@@ -13,7 +13,7 @@ from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QFont
 from datetime import datetime
 from ...core.accounting_system import AccountingSystem
-from ..components.widgets import PageHeader
+from ..components.widgets import PageHeader, NonScrollableComboBox
 from ..components.styles import ModernStyles, GlassmorphismHelper
 from ..common import ResponsiveHelper
 from .bulk_entry import BulkEntryPage
@@ -52,6 +52,8 @@ class TransactionCard(QFrame):
             color: rgba(255, 255, 255, 0.9);
             font-weight: 600;
             font-size: 12px;
+            background: transparent;
+            border: none;
         """)
         
         # Description column
@@ -59,6 +61,8 @@ class TransactionCard(QFrame):
         desc_label.setStyleSheet("""
             color: white;
             font-size: 13px;
+            background: transparent;
+            border: none;
         """)
         
         # From account
@@ -67,6 +71,8 @@ class TransactionCard(QFrame):
         from_label.setStyleSheet("""
             color: rgba(255, 255, 255, 0.8);
             font-size: 12px;
+            background: transparent;
+            border: none;
         """)
         
         # To account  
@@ -75,6 +81,8 @@ class TransactionCard(QFrame):
         to_label.setStyleSheet("""
             color: rgba(255, 255, 255, 0.8);
             font-size: 12px;
+            background: transparent;
+            border: none;
         """)
         
         # Amount
@@ -86,6 +94,8 @@ class TransactionCard(QFrame):
             color: #81C784;
             font-weight: 600;
             font-size: 13px;
+            background: transparent;
+            border: none;
         """)
         
         layout.addWidget(date_label)
@@ -485,7 +495,7 @@ class JournalPage(QWidget):
         except Exception as e:
             print(f"Error loading transactions: {e}")
             error_label = QLabel(f"Error loading transactions: {str(e)}")
-            error_label.setStyleSheet("color: #e74c3c; text-align: center; padding: 20px;")
+            error_label.setStyleSheet("color: #e74c3c; text-align: center; padding: 20px; background: transparent; border: none;")
             error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.transactions_layout.addWidget(error_label)
     
@@ -662,7 +672,7 @@ class JournalPage(QWidget):
         from_label.setFixedWidth(100)
         from_label.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 500;")
         
-        self.from_combo = QComboBox()
+        self.from_combo = NonScrollableComboBox()
         self.from_combo.setStyleSheet(self._get_field_style())
         self._populate_account_combo(self.from_combo)
         
@@ -674,7 +684,7 @@ class JournalPage(QWidget):
         to_label.setFixedWidth(100)
         to_label.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 500;")
         
-        self.to_combo = QComboBox()
+        self.to_combo = NonScrollableComboBox()
         self.to_combo.setStyleSheet(self._get_field_style())
         self._populate_account_combo(self.to_combo)
         
@@ -741,26 +751,26 @@ class JournalPage(QWidget):
         
         # Date header
         date_header = QLabel("Date")
-        date_header.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 600; font-size: 12px;")
+        date_header.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 600; font-size: 12px; background: transparent; border: none;")
         date_header.setFixedWidth(80)
         
         # Description header
         desc_header = QLabel("Description")
-        desc_header.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 600; font-size: 12px;")
+        desc_header.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 600; font-size: 12px; background: transparent; border: none;")
         
         # From header
         from_header = QLabel("Debit")
-        from_header.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 600; font-size: 12px;")
+        from_header.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 600; font-size: 12px; background: transparent; border: none;")
         from_header.setFixedWidth(120)
         
         # To header
         to_header = QLabel("Credit")
-        to_header.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 600; font-size: 12px;")
+        to_header.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 600; font-size: 12px; background: transparent; border: none;")
         to_header.setFixedWidth(120)
         
         # Amount header
         amount_header = QLabel("Amount")
-        amount_header.setStyleSheet("color: #81C784; font-weight: 600; font-size: 12px;")
+        amount_header.setStyleSheet("color: #81C784; font-weight: 600; font-size: 12px; background: transparent; border: none;")
         amount_header.setAlignment(Qt.AlignmentFlag.AlignRight)
         amount_header.setFixedWidth(100)
         

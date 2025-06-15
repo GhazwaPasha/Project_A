@@ -18,7 +18,7 @@ import csv
 import pandas as pd
 import os
 from ...core.utils import parse_transaction
-from ..components.widgets import PageHeader
+from ..components.widgets import PageHeader, NonScrollableComboBox
 from ..components.styles import ModernStyles, GlassmorphismHelper
 from ..common import ResponsiveHelper
 
@@ -119,18 +119,16 @@ class BulkEntryTable(QTableWidget):
             desc_edit.setMinimumHeight(35)
             desc_edit.setStyleSheet(self._get_cell_widget_style())
             self.setCellWidget(row, 1, desc_edit)
-            
-            # Debit Account column - QComboBox
-            debit_combo = QComboBox()
+              # Debit Account column - NonScrollableComboBox
+            debit_combo = NonScrollableComboBox()
             debit_combo.setEditable(True)
             debit_combo.setPlaceholderText("Select debit account...")
             debit_combo.setMinimumHeight(35)
             debit_combo.setStyleSheet(self._get_combo_cell_style())
             self._populate_account_combo(debit_combo)
             self.setCellWidget(row, 2, debit_combo)
-            
-            # Credit Account column - QComboBox
-            credit_combo = QComboBox()
+              # Credit Account column - NonScrollableComboBox
+            credit_combo = NonScrollableComboBox()
             credit_combo.setEditable(True)
             credit_combo.setPlaceholderText("Select credit account...")
             credit_combo.setMinimumHeight(35)
@@ -239,7 +237,7 @@ class BulkEntryTable(QTableWidget):
         desc_edit.setStyleSheet(self._get_cell_widget_style())
         self.setCellWidget(row, 1, desc_edit)
         
-        debit_combo = QComboBox()
+        debit_combo = NonScrollableComboBox()
         debit_combo.setEditable(True)
         debit_combo.setPlaceholderText("Select debit account...")
         debit_combo.setMinimumHeight(35)
@@ -247,7 +245,7 @@ class BulkEntryTable(QTableWidget):
         self._populate_account_combo(debit_combo)
         self.setCellWidget(row, 2, debit_combo)
         
-        credit_combo = QComboBox()
+        credit_combo = NonScrollableComboBox()
         credit_combo.setEditable(True)
         credit_combo.setPlaceholderText("Select credit account...")
         credit_combo.setMinimumHeight(35)

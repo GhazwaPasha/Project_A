@@ -7,7 +7,7 @@ from ..common import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QLineEdit,
     ResponsiveHelper, MODERN_BUTTON_STYLE, MODERN_FRAME_STYLE, Qt, QColor
 )
-from PyQt6.QtWidgets import QGraphicsDropShadowEffect, QSizePolicy
+from PyQt6.QtWidgets import QGraphicsDropShadowEffect, QSizePolicy, QComboBox
 from PyQt6.QtGui import QPixmap
 from .styles import ModernStyles, GlassmorphismHelper
 
@@ -683,3 +683,36 @@ class SearchBar(QLineEdit):
                 color: rgba(255, 255, 255, 0.5);
             }}
         """)
+
+
+class NonScrollableComboBox(QComboBox):
+    """A QComboBox that ignores wheel events to prevent accidental scrolling.
+    
+    This is especially useful for account selection fields where users might
+    accidentally change the selected account while scrolling through a form.
+    The combo box will only respond to wheel events when it has focus AND
+    its dropdown list is open, preventing accidental changes.
+    """
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+    
+    def wheelEvent(self, event):
+        """Override wheel event to prevent accidental scrolling.
+        
+        Args:
+            event: The wheel event from mouse scrolling
+            
+        Behavior:
+        - Ignores wheel events when combo box doesn't have focus
+        - Ignores wheel events when dropdown is closed
+        - Allows normal wheel scrolling only when focused AND dropdown is open
+        """
+        # Only allow wheel scrolling when the combo box has focus
+        # and the dropdown list is visible (open)
+        if self.hasFocus() and self.view().isVisible():
+            # Allow normal wheel behavior when dropdown is open and focused
+            super().wheelEvent(event)
+        else:
+            # Ignore wheel events to prevent accidental changes
+            event.ignore()
