@@ -96,65 +96,70 @@ class JournalPage(QWidget):
         
     def _setup_ui(self):
         """Setup the tabbed interface."""
+        # Main layout with responsive margins
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
+        main_layout.setContentsMargins(responsive_margin, responsive_margin, 
+                                     responsive_margin, responsive_margin)
+        main_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
         
-        # Create the page header
-        header = PageHeader("Journal Entry", "📝")
+        # Create the page header with descriptive subtext
+        header = PageHeader("Journal Entry", "Record and manage your financial transactions")
         main_layout.addWidget(header)
         
-        # Create the tab widget
+        # Create the tab widget with proper spacing
         self.tab_widget = QTabWidget()
         self.tab_widget.setStyleSheet(self._get_tab_style())
         
         # Create and add the single entry tab
         self.single_entry_tab = SingleEntryTab(self.system)
-        self.tab_widget.addTab(self.single_entry_tab, "📝 Single Entry")
+        self.tab_widget.addTab(self.single_entry_tab, "Single Entry")
         
         # Create and add the bulk entry tab
         self.bulk_entry_tab = BulkEntryPage(self.system)
-        self.tab_widget.addTab(self.bulk_entry_tab, "📊 Bulk Entry")
+        self.tab_widget.addTab(self.bulk_entry_tab, "Bulk Entry")
         
         # Set default tab
         self.tab_widget.setCurrentIndex(0)  # Single entry is default
         
-        main_layout.addWidget(self.tab_widget)
+        # Add tab widget to main layout
+        main_layout.addWidget(self.tab_widget, 1)  # Give it a stretch factor of 1
+        
+        # Add stretch to ensure proper spacing
+        main_layout.addStretch()
     
     def _get_tab_style(self):
         """Get the styling for the tab widget."""
         return """
             QTabWidget::pane {
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 8px;
-                background: rgba(255, 255, 255, 0.02);
+                border: none;
+                background: transparent;
                 margin-top: 2px;
             }
             
             QTabBar::tab {
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                padding: 12px 24px;
-                margin-right: 2px;
-                border-top-left-radius: 8px;
-                border-top-right-radius: 8px;
-                color: rgba(255, 255, 255, 0.7);
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                color: white;
+                border-radius: 6px;
+                padding: 10px 20px;
                 font-weight: 500;
-                font-size: 14px;
-                min-width: 120px;
+                font-size: 13px;
+                margin-right: 8px;
+                min-width: 100px;
+                max-width: 160px;
+            }
+            
+            QTabBar::tab:hover {
+                background: rgba(255, 255, 255, 0.2);
+                border-color: rgba(255, 255, 255, 0.3);
             }
             
             QTabBar::tab:selected {
-                background: rgba(255, 255, 255, 0.1);
-                border-color: rgba(255, 255, 255, 0.2);
-                color: rgba(255, 255, 255, 0.95);
+                background: rgba(100, 181, 246, 0.3);
+                border-color: #64B5F6;
+                color: #64B5F6;
                 font-weight: 600;
-            }
-            
-            QTabBar::tab:hover:!selected {
-                background: rgba(255, 255, 255, 0.08);
-                border-color: rgba(255, 255, 255, 0.15);
-                color: rgba(255, 255, 255, 0.85);
             }
             
             QTabBar::tab:first {
@@ -188,7 +193,7 @@ class SingleEntryTab(QWidget):
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_area.setStyleSheet("""
-            QScrollArea {
+            QScrollArea, QWidget#scrollAreaWidgetContents {
                 background: transparent;
                 border: none;
             }
@@ -198,37 +203,48 @@ class SingleEntryTab(QWidget):
                 border-radius: 4px;
                 margin: 0;
             }
-            QScrollBar::handle:vertical {
-                background: rgba(255, 255, 255, 0.3);
-                border-radius: 4px;
-                min-height: 20px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: rgba(255, 255, 255, 0.5);
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                border: none;
-                background: none;
+            QWidget {
+                background: transparent;
             }
         """)
         
         # Main container widget for scroll area
         main_container = QWidget()
         main_layout = QVBoxLayout(main_container)
-        main_layout.setContentsMargins(ResponsiveHelper.scale_size(24, 20, 32), 
-                                       ResponsiveHelper.scale_size(24, 20, 32),
-                                       ResponsiveHelper.scale_size(24, 20, 32), 
-                                       ResponsiveHelper.scale_size(24, 20, 32))
-        main_layout.setSpacing(ResponsiveHelper.scale_size(24, 20, 32))
+        # Use consistent spacing from dashboard
+        main_layout.setContentsMargins(ResponsiveHelper.scale_size(32, 24, 48),
+                                     ResponsiveHelper.scale_size(24, 16, 32),
+                                     ResponsiveHelper.scale_size(32, 24, 48),
+                                     ResponsiveHelper.scale_size(24, 16, 32))
+        main_layout.setSpacing(ResponsiveHelper.scale_size(24, 16, 32))
         
         # Entry form section (collapsible)
         self.entry_form_container = self._create_entry_form()
         main_layout.addWidget(self.entry_form_container)
         
+        # Add some spacing between form and transactions
+        spacer = QWidget()
+        spacer.setFixedHeight(ResponsiveHelper.scale_size(16, 12, 24))
+        main_layout.addWidget(spacer)
+        
+        # Transactions section with title
+        transactions_label = QLabel("Recent Transactions")
+        transactions_label.setStyleSheet("""
+            QLabel {
+                color: rgba(255, 255, 255, 0.9);
+                font-size: 16px;
+                font-weight: 600;
+                background: transparent;
+                padding-bottom: 8px;
+            }
+        """)
+        main_layout.addWidget(transactions_label)
+        
         # Transactions section
         transactions_section = self._create_transactions_section()
         main_layout.addWidget(transactions_section, 1)  # Allow it to expand
-          # Set the container as the scroll area widget
+        
+        # Set the container as the scroll area widget
         scroll_area.setWidget(main_container)
         tab_layout.addWidget(scroll_area)
 

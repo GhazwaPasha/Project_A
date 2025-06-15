@@ -520,27 +520,18 @@ class BulkEntryPage(QWidget):
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_area.setStyleSheet("""
-            QScrollArea {
+            QScrollArea, QWidget#scrollAreaWidgetContents {
                 background: transparent;
                 border: none;
+            }
+            QWidget {
+                background: transparent;
             }
             QScrollBar:vertical {
                 background: rgba(255, 255, 255, 0.1);
                 width: 8px;
                 border-radius: 4px;
                 margin: 0;
-            }
-            QScrollBar::handle:vertical {
-                background: rgba(255, 255, 255, 0.3);
-                border-radius: 4px;
-                min-height: 20px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: rgba(255, 255, 255, 0.5);
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                border: none;
-                background: none;
             }
         """)
         
