@@ -1,0 +1,11 @@
+Date,Description,Debit Account,Credit Account,Amount
+2024-01-15,Office Supplies Purchase,Office Supplies,Cash,250.00
+2024-01-16,Client Payment Received,Cash,Accounts Receivable,1500.00
+2024-01-17,Rent Payment,Rent Expense,Cash,800.00
+2024-01-18,Equipment Purchase,Equipment,Cash,2000.00
+2024-01-19,Service Revenue,Cash,Service Revenue,750.00
+2024-01-20,Utilities Payment,Utilities Expense,Cash,150.00
+2024-01-21,Insurance Payment,Insurance Expense,Cash,300.00
+2024-01-22,Sales Revenue,Cash,Sales Revenue,1200.00
+2024-01-23,Marketing Expense,Marketing Expense,Cash,400.00
+2024-01-24,Phone Bill,Telephone Expense,Cash,75.00

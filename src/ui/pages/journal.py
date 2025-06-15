@@ -9,14 +9,14 @@ from PyQt6.QtWidgets import (
     QLineEdit, QComboBox, QFrame, QDateEdit, QMessageBox, 
     QScrollArea, QSpacerItem, QSizePolicy
 )
-from PyQt6.QtCore import Qt, QDate, pyqtSignal, QPropertyAnimation, QEasingCurve, QTimer
-from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtCore import Qt, QDate
+from PyQt6.QtGui import QFont
 from datetime import datetime
-from ...core.utils import parse_transaction, analyze_accounts_with_llm
-from ..components.widgets import DateRangeSelector, PageHeader
+from ...core.accounting_system import AccountingSystem
+from ..components.widgets import PageHeader
 from ..components.styles import ModernStyles, GlassmorphismHelper
 from ..common import ResponsiveHelper
-
+from .bulk_entry import BulkEntryPage
 
 class TransactionCard(QFrame):
     """A clean card for displaying a transaction."""
@@ -38,43 +38,62 @@ class TransactionCard(QFrame):
             QFrame:hover {
                 background: rgba(255, 255, 255, 0.08);
                 border-color: rgba(255, 255, 255, 0.2);
-            }        """)
+            }
+        """)
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(15)
-          # Entry data structure: (id, date, description, debit_account, credit_account, amount, timestamp)
-        # Date (position 1)
-        date_label = QLabel(str(self.entry_data[1]))
-        date_label.setStyleSheet("color: #90CAF9; font-weight: 500; background: transparent; border: none;")
-        date_label.setFixedWidth(85)
+        layout.setSpacing(12)
         
-        # Description (position 2)
-        desc_label = QLabel(str(self.entry_data[2]))
-        desc_label.setStyleSheet("color: white; font-weight: 500; background: transparent; border: none;")
-        desc_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-          # Debit account (position 3 - debit_account)
-        from_label = QLabel(str(self.entry_data[3]))
-        from_label.setStyleSheet("color: #A5D6A7; font-size: 12px; background: transparent; border: none;")
-        from_label.setFixedWidth(140)
+        # Date column
+        date_label = QLabel(self.entry_data.get('date', ''))
+        date_label.setFixedWidth(80)
+        date_label.setStyleSheet("""
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 600;
+            font-size: 12px;
+        """)
         
-        # Credit account (position 4 - credit_account) 
-        to_label = QLabel(str(self.entry_data[4]))
-        to_label.setStyleSheet("color: #FFAB91; font-size: 12px; background: transparent; border: none;")
-        to_label.setFixedWidth(140)
+        # Description column
+        desc_label = QLabel(self.entry_data.get('description', ''))
+        desc_label.setStyleSheet("""
+            color: white;
+            font-size: 13px;
+        """)
         
-        # Amount column - single, properly aligned (position 5)
-        amount = float(self.entry_data[5])
-        amount_label = QLabel(f"${amount:,.2f}")
-        amount_label.setStyleSheet("color: #81C784; font-weight: 600; background: transparent; border: none;")
+        # From account
+        from_label = QLabel(self.entry_data.get('debit_account', ''))
+        from_label.setFixedWidth(120)
+        from_label.setStyleSheet("""
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 12px;
+        """)
+        
+        # To account  
+        to_label = QLabel(self.entry_data.get('credit_account', ''))
+        to_label.setFixedWidth(120)
+        to_label.setStyleSheet("""
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 12px;
+        """)
+        
+        # Amount
+        amount = self.entry_data.get('amount', 0)
+        amount_label = QLabel(f"${amount:.2f}")
+        amount_label.setFixedWidth(100)
         amount_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        amount_label.setFixedWidth(120)
+        amount_label.setStyleSheet("""
+            color: #81C784;
+            font-weight: 600;
+            font-size: 13px;
+        """)
         
         layout.addWidget(date_label)
-        layout.addWidget(desc_label)
+        layout.addWidget(desc_label, 1)  # This will stretch
         layout.addWidget(from_label)
         layout.addWidget(to_label)
         layout.addWidget(amount_label)
+
 class JournalPage(QWidget):
     """Clean, professional journal page."""
     
@@ -82,6 +101,8 @@ class JournalPage(QWidget):
         super().__init__(parent)
         self.system = system
         self.is_form_expanded = False  # Form starts collapsed
+        self.accounts = []  # Initialize accounts list
+        self._load_accounts()  # Load accounts first
         self._setup_ui()
         self._apply_styling()
         self._load_transactions()
@@ -93,8 +114,43 @@ class JournalPage(QWidget):
         
     def _setup_ui(self):
         """Setup the main UI."""
-        # Main layout with responsive margins
-        main_layout = QVBoxLayout(self)
+        # Main layout for the page
+        page_layout = QVBoxLayout(self)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        page_layout.setSpacing(0)
+        
+        # Create scroll area for the main content
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                background: transparent;
+                border: none;
+            }
+            QScrollBar:vertical {
+                background: rgba(255, 255, 255, 0.1);
+                width: 8px;
+                border-radius: 4px;
+                margin: 0;
+            }
+            QScrollBar::handle:vertical {
+                background: rgba(255, 255, 255, 0.3);
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: rgba(255, 255, 255, 0.5);
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+        """)
+        
+        # Content widget that goes inside the scroll area
+        content_widget = QWidget()
+        main_layout = QVBoxLayout(content_widget)
         responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
         main_layout.setContentsMargins(responsive_margin, responsive_margin, 
                                      responsive_margin, responsive_margin)
@@ -104,11 +160,66 @@ class JournalPage(QWidget):
         header = PageHeader("Journal Entries", "Record and view your accounting transactions")
         main_layout.addWidget(header)
         
-        # Entry form (collapsible)
-        self._create_collapsible_entry_form(main_layout)
-          # Transactions list
-        self._create_transactions_list(main_layout)
+        # Action buttons
+        self._create_action_buttons(main_layout)
         
+        # Entry form
+        self._create_collapsible_entry_form(main_layout)
+        
+        # Transaction list
+        self._create_transaction_list(main_layout)
+        
+        # Set the content widget in the scroll area
+        scroll_area.setWidget(content_widget)
+        page_layout.addWidget(scroll_area)
+    
+    def _create_action_buttons(self, main_layout):
+        """Create action buttons for bulk entry and CSV import."""
+        buttons_frame = QFrame()
+        buttons_frame.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 0.06);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 12px;
+            }
+        """)
+        buttons_layout = QHBoxLayout(buttons_frame)
+        buttons_layout.setContentsMargins(20, 15, 20, 15)
+        
+        # Bulk Entry Button
+        bulk_entry_btn = QPushButton("📊 Bulk Entry")
+        bulk_entry_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
+                    stop:0 rgba(52, 152, 219, 0.8), stop:1 rgba(41, 128, 185, 0.8));
+                color: white;
+                border: 2px solid rgba(255, 255, 255, 0.3);
+                border-radius: 12px;
+                padding: 12px 24px;
+                font-size: 14px;
+                font-weight: bold;
+                min-width: 140px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
+                    stop:0 rgba(52, 152, 219, 1.0), stop:1 rgba(41, 128, 185, 1.0));
+                transform: translateY(-2px);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
+                    stop:0 rgba(41, 128, 185, 0.9), stop:1 rgba(30, 100, 150, 0.9));
+            }
+        """)
+        bulk_entry_btn.clicked.connect(self._open_bulk_entry_page)
+        
+        # Add spacer
+        spacer = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        
+        buttons_layout.addWidget(bulk_entry_btn)
+        buttons_layout.addItem(spacer)
+        
+        main_layout.addWidget(buttons_frame)
+    
     def _create_collapsible_entry_form(self, main_layout):
         """Create the collapsible entry form."""
         # Container for the entire form section
@@ -187,7 +298,8 @@ class JournalPage(QWidget):
         header_layout.addWidget(self.toggle_indicator, 0, Qt.AlignmentFlag.AlignCenter)
         
         container_layout.addWidget(self.header_frame)
-          # Collapsible content area
+        
+        # Collapsible content area
         self.form_content = QFrame()
         self.form_content.setStyleSheet("""
             QFrame {
@@ -199,294 +311,65 @@ class JournalPage(QWidget):
         
         self._create_form_fields()
         container_layout.addWidget(self.form_content)
-          # Set initial state (collapsed)
+        
+        # Set initial state (collapsed)
         self.form_content.setVisible(self.is_form_expanded)
         
         main_layout.addWidget(self.form_container)
-        
-    def _create_form_fields(self):
-        """Create the actual form fields."""
-        form_layout = QVBoxLayout(self.form_content)
-        form_layout.setSpacing(12)  # Reduced spacing
-        form_layout.setContentsMargins(16, 16, 16, 16)  # Reduced margins
-        
-        # Form fields in a grid
-        fields_layout = QHBoxLayout()
-        fields_layout.setSpacing(10)  # Reduced spacing between columns
-        
-        # Date field
-        date_container = QVBoxLayout()
-        date_container.setSpacing(2)  # Minimal spacing
-        date_label = QLabel("Date")
-        date_label.setStyleSheet("""
-            color: rgba(255, 255, 255, 0.8); 
-            font-size: 11px; 
-            font-weight: 500;
-            background: transparent;
-            border: none;
-        """)
-        
-        self.date_edit = QDateEdit()
-        self.date_edit.setDate(QDate.currentDate())
-        self.date_edit.setCalendarPopup(True)
-        self.date_edit.setStyleSheet(self._get_input_style())
-        
-        date_container.addWidget(date_label)
-        date_container.addWidget(self.date_edit)
-        
-        # Simple Description field
-        desc_container = QVBoxLayout()
-        desc_container.setSpacing(2)  # Minimal spacing
-        
-        desc_label = QLabel("Description")
-        desc_label.setStyleSheet("""
-            color: rgba(255, 255, 255, 0.8); 
-            font-size: 11px; 
-            font-weight: 500;
-            background: transparent;
-            border: none;
-        """)
-        
-        self.desc_edit = QLineEdit()
-        self.desc_edit.setPlaceholderText("Transaction description")
-        self.desc_edit.setStyleSheet(self._get_input_style())
-        
-        desc_container.addWidget(desc_label)
-        desc_container.addWidget(self.desc_edit)
-        
-        # Debit account
-        from_container = QVBoxLayout()
-        from_container.setSpacing(2)  # Minimal spacing
-        from_label = QLabel("Debit Account")
-        from_label.setStyleSheet("""
-            color: rgba(255, 255, 255, 0.8); 
-            font-size: 11px; 
-            font-weight: 500;
-            background: transparent;
-            border: none;
-        """)
-        
-        self.from_combo = QComboBox()
-        self.from_combo.setEditable(True)
-        self.from_combo.setStyleSheet(self._get_combo_style())
-        self._populate_accounts(self.from_combo)
-        
-        from_container.addWidget(from_label)
-        from_container.addWidget(self.from_combo)
-        
-        # Credit account
-        to_container = QVBoxLayout()
-        to_container.setSpacing(2)  # Minimal spacing
-        to_label = QLabel("Credit Account")
-        to_label.setStyleSheet("""
-            color: rgba(255, 255, 255, 0.8); 
-            font-size: 11px; 
-            font-weight: 500;
-            background: transparent;
-            border: none;
-        """)
-        
-        self.to_combo = QComboBox()
-        self.to_combo.setEditable(True)
-        self.to_combo.setStyleSheet(self._get_combo_style())
-        self._populate_accounts(self.to_combo)
-        
-        to_container.addWidget(to_label)
-        to_container.addWidget(self.to_combo)
-        
-        # Amount field
-        amount_container = QVBoxLayout()
-        amount_container.setSpacing(2)  # Minimal spacing
-        amount_label = QLabel("Amount")
-        amount_label.setStyleSheet("""
-            color: rgba(255, 255, 255, 0.8); 
-            font-size: 11px; 
-            font-weight: 500;
-            background: transparent;
-            border: none;
-        """)
-        
-        self.amount_edit = QLineEdit()
-        self.amount_edit.setPlaceholderText("0.00")
-        self.amount_edit.setStyleSheet(self._get_input_style())
-        
-        amount_container.addWidget(amount_label)
-        amount_container.addWidget(self.amount_edit)
-        # Add all field containers to the layout
-        fields_layout.addLayout(date_container)
-        fields_layout.addLayout(desc_container)
-        fields_layout.addLayout(from_container)
-        fields_layout.addLayout(to_container)
-        fields_layout.addLayout(amount_container)
-        
-        form_layout.addLayout(fields_layout)
-        
-        # Action buttons
-        self._create_action_buttons(form_layout)
-        
-    def _create_action_buttons(self, form_layout):
-        """Create action buttons and AI controls for the form."""        # AI input row - compact and above the buttons
-        ai_input_layout = QHBoxLayout()
-        ai_input_layout.setSpacing(8)
-        ai_input_layout.setContentsMargins(0, 4, 0, 0)        # Natural language input field - full width to match description field above
-        self.nl_input = QLineEdit()
-        self.nl_input.setPlaceholderText("Describe your Entry in Words")
-        self.nl_input.setStyleSheet(self._get_input_style())
-        # Enable Enter key to trigger AI parsing
-        self.nl_input.returnPressed.connect(self._parse_with_ai)
-        
-        # Add robotic icon at the end of the input field
-        ai_icon = QLabel("🤖")
-        ai_icon.setStyleSheet("""
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 16px;
-            background: transparent;
-            border: none;
-            padding: 0px 8px;
-        """)
-        ai_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # Container for input field and icon
-        ai_input_container = QHBoxLayout()
-        ai_input_container.setSpacing(0)
-        ai_input_container.setContentsMargins(0, 0, 0, 0)
-        ai_input_container.addWidget(self.nl_input)
-        ai_input_container.addWidget(ai_icon)
-        
-        # Success checkmark (initially hidden) - appears next to robot
-        self.success_checkmark = QLabel("✅")
-        self.success_checkmark.setStyleSheet("""
-            color: rgba(129, 199, 132, 1.0);
-            font-size: 16px;
-            background: transparent;
-            border: none;
-            padding: 0px 4px;
-        """)
-        self.success_checkmark.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.success_checkmark.hide()
-        
-        ai_input_container.addWidget(self.success_checkmark)
-        
-        # Parsing progress indicator - positioned separately to avoid width changes
-        self.parsing_indicator = QLabel("")
-        self.parsing_indicator.setStyleSheet("""
-            color: rgba(129, 199, 132, 0.8);
-            font-size: 10px;
-            font-weight: 500;
-            background: transparent;
-            border: none;
-        """)
-        self.parsing_indicator.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        
-        ai_input_layout.addLayout(ai_input_container)
-        ai_input_layout.addWidget(self.parsing_indicator)
-        ai_input_layout.addStretch()  # Push everything to the left
-        
-        form_layout.addLayout(ai_input_layout)
-        
-        # Combined action buttons row with AI controls inline
-        button_layout = QHBoxLayout()
-        button_layout.setContentsMargins(0, 6, 0, 0)
-        button_layout.setSpacing(8)
-        
-        # AI Parse button - compact
-        self.parse_btn = QPushButton("🪄 Fill")
-        self.parse_btn.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 rgba(76, 175, 80, 0.8),
-                    stop:1 rgba(129, 199, 132, 0.8));
-                border: 1px solid rgba(76, 175, 80, 0.3);
-                border-radius: 5px;
-                padding: 6px 12px;
-                color: white;
-                font-weight: 600;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 rgba(76, 175, 80, 1.0),
-                    stop:1 rgba(129, 199, 132, 1.0));
-            }
-            QPushButton:disabled {
-                background: rgba(128, 128, 128, 0.3);
-                color: rgba(255, 255, 255, 0.5);
+    
+    def _create_transaction_list(self, main_layout):
+        """Create the transaction display section."""
+        # Transaction list container
+        list_frame = QFrame()
+        list_frame.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 0.06);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 12px;
             }
         """)
-        self.parse_btn.clicked.connect(self._parse_with_ai)
-        self.parse_btn.setFixedWidth(65)
         
-        # Clear button - positioned next to Add Entry
-        clear_btn = QPushButton("Clear")
-        clear_btn.setStyleSheet("""
-            QPushButton {
-                background: rgba(255, 255, 255, 0.1);
-                color: white;
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 5px;
-                padding: 6px 12px;
-                font-weight: 500;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background: rgba(255, 255, 255, 0.15);
-            }
-        """)
-        clear_btn.clicked.connect(self._clear_form)
-        clear_btn.setFixedWidth(55)
+        list_layout = QVBoxLayout(list_frame)
+        list_layout.setContentsMargins(20, 20, 20, 20)
+        list_layout.setSpacing(16)
         
-        # Add entry button - primary action
-        add_btn = QPushButton("Add Entry")
-        add_btn.setStyleSheet("""
-            QPushButton {
-                background: #4CAF50;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                padding: 6px 16px;
-                font-weight: 600;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background: #45a049;
-            }
-            QPushButton:pressed {
-                background: #3d8b40;
-            }
-        """)
-        add_btn.clicked.connect(self._add_entry)
-        add_btn.setFixedWidth(85)
+        # Header with transaction count
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(8)
         
-        # Layout the buttons: AI Fill on left, Clear and Add Entry on right
-        button_layout.addWidget(self.parse_btn)
-        button_layout.addStretch()
-        button_layout.addWidget(clear_btn)
-        button_layout.addWidget(add_btn)
-        
-        form_layout.addLayout(button_layout)
-        
-    def _create_transactions_list(self, main_layout):
-        """Create the transactions list."""
-        # Header
-        list_header = QLabel("Transactions")
-        list_header.setStyleSheet("""
-            font-size: 20px;
+        title_label = QLabel("Recent Transactions")
+        title_label.setStyleSheet("""
+            font-size: 18px;
             font-weight: 600;
             color: white;
-            margin-bottom: 16px;
             background: transparent;
             border: none;
         """)
-        main_layout.addWidget(list_header)
-          # Date filter
-        self._create_date_filter(main_layout)
         
-        # Column headers for better alignment
-        self._create_column_headers(main_layout)
+        # Transaction count badge
+        self.count_label = QLabel("0 entries")
+        self.count_label.setStyleSheet("""
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+        """)
+        
+        header_layout.addWidget(title_label)
+        header_layout.addStretch()
+        header_layout.addWidget(self.count_label)
+        
+        list_layout.addLayout(header_layout)
+        
+        # Column headers
+        self._create_transaction_headers(list_layout)
         
         # Scrollable area for transactions
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
+        scroll_area.setMaximumHeight(500)  # Limit height for better proportions
+        scroll_area.setMinimumHeight(300)  # Ensure reasonable minimum
         scroll_area.setStyleSheet("""
             QScrollArea {
                 background: transparent;
@@ -514,66 +397,409 @@ class JournalPage(QWidget):
         self.transactions_layout.setContentsMargins(0, 0, 0, 0)
         
         scroll_area.setWidget(self.transactions_container)
-        main_layout.addWidget(scroll_area)
+        list_layout.addWidget(scroll_area)
         
-    def _create_date_filter(self, main_layout):
-        """Create the date filter widget."""
-        self.date_selector = DateRangeSelector(callback=self._on_date_range_changed)
-        main_layout.addWidget(self.date_selector)
+        main_layout.addWidget(list_frame)
+    
+    def _get_input_style(self):
+        return """
+            QLineEdit, QComboBox, QDateEdit {
+                background: rgba(255, 255, 255, 0.9);
+                border: 2px solid rgba(255, 255, 255, 0.3);
+                border-radius: 8px;
+                padding: 10px 12px;
+                font-size: 13px;
+                color: #2c3e50;
+                min-height: 20px;
+            }
+            QLineEdit:focus, QComboBox:focus, QDateEdit:focus {
+                border-color: rgba(52, 152, 219, 0.8);
+                background: rgba(255, 255, 255, 1.0);
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 30px;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid #7f8c8d;
+                margin-right: 5px;
+            }
+        """
+    
+    def _load_accounts(self):
+        """Load accounts from the accounting system."""
+        self.accounts = self.system.get_postable_accounts()
+    
+    def _populate_account_combo(self, combo):
+        """Populate account combo box with available accounts."""
+        combo.clear()
+        combo.addItem("Select Account...", "")
+        for account in self.accounts:
+            combo.addItem(account[0], account[0])  # account name
+    
+    def _load_transactions(self):
+        """Load and display transactions."""
+        try:
+            # Clear existing cards
+            for i in reversed(range(self.transactions_layout.count())):
+                widget = self.transactions_layout.itemAt(i).widget()
+                if widget:
+                    widget.setParent(None)
+                    
+            # Get recent transactions from system
+            try:
+                entries = self.system.get_recent_journal_entries(20)  # Get last 20 entries
+            except Exception as e:
+                print(f"Error getting entries from system: {e}")
+                entries = []
+            
+            # Update count
+            self.count_label.setText(f"{len(entries)} entries")
+            
+            if not entries:
+                no_data = QLabel("No transactions found. Add your first entry above!")
+                no_data.setStyleSheet("""
+                    color: rgba(255, 255, 255, 0.6);
+                    font-size: 14px;
+                    text-align: center;
+                    padding: 40px;
+                    background: transparent;
+                    border: none;
+                """)
+                no_data.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.transactions_layout.addWidget(no_data)
+            else:
+                for entry in entries:
+                    try:
+                        card = TransactionCard(entry)
+                        self.transactions_layout.addWidget(card)
+                    except Exception as e:
+                        print(f"Error creating card for entry {entry}: {e}")
+                        continue
+                    
+            self.transactions_layout.addStretch()
+            
+        except Exception as e:
+            print(f"Error loading transactions: {e}")
+            error_label = QLabel(f"Error loading transactions: {str(e)}")
+            error_label.setStyleSheet("color: #e74c3c; text-align: center; padding: 20px;")
+            error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.transactions_layout.addWidget(error_label)
+    
+    def _save_transaction(self):
+        """Save a new transaction."""
+        try:
+            # Get form data
+            date = self.date_edit.date().toString("yyyy-MM-dd")
+            description = self.desc_edit.text().strip()
+            debit_account = self.from_combo.currentText()
+            credit_account = self.to_combo.currentText()
+            amount_text = self.amount_edit.text().strip()
+            
+            # Validate
+            if not description:
+                QMessageBox.warning(self, "Validation Error", "Please enter a description.")
+                return
+            
+            if not debit_account or debit_account == "Select Account...":
+                QMessageBox.warning(self, "Validation Error", "Please select a debit account.")
+                return
+            
+            if not credit_account or credit_account == "Select Account...":
+                QMessageBox.warning(self, "Validation Error", "Please select a credit account.")
+                return
+            
+            if debit_account == credit_account:
+                QMessageBox.warning(self, "Validation Error", "Debit and credit accounts must be different.")
+                return
+            
+            try:
+                amount = float(amount_text)
+                if amount <= 0:
+                    raise ValueError()
+            except ValueError:
+                QMessageBox.warning(self, "Validation Error", "Please enter a valid positive amount.")
+                return
+            
+            # Save using accounting system
+            success = self.system.add_journal_entry(
+                date=date,
+                description=description,
+                debit_account=debit_account,
+                credit_account=credit_account,
+                amount=amount
+            )
+            
+            if success:
+                # Clear form
+                self.desc_edit.clear()
+                self.amount_edit.clear()
+                self.from_combo.setCurrentIndex(0)
+                self.to_combo.setCurrentIndex(0)
+                self.date_edit.setDate(QDate.currentDate())
+                
+                # Reload transactions
+                self._load_transactions()
+                
+                QMessageBox.information(self, "Success", "Transaction saved successfully!")
+            else:
+                QMessageBox.critical(self, "Error", "Failed to save transaction.")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save transaction: {str(e)}")
+    
+    def _create_form_fields(self):
+        """Create the form fields for transaction entry."""
+        form_layout = QVBoxLayout(self.form_content)
+        form_layout.setContentsMargins(20, 20, 20, 20)
+        form_layout.setSpacing(16)
         
-    def _on_date_range_changed(self):
-        """Handle date range changes."""
-        self._load_transactions()
+        # Natural language input
+        nl_layout = QVBoxLayout()
+        nl_layout.setSpacing(8)
         
-    def _create_column_headers(self, main_layout):
-        """Create column headers for the transactions table."""
+        nl_label = QLabel("Natural Language Entry")
+        nl_label.setStyleSheet("""
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 600;
+            font-size: 14px;
+        """)
+        
+        nl_input_layout = QHBoxLayout()
+        nl_input_layout.setSpacing(8)
+        
+        self.nl_input = QLineEdit()
+        self.nl_input.setPlaceholderText("Describe your transaction (e.g., 'Paid $500 cash for office supplies')")
+        self.nl_input.setStyleSheet("""
+            QLineEdit {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 8px;
+                padding: 12px 16px;
+                color: white;
+                font-size: 14px;
+            }
+            QLineEdit:focus {
+                border-color: rgba(0, 120, 215, 0.6);
+                background: rgba(255, 255, 255, 0.12);
+            }
+        """)
+        
+        self.parse_btn = QPushButton("✨ Parse")
+        self.parse_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(155, 89, 182, 0.8);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 12px 20px;
+                font-weight: 600;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background: rgba(155, 89, 182, 1.0);
+            }
+        """)
+        self.parse_btn.clicked.connect(self._parse_with_ai)
+        
+        nl_input_layout.addWidget(self.nl_input, 1)
+        nl_input_layout.addWidget(self.parse_btn)
+        
+        nl_layout.addWidget(nl_label)
+        nl_layout.addLayout(nl_input_layout)
+        
+        form_layout.addLayout(nl_layout)
+        
+        # Separator
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setStyleSheet("background: rgba(255, 255, 255, 0.1); max-height: 1px;")
+        form_layout.addWidget(separator)
+        
+        # Manual entry fields
+        manual_label = QLabel("Manual Entry")
+        manual_label.setStyleSheet("""
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 600;
+            font-size: 14px;
+        """)
+        form_layout.addWidget(manual_label)
+        
+        # Date field
+        date_layout = QHBoxLayout()
+        date_label = QLabel("Date:")
+        date_label.setFixedWidth(100)
+        date_label.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 500;")
+        
+        self.date_edit = QDateEdit()
+        self.date_edit.setDate(QDate.currentDate())
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setStyleSheet(self._get_field_style())
+        
+        date_layout.addWidget(date_label)
+        date_layout.addWidget(self.date_edit)
+        date_layout.addStretch()
+        
+        # Description field
+        desc_layout = QHBoxLayout()
+        desc_label = QLabel("Description:")
+        desc_label.setFixedWidth(100)
+        desc_label.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 500;")
+        
+        self.desc_edit = QLineEdit()
+        self.desc_edit.setPlaceholderText("Transaction description")
+        self.desc_edit.setStyleSheet(self._get_field_style())
+        
+        desc_layout.addWidget(desc_label)
+        desc_layout.addWidget(self.desc_edit)
+        
+        # Account fields
+        from_layout = QHBoxLayout()
+        from_label = QLabel("Debit:")
+        from_label.setFixedWidth(100)
+        from_label.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 500;")
+        
+        self.from_combo = QComboBox()
+        self.from_combo.setStyleSheet(self._get_field_style())
+        self._populate_account_combo(self.from_combo)
+        
+        from_layout.addWidget(from_label)
+        from_layout.addWidget(self.from_combo)
+        
+        to_layout = QHBoxLayout()
+        to_label = QLabel("Credit:")
+        to_label.setFixedWidth(100)
+        to_label.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 500;")
+        
+        self.to_combo = QComboBox()
+        self.to_combo.setStyleSheet(self._get_field_style())
+        self._populate_account_combo(self.to_combo)
+        
+        to_layout.addWidget(to_label)
+        to_layout.addWidget(self.to_combo)
+        
+        # Amount field
+        amount_layout = QHBoxLayout()
+        amount_label = QLabel("Amount:")
+        amount_label.setFixedWidth(100)
+        amount_label.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 500;")
+        
+        self.amount_edit = QLineEdit()
+        self.amount_edit.setPlaceholderText("0.00")
+        self.amount_edit.setStyleSheet(self._get_field_style())
+        
+        amount_layout.addWidget(amount_label)
+        amount_layout.addWidget(self.amount_edit)
+        amount_layout.addStretch()
+        
+        # Add all layouts
+        form_layout.addLayout(date_layout)
+        form_layout.addLayout(desc_layout)
+        form_layout.addLayout(from_layout)
+        form_layout.addLayout(to_layout)
+        form_layout.addLayout(amount_layout)
+        
+        # Save button
+        save_btn = QPushButton("💾 Save Transaction")
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(46, 204, 113, 0.8);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 14px 28px;
+                font-weight: 600;
+                font-size: 14px;
+                margin-top: 10px;
+            }
+            QPushButton:hover {
+                background: rgba(46, 204, 113, 1.0);
+            }
+        """)
+        save_btn.clicked.connect(self._save_transaction)
+        
+        form_layout.addWidget(save_btn)
+    
+    def _create_transaction_headers(self, layout):
+        """Create the transaction list headers."""
         header_frame = QFrame()
         header_frame.setStyleSheet("""
             QFrame {
                 background: rgba(255, 255, 255, 0.05);
                 border: none;
                 border-radius: 6px;
-                margin: 8px 0px;
+                padding: 8px;
             }
         """)
         
         header_layout = QHBoxLayout(header_frame)
         header_layout.setContentsMargins(16, 8, 16, 8)
-        header_layout.setSpacing(15)
+        header_layout.setSpacing(12)
         
         # Date header
         date_header = QLabel("Date")
-        date_header.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 600; font-size: 12px; background: transparent; border: none;")
-        date_header.setFixedWidth(85)
+        date_header.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 600; font-size: 12px;")
+        date_header.setFixedWidth(80)
         
         # Description header
         desc_header = QLabel("Description")
-        desc_header.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 600; font-size: 12px; background: transparent; border: none;")
-        desc_header.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-          # Debit header
+        desc_header.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 600; font-size: 12px;")
+        
+        # From header
         from_header = QLabel("Debit")
-        from_header.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 600; font-size: 12px; background: transparent; border: none;")
-        from_header.setFixedWidth(140)
+        from_header.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 600; font-size: 12px;")
+        from_header.setFixedWidth(120)
         
-        # Credit header
+        # To header
         to_header = QLabel("Credit")
-        to_header.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 600; font-size: 12px; background: transparent; border: none;")
-        to_header.setFixedWidth(140)
+        to_header.setStyleSheet("color: rgba(255, 255, 255, 0.8); font-weight: 600; font-size: 12px;")
+        to_header.setFixedWidth(120)
         
-        # Amount header - single column to match transaction display
+        # Amount header
         amount_header = QLabel("Amount")
-        amount_header.setStyleSheet("color: #81C784; font-weight: 600; font-size: 12px; background: transparent; border: none;")
+        amount_header.setStyleSheet("color: #81C784; font-weight: 600; font-size: 12px;")
         amount_header.setAlignment(Qt.AlignmentFlag.AlignRight)
-        amount_header.setFixedWidth(120)
+        amount_header.setFixedWidth(100)
         
         header_layout.addWidget(date_header)
-        header_layout.addWidget(desc_header)
+        header_layout.addWidget(desc_header, 1)
         header_layout.addWidget(from_header)
         header_layout.addWidget(to_header)
         header_layout.addWidget(amount_header)
         
-        main_layout.addWidget(header_frame)
-        
+        layout.addWidget(header_frame)
+    
+    def _get_field_style(self):
+        """Get styling for form fields."""
+        return """
+            QLineEdit, QComboBox, QDateEdit {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 6px;
+                padding: 10px 12px;
+                color: white;
+                font-size: 13px;
+            }
+            QLineEdit:focus, QComboBox:focus, QDateEdit:focus {
+                border-color: rgba(0, 120, 215, 0.6);
+                background: rgba(255, 255, 255, 0.12);
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 20px;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 4px solid rgba(255, 255, 255, 0.6);
+                margin-right: 4px;
+            }
+        """
+    
     def _on_header_click(self, event):
         """Handle header click to toggle form."""
         self._toggle_form()
@@ -612,318 +838,15 @@ class JournalPage(QWidget):
                     background: rgba(255, 255, 255, 0.12);
                 }
             """)
-        
-    def _get_input_style(self):
-        """Get styling for input fields."""
-        return """
-            QLineEdit, QDateEdit {
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 6px;
-                padding: 8px 12px;
-                color: white;
-                font-size: 14px;
-            }
-            QLineEdit:focus, QDateEdit:focus {
-                background: rgba(255, 255, 255, 0.15);
-                border-color: #4CAF50;
-            }
-            QLineEdit::placeholder {
-                color: rgba(255, 255, 255, 0.5);
-            }
-        """
-        
-    def _get_combo_style(self):
-        """Get styling for combo boxes."""
-        return """
-            QComboBox {
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 6px;
-                padding: 8px 12px;
-                color: white;
-                font-size: 14px;
-                min-width: 150px;
-            }
-            QComboBox:focus {
-                background: rgba(255, 255, 255, 0.15);
-                border-color: #4CAF50;
-            }
-            QComboBox::drop-down {
-                border: none;
-                width: 20px;
-            }
-            QComboBox::down-arrow {
-                image: none;
-                border-style: solid;
-                border-width: 4px 4px 0 4px;
-                border-color: white transparent transparent transparent;
-            }            QComboBox QAbstractItemView {
-                background: #2b2b2b;
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 6px;
-                color: white;
-                selection-background-color: #4CAF50;
-            }
-        """
-        
-    def _populate_accounts(self, combo):
-        """Populate account combo boxes."""
-        try:
-            accounts = self.system.get_all_accounts()
-            combo.clear()
-            for account in accounts:
-                combo.addItem(f"{account[2]} - {account[0]}", account[0])
-        except Exception as e:
-            print(f"Error loading accounts: {e}")
-            
-    def _populate_smart_accounts(self, combo, suggested_accounts):
-        """Populate combo box with smart account suggestions first, then all accounts."""
-        try:
-            combo.clear()
-            # Add suggested accounts first (prioritized but no visual indicator)
-            for account_name in suggested_accounts:
-                # Find the account details
-                for name, acc_type, code, parent_code, level, is_postable, description in self.system.get_all_accounts():
-                    if name.lower().strip() == account_name.lower().strip():
-                        combo.addItem(f"{code} - {name}", name)
-                        break
-            
-            # Add all other accounts
-            all_accounts = self.system.get_all_accounts()
-            for name, acc_type, code, parent_code, level, is_postable, description in all_accounts:
-                # Skip if already added as suggestion
-                if name not in suggested_accounts:
-                    combo.addItem(f"{code} - {name}", name)                    
-        except Exception as e:
-            print(f"Error loading smart accounts: {e}")
-            # Fallback to regular population
-            self._populate_accounts(combo)
-    
-    def _clear_form(self):
-        """Clear the form fields."""
-        self.date_edit.setDate(QDate.currentDate())
-        self.nl_input.clear()
-        self.desc_edit.clear()
-        self.from_combo.setCurrentIndex(-1)
-        self.to_combo.setCurrentIndex(-1)
-        self.amount_edit.clear()
-        self._clear_parsing_indicators()  # Clear all parsing indicators
-        # Refresh to show all accounts again
-        self._refresh_all_accounts()
-        
-    def _refresh_all_accounts(self):
-        """Refresh combo boxes to show all accounts."""
-        self._populate_accounts(self.from_combo)
-        self._populate_accounts(self.to_combo)
     
     def _parse_with_ai(self):
-        """Parse natural language input with AI and fill form fields."""
-        nl_text = self.nl_input.text().strip()
-        
-        if not nl_text:
-            QMessageBox.warning(self, "AI Parse", "Please enter a transaction description first.")
-            return        # Disable button and show progress
-        self.parse_btn.setText("Parsing...")
-        self.parse_btn.setEnabled(False)
-        self.parsing_indicator.setText("Analyzing transaction...")
-        self.success_checkmark.hide()
-        
-        try:
-            # Get available accounts for context
-            available_accounts = []
-            accounts = self.system.get_all_accounts()
-            for account in accounts:
-                available_accounts.append(account[0])  # account name
-            
-            self.parsing_indicator.setText("Processing with AI...")
-            
-            # Use AI to parse the transaction (includes accounting logic enforcement)
-            parsed_data = parse_transaction(nl_text, available_accounts, self.system)
-            
-            self.parsing_indicator.setText("Matching accounts...")
-            
-            # Get smart account suggestions based on the input
-            suggested_accounts = analyze_accounts_with_llm(self.system, nl_text)
-            
-            # Update combo boxes with relevant accounts for better UX
-            if suggested_accounts:
-                self._populate_smart_accounts(self.from_combo, suggested_accounts)
-                self._populate_smart_accounts(self.to_combo, suggested_accounts)
-            
-            if parsed_data:
-                # Fill the form fields with AI-parsed data
-                
-                # Set description
-                if 'description' in parsed_data:
-                    self.desc_edit.setText(parsed_data['description'])
-                
-                # Set amount
-                if 'amount' in parsed_data:
-                    self.amount_edit.setText(str(parsed_data['amount']))
-                
-                # Set accounts (debit = from, credit = to in double-entry)
-                if 'debit_account' in parsed_data:
-                    from_account = parsed_data['debit_account']
-                    # Find and set the account in combo
-                    for i in range(self.from_combo.count()):
-                        combo_text = self.from_combo.itemText(i)
-                        combo_data = self.from_combo.itemData(i)
-                        if (from_account.lower() in combo_text.lower() or 
-                            from_account.lower() == combo_data.lower()):
-                            self.from_combo.setCurrentIndex(i)
-                            break
-                
-                if 'credit_account' in parsed_data:
-                    to_account = parsed_data['credit_account']
-                    # Find and set the account in combo
-                    for i in range(self.to_combo.count()):
-                        combo_text = self.to_combo.itemText(i)
-                        combo_data = self.to_combo.itemData(i)
-                        if (to_account.lower() in combo_text.lower() or 
-                            to_account.lower() == combo_data.lower()):
-                            self.to_combo.setCurrentIndex(i)
-                            break                
-                # Transaction parsed successfully - show checkmark next to robot
-                self.parsing_indicator.setText("")
-                self.success_checkmark.show()
-                
-            else:
-                self.parsing_indicator.setText("❌ Could not parse transaction")
-                self.success_checkmark.hide()
-                QMessageBox.warning(self, "AI Parse Error",                    "❌ Could not parse the transaction.\n\n"
-                    "💡 **Suggestions:**\n"
-                    "• Try rephrasing with more details\n"
-                    "• Include amount, accounts, and action\n"                    "• Example: 'paid office rent $500 by bank transfer'\n\n"
-                    "You can still fill the form manually.")
-                
-        except Exception as e:
-            self.parsing_indicator.setText("❌ Parsing failed")
-            self.success_checkmark.hide()
-            error_msg = str(e)
-            if "API" in error_msg.upper():
-                QMessageBox.critical(self, "AI Service Error", 
-                    f"🚫 AI Service Unavailable\n\n"
-                    f"The AI parsing service is currently unavailable.\n"
-                    f"Please check your internet connection and API configuration.\n\n"
-                    f"Error: {error_msg}\n\n"
-                    f"You can still fill the form manually.")
-            else:
-                QMessageBox.critical(self, "AI Parse Error", 
-                    f"❌ An error occurred while parsing:\n\n{error_msg}\n\n"
-                    f"💡 **What you can do:**\n"
-                    f"• Check your transaction description\n"
-                    f"• Try a simpler format\n"
-                    f"• Fill the form manually\n\n"                    f"The error has been logged for review.")
-        
-        finally:
-            # Re-enable button and clear progress after 2 seconds
-            self.parse_btn.setText("🪄 Fill")
-            self.parse_btn.setEnabled(True)
-            # Clear progress text after a delay, but keep checkmark visible            QTimer.singleShot(2000, lambda: self.parsing_indicator.setText(""))
+        """Parse natural language input (placeholder)."""
+        QMessageBox.information(self, "AI Parse", "AI parsing feature coming soon!")
     
-    def _clear_parsing_indicators(self):
-        """Clear all parsing indicators."""
-        self.parsing_indicator.setText("")
-        self.success_checkmark.hide()
-        
-    def _add_entry(self):
-        """Add a new journal entry."""
+    def _open_bulk_entry_page(self):
+        """Open the bulk entry page."""
         try:
-            # Get form data
-            date = self.date_edit.date().toString("yyyy-MM-dd")
-            description = self.desc_edit.text().strip()
-            from_account = self.from_combo.currentData()
-            to_account = self.to_combo.currentData()
-            amount = self.amount_edit.text().strip()
-            
-            # Validate
-            if not all([description, from_account, to_account, amount]):
-                QMessageBox.warning(self, "Error", "Please fill in all fields.")
-                return
-                
-            try:
-                amount = float(amount)
-                if amount <= 0:
-                    raise ValueError()
-            except ValueError:
-                QMessageBox.warning(self, "Error", "Please enter a valid positive amount.")
-                return
-                
-            if from_account == to_account:
-                QMessageBox.warning(self, "Error", "Debit and Credit accounts must be different.")
-                return
-                
-            # Add the entry
-            entry_id = self.system.add_journal_entry(date, description, from_account, to_account, amount)
-            if entry_id:
-                QMessageBox.information(self, "Success", "Journal entry added successfully!")
-                self._clear_form()
-                self._load_transactions()
-            else:
-                QMessageBox.warning(self, "Error", "Failed to add journal entry.")
-                
+            self.bulk_entry_page = BulkEntryPage(self.system)
+            self.bulk_entry_page.show()
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"An error occurred: {str(e)}")
-            
-    def _load_transactions(self):
-        """Load and display transactions based on date filter."""
-        try:
-            # Clear existing cards
-            for i in reversed(range(self.transactions_layout.count())):
-                widget = self.transactions_layout.itemAt(i).widget()
-                if widget:
-                    widget.setParent(None)
-                    
-            # Get date range from filter
-            from_date, to_date = self.date_selector.get_date_range()
-            from_date_str = from_date.toString("yyyy-MM-dd") if from_date else None
-            to_date_str = to_date.toString("yyyy-MM-dd") if to_date else None
-            
-            # Get filtered transactions
-            try:
-                if from_date_str and to_date_str:
-                    # Get transactions within date range
-                    entries = self.system.get_journal_entries_by_date_range(from_date_str, to_date_str)
-                else:
-                    # Get all recent transactions
-                    entries = self.system.get_recent_journal_entries(50)  # Get last 50 entries
-            except Exception as e:
-                print(f"Error getting entries from system: {e}")
-                entries = []
-            
-            if not entries:
-                no_data = QLabel("No transactions found.")
-                no_data.setStyleSheet("""
-                    color: rgba(255, 255, 255, 0.6);
-                    font-size: 14px;
-                    text-align: center;
-                    padding: 40px;
-                    background: transparent;
-                    border: none;
-                """)
-                no_data.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.transactions_layout.addWidget(no_data)
-            else:
-                for entry in entries:
-                    try:
-                        card = TransactionCard(entry)
-                        self.transactions_layout.addWidget(card)
-                    except Exception as e:
-                        print(f"Error creating card for entry {entry}: {e}")
-                        # Skip this entry and continue
-                        continue
-                    
-            # Add stretch at the end
-            self.transactions_layout.addStretch()
-            
-        except Exception as e:
-            print(f"Error loading transactions: {e}")
-            error_label = QLabel(f"Error loading transactions: {str(e)}")
-            error_label.setStyleSheet("""
-                color: #f44336;
-                font-size: 14px;
-                background: transparent;
-                border: none;
-            """)
-            self.transactions_layout.addWidget(error_label)
+            QMessageBox.critical(self, "Error", f"Failed to open bulk entry page: {str(e)}")

@@ -94,8 +94,7 @@ class HierarchyAccountDialog(QDialog):
         # Hierarchy Settings Group
         hierarchy_group = self._create_group("Hierarchy Settings", layout)
         self._create_hierarchy_fields(hierarchy_group)
-        
-        # Account Properties Group
+          # Account Properties Group
         properties_group = self._create_group("Account Properties", layout)
         self._create_properties_fields(properties_group)
         
@@ -107,17 +106,18 @@ class HierarchyAccountDialog(QDialog):
                 color: rgba(255, 255, 255, 0.9);
                 font-size: {ResponsiveHelper.scale_size(14, 12, 16)}px;
                 font-weight: 600;
-                border: 1px solid rgba(255, 255, 255, 0.2);
+                border: none;
                 border-radius: 8px;
                 margin-top: 8px;
-                padding-top: 8px;
-                background: rgba(255, 255, 255, 0.05);
+                padding-top: 12px;
+                background: transparent;
             }}
             QGroupBox::title {{
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 8px 0 8px;
-                background: rgba(32, 32, 32, 0.9);
+                background: transparent;
+                color: rgba(255, 255, 255, 0.9);
             }}
         """)
         
@@ -356,8 +356,7 @@ class HierarchyAccountDialog(QDialog):
         level = self.level_combo.currentIndex() + 1
         return {
             'name': self.name_edit.text().strip(),
-            'type': self.type_combo.currentText(),
-            'code': self.code_edit.text().strip(),
+            'type': self.type_combo.currentText(),            'code': self.code_edit.text().strip(),
             'parent_code': self.parent_combo.currentData() or None,
             'level': level,
             'is_postable': self.postable_checkbox.isChecked(),
@@ -372,7 +371,9 @@ class HierarchyAccountDialog(QDialog):
                 font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
                 font-weight: 500;
                 background: transparent;
+                border: none;
                 margin-bottom: 4px;
+                padding: 0px;
             }}
         """
         
@@ -514,11 +515,11 @@ class HierarchicalAccountsPage(QWidget):
         )
         layout.addWidget(header)
         
+        # Create toolbar first (move to top)
+        self._create_toolbar(layout)
+        
         # Create main content area
         self._create_content_area(layout)
-        
-        # Create toolbar
-        self._create_toolbar(layout)
         
     def _create_content_area(self, layout):
         """Create the main content area with splitter."""
@@ -552,8 +553,7 @@ class HierarchicalAccountsPage(QWidget):
         tree_layout = QVBoxLayout(tree_frame)
         tree_layout.setContentsMargins(16, 16, 16, 16)
         tree_layout.setSpacing(12)
-        
-        # Tree header
+          # Tree header
         tree_header = QLabel("Account Hierarchy")
         tree_header.setStyleSheet(f"""
             QLabel {{
@@ -561,7 +561,9 @@ class HierarchicalAccountsPage(QWidget):
                 font-size: {ResponsiveHelper.scale_size(16, 14, 18)}px;
                 font-weight: 600;
                 background: transparent;
+                border: none;
                 margin-bottom: 8px;
+                padding: 0px;
             }}
         """)
         tree_layout.addWidget(tree_header)
@@ -598,8 +600,7 @@ class HierarchicalAccountsPage(QWidget):
         details_layout = QVBoxLayout(details_frame)
         details_layout.setContentsMargins(16, 16, 16, 16)
         details_layout.setSpacing(16)
-        
-        # Details header
+          # Details header
         details_header = QLabel("Account Details")
         details_header.setStyleSheet(f"""
             QLabel {{
@@ -607,7 +608,9 @@ class HierarchicalAccountsPage(QWidget):
                 font-size: {ResponsiveHelper.scale_size(16, 14, 18)}px;
                 font-weight: 600;
                 background: transparent;
+                border: none;
                 margin-bottom: 8px;
+                padding: 0px;
             }}
         """)
         details_layout.addWidget(details_header)
@@ -635,8 +638,7 @@ class HierarchicalAccountsPage(QWidget):
         
         layout = QVBoxLayout(info_frame)
         layout.setSpacing(12)
-        
-        # Default message
+          # Default message
         self.info_label = QLabel("Select an account to view details")
         self.info_label.setStyleSheet(f"""
             QLabel {{
@@ -644,6 +646,7 @@ class HierarchicalAccountsPage(QWidget):
                 font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
                 font-style: italic;
                 background: transparent;
+                border: none;
                 padding: 20px;
                 text-align: center;
             }}
@@ -663,8 +666,7 @@ class HierarchicalAccountsPage(QWidget):
         self._create_level_filters(toolbar_layout)
         
         toolbar_layout.addStretch()
-        
-        # Action buttons
+          # Action buttons
         self._create_action_buttons(toolbar_layout)
         
         layout.addLayout(toolbar_layout)
@@ -678,7 +680,9 @@ class HierarchicalAccountsPage(QWidget):
                 font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
                 font-weight: 500;
                 background: transparent;
+                border: none;
                 margin-right: 8px;
+                padding: 0px;
             }}
         """)
         layout.addWidget(filter_label)

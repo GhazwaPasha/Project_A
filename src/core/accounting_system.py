@@ -487,10 +487,23 @@ class AccountingSystem:
     def close(self):
         self.conn.close()
 
-    def get_recent_journal_entries(self, limit=5):
+    def get_recent_journal_entries(self, limit=20):
+        """Get recent journal entries ordered by date descending."""
         cursor = self.conn.cursor()
         cursor.execute("SELECT id, date, description, debit_account, credit_account, amount, timestamp FROM journal_entries ORDER BY date DESC, timestamp DESC LIMIT ?", (limit,))
-        return cursor.fetchall()
+        
+        entries = []
+        for row in cursor.fetchall():
+            entries.append({
+                'id': row[0],
+                'date': row[1],
+                'description': row[2],
+                'debit_account': row[3],
+                'credit_account': row[4],
+                'amount': row[5],
+                'timestamp': row[6]
+            })
+        return entries
 
     def get_journal_entries(self, from_date=None, to_date=None):
         """Get journal entries filtered by date range."""
