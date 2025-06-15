@@ -9,6 +9,8 @@ from ..common import (
 )
 from PyQt6.QtWidgets import QGraphicsDropShadowEffect, QSizePolicy, QComboBox
 from PyQt6.QtGui import QPixmap
+from PyQt6.QtCore import Qt, QStringListModel
+from PyQt6.QtWidgets import QCompleter
 from .styles import ModernStyles, GlassmorphismHelper
 
 
@@ -716,3 +718,423 @@ class NonScrollableComboBox(QComboBox):
         else:
             # Ignore wheel events to prevent accidental changes
             event.ignore()
+
+
+class EditableAccountComboBox(QComboBox):
+    """An editable combo box with smart account suggestions.
+    
+    Features:
+    - Editable text input for typing account names/codes
+    - Auto-completion with smart filtering
+    - Non-scrollable when not focused (prevents accidents)
+    - Smart matching (partial text, codes, account names)
+    - Proper placeholder text (not a selectable item)
+    - Strict validation: only accepts accounts from chart of accounts
+    """
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setEditable(True)
+        self.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.placeholder_text = "Select or type account..."
+        self.valid_accounts = []  # List of valid account strings
+        self.valid_account_codes = []  # List of valid account codes
+        self.valid_account_names = []  # List of valid account names
+        self._setup_completer()
+        self._setup_placeholder()
+        self._setup_validation()
+        
+        # Ensure we start with no selection to show placeholder
+        self.setCurrentIndex(-1)
+    
+    def _setup_validation(self):
+        """Setup validation to only accept valid accounts."""
+        line_edit = self.lineEdit()
+        if line_edit:
+            # Connect to text editing finished to validate
+            line_edit.editingFinished.connect(self._validate_input)
+            # Connect to text changed for real-time feedback
+            line_edit.textChanged.connect(self._on_text_changed_with_validation)
+    
+    def _validate_input(self):
+        """Validate that the entered text matches a valid account."""
+        line_edit = self.lineEdit()
+        if not line_edit:
+            return
+            
+        text = line_edit.text().strip()
+        if not text:
+            # Empty is allowed (placeholder)
+            return
+            
+        # Check if the text matches any valid account format
+        if self._is_valid_account(text):
+            # Valid account - ensure proper formatting and set selection
+            formatted_account = self._format_account_text(text)
+            if formatted_account:
+                # Find and select the properly formatted account
+                index = self.findText(formatted_account, Qt.MatchFlag.MatchExactly)
+                if index >= 0:
+                    self.setCurrentIndex(index)
+                else:
+                    # Set the text directly if not found in combo
+                    line_edit.setText(formatted_account)
+            else:
+                # Could not format - reject input
+                self._show_validation_error(line_edit)
+                line_edit.clear()
+        else:
+            # Invalid account - clear the input and show error styling
+            self._show_validation_error(line_edit)
+            line_edit.clear()
+    
+    def _is_valid_account(self, text):
+        """Check if the text represents a valid account - strict validation."""
+        text = text.strip()
+        if not text:
+            return True  # Empty is allowed
+            
+        # For strict validation: only allow exact matches or partial matches that lead to exact matches
+        
+        # Check if it's exactly one of our valid account strings
+        if text in self.valid_accounts:
+            return True
+            
+        # Check if it's a valid account code (4 digits) that exists in our chart
+        if len(text) == 4 and text.isdigit():
+            return text in self.valid_account_codes
+            
+        # Check if it's a valid account name that exists in our chart
+        if text in self.valid_account_names:
+            return True
+            
+        # For partial input during typing: check if it's a valid prefix
+        # But only if it's unique enough (at least 2 characters)
+        if len(text) >= 2:
+            text_lower = text.lower()
+            
+            # Check for partial matches in account codes (must start with the text)
+            if text.isdigit():
+                matching_codes = [code for code in self.valid_account_codes if code.startswith(text)]
+                if len(matching_codes) >= 1:  # Allow if there's at least one match
+                    return True
+            
+            # Check for partial matches in full account strings
+            matching_accounts = [acc for acc in self.valid_accounts if acc.lower().startswith(text_lower)]
+            if len(matching_accounts) >= 1:  # Allow if there's at least one match
+                return True
+                
+            # Check for partial matches in account names
+            matching_names = [name for name in self.valid_account_names if name.lower().startswith(text_lower)]
+            if len(matching_names) >= 1:  # Allow if there's at least one match
+                return True
+        
+        return False
+    
+    def _format_account_text(self, text):
+        """Format the text to proper account format (code - name)."""
+        text = text.strip()
+        if not text:
+            return ""
+            
+        # If it's already in proper format, return as-is
+        if text in self.valid_accounts:
+            return text
+            
+        # If it's just a code, find the full account string
+        if len(text) == 4 and text.isdigit():
+            for account in self.valid_accounts:
+                if account.startswith(text + " - "):
+                    return account
+                    
+        # If it's just a name, find the full account string
+        for account in self.valid_accounts:
+            account_name = account.split(" - ", 1)[1] if " - " in account else ""
+            if account_name.lower() == text.lower():
+                return account
+                
+        # Try partial matching for the closest account
+        text_lower = text.lower()
+        for account in self.valid_accounts:
+            if account.lower().startswith(text_lower):
+                return account
+                
+        return None
+    
+    def _show_validation_error(self, line_edit):
+        """Show visual feedback for validation error."""
+        # Temporarily change styling to indicate error
+        original_style = line_edit.styleSheet()
+        error_style = original_style + """
+            border: 2px solid rgba(255, 100, 100, 0.9) !important;
+            background: rgba(255, 100, 100, 0.15) !important;
+            color: rgba(255, 255, 255, 0.9) !important;
+        """
+        line_edit.setStyleSheet(error_style)
+        
+        # Show tooltip with error message
+        line_edit.setToolTip("❌ Invalid account. Please select an account from the chart of accounts.")
+        
+        # Reset styling after a delay
+        from PyQt6.QtCore import QTimer
+        def reset_style():
+            line_edit.setStyleSheet(original_style)
+            line_edit.setToolTip("")
+        
+        QTimer.singleShot(2000, reset_style)
+    
+    def _on_text_changed_with_validation(self, text):
+        """Handle text changes with validation feedback."""
+        # Call original text changed handler
+        self._on_text_changed(text)
+        
+        # Prevent styling conflicts - don't apply validation styling while typing
+        # The bulk entry page handles validation styling externally
+    
+    def setAccountList(self, accounts):
+        """Set the list of valid accounts for validation."""
+        self.valid_accounts = accounts.copy() if accounts else []
+        
+        # Extract codes and names for validation
+        self.valid_account_codes = []
+        self.valid_account_names = []
+        
+        for account in self.valid_accounts:
+            if " - " in account:
+                code, name = account.split(" - ", 1)
+                self.valid_account_codes.append(code)
+                self.valid_account_names.append(name)
+        
+        # Update the combo box items
+        self.addItems(self.valid_accounts)
+
+    def _setup_placeholder(self):
+        """Setup proper placeholder text functionality."""
+        # Set placeholder text on the line edit
+        line_edit = self.lineEdit()
+        if line_edit:
+            line_edit.setPlaceholderText(self.placeholder_text)
+            # Connect to text changes to handle placeholder behavior
+            line_edit.textChanged.connect(self._on_text_changed)
+            # Ensure it starts empty to show placeholder
+            line_edit.clear()
+    
+    def _on_text_changed(self, text):
+        """Handle text changes to manage placeholder and selection."""
+        # If user types something, clear the current selection if it was the placeholder
+        if text and self.currentIndex() == 0 and self.count() > 0:
+            # Check if the first item was our old placeholder item
+            first_item = self.itemText(0)
+            if first_item.startswith("--") and "Select" in first_item:
+                self.setCurrentIndex(-1)  # Clear selection
+    
+    def setPlaceholderText(self, text):
+        """Set the placeholder text."""
+        self.placeholder_text = text
+        line_edit = self.lineEdit()
+        if line_edit:
+            line_edit.setPlaceholderText(text)
+    
+    def _setup_completer(self):
+        """Setup the auto-completer for smart suggestions."""
+        # Create completer with case-insensitive matching
+        self.completer = QCompleter()
+        self.completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        self.completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        
+        # Set the completer on the line edit
+        self.setCompleter(self.completer)
+        
+        # Connect completion selection to combo box selection
+        self.completer.activated.connect(self._on_completion_selected)
+    
+    def _on_completion_selected(self, text):
+        """Handle when a completion is selected."""
+        # Find the index of the selected item and set it
+        index = self.findText(text, Qt.MatchFlag.MatchExactly)
+        if index >= 0:
+            self.setCurrentIndex(index)
+    
+    def setModel(self, model):
+        """Override setModel to also update the completer."""
+        super().setModel(model)
+        if self.completer:
+            self.completer.setModel(model)
+    
+    def addItems(self, items):
+        """Override addItems to also update the completer (no placeholder item)."""
+        # Clear first to ensure clean state
+        self.clear()
+        super().addItems(items)
+        # Update completer model with actual items only
+        string_list = [self.itemText(i) for i in range(self.count())]
+        model = QStringListModel(string_list)
+        self.completer.setModel(model)
+        # Reset to no selection and show placeholder
+        self.setCurrentIndex(-1)
+        # Clear the line edit to ensure placeholder shows
+        line_edit = self.lineEdit()
+        if line_edit:
+            line_edit.clear()
+    
+    def addItem(self, text, userData=None):
+        """Override addItem to also update the completer."""
+        # Don't add placeholder items
+        if text.startswith("--") and "Select" in text:
+            return
+        
+        super().addItem(text, userData)
+        # Update completer model
+        string_list = [self.itemText(i) for i in range(self.count())]
+        model = QStringListModel(string_list)
+        self.completer.setModel(model)
+    
+    def currentText(self):
+        """Override currentText to handle empty selection properly."""
+        # If no item is selected (index -1), return empty string to show placeholder
+        if self.currentIndex() == -1:
+            line_edit = self.lineEdit()
+            if line_edit:
+                text = line_edit.text()
+                # If it's empty or just the placeholder, return empty
+                if not text or text == self.placeholder_text:
+                    return ""
+                return text
+            return ""
+        
+        # Otherwise get the normal current text
+        text = super().currentText()
+        # If it's a placeholder-like text, return empty string
+        if text and (text.startswith("--") and "Select" in text):
+            return ""
+        return text
+    
+    def setCurrentText(self, text):
+        """Override setCurrentText to handle setting custom text."""
+        if not text or (text.startswith("--") and "Select" in text):
+            # Clear selection and show placeholder
+            self.setCurrentIndex(-1)
+            line_edit = self.lineEdit()
+            if line_edit:
+                line_edit.clear()
+                line_edit.setText("")  # Ensure completely empty
+        else:
+            # Try to find the text in the list first
+            index = self.findText(text, Qt.MatchFlag.MatchExactly)
+            if index >= 0:
+                self.setCurrentIndex(index)
+            else:
+                # Set custom text and clear index to show it's custom
+                self.setCurrentIndex(-1)
+                line_edit = self.lineEdit()
+                if line_edit:
+                    line_edit.setText(text)
+    
+    def clear_selection(self):
+        """Clear the selection and show placeholder text."""
+        self.setCurrentIndex(-1)
+        line_edit = self.lineEdit()
+        if line_edit:
+            line_edit.clear()
+            line_edit.setText("")  # Ensure it's completely empty
+    
+    def showPopup(self):
+        """Override showPopup to ensure proper placeholder handling."""
+        # If we're currently showing placeholder (no selection), make sure it stays that way
+        if self.currentIndex() == -1:
+            line_edit = self.lineEdit()
+            if line_edit and not line_edit.text():
+                # Ensure the line edit is truly empty when showing popup
+                line_edit.setText("")
+        super().showPopup()
+    
+    def wheelEvent(self, event):
+        """Override wheel event to prevent accidental scrolling.
+        
+        Same behavior as NonScrollableComboBox:
+        - Only allow wheel scrolling when focused and dropdown is open
+        - Prevent accidental changes while scrolling through form
+        """
+        if self.hasFocus() and self.view().isVisible():
+            super().wheelEvent(event)
+        else:
+            event.ignore()
+    
+    def keyPressEvent(self, event):
+        """Enhanced key handling for better user experience."""
+        if event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
+            # On Enter, try to find the best match for the current text
+            current_text = self.currentText()
+            best_match_index = self._find_best_match(current_text)
+            if best_match_index >= 0:
+                self.setCurrentIndex(best_match_index)
+        
+        super().keyPressEvent(event)
+    
+    def _find_best_match(self, text):
+        """Find the best matching item for the given text."""
+        if not text:
+            return -1
+        
+        text_lower = text.lower()
+        
+        # Try exact match first
+        for i in range(self.count()):
+            item_text = self.itemText(i)
+            if item_text.lower() == text_lower:
+                return i
+        
+        # Try partial match (starts with)
+        for i in range(self.count()):
+            item_text = self.itemText(i)
+            if item_text.lower().startswith(text_lower):
+                return i
+        
+        # Try contains match
+        for i in range(self.count()):
+            item_text = self.itemText(i)
+            if text_lower in item_text.lower():
+                return i
+        
+        return -1
+    
+    def getValidatedAccount(self):
+        """Get the current account text only if it's valid, otherwise return empty string."""
+        current_text = self.currentText()
+        if not current_text:
+            return ""
+            
+        # Final validation check
+        if self._is_valid_account(current_text):
+            formatted = self._format_account_text(current_text)
+            return formatted if formatted else ""
+        
+        return ""
+
+    def isValidAccount(self):
+        """Check if the current account selection/input is valid."""
+        current_text = self.currentText()
+        if not current_text:
+            return True  # Empty is considered valid (will be caught by form validation)
+        
+        return self._is_valid_account(current_text) and self._format_account_text(current_text) is not None
+    
+    def setTextWithValidation(self, text):
+        """Set text and trigger validation to match against chart of accounts."""
+        if not text:
+            self.clear_selection()
+            return
+            
+        # First try exact match
+        index = self.findText(text, Qt.MatchFlag.MatchExactly)
+        if index >= 0:
+            self.setCurrentIndex(index)
+            return
+            
+        # Set the text in line edit
+        line_edit = self.lineEdit()
+        if line_edit:
+            line_edit.setText(text)
+            # Trigger validation to find matching accounts
+            self._validate_input()
