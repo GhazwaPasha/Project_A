@@ -33,6 +33,7 @@ class TransactionCard(QFrame):
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 8px;
                 margin: 2px 0px;
+                min-height: 50px;
             }
             QFrame:hover {
                 background: rgba(255, 255, 255, 0.08);
@@ -43,40 +44,50 @@ class TransactionCard(QFrame):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(12)
-        
-        # Date column
-        date_label = QLabel(self.entry_data.get('date', ''))
+          # Date column
+        date_value = self.entry_data.get('date', 'N/A')
+        date_label = QLabel(str(date_value))
         date_label.setFixedWidth(80)
         date_label.setStyleSheet("color: rgba(255, 255, 255, 0.7); font-weight: 500; background: transparent; border: none;")
         
         # Description column
-        desc_label = QLabel(self.entry_data.get('description', ''))
+        desc_value = self.entry_data.get('description', 'No description')
+        desc_label = QLabel(str(desc_value))
         desc_label.setStyleSheet("color: rgba(255, 255, 255, 0.9); font-weight: 500; background: transparent; border: none;")
         desc_label.setWordWrap(True)
         
-        # From account column (Debit)
-        from_account = self.entry_data.get('from_account', '')
-        from_label = QLabel(from_account)
-        from_label.setFixedWidth(140)
-        from_label.setStyleSheet("color: rgba(255, 100, 100, 0.9); font-weight: 500; background: transparent; border: none;")
+        # Debit account column
+        debit_account = self.entry_data.get('debit_account', 'N/A')
+        debit_label = QLabel(str(debit_account))
+        debit_label.setFixedWidth(140)
+        debit_label.setStyleSheet("color: rgba(255, 255, 255, 0.9); font-weight: 500; background: transparent; border: none;")
         
-        # To account column (Credit)
-        to_account = self.entry_data.get('to_account', '')
-        to_label = QLabel(to_account)
-        to_label.setFixedWidth(140)
-        to_label.setStyleSheet("color: rgba(100, 255, 100, 0.9); font-weight: 500; background: transparent; border: none;")
+        # Credit account column
+        credit_account = self.entry_data.get('credit_account', 'N/A')
+        credit_label = QLabel(str(credit_account))
+        credit_label.setFixedWidth(140)
+        credit_label.setStyleSheet("color: rgba(255, 255, 255, 0.9); font-weight: 500; background: transparent; border: none;")
         
         # Amount column
-        amount = self.entry_data.get('amount', '0.00')
-        amount_label = QLabel(f"${amount}")
+        amount = self.entry_data.get('amount', 0)
+        # Format amount properly - handle both string and float
+        if isinstance(amount, (int, float)):
+            amount_str = f"${amount:,.2f}"
+        else:
+            try:
+                amount_str = f"${float(amount):,.2f}"
+            except (ValueError, TypeError):
+                amount_str = f"${amount}"
+        
+        amount_label = QLabel(amount_str)
         amount_label.setFixedWidth(100)
         amount_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         amount_label.setStyleSheet("color: rgba(255, 255, 255, 0.9); font-weight: bold; font-size: 14px; background: transparent; border: none;")
         
         layout.addWidget(date_label)
         layout.addWidget(desc_label, 1)  # This will stretch
-        layout.addWidget(from_label)
-        layout.addWidget(to_label)
+        layout.addWidget(debit_label)
+        layout.addWidget(credit_label)
         layout.addWidget(amount_label)
 
 
@@ -284,7 +295,7 @@ class SingleEntryTab(QWidget):
     def _create_entry_form(self):
         """Create expandable entry form."""
         from PyQt6.QtCore import QPropertyAnimation, QEasingCurve
-        from PyQt6.QtWidgets import QToolButton, QGridLayout
+        from PyQt6.QtWidgets import QGridLayout
         from ..components.shared_styles import get_field_style, get_button_style, get_label_style
         
         # Main container
@@ -311,9 +322,9 @@ class SingleEntryTab(QWidget):
         title = QLabel("New Transaction")
         title.setStyleSheet("color: white; font-size: 15px; font-weight: 600; background: transparent;")
         
-        toggle_btn = QToolButton()
+        toggle_btn = QLabel()
         toggle_btn.setStyleSheet("""
-            QToolButton {
+            QLabel {
                 border: none;
                 background: transparent;
                 font-size: 18px;
@@ -321,8 +332,6 @@ class SingleEntryTab(QWidget):
             }
         """)
         toggle_btn.setText("▶")
-        toggle_btn.setCheckable(True)
-        toggle_btn.setChecked(False)
         
         header_layout.addWidget(title)
         header_layout.addStretch()
@@ -413,8 +422,9 @@ class SingleEntryTab(QWidget):
         animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
 
         def toggle():
-            expanded = toggle_btn.isChecked()
-            toggle_btn.setText("▼" if expanded else "▶")
+            # Check current visibility to determine state
+            expanded = content.isVisible()
+            toggle_btn.setText("▶" if expanded else "▼")
             
             animation.stop()
             try:
@@ -422,14 +432,14 @@ class SingleEntryTab(QWidget):
             except TypeError:
                 pass
             
-            if expanded:
+            if not expanded:  # Currently collapsed, so expand
                 content.setVisible(True)
                 content.setMaximumHeight(16777215)
                 content_height = content.sizeHint().height()
                 animation.setStartValue(0)
                 animation.setEndValue(content_height)
                 animation.start()
-            else:
+            else:  # Currently expanded, so collapse
                 current_height = content.height()
                 animation.setStartValue(current_height)
                 animation.setEndValue(0)
@@ -437,9 +447,9 @@ class SingleEntryTab(QWidget):
                 animation.start()
 
         def header_toggle():
-            toggle_btn.setChecked(not toggle_btn.isChecked())
             toggle()
         
+        # Only connect header click to toggle function (not the triangle icon)
         header.mousePressEvent = lambda event: header_toggle()
 
         layout.insertWidget(0, header)
