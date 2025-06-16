@@ -1137,3 +1137,14 @@ class EditableAccountComboBox(QComboBox):
             
         # Force a repaint to ensure visual update
         self.update()
+
+    def force_refresh(self):
+        """Force a complete UI refresh of the combo box."""
+        line_edit = self.lineEdit()
+        if line_edit:
+            # Force the line edit to repaint
+            line_edit.update()
+            line_edit.repaint()
+        # Force the combo box itself to repaint
+        self.update()
+        self.repaint()

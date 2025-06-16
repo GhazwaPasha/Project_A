@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QDateEdit, QFrame, QGridLayout, QSizePolicy, QGraphicsOpacityEffect,
     QMenu
 )
-from PyQt6.QtCore import Qt, QDate, pyqtSignal, QPropertyAnimation, QEasingCurve, QTimer
+from PyQt6.QtCore import Qt, QDate, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFont
 from datetime import datetime
 from ..components.widgets import EditableAccountComboBox
@@ -209,6 +209,42 @@ class CardBasedTransactionEntry(QFrame):
             'amount': self.amount_edit.text().strip()
         }
         
+    def set_entry_data(self, data):
+        """Set the transaction data."""
+        date_str = data.get('date', '')
+        if date_str:
+            try:
+                # Attempt to parse multiple date formats
+                dt = datetime.strptime(date_str, '%Y-%m-%d')
+                self.date_edit.setDate(QDate(dt))
+            except ValueError:
+                try:
+                    dt = datetime.strptime(date_str, '%m/%d/%Y')
+                    self.date_edit.setDate(QDate(dt))
+                except ValueError:
+                    self.date_edit.setDate(QDate.currentDate()) # Fallback
+        else:            self.date_edit.setDate(QDate.currentDate())
+
+        self.desc_edit.setText(data.get('description', ''))
+        self.debit_combo.setTextWithValidation(data.get('debit_account', ''))
+        self.credit_combo.setTextWithValidation(data.get('credit_account', ''))
+        self.amount_edit.setText(str(data.get('amount', '')))
+
+        # After setting data, explicitly trigger validation and styling updates        self.update_ui_and_validation()
+
+    def update_ui_and_validation(self):
+        """Force an update of the UI and re-apply validation styling."""
+        # Force refresh of combo boxes to ensure they display the correct values
+        self.debit_combo.force_refresh()
+        self.credit_combo.force_refresh()
+        
+        # Apply validation styling
+        self.apply_incomplete_styling()
+        
+        # Force repaint of the entire card
+        self.update()
+        self.repaint()
+    
     def is_valid(self):
         """Check if entry is valid."""
         data = self.get_entry_data()
@@ -227,6 +263,90 @@ class CardBasedTransactionEntry(QFrame):
             data['debit_account'] and data['debit_account'] != '-- Select Account --',            data['credit_account'] and data['credit_account'] != '-- Select Account --',
             data['amount']
         ])
+    
+    def has_incomplete_data(self):
+        """Check if card has some data but is incomplete (missing required fields)."""
+        if not self._has_any_data():
+            return False  # Completely empty cards are not incomplete
+        
+        data = self.get_entry_data()
+        return not all([
+            data['description'],
+            data['debit_account'] and data['debit_account'] != '-- Select Account --',
+            data['credit_account'] and data['credit_account'] != '-- Select Account --',
+            data['amount']
+        ])
+    
+    def apply_incomplete_styling(self):
+        """Apply yellow outline to empty fields when card has incomplete data."""
+        if not self.has_incomplete_data():
+            self.clear_validation_styling()
+            return
+            
+        data = self.get_entry_data()
+        
+        # Apply yellow styling to empty fields
+        if not data['description']:
+            self._apply_yellow_border(self.desc_edit)
+        else:
+            self._clear_field_styling(self.desc_edit)
+            
+        if not data['debit_account'] or data['debit_account'] == '-- Select Account --':
+            self._apply_yellow_border(self.debit_combo)
+        else:
+            self._clear_field_styling(self.debit_combo)
+            
+        if not data['credit_account'] or data['credit_account'] == '-- Select Account --':
+            self._apply_yellow_border(self.credit_combo)
+        else:
+            self._clear_field_styling(self.credit_combo)
+            
+        if not data['amount']:
+            self._apply_yellow_border(self.amount_edit)
+        else:
+            self._clear_field_styling(self.amount_edit)
+    
+    def clear_validation_styling(self):
+        """Clear any validation-related styling from all fields."""
+        base_style = self._get_single_row_field_style()
+        self.desc_edit.setStyleSheet(base_style)
+        self.debit_combo.setStyleSheet(base_style)
+        self.credit_combo.setStyleSheet(base_style)
+        self.amount_edit.setStyleSheet(base_style)
+    
+    def clear_entry(self):
+        """Clear all fields in the entry card."""
+        self.date_edit.setDate(QDate.currentDate())
+        self.desc_edit.clear()
+        self.debit_combo.clear_selection()
+        self.credit_combo.clear_selection()
+        self.amount_edit.clear()
+        self.clear_validation_styling()
+    
+    def _apply_yellow_border(self, widget):
+        """Apply yellow border to indicate missing required field."""
+        if hasattr(widget, 'setStyleSheet'):
+            base_style = self._get_base_style_for_widget(widget)
+            yellow_style = base_style + """
+                border: 2px solid rgba(255, 193, 7, 0.9) !important;
+                background: rgba(255, 193, 7, 0.1) !important;
+            """
+            widget.setStyleSheet(yellow_style)
+    
+    def _clear_field_styling(self, widget):
+        """Clear validation styling and restore normal styling."""
+        if hasattr(widget, 'setStyleSheet'):
+            base_style = self._get_base_style_for_widget(widget)
+            widget.setStyleSheet(base_style)
+    
+    def _get_base_style_for_widget(self, widget):
+        """Get the base style for a widget type."""
+        if widget == self.desc_edit or widget == self.amount_edit:
+            return self._get_single_row_field_style()
+        elif isinstance(widget, EditableAccountComboBox):
+            return self._get_single_row_field_style()
+        else:
+            return self._get_single_row_field_style()
     
     def animate_and_remove(self):
         """Animate the card removal with a smooth fade-out effect."""
@@ -299,60 +419,3 @@ class CardBasedTransactionEntry(QFrame):
         """Reset cursor when leaving the card."""
         self.setCursor(Qt.CursorShape.ArrowCursor)
         super().leaveEvent(event)
-    
-    def clear_entry(self):
-        """Clear all entry fields."""
-        self.date_edit.setDate(QDate.currentDate())
-        self.desc_edit.clear()
-        self.debit_combo.setCurrentText("")
-        self.credit_combo.setCurrentText("")
-        self.amount_edit.clear()
-    
-    def set_entry_data(self, data):
-        """Set entry data from a dictionary."""
-        if 'date' in data and data['date']:
-            try:
-                # Try to parse the date string
-                date_str = str(data['date']).strip()
-                if date_str:
-                    # Handle various date formats
-                    for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%Y/%m/%d']:
-                        try:
-                            parsed_date = datetime.strptime(date_str, fmt)
-                            self.date_edit.setDate(QDate.fromString(parsed_date.strftime('%Y-%m-%d'), 'yyyy-MM-dd'))
-                            break
-                        except ValueError:
-                            continue
-            except:
-                pass  # Use current date if parsing fails
-        
-        if 'description' in data:
-            self.desc_edit.setText(str(data['description']).strip())
-        
-        if 'debit_account' in data:
-            debit_text = str(data['debit_account']).strip()
-            if debit_text:
-                self.debit_combo.setTextWithValidation(debit_text)
-        
-        if 'credit_account' in data:
-            credit_text = str(data['credit_account']).strip()
-            if credit_text:
-                self.credit_combo.setTextWithValidation(credit_text)
-        
-        if 'amount' in data:
-            self.amount_edit.setText(str(data['amount']).strip())
-    
-    def refresh_accounts(self, new_accounts):
-        """Refresh account lists with new accounts."""
-        self.accounts = new_accounts
-        current_debit = self.debit_combo.currentText()
-        current_credit = self.credit_combo.currentText()
-        
-        self._populate_account_combo(self.debit_combo)
-        self._populate_account_combo(self.credit_combo)
-        
-        # Restore selections if they still exist
-        if current_debit:
-            self.debit_combo.setCurrentText(current_debit)
-        if current_credit:
-            self.credit_combo.setCurrentText(current_credit)

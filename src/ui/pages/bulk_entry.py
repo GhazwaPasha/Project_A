@@ -110,8 +110,7 @@ class BulkEntryPage(QWidget):
             background: transparent;
             border: none;
         """)
-        
-        # Buttons
+          # Buttons
         add_btn = QPushButton("➕ Add Entry")
         add_btn.setStyleSheet(get_button_style())
         add_btn.clicked.connect(self._add_new_card)
@@ -123,6 +122,7 @@ class BulkEntryPage(QWidget):
         save_all_btn = QPushButton("💾 Save All")
         save_all_btn.setStyleSheet(get_button_style(primary=True))
         save_all_btn.clicked.connect(self._save_all_entries)
+        self.save_all_btn = save_all_btn  # Store reference for validation management
         
         clear_all_btn = QPushButton("🗑️ Clear All")
         clear_all_btn.setStyleSheet(get_button_style(secondary=True))
@@ -143,19 +143,25 @@ class BulkEntryPage(QWidget):
         for _ in range(3):
             self._add_new_card()
         QTimer.singleShot(100, self._update_summary)
+        # Trigger initial validation to set proper save button state
+        QTimer.singleShot(200, self._update_validation_and_save_state)
             
     def _add_new_card(self):
         """Add a new entry card."""
         card = CardBasedTransactionEntry(self.system, self.next_card_number)
         card.remove_requested.connect(self._remove_card)
         card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        
         # Connect to validation changes
         card.desc_edit.textChanged.connect(self._check_auto_add_card)
         card.debit_combo.currentTextChanged.connect(self._check_auto_add_card)
         card.credit_combo.currentTextChanged.connect(self._check_auto_add_card)
         card.amount_edit.textChanged.connect(self._check_auto_add_card)
         
+        # Connect validation styling updates for real-time feedback
+        card.desc_edit.textChanged.connect(self._update_validation_and_save_state)
+        card.debit_combo.currentTextChanged.connect(self._update_validation_and_save_state)
+        card.credit_combo.currentTextChanged.connect(self._update_validation_and_save_state)
+        card.amount_edit.textChanged.connect(self._update_validation_and_save_state)
         self.cards_layout.insertWidget(len(self.entry_cards), card)
         self.entry_cards.append(card)
         self.next_card_number += 1
@@ -194,6 +200,8 @@ class BulkEntryPage(QWidget):
             card.deleteLater()
             self._renumber_cards()
             self._update_summary()
+            # Update validation and save button state after card removal
+            self._update_validation_and_save_state()
         else:
             QMessageBox.information(self, "Cannot Remove", "At least one entry card must remain.")
             
@@ -287,9 +295,12 @@ class BulkEntryPage(QWidget):
                             'amount': str(row.get('Amount', ''))
                         })
                         # Force UI updates for account fields
-                        card.debit_combo.update()
-                        card.credit_combo.update()
+                        card.debit_combo.repaint()
+                        card.credit_combo.repaint()
                 
+                # Trigger validation and UI updates after import
+                self._update_validation_and_save_state()
+
                 # Wait briefly to ensure all updates are processed
                 QTimer.singleShot(100, lambda: [
                     QMessageBox.information(self, "Import Successful", f"Imported {len(df)} entries from file."),
@@ -307,3 +318,50 @@ class BulkEntryPage(QWidget):
                 card.refresh_accounts(new_accounts)
         except Exception as e:
             print(f"Error refreshing accounts: {e}")
+    
+    def _update_validation_and_save_state(self):
+        """Update validation styling for all cards and save button state."""
+        # Apply validation immediately for responsive UI
+        self._apply_validation_styling()
+    
+    def _apply_validation_styling(self):
+        """Apply validation styling to all cards and update save button state."""
+        has_incomplete_cards = False
+        
+        for card in self.entry_cards:
+            if hasattr(card, 'apply_incomplete_styling') and hasattr(card, 'has_incomplete_data'):
+                # Apply styling first
+                card.apply_incomplete_styling()
+                
+                # Check if incomplete
+                if card.has_incomplete_data():
+                    has_incomplete_cards = True
+        
+        # Update save button state
+        self._update_save_button_state(has_incomplete_cards)
+    
+    def _update_save_button_state(self, has_incomplete_cards):
+        """Enable/disable save button based on validation state."""
+        if hasattr(self, 'save_all_btn'):
+            should_enable = not has_incomplete_cards
+            current_enabled = self.save_all_btn.isEnabled()
+            
+            # Only update if state actually changed to avoid unnecessary style updates
+            if should_enable != current_enabled:
+                self.save_all_btn.setEnabled(should_enable)
+                
+                # Visual feedback for disabled state
+                if has_incomplete_cards:
+                    self.save_all_btn.setStyleSheet("""
+                        QPushButton {
+                            background: rgba(108, 117, 125, 0.3);
+                            color: rgba(255, 255, 255, 0.5);
+                            border: 1px solid rgba(108, 117, 125, 0.5);
+                            border-radius: 8px;
+                            padding: 8px 16px;
+                            font-weight: 500;
+                        }
+                    """)
+                else:
+                    # Restore primary button styling when enabled
+                    self.save_all_btn.setStyleSheet(get_button_style(primary=True))
