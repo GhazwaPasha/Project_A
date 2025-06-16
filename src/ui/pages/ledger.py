@@ -910,57 +910,17 @@ class LedgerPage(QWidget):
         layout.setContentsMargins(responsive_margin, responsive_margin, 
                                  responsive_margin, responsive_margin)
         layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
-          # Page header
+        
+        # Page header
         header = PageHeader("General Ledger", "Account balances and transaction details")
         layout.addWidget(header)
-        
-        # Search and controls
-        controls_layout = QHBoxLayout()
-        controls_layout.addStretch()
-        
-        # Search box
-        self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("Search accounts...")
-        self.search_box.setFixedWidth(250)
-        self.search_box.setStyleSheet("""
-            QLineEdit {
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 8px;
-                padding: 8px 12px;
-                color: white;
-                font-size: 14px;
-            }
-            QLineEdit:focus {
-                border-color: #64B5F6;
-                background: rgba(255, 255, 255, 0.15);
-            }
-            QLineEdit::placeholder {
-                color: rgba(255, 255, 255, 0.5);
-            }
-        """)
-        self.search_box.textChanged.connect(self._filter_accounts)
-        controls_layout.addWidget(self.search_box)
-        
-        layout.addLayout(controls_layout)
-        
-        # Subtitle
-        subtitle = QLabel("Account balances and transaction history")
-        subtitle.setStyleSheet("""
-            color: rgba(255, 255, 255, 0.7);
-            font-size: 14px;
-            margin-bottom: 8px;
-            background: transparent;
-            border: none;
-        """)
-        layout.addWidget(subtitle)
         
         # Date range selector
         self.date_selector = DateRangeSelector()
         self.date_selector.dateRangeChanged.connect(self._refresh_balances)
         layout.addWidget(self.date_selector)
         
-        # Account type filter
+        # Filter bar with search and account type filter
         filter_layout = QHBoxLayout()
         
         filter_label = QLabel("Account Type:")
@@ -996,6 +956,36 @@ class LedgerPage(QWidget):
         self.type_filter.currentTextChanged.connect(self._filter_accounts)
         filter_layout.addWidget(self.type_filter)
         
+        filter_layout.addSpacing(16)
+        
+        search_label = QLabel("Search:")
+        search_label.setStyleSheet("color: rgba(255, 255, 255, 0.7); font-weight: 500; background: transparent; border: none;")
+        filter_layout.addWidget(search_label)
+        
+        # Search box - now next to the type filter
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("Search accounts...")
+        self.search_box.setFixedWidth(250)
+        self.search_box.setStyleSheet("""
+            QLineEdit {
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 6px;
+                padding: 6px 8px;
+                color: white;
+                font-size: 12px;
+            }
+            QLineEdit:focus {
+                border-color: #64B5F6;
+                background: rgba(255, 255, 255, 0.15);
+            }
+            QLineEdit::placeholder {
+                color: rgba(255, 255, 255, 0.5);
+            }
+        """)
+        self.search_box.textChanged.connect(self._filter_accounts)
+        filter_layout.addWidget(self.search_box)
+        
         filter_layout.addStretch()
         
         # Refresh button
@@ -1021,7 +1011,8 @@ class LedgerPage(QWidget):
         filter_layout.addWidget(refresh_btn)
         
         layout.addLayout(filter_layout)
-          # Accounts scroll area
+        
+        # Accounts scroll area
         self.accounts_scroll = QScrollArea()
         self.accounts_scroll.setWidgetResizable(True)
         self.accounts_scroll.setStyleSheet("""

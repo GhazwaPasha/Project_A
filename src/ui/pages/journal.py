@@ -138,12 +138,11 @@ class JournalPage(QWidget):
                 border: 1px solid rgba(255, 255, 255, 0.2);
                 color: white;
                 border-radius: 6px;
-                padding: 10px 20px;
+                padding: 6px 12px;
                 font-weight: 500;
-                font-size: 13px;
+                font-size: 12px;
                 margin-right: 8px;
-                min-width: 100px;
-                max-width: 160px;
+                min-width: 80px;
             }
             
             QTabBar::tab:hover {
@@ -155,7 +154,6 @@ class JournalPage(QWidget):
                 background: rgba(100, 181, 246, 0.3);
                 border-color: #64B5F6;
                 color: #64B5F6;
-                font-weight: 600;
             }
             
             QTabBar::tab:first {

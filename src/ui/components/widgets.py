@@ -319,11 +319,7 @@ class DateRangeSelector(QWidget):
         layout.setContentsMargins(0, 8, 0, 8)
         layout.setSpacing(12)
         
-        # Quick filters
-        quick_label = QLabel("Quick Filter:")
-        quick_label.setStyleSheet("color: rgba(255, 255, 255, 0.7); font-weight: 500; background: transparent; border: none;")
-        layout.addWidget(quick_label)
-        
+        # Quick filters on the left
         self.quick_buttons = QButtonGroup(self)
         quick_filters = ["This Month", "Last Month", "This Quarter", "This Year", "All Time"]
         
@@ -353,14 +349,10 @@ class DateRangeSelector(QWidget):
             btn.clicked.connect(self._quick_filter_selected)
             self.quick_buttons.addButton(btn, i)
             layout.addWidget(btn)
-            
-        layout.addStretch()
         
-        # Custom date range
-        range_label = QLabel("Custom Range:")
-        range_label.setStyleSheet("color: rgba(255, 255, 255, 0.7); font-weight: 500; background: transparent; border: none;")
-        layout.addWidget(range_label)
+        layout.addStretch()  # This pushes the date pickers to the right
         
+        # Custom date range on the right
         self.from_date = QDateEdit()
         self.from_date.setDate(QDate.currentDate().addDays(-30))
         self.from_date.setCalendarPopup(True)
@@ -391,7 +383,8 @@ class DateRangeSelector(QWidget):
         self.to_date.setStyleSheet(self.from_date.styleSheet())
         self.to_date.dateChanged.connect(self._on_date_changed)
         layout.addWidget(self.to_date)
-          # Set default selection
+        
+        # Set default selection
         self.quick_buttons.button(0).setChecked(True)  # This Month
         
     def _on_date_changed(self):
