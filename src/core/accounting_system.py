@@ -469,9 +469,9 @@ class AccountingSystem:
         self.conn.close()
 
     def get_recent_journal_entries(self, limit=20):
-        """Get recent journal entries ordered by date descending."""
+        """Get recent journal entries ordered by when they were saved (timestamp descending)."""
         cursor = self.conn.cursor()
-        cursor.execute("SELECT id, date, description, debit_account, credit_account, amount, timestamp FROM journal_entries ORDER BY date DESC, timestamp DESC LIMIT ?", (limit,))
+        cursor.execute("SELECT id, date, description, debit_account, credit_account, amount, timestamp FROM journal_entries ORDER BY timestamp DESC LIMIT ?", (limit,))
         
         entries = []
         for row in cursor.fetchall():

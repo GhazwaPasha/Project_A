@@ -43,30 +43,38 @@ class TransactionCard(QFrame):
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(12)
-          # Date column
+        layout.setSpacing(12)        # Common style for consistent alignment
+        base_style = "color: rgba(255, 255, 255, 0.9); font-weight: 500; font-size: 14px; background: transparent; border: none;"
+        date_style = "color: rgba(255, 255, 255, 0.7); font-weight: 500; font-size: 14px; background: transparent; border: none;"
+        amount_style = "color: rgba(255, 255, 255, 0.9); font-weight: bold; font-size: 14px; background: transparent; border: none;"
+        
+        # Date column
         date_value = self.entry_data.get('date', 'N/A')
         date_label = QLabel(str(date_value))
         date_label.setFixedWidth(80)
-        date_label.setStyleSheet("color: rgba(255, 255, 255, 0.7); font-weight: 500; background: transparent; border: none;")
+        date_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        date_label.setStyleSheet(date_style)
         
         # Description column
         desc_value = self.entry_data.get('description', 'No description')
         desc_label = QLabel(str(desc_value))
-        desc_label.setStyleSheet("color: rgba(255, 255, 255, 0.9); font-weight: 500; background: transparent; border: none;")
+        desc_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        desc_label.setStyleSheet(base_style)
         desc_label.setWordWrap(True)
         
         # Debit account column
         debit_account = self.entry_data.get('debit_account', 'N/A')
         debit_label = QLabel(str(debit_account))
         debit_label.setFixedWidth(140)
-        debit_label.setStyleSheet("color: rgba(255, 255, 255, 0.9); font-weight: 500; background: transparent; border: none;")
+        debit_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        debit_label.setStyleSheet(base_style)
         
         # Credit account column
         credit_account = self.entry_data.get('credit_account', 'N/A')
         credit_label = QLabel(str(credit_account))
         credit_label.setFixedWidth(140)
-        credit_label.setStyleSheet("color: rgba(255, 255, 255, 0.9); font-weight: 500; background: transparent; border: none;")
+        credit_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        credit_label.setStyleSheet(base_style)
         
         # Amount column
         amount = self.entry_data.get('amount', 0)
@@ -81,8 +89,8 @@ class TransactionCard(QFrame):
         
         amount_label = QLabel(amount_str)
         amount_label.setFixedWidth(100)
-        amount_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        amount_label.setStyleSheet("color: rgba(255, 255, 255, 0.9); font-weight: bold; font-size: 14px; background: transparent; border: none;")
+        amount_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
+        amount_label.setStyleSheet(amount_style)
         
         layout.addWidget(date_label)
         layout.addWidget(desc_label, 1)  # This will stretch
@@ -262,14 +270,12 @@ class SingleEntryTab(QWidget):
         main_layout.addWidget(headers_frame)
         
         # Add the fixed content to main layout
-        tab_layout.addWidget(main_container)
-        
-        # Scrollable transactions area
-        transactions_scroll = QScrollArea()
-        transactions_scroll.setWidgetResizable(True)
-        transactions_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        transactions_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        transactions_scroll.setStyleSheet("""
+        tab_layout.addWidget(main_container)        # Scrollable transactions area
+        self.transactions_scroll = QScrollArea()
+        self.transactions_scroll.setWidgetResizable(True)
+        self.transactions_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.transactions_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.transactions_scroll.setStyleSheet("""
             QScrollArea, QWidget#scrollAreaWidgetContents {
                 background: transparent;
                 border: none;
@@ -287,10 +293,9 @@ class SingleEntryTab(QWidget):
         self.transactions_widget = QWidget()
         self.transactions_layout = QVBoxLayout(self.transactions_widget)
         self.transactions_layout.setContentsMargins(0, 0, 0, ResponsiveHelper.scale_size(24, 16, 32))
-        self.transactions_layout.setSpacing(8)
-        
-        transactions_scroll.setWidget(self.transactions_widget)
-        tab_layout.addWidget(transactions_scroll, 1)  # This takes remaining space
+        self.transactions_layout.setSpacing(8)        
+        self.transactions_scroll.setWidget(self.transactions_widget)
+        tab_layout.addWidget(self.transactions_scroll, 1)  # This takes remaining space
 
     def _create_entry_form(self):
         """Create expandable entry form."""
@@ -504,11 +509,14 @@ class SingleEntryTab(QWidget):
             
             # Save to system
             if hasattr(self.system, 'add_journal_entry'):
-                self.system.add_journal_entry(date, description, debit_account, credit_account, amount)
+                entry_id = self.system.add_journal_entry(date, description, debit_account, credit_account, amount)
             
             QMessageBox.information(self, "Success", "Transaction saved successfully!")
             self._clear_form()
-            self._load_transactions()
+            
+            # Refresh transactions with improved timing
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(100, self._load_transactions)  # Small delay to ensure DB operations complete
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save transaction: {e}")
@@ -525,14 +533,19 @@ class SingleEntryTab(QWidget):
     def _create_transactions_section(self):
         """This method is no longer used - transactions are now directly in main layout."""
         pass
-        
     def _load_transactions(self):
         """Load and display recent transactions."""
         # Clear existing transactions
         for i in reversed(range(self.transactions_layout.count())):
-            child = self.transactions_layout.itemAt(i).widget()
-            if child:
-                child.setParent(None)
+            item = self.transactions_layout.itemAt(i)
+            if item:
+                widget = item.widget()
+                if widget:
+                    self.transactions_layout.removeWidget(widget)
+                    widget.deleteLater()
+                else:
+                    # It's a spacer item
+                    self.transactions_layout.removeItem(item)
         
         try:
             if hasattr(self.system, 'get_recent_journal_entries'):
@@ -541,6 +554,7 @@ class SingleEntryTab(QWidget):
                 if transactions:
                     for transaction in transactions:
                         card = TransactionCard(transaction)
+                        card.show()  # Ensure card is visible
                         self.transactions_layout.addWidget(card)
                 else:
                     empty_label = QLabel("No transactions yet. Add your first transaction above!")
@@ -554,10 +568,27 @@ class SingleEntryTab(QWidget):
                     empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                     self.transactions_layout.addWidget(empty_label)
             
-            # Add spacer
+            # Add spacer to push content to top
             from PyQt6.QtWidgets import QSpacerItem
             spacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
             self.transactions_layout.addItem(spacer)
+            
+            # Force comprehensive layout update
+            self.transactions_widget.updateGeometry()
+            self.transactions_layout.update()
+            
+            # Also update the parent widgets
+            if self.transactions_widget.parent():
+                self.transactions_widget.parent().updateGeometry()
+                self.transactions_widget.parent().update()
+            
+            # Force a repaint of the entire widget
+            self.transactions_widget.repaint()
+            
+            # Ensure scroll area shows the top (newest entries)
+            if hasattr(self, 'transactions_scroll'):
+                self.transactions_scroll.verticalScrollBar().setValue(0)
+                self.transactions_scroll.ensureVisible(0, 0)
             
         except Exception as e:
             print(f"Error loading transactions: {e}")
