@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QDateEdit, QFrame, QGridLayout, QSizePolicy, QGraphicsOpacityEffect,
     QMenu
 )
-from PyQt6.QtCore import Qt, QDate, pyqtSignal, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, QDate, pyqtSignal, QPropertyAnimation, QEasingCurve, QTimer
 from PyQt6.QtGui import QFont
 from datetime import datetime
 from ..components.widgets import EditableAccountComboBox
@@ -299,3 +299,60 @@ class CardBasedTransactionEntry(QFrame):
         """Reset cursor when leaving the card."""
         self.setCursor(Qt.CursorShape.ArrowCursor)
         super().leaveEvent(event)
+    
+    def clear_entry(self):
+        """Clear all entry fields."""
+        self.date_edit.setDate(QDate.currentDate())
+        self.desc_edit.clear()
+        self.debit_combo.setCurrentText("")
+        self.credit_combo.setCurrentText("")
+        self.amount_edit.clear()
+    
+    def set_entry_data(self, data):
+        """Set entry data from a dictionary."""
+        if 'date' in data and data['date']:
+            try:
+                # Try to parse the date string
+                date_str = str(data['date']).strip()
+                if date_str:
+                    # Handle various date formats
+                    for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%Y/%m/%d']:
+                        try:
+                            parsed_date = datetime.strptime(date_str, fmt)
+                            self.date_edit.setDate(QDate.fromString(parsed_date.strftime('%Y-%m-%d'), 'yyyy-MM-dd'))
+                            break
+                        except ValueError:
+                            continue
+            except:
+                pass  # Use current date if parsing fails
+        
+        if 'description' in data:
+            self.desc_edit.setText(str(data['description']).strip())
+        
+        if 'debit_account' in data:
+            debit_text = str(data['debit_account']).strip()
+            if debit_text:
+                self.debit_combo.setTextWithValidation(debit_text)
+        
+        if 'credit_account' in data:
+            credit_text = str(data['credit_account']).strip()
+            if credit_text:
+                self.credit_combo.setTextWithValidation(credit_text)
+        
+        if 'amount' in data:
+            self.amount_edit.setText(str(data['amount']).strip())
+    
+    def refresh_accounts(self, new_accounts):
+        """Refresh account lists with new accounts."""
+        self.accounts = new_accounts
+        current_debit = self.debit_combo.currentText()
+        current_credit = self.credit_combo.currentText()
+        
+        self._populate_account_combo(self.debit_combo)
+        self._populate_account_combo(self.credit_combo)
+        
+        # Restore selections if they still exist
+        if current_debit:
+            self.debit_combo.setCurrentText(current_debit)
+        if current_credit:
+            self.credit_combo.setCurrentText(current_credit)

@@ -1138,3 +1138,9 @@ class EditableAccountComboBox(QComboBox):
             line_edit.setText(text)
             # Trigger validation to find matching accounts
             self._validate_input()
+            # Ensure UI updates
+            line_edit.textChanged.emit(text)
+            line_edit.editingFinished.emit()
+            
+        # Force a repaint to ensure visual update
+        self.update()

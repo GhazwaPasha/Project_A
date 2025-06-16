@@ -6,14 +6,10 @@ Refactored to use shared styles and eliminate code duplication
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QLineEdit, QFrame, QDateEdit, QMessageBox, 
-    QScrollArea, QSizePolicy, QFileDialog, QDialog
+    QScrollArea, QSizePolicy, QFileDialog
 )
 from PyQt6.QtCore import Qt, QDate, pyqtSignal, QTimer
-from datetime import datetime
-import csv
 import pandas as pd
-import os
-from ...core.utils import parse_transaction
 from ..components.widgets import PageHeader, EditableAccountComboBox
 from ..components.card_based_entry import CardBasedTransactionEntry
 from ..components.shared_styles import get_field_style, get_button_style, load_accounts_from_system, populate_account_combo
@@ -229,8 +225,7 @@ class BulkEntryPage(QWidget):
                 f"Cannot save: {invalid_count} entry card(s) have invalid or missing account information.\n\n"
                 f"Please check cards: {card_list}\n\n"
                 "⚠ Account fields with red borders contain invalid accounts.\n"
-                "⚠ Account fields with orange borders are required but empty."
-            )
+                "⚠ Account fields with orange borders are required but empty."            )
             return
         
         if not valid_entries:
@@ -254,65 +249,15 @@ class BulkEntryPage(QWidget):
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save entries: {e}")
-    
+
     def _clear_all_entries(self):
         """Clear all entry cards."""
         for card in self.entry_cards:
             card.clear_entry()
         self._update_summary()
-    
+
     def _import_file(self):
         """Import entries from CSV/Excel file."""
-        try:
-            from ..components.enhanced_csv_import import EnhancedCSVImportDialog
-            
-            import_dialog = EnhancedCSVImportDialog(self.system, self)
-            
-            if import_dialog.exec() == QDialog.DialogCode.Accepted:
-                import_data = import_dialog.get_import_data()
-                summary = import_dialog.get_import_summary()
-                
-                if not import_data:
-                    QMessageBox.warning(self, "No Data", "No valid transactions found to import.")
-                    return
-                
-                self._clear_all_entries()
-                
-                while len(self.entry_cards) < len(import_data):
-                    self._add_new_card()
-                
-                for i, entry_data in enumerate(import_data):
-                    if i < len(self.entry_cards):
-                        card = self.entry_cards[i]
-                        card.set_entry_data(entry_data)
-                
-                total = summary['total_processed']
-                skipped = summary['skipped_rows']
-                mappings = summary['mappings_used']
-                
-                summary_msg = f"""
-                <h3>Import Completed Successfully!</h3>
-                <p><b>Transactions Imported:</b> {total}</p>
-                <p><b>Rows Skipped:</b> {skipped}</p>
-                <p><b>Account Mappings Applied:</b> {mappings}</p>
-                """
-                
-                msg_box = QMessageBox(self)
-                msg_box.setWindowTitle("Import Summary")
-                msg_box.setTextFormat(Qt.TextFormat.RichText)
-                msg_box.setText(summary_msg)
-                msg_box.setIcon(QMessageBox.Icon.Information)
-                msg_box.exec()
-                
-                self._update_summary()
-                
-        except ImportError:
-            self._simple_import_file()
-        except Exception as e:
-            QMessageBox.critical(self, "Import Error", f"Failed to import file: {e}")
-    
-    def _simple_import_file(self):
-        """Simple CSV/Excel import fallback."""
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Import Transactions", "", 
             "Excel files (*.xlsx *.xls);;CSV files (*.csv);;All files (*.*)"
@@ -330,6 +275,7 @@ class BulkEntryPage(QWidget):
                 while len(self.entry_cards) < len(df):
                     self._add_new_card()
                 
+                # Import data and ensure validation/updates are triggered
                 for i, row in df.iterrows():
                     if i < len(self.entry_cards):
                         card = self.entry_cards[i]
@@ -340,9 +286,15 @@ class BulkEntryPage(QWidget):
                             'credit_account': str(row.get('Credit Account', '')),
                             'amount': str(row.get('Amount', ''))
                         })
+                        # Force UI updates for account fields
+                        card.debit_combo.update()
+                        card.credit_combo.update()
                 
-                QMessageBox.information(self, "Import Successful", f"Imported {len(df)} entries from file.")
-                self._update_summary()
+                # Wait briefly to ensure all updates are processed
+                QTimer.singleShot(100, lambda: [
+                    QMessageBox.information(self, "Import Successful", f"Imported {len(df)} entries from file."),
+                    self._update_summary()
+                ])
                 
             except Exception as e:
                 QMessageBox.critical(self, "Import Error", f"Failed to import file: {e}")
