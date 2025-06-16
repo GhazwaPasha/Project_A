@@ -190,17 +190,76 @@ class SingleEntryTab(QWidget):
             self.accounts = ["1001 - Cash", "1002 - Bank Account"]
         
     def _setup_ui(self):
-        """Setup the single entry tab UI."""
+        """Setup the single entry tab UI with fixed top section and scrollable transactions."""
         tab_layout = QVBoxLayout(self)
         tab_layout.setContentsMargins(0, 0, 0, 0)
         tab_layout.setSpacing(0)
         
-        # Scroll area
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll_area.setStyleSheet("""
+        # Main container (no scroll area - fixed content)
+        main_container = QWidget()
+        main_layout = QVBoxLayout(main_container)
+        main_layout.setContentsMargins(0, ResponsiveHelper.scale_size(24, 16, 32),
+                                     0, ResponsiveHelper.scale_size(24, 16, 32))
+        main_layout.setSpacing(ResponsiveHelper.scale_size(24, 16, 32))
+          # Entry form (fixed at top)
+        self.entry_form = self._create_entry_form()
+        main_layout.addWidget(self.entry_form)
+        
+        # Transaction History Header (fixed)
+        header_label = QLabel("Transaction History")
+        header_label.setStyleSheet("""
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            background: transparent;
+            border: none;
+        """)
+        main_layout.addWidget(header_label)
+        
+        # Column headers (fixed)
+        headers_frame = QFrame()
+        headers_frame.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 8px;
+                margin-bottom: 8px;
+            }
+        """)
+        
+        headers_layout = QHBoxLayout(headers_frame)
+        headers_layout.setContentsMargins(16, 8, 16, 8)
+        headers_layout.setSpacing(12)
+        
+        headers = [
+            ("DATE", 80, "rgba(255, 255, 255, 0.8)"),
+            ("DESCRIPTION", None, "rgba(255, 255, 255, 0.8)"),
+            ("DEBIT ACCOUNT", 140, "rgba(255, 255, 255, 0.8)"),
+            ("CREDIT ACCOUNT", 140, "rgba(255, 255, 255, 0.8)"),
+            ("AMOUNT", 100, "rgba(255, 255, 255, 0.8)")
+        ]
+        
+        for text, width, color in headers:
+            header = QLabel(text)
+            if width:
+                header.setFixedWidth(width)
+                if text == "AMOUNT":
+                    header.setAlignment(Qt.AlignmentFlag.AlignRight)
+            header.setStyleSheet(f"color: {color}; font-weight: 600; font-size: 12px; background: transparent; border: none;")
+            headers_layout.addWidget(header, 0 if width else 1)
+        
+        main_layout.addWidget(headers_frame)
+        
+        # Add the fixed content to main layout
+        tab_layout.addWidget(main_container)
+        
+        # Scrollable transactions area
+        transactions_scroll = QScrollArea()
+        transactions_scroll.setWidgetResizable(True)
+        transactions_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        transactions_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        transactions_scroll.setStyleSheet("""
             QScrollArea, QWidget#scrollAreaWidgetContents {
                 background: transparent;
                 border: none;
@@ -214,40 +273,14 @@ class SingleEntryTab(QWidget):
             QWidget { background: transparent; }
         """)
         
-        # Main container
-        main_container = QWidget()
-        main_layout = QVBoxLayout(main_container)
-        main_layout.setContentsMargins(0, ResponsiveHelper.scale_size(24, 16, 32),
-                                     0, ResponsiveHelper.scale_size(24, 16, 32))
-        main_layout.setSpacing(ResponsiveHelper.scale_size(24, 16, 32))
+        # Transactions container widget (scrollable content)
+        self.transactions_widget = QWidget()
+        self.transactions_layout = QVBoxLayout(self.transactions_widget)
+        self.transactions_layout.setContentsMargins(0, 0, 0, ResponsiveHelper.scale_size(24, 16, 32))
+        self.transactions_layout.setSpacing(8)
         
-        # Entry form
-        self.entry_form = self._create_entry_form()
-        main_layout.addWidget(self.entry_form)
-        
-        # Spacer
-        spacer = QWidget()
-        spacer.setFixedHeight(ResponsiveHelper.scale_size(16, 12, 24))
-        main_layout.addWidget(spacer)
-        
-        # Transactions section
-        transactions_label = QLabel("Recent Transactions")
-        transactions_label.setStyleSheet("""
-            QLabel {
-                color: rgba(255, 255, 255, 0.9);
-                font-size: 16px;
-                font-weight: 600;
-                background: transparent;
-                padding-bottom: 8px;
-            }
-        """)
-        main_layout.addWidget(transactions_label)
-        
-        transactions_section = self._create_transactions_section()
-        main_layout.addWidget(transactions_section, 1)
-        
-        scroll_area.setWidget(main_container)
-        tab_layout.addWidget(scroll_area)
+        transactions_scroll.setWidget(self.transactions_widget)
+        tab_layout.addWidget(transactions_scroll, 1)  # This takes remaining space
 
     def _create_entry_form(self):
         """Create expandable entry form."""
@@ -481,83 +514,8 @@ class SingleEntryTab(QWidget):
         self.nl_input.clear()
         
     def _create_transactions_section(self):
-        """Create the transactions history section."""
-        section_frame = QFrame()
-        section_frame.setStyleSheet("""
-            QFrame {
-                background: rgba(255, 255, 255, 0.06);
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                border-radius: 12px;
-            }
-        """)
-        
-        section_layout = QVBoxLayout(section_frame)
-        section_layout.setContentsMargins(24, 20, 24, 24)
-        section_layout.setSpacing(16)
-        
-        # Header
-        header_label = QLabel("Transaction History")
-        header_label.setStyleSheet("""
-            color: rgba(255, 255, 255, 0.9);
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 8px;
-            background: transparent;
-            border: none;
-        """)
-        section_layout.addWidget(header_label)
-        
-        # Column headers
-        headers_frame = QFrame()
-        headers_frame.setStyleSheet("""
-            QFrame {
-                background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                border-radius: 8px;
-                margin-bottom: 8px;
-            }
-        """)
-        
-        headers_layout = QHBoxLayout(headers_frame)
-        headers_layout.setContentsMargins(16, 8, 16, 8)
-        headers_layout.setSpacing(12)
-        
-        headers = [
-            ("Date", 80, "rgba(255, 255, 255, 0.8)"),
-            ("Description", None, "rgba(255, 255, 255, 0.8)"),
-            ("Debit Account", 140, "rgba(255, 100, 100, 0.8)"),
-            ("Credit Account", 140, "rgba(100, 255, 100, 0.8)"),
-            ("Amount", 100, "rgba(255, 255, 255, 0.8)")
-        ]
-        
-        for text, width, color in headers:
-            header = QLabel(text)
-            if width:
-                header.setFixedWidth(width)
-                if text == "Amount":
-                    header.setAlignment(Qt.AlignmentFlag.AlignRight)
-            header.setStyleSheet(f"color: {color}; font-weight: 600; font-size: 12px; background: transparent; border: none;")
-            headers_layout.addWidget(header, 0 if width else 1)
-        
-        section_layout.addWidget(headers_frame)
-        
-        # Transactions container
-        self.transactions_container = QScrollArea()
-        self.transactions_container.setWidgetResizable(True)
-        self.transactions_container.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.transactions_container.setStyleSheet("""
-            QScrollArea { background: transparent; border: none; }
-        """)
-        
-        self.transactions_widget = QWidget()
-        self.transactions_layout = QVBoxLayout(self.transactions_widget)
-        self.transactions_layout.setContentsMargins(0, 0, 0, 0)
-        self.transactions_layout.setSpacing(8)
-        
-        self.transactions_container.setWidget(self.transactions_widget)
-        section_layout.addWidget(self.transactions_container, 1)
-        
-        return section_frame
+        """This method is no longer used - transactions are now directly in main layout."""
+        pass
         
     def _load_transactions(self):
         """Load and display recent transactions."""
