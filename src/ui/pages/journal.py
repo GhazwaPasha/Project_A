@@ -180,14 +180,13 @@ class SingleEntryTab(QWidget):
                 accounts_data = self.system.get_all_accounts()
                 self.accounts = [f"{acc[2]} - {acc[0]}" for acc in accounts_data if acc[5]]
             else:
-                self.accounts = [
-                    "1001 - Cash", "1002 - Bank Account", "1100 - Accounts Receivable",
-                    "2001 - Accounts Payable", "3001 - Owner's Equity", "4001 - Sales Revenue",
-                    "5001 - Cost of Goods Sold", "6001 - Operating Expenses"
-                ]
+                # No fallback accounts - system must have proper chart of accounts
+                self.accounts = []
+                print("Warning: System does not have get_all_accounts method")
         except Exception as e:
             print(f"Error loading accounts: {e}")
-            self.accounts = ["1001 - Cash", "1002 - Bank Account"]
+            # No fallback accounts - system must have proper chart of accounts
+            self.accounts = []
         
     def _setup_ui(self):
         """Setup the single entry tab UI with fixed top section and scrollable transactions."""

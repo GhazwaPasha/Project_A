@@ -80,17 +80,8 @@ class AccountingSystem:
                 self._update_existing_accounts_data()
             
             self.conn.commit()
+            
     def add_journal_entry(self, date, description, debit_account, credit_account, amount):
-        # Chart of accounts with types
-        account_types = {
-            'cash': 'asset', 'bank': 'asset', 'accounts receivable': 'asset', 'inventory': 'asset', 'equipment': 'asset', 'supplies': 'asset',
-            'accounts payable': 'liability', 'loan': 'liability', 'taxes payable': 'liability',
-            'capital': 'equity', 'owner equity': 'equity', 'retained earnings': 'equity',
-            'sales': 'income', 'revenue': 'income', 'interest income': 'income',
-            'rent': 'expense', 'salary': 'expense', 'utilities': 'expense', 'wages': 'expense', 'cost of goods sold': 'expense', 'advertising': 'expense', 'insurance': 'expense', 'depreciation': 'expense',
-            # Add more as needed
-        }
-        
         # Helper to get or add account type and generate code
         def get_or_add_account_type(account):
             if not account:
@@ -111,17 +102,7 @@ class AccountingSystem:
             if row:
                 return row[0]
                 
-            # Infer type or skip (do not prompt in GUI)
-            inferred_type = account_types.get(account.lower(), None)
-            if inferred_type:
-                # Generate a code for the new account
-                code = self.generate_account_code(inferred_type.capitalize())
-                cursor.execute('INSERT OR IGNORE INTO accounts (name, type, code, level, is_postable) VALUES (?, ?, ?, ?, ?)', 
-                              (account, inferred_type.capitalize(), code, 2, 1))  # Default to level 2, postable
-                self.conn.commit()
-                return inferred_type
-                
-            # If not found, just skip (GUI will already have validated)
+            # If account not found, return None (account must exist in chart of accounts)
             return None
             
         debit_type = get_or_add_account_type(debit_account)
@@ -543,68 +524,6 @@ class AccountingSystem:
         """Wrapper for get_journal_entries to support the journal UI's expected method name."""
         return self.get_journal_entries(from_date, to_date)
 
-    def seed_mock_journal_entries(self):
-        """
-        Populate the journal_entries table with 50 realistic mock entries per day for the last 6 months.
-        """
-        import random
-        from datetime import datetime, timedelta
-        cursor = self.conn.cursor()
-        cursor.execute('DELETE FROM journal_entries')
-        self.conn.commit()
-        today = datetime.now()
-        descriptions = [
-            ("Sales revenue", "Cash", "Sales", 1200),
-            ("Customer payment", "Bank", "Accounts Receivable", 800),
-            ("Paid rent", "Rent", "Cash", 500),
-            ("Paid salary", "Salary", "Bank", 1500),
-            ("Bought inventory", "Inventory", "Cash", 700),
-            ("Paid utilities", "Utilities", "Bank", 200),
-            ("Owner investment", "Cash", "Owner Equity", 2000),
-            ("Paid supplier", "Accounts Payable", "Bank", 600),
-            ("Paid insurance", "Insurance", "Cash", 250),
-            ("Paid loan", "Loan", "Cash", 1000),
-            ("Interest income", "Bank", "Interest Income", 50),
-            ("Advertising expense", "Advertising", "Bank", 120),
-            ("Equipment purchase", "Equipment", "Bank", 900),
-            ("Supplies purchase", "Supplies", "Cash", 150),
-            ("Tax payment", "Taxes Payable", "Bank", 300),
-        ]
-        start_date = today.replace(day=1) - timedelta(days=180)
-        for i in range(180):
-            entry_date = start_date + timedelta(days=i)
-            if entry_date.weekday() >= 5:
-                continue
-            for _ in range(50):
-                desc, debit, credit, base_amt = random.choice(descriptions)
-                amount = base_amt + random.randint(-50, 100)
-                self.add_journal_entry(
-                    entry_date.strftime('%Y-%m-%d'),
-                    desc,
-                    debit,
-                    credit,
-                    float(amount)
-                )
-        # Add entries for current month (June 2025)
-        from datetime import date
-        june_start = date(2025, 6, 1)
-        june_end = date(2025, 6, 11)  # up to today
-        for i in range((june_end - june_start).days + 1):
-            entry_date = june_start + timedelta(days=i)
-            if entry_date.weekday() >= 5:
-                continue
-            for _ in range(20):  # Fewer per day for demo
-                desc, debit, credit, base_amt = random.choice(descriptions)
-                amount = base_amt + random.randint(-50, 100)
-                self.add_journal_entry(
-                    entry_date.strftime('%Y-%m-%d'),
-                    desc,
-                    debit,
-                    credit,
-                    float(amount)
-                )
-        self.conn.commit()
-
     def seed_hierarchical_accounts(self):
         """Seed the chart of accounts with a proper 3-level hierarchical structure."""
         cursor = self.conn.cursor()
@@ -831,16 +750,6 @@ class AccountingSystem:
                 needs_update = True
             
             if needs_update:
-                cursor.execute('UPDATE accounts SET code = ?, level = ?, is_postable = ? WHERE name = ?', 
-                              (new_code, new_level, new_is_postable, name))
+                cursor.execute('UPDATE accounts SET code = ?, level = ?, is_postable = ? WHERE name = ?',                              (new_code, new_level, new_is_postable, name))
         
         self.conn.commit()
-
-if __name__ == "__main__":
-    import os
-    # Get the database path relative to the project root
-    db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'accounting.db')
-    system = AccountingSystem(db_path)
-    system.seed_mock_journal_entries()
-    print("Seeded 6 months of mock journal entries.")
-    system.close()
