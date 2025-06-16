@@ -722,13 +722,16 @@ class EditableAccountComboBox(QComboBox):
     - Non-scrollable when not focused (prevents accidents)
     - Smart matching (partial text, codes, account names)
     - Proper placeholder text (not a selectable item)
-    - Strict validation: only accepts accounts from chart of accounts
-    """
+    - Strict validation: only accepts accounts from chart of accounts    """
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setEditable(True)
         self.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        
+        # Completely disable native dropdown - we only want QCompleter suggestions
+        self.setMaxVisibleItems(0)  # Hide native dropdown
+        
         self.placeholder_text = "Select or type account..."
         self.valid_accounts = []  # List of valid account strings
         self.valid_account_codes = []  # List of valid account codes
@@ -878,14 +881,13 @@ class EditableAccountComboBox(QComboBox):
     
     def _on_text_changed_with_validation(self, text):
         """Handle text changes with validation feedback."""
-        # Call original text changed handler
-        self._on_text_changed(text)
+        # Call original text changed handler        self._on_text_changed(text)
         
         # Prevent styling conflicts - don't apply validation styling while typing
         # The bulk entry page handles validation styling externally
     
     def setAccountList(self, accounts):
-        """Set the list of valid accounts for validation."""
+        """Set the list of valid accounts for validation and QCompleter only."""
         self.valid_accounts = accounts.copy() if accounts else []
         
         # Extract codes and names for validation
@@ -898,8 +900,10 @@ class EditableAccountComboBox(QComboBox):
                 self.valid_account_codes.append(code)
                 self.valid_account_names.append(name)
         
-        # Update the combo box items
-        self.addItems(self.valid_accounts)
+        # Only update the QCompleter, don't add items to combo box (prevents third dropdown)
+        if hasattr(self, 'completer') and self.completer:
+            model = QStringListModel(self.valid_accounts)
+            self.completer.setModel(model)
 
     def _setup_placeholder(self):
         """Setup proper placeholder text functionality."""
@@ -947,8 +951,7 @@ class EditableAccountComboBox(QComboBox):
         # Find the index of the selected item and set it
         index = self.findText(text, Qt.MatchFlag.MatchExactly)
         if index >= 0:
-            self.setCurrentIndex(index)
-    
+            self.setCurrentIndex(index)    
     def setModel(self, model):
         """Override setModel to also update the completer."""
         super().setModel(model)
@@ -956,32 +959,23 @@ class EditableAccountComboBox(QComboBox):
             self.completer.setModel(model)
     
     def addItems(self, items):
-        """Override addItems to also update the completer (no placeholder item)."""
-        # Clear first to ensure clean state
-        self.clear()
-        super().addItems(items)
-        # Update completer model with actual items only
-        string_list = [self.itemText(i) for i in range(self.count())]
-        model = QStringListModel(string_list)
-        self.completer.setModel(model)
-        # Reset to no selection and show placeholder
-        self.setCurrentIndex(-1)
-        # Clear the line edit to ensure placeholder shows
+        """Override addItems to prevent dropdown list - only use QCompleter."""
+        # Don't call super().addItems(items) to prevent creating dropdown list
+        # Only update the QCompleter model for smart suggestions
+        if hasattr(self, 'completer') and self.completer:
+            model = QStringListModel(items)
+            self.completer.setModel(model)
+        
+        # Ensure no selection and placeholder shows        self.setCurrentIndex(-1)
         line_edit = self.lineEdit()
         if line_edit:
             line_edit.clear()
     
     def addItem(self, text, userData=None):
-        """Override addItem to also update the completer."""
-        # Don't add placeholder items
-        if text.startswith("--") and "Select" in text:
-            return
-        
-        super().addItem(text, userData)
-        # Update completer model
-        string_list = [self.itemText(i) for i in range(self.count())]
-        model = QStringListModel(string_list)
-        self.completer.setModel(model)
+        """Override addItem to prevent dropdown items - only use QCompleter."""
+        # Don't call super().addItem() to prevent creating dropdown items
+        # The QCompleter handles all suggestions
+        pass
     
     def currentText(self):
         """Override currentText to handle empty selection properly."""
@@ -1012,8 +1006,7 @@ class EditableAccountComboBox(QComboBox):
             if line_edit:
                 line_edit.clear()
                 line_edit.setText("")  # Ensure completely empty
-        else:
-            # Try to find the text in the list first
+        else:            # Try to find the text in the list first
             index = self.findText(text, Qt.MatchFlag.MatchExactly)
             if index >= 0:
                 self.setCurrentIndex(index)
@@ -1031,16 +1024,12 @@ class EditableAccountComboBox(QComboBox):
         if line_edit:
             line_edit.clear()
             line_edit.setText("")  # Ensure it's completely empty
-    
+
     def showPopup(self):
-        """Override showPopup to ensure proper placeholder handling."""
-        # If we're currently showing placeholder (no selection), make sure it stays that way
-        if self.currentIndex() == -1:
-            line_edit = self.lineEdit()
-            if line_edit and not line_edit.text():
-                # Ensure the line edit is truly empty when showing popup
-                line_edit.setText("")
-        super().showPopup()
+        """Override showPopup to disable native dropdown - only use QCompleter suggestions."""
+        # Don't call the parent showPopup to prevent the native dropdown
+        # The QCompleter will handle showing suggestions as the user types
+        pass
     
     def wheelEvent(self, event):
         """Override wheel event to prevent accidental scrolling.

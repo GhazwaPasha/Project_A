@@ -32,13 +32,15 @@ class CardBasedTransactionEntry(QFrame):
             if hasattr(self.system, 'get_all_accounts'):
                 accounts_data = self.system.get_all_accounts()
                 self.accounts = [f"{acc[2]} - {acc[0]}" for acc in accounts_data if acc[5]]
-            else:            self.accounts = ["1001 - Cash", "2001 - Accounts Payable"]
+            else:
+                self.accounts = ["1001 - Cash", "2001 - Accounts Payable"]
         except Exception as e:
             print(f"Error loading accounts: {e}")
             self.accounts = ["1001 - Cash", "2001 - Accounts Payable"]
         
     def _setup_ui(self):
-        """Setup the card-based UI."""        # Set fixed size policy to prevent dynamic resizing
+        """Setup the card-based UI."""
+        # Set fixed size policy to prevent dynamic resizing
         self.setFixedHeight(80)  # Reduced height since no title section
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         
@@ -110,7 +112,7 @@ class CardBasedTransactionEntry(QFrame):
         debit_label.setFixedHeight(14)  # Ensure label has proper height
         self.debit_combo = EditableAccountComboBox()
         self.debit_combo.setFixedHeight(28)
-        self.debit_combo.setMinimumWidth(120)
+        self.debit_combo.setMinimumWidth(160)  # Increased from 120
         self.debit_combo.setStyleSheet(self._get_single_row_field_style())
         self._populate_account_combo(self.debit_combo)
         debit_container.addWidget(debit_label)
@@ -126,12 +128,13 @@ class CardBasedTransactionEntry(QFrame):
         credit_label.setFixedHeight(14)  # Ensure label has proper height
         self.credit_combo = EditableAccountComboBox()
         self.credit_combo.setFixedHeight(28)
-        self.credit_combo.setMinimumWidth(120)
+        self.credit_combo.setMinimumWidth(160)  # Increased from 120
         self.credit_combo.setStyleSheet(self._get_single_row_field_style())
         self._populate_account_combo(self.credit_combo)
         credit_container.addWidget(credit_label)
         credit_container.addWidget(self.credit_combo)
-          # Amount field
+        
+        # Amount field
         amount_container = QVBoxLayout()
         amount_container.setSpacing(3)
         amount_container.setContentsMargins(0, 0, 0, 0)

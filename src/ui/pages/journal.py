@@ -253,7 +253,7 @@ class SingleEntryTab(QWidget):
         """Create expandable entry form."""
         from PyQt6.QtCore import QPropertyAnimation, QEasingCurve
         from PyQt6.QtWidgets import QToolButton, QGridLayout
-        from ..components.shared_styles import get_field_style, get_button_style
+        from ..components.shared_styles import get_field_style, get_button_style, get_label_style
         
         # Main container
         container = QFrame()
@@ -307,82 +307,70 @@ class SingleEntryTab(QWidget):
         grid = QGridLayout()
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(8)
-        grid.setVerticalSpacing(2)
-
-        # Labels
-        labels = ["Date:", "Description:", "Debit:", "Credit:", "Amount:"]
-        label_colors = [None, None, "debit", "credit", None]
-        for i, (text, color_type) in enumerate(zip(labels, label_colors)):
+        grid.setVerticalSpacing(2)        # Labels
+        labels = ["DATE", "DESCRIPTION", "DEBIT ACCOUNT", "CREDIT ACCOUNT", "AMOUNT"]
+        for i, text in enumerate(labels):
             label = QLabel(text)
-            label_style = "color: rgba(255, 255, 255, 0.8); font-size: 12px; font-weight: 600;"
-            if color_type == "debit":
-                label_style = "color: rgba(255, 120, 120, 0.9); font-size: 12px; font-weight: 600;"
-            elif color_type == "credit":
-                label_style = "color: rgba(120, 255, 120, 0.9); font-size: 12px; font-weight: 600;"
-            label.setStyleSheet(label_style)
+            label.setStyleSheet(get_label_style())
             label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-            grid.addWidget(label, 0, i)
-
-        # Input fields
+            grid.addWidget(label, 0, i)        # Input fields
         self.date_edit = QDateEdit()
         self.date_edit.setDate(QDate.currentDate())
         self.date_edit.setCalendarPopup(True)
+        self.date_edit.setFixedWidth(120)
         self.date_edit.setStyleSheet(get_field_style("date"))
         
         self.desc_edit = QLineEdit()
         self.desc_edit.setPlaceholderText("Enter description...")
+        self.desc_edit.setMinimumWidth(180)
+        self.desc_edit.setMaximumWidth(200)
         self.desc_edit.setStyleSheet(get_field_style("description"))
         
         self.debit_combo = EditableAccountComboBox()
+        self.debit_combo.setMinimumWidth(160)
+        self.debit_combo.setMaximumWidth(200)
         self.debit_combo.setStyleSheet(get_field_style("debit"))
         self._populate_account_combo(self.debit_combo)
         
         self.credit_combo = EditableAccountComboBox()
+        self.credit_combo.setMinimumWidth(160)
+        self.credit_combo.setMaximumWidth(200)
         self.credit_combo.setStyleSheet(get_field_style("credit"))
         self._populate_account_combo(self.credit_combo)
         
         self.amount_edit = QLineEdit()
         self.amount_edit.setPlaceholderText("0.00")
         self.amount_edit.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.amount_edit.setFixedWidth(120)
         self.amount_edit.setStyleSheet(get_field_style("amount"))
         
         fields = [self.date_edit, self.desc_edit, self.debit_combo, self.credit_combo, self.amount_edit]
         for i, field in enumerate(fields):
-            grid.addWidget(field, 1, i)
-
-        content_layout.addLayout(grid)
-
-        # AI Entry row
-        row2 = QHBoxLayout()
-        row2.setContentsMargins(0, 0, 0, 0)
-        row2.setSpacing(8)
-
-        nl_label = QLabel("AI Entry:")
-        nl_label.setStyleSheet("color: #64B5F6; font-weight: 600; font-size: 12px;")
-        
+            grid.addWidget(field, 1, i)        # Add AI entry row directly to the main grid for perfect alignment
+        # AI input field spans from Date column (0) to Description column (1) - exactly matching their combined width
         self.nl_input = QLineEdit()
         self.nl_input.setPlaceholderText("Describe your transaction in plain English...")
-        self.nl_input.setStyleSheet(get_field_style("description"))
-
-        parse_btn = QPushButton("Parse")
-        parse_btn.setStyleSheet(get_button_style())
+        # Remove any width constraints to let it fill the full span of Date + Description columns
+        self.nl_input.setStyleSheet(get_field_style("description").replace("max-width: 200px;", "").replace("min-width: 180px;", ""))
+        grid.addWidget(self.nl_input, 2, 0, 1, 2)  # row 2, span columns 0-1 (Date + Description)        # Parse button in Debit column (2)
+        parse_btn = QPushButton("Interpret")
+        parse_btn.setStyleSheet(get_button_style(compact=True))
         parse_btn.clicked.connect(self._parse_transaction)
+        grid.addWidget(parse_btn, 2, 2)  # row 2, column 2
         
+        # Save button in Credit column (3)
         save_btn = QPushButton("Save")
-        save_btn.setStyleSheet(get_button_style(primary=True))
+        save_btn.setStyleSheet(get_button_style(primary=True, compact=True))
         save_btn.clicked.connect(self._save_entry)
+        grid.addWidget(save_btn, 2, 3)  # row 2, column 3
         
+        # Clear button in Amount column (4)
         clear_btn = QPushButton("Clear")
-        clear_btn.setStyleSheet(get_button_style(secondary=True))
+        clear_btn.setStyleSheet(get_button_style(secondary=True, compact=True))
         clear_btn.clicked.connect(self._clear_form)
+        grid.addWidget(clear_btn, 2, 4)  # row 2, column 4
 
-        row2.addWidget(nl_label)
-        row2.addWidget(self.nl_input, 1)
-        row2.addWidget(parse_btn)
-        row2.addWidget(save_btn)
-        row2.addWidget(clear_btn)
-
-        content_layout.addLayout(row2)
+        content_layout.addLayout(grid)
 
         # Setup animation
         content.setVisible(False)
