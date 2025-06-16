@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QColor
 
-from ..core.account_matcher import AccountMatcher
+from ...core.account_matcher import AccountMatcher
 
 
 class AccountMappingThread(QThread):
