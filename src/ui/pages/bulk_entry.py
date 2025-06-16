@@ -498,7 +498,8 @@ class BulkEntryPage(QWidget):
         """Setup the main UI."""
         # Main layout for the page
         page_layout = QVBoxLayout(self)
-        page_layout.setContentsMargins(16, 16, 16, 16)
+        # Align with the main page header margins - use zero horizontal margins
+        page_layout.setContentsMargins(0, 16, 0, 16)
         page_layout.setSpacing(16)
         
         # Toolbar section
