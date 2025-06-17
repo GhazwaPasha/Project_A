@@ -214,8 +214,7 @@ class BulkEntryPage(QWidget):
             self.entry_cards.remove(card)
             card.deleteLater()
             self._renumber_cards()
-            self._update_summary()
-            # Update validation and save button state after card removal
+            self._update_summary()            # Update validation and save button state after card removal
             self._update_validation_and_save_state()
         else:
             QMessageBox.information(self, "Cannot Remove", "At least one entry card must remain.")
@@ -226,7 +225,7 @@ class BulkEntryPage(QWidget):
             card.card_number = i + 1
             
     def _save_all_entries(self):
-        """Save all valid entries."""
+        """Save all valid entries one by one, removing each card as it's saved."""
         valid_entries = []
         valid_cards = []  # Keep track of valid cards
         invalid_cards = []
@@ -265,37 +264,58 @@ class BulkEntryPage(QWidget):
             progress.show()
             QApplication.processEvents()
             
-            def progress_callback(current, total, entry):
+            success_count = 0
+            failed_entries = []
+            cards_to_remove = []  # Track cards that need to be removed
+            
+            # Save entries one by one
+            for i, (entry_data, card) in enumerate(zip(valid_entries, valid_cards)):
                 if progress.was_cancelled():
-                    return False
+                    break
                 
-                # Remove the successfully saved card
-                if current > 0:  # Skip for the first progress update
-                    card_to_remove = valid_cards[current - 1]
-                    self.cards_layout.removeWidget(card_to_remove)
-                    card_to_remove.deleteLater()
-                    QApplication.processEvents()  # Ensure UI updates
-                
-                progress_value = int((current / total) * 100)
-                progress.set_progress(
-                    progress_value,
-                    f"Saving entries... ({current}/{total})"
-                )
-                QApplication.processEvents()
-                return True
+                try:
+                    # Update progress
+                    progress_value = int((i / len(valid_entries)) * 100)
+                    progress.set_progress(
+                        progress_value,
+                        f"Saving entry {i + 1} of {len(valid_entries)}..."
+                    )
+                    QApplication.processEvents()
+                    
+                    # Save the individual entry
+                    self.system.add_journal_entry(
+                        entry_data['date'],
+                        entry_data['description'], 
+                        entry_data['debit_account'],
+                        entry_data['credit_account'],
+                        entry_data['amount']
+                    )
+                    
+                    success_count += 1
+                    cards_to_remove.append(card)
+                    
+                    # Remove the card immediately after successful save
+                    self.cards_layout.removeWidget(card)
+                    if card in self.entry_cards:
+                        self.entry_cards.remove(card)
+                    card.deleteLater()
+                    
+                    # Update UI to show the card being removed
+                    QApplication.processEvents()
+                    
+                    # Update progress after successful save
+                    progress.set_progress(
+                        int(((i + 1) / len(valid_entries)) * 100),
+                        f"Saved entry {i + 1} of {len(valid_entries)}"
+                    )
+                    QApplication.processEvents()
+                    
+                except Exception as e:
+                    failed_entries.append((i, str(e)))
+                    # Don't remove the card if saving failed
+                    continue
             
-            # Save entries one by one with progress
-            success_count, failed_entries = self.system.add_journal_entries_with_progress(
-                valid_entries,
-                progress_callback
-            )
-            
-            # Remove any remaining successful cards if we were cancelled
-            remaining_successful = success_count - 1  # -1 because the callback already handled the last one
-            if remaining_successful >= 0 and remaining_successful < len(valid_cards):
-                card_to_remove = valid_cards[remaining_successful]
-                self.cards_layout.removeWidget(card_to_remove)
-                card_to_remove.deleteLater()
+            progress.close()
             
             # Handle results
             if progress.was_cancelled():
@@ -323,26 +343,36 @@ class BulkEntryPage(QWidget):
                     f"Successfully saved {success_count} {plural}!"
                 )
             
-            progress.close()
-            
             if success_count > 0:
-                # Only emit the saved signal since cards are already removed
+                # Emit the saved signal
                 self.entries_saved.emit()
                 
-                # Renumber remaining cards if any
+                # Renumber remaining cards
                 self._renumber_cards()
+                
                 # Update the summary to reflect the new count
                 self._update_summary()
-                # Add a new empty card if all were saved
+                
+                # Add a new empty card if no cards remain
                 if not self.entry_cards:
                     self._add_new_card()
+                # If we have remaining cards but they're all empty, ensure we have one empty card
+                elif all(not card._has_any_data() for card in self.entry_cards):
+                    # Remove all empty cards except one
+                    while len(self.entry_cards) > 1:
+                        card_to_remove = self.entry_cards[-1]
+                        self.cards_layout.removeWidget(card_to_remove)
+                        self.entry_cards.remove(card_to_remove)
+                        card_to_remove.deleteLater()
+                    self._renumber_cards()
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save entries: {e}")
     
     def _clear_all_entries(self):
         """Clear all entry cards."""
-        for card in self.entry_cards:            card.clear_entry()
+        for card in self.entry_cards:
+            card.clear_entry()
         self._update_summary()
         
     def _import_file(self):
@@ -394,72 +424,83 @@ class BulkEntryPage(QWidget):
                 
                 if progress.was_cancelled():
                     progress.close()
-                    self._clear_all_entries()
                     return
 
-                progress.set_progress(10, "Preparing entry cards...")
+                progress.set_progress(10, "Preparing for import...")
                 QApplication.processEvents()
                 
                 # Store the initial state so we can revert if cancelled
-                initial_card_count = len(self.entry_cards)
+                initial_cards = []
+                for card in self.entry_cards[:]:  # Create a copy of the list
+                    initial_cards.append({
+                        'date': card.date_edit.date().toString('yyyy-MM-dd'),
+                        'description': card.desc_edit.text(),
+                        'debit_account': card.debit_combo.currentText(),
+                        'credit_account': card.credit_combo.currentText(),
+                        'amount': card.amount_edit.text()
+                    })
+                
+                # Clear existing cards
                 self._clear_all_entries()
                 
-                # Create required cards
-                total_entries = len(df)
-                while len(self.entry_cards) < total_entries:
-                    if progress.was_cancelled():
-                        # Revert to initial state
-                        self._clear_all_entries()
-                        for _ in range(initial_card_count):
-                            self._add_new_card()
-                        progress.close()
-                        return
-                        
-                    self._add_new_card()
-                    progress.set_progress(
-                        10 + (20 * len(self.entry_cards) // total_entries),
-                        f"Creating entry cards... ({len(self.entry_cards)}/{total_entries})"
-                    )
-                    QApplication.processEvents()
-                
-                # Import data and ensure validation/updates are triggered
+                # Import data by creating cards dynamically as we process each entry
                 for i, row in df.iterrows():
                     if progress.was_cancelled():
                         # Revert to initial state
                         self._clear_all_entries()
-                        for _ in range(initial_card_count):
+                        for initial_data in initial_cards:
                             self._add_new_card()
+                            if len(self.entry_cards) > 0:
+                                card = self.entry_cards[-1]
+                                card.set_entry_data(initial_data)
                         progress.close()
                         return
+                    
+                    # Create a new card for this entry
+                    self._add_new_card()
+                    
+                    # Get the newly created card
+                    if len(self.entry_cards) > 0:
+                        card = self.entry_cards[-1]
                         
-                    if i < len(self.entry_cards):
-                        card = self.entry_cards[i]
-                        card.set_entry_data({
+                        # Set the entry data
+                        entry_data = {
                             'date': str(row.get('Date', '')),
                             'description': str(row.get('Description', '')),
                             'debit_account': str(row.get('Debit Account', '')),
                             'credit_account': str(row.get('Credit Account', '')),
                             'amount': str(row.get('Amount', ''))
-                        })
+                        }
+                        card.set_entry_data(entry_data)
+                        
                         # Force UI updates for account fields
                         card.debit_combo.repaint()
                         card.credit_combo.repaint()
                         
+                        # Process events to show the card being created
+                        QApplication.processEvents()
+                        
                         # Update progress
-                        progress_value = 30 + (70 * (i + 1) // total_entries)
+                        progress_value = 10 + (85 * (i + 1) // total_entries)
                         progress.set_progress(
                             progress_value,
-                            f"Processing entries... ({i + 1}/{total_entries})"
+                            f"Creating entry {i + 1} of {total_entries}..."
                         )
                         QApplication.processEvents()
                 
                 if progress.was_cancelled():
                     # Revert to initial state
                     self._clear_all_entries()
-                    for _ in range(initial_card_count):
+                    for initial_data in initial_cards:
                         self._add_new_card()
+                        if len(self.entry_cards) > 0:
+                            card = self.entry_cards[-1]
+                            card.set_entry_data(initial_data)
                     progress.close()
                     return
+                
+                # Add one final empty card if we successfully imported all entries
+                self._add_new_card()
                     
                 progress.set_progress(100, "Import complete!")
                 QApplication.processEvents()
@@ -476,9 +517,16 @@ class BulkEntryPage(QWidget):
                 
             except Exception as e:
                 QMessageBox.critical(self, "Import Error", f"Failed to import file: {e}")
-                # Clean up on error
+                # Clean up on error - revert to initial state if we have it
                 self._clear_all_entries()
-                for _ in range(initial_card_count):
+                if 'initial_cards' in locals():
+                    for initial_data in initial_cards:
+                        self._add_new_card()
+                        if len(self.entry_cards) > 0:
+                            card = self.entry_cards[-1]
+                            card.set_entry_data(initial_data)
+                else:
+                    # Fallback: just add one empty card
                     self._add_new_card()
     
     def refresh_accounts_from_system(self):
