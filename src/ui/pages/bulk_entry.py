@@ -37,9 +37,7 @@ class BulkEntryPage(QWidget):
         self.formatted_accounts = [f"{acc[2]} - {acc[0]}" for acc in accounts_data]
         
         self._setup_ui()
-        self._add_new_card()  # Start with one empty card
-
-    def _apply_styling(self):
+        self._add_new_card()  # Start with one empty card    def _apply_styling(self):
         """Apply modern glassmorphism styling."""
         GlassmorphismHelper.apply_main_container_effect(self)
         self.setStyleSheet(ModernStyles.get_complete_stylesheet())
@@ -47,8 +45,10 @@ class BulkEntryPage(QWidget):
     def _setup_ui(self):
         """Setup the main UI."""
         page_layout = QVBoxLayout(self)
-        page_layout.setContentsMargins(0, 16, 0, 16)
-        page_layout.setSpacing(16)
+        responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
+        page_layout.setContentsMargins(responsive_margin, responsive_margin, 
+                                     responsive_margin, responsive_margin)
+        page_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
         
         # Toolbar
         toolbar_section = self._create_toolbar()
@@ -86,8 +86,7 @@ class BulkEntryPage(QWidget):
     def _create_toolbar(self):
         """Create the toolbar section."""
         toolbar_frame = QFrame()
-        toolbar_frame.setStyleSheet("""
-            QFrame {
+        toolbar_frame.setStyleSheet("""            QFrame {
                 background: rgba(255, 255, 255, 0.06);
                 border: 1px solid rgba(255, 255, 255, 0.12);
                 border-radius: 12px;
@@ -96,8 +95,10 @@ class BulkEntryPage(QWidget):
         """)
         
         toolbar_layout = QHBoxLayout(toolbar_frame)
-        toolbar_layout.setContentsMargins(20, 16, 20, 16)
-        toolbar_layout.setSpacing(12)
+        responsive_margin = ResponsiveHelper.scale_size(20, 16, 24)
+        toolbar_layout.setContentsMargins(responsive_margin, responsive_margin, 
+                                        responsive_margin, responsive_margin)
+        toolbar_layout.setSpacing(ResponsiveHelper.scale_size(12, 10, 16))
         
         # Title
         title_label = QLabel("Bulk Entry")

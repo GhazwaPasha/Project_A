@@ -65,13 +65,12 @@ class TrialBalancePage(QWidget):
         # Content widget
         content_widget = QWidget()
         scroll_area.setWidget(content_widget)
-        
-        # Main layout for scroll content
+          # Main layout for scroll content
         main_layout = QVBoxLayout(content_widget)
-        responsive_margin = ResponsiveHelper.scale_size(24, 20, 32)
+        responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
         main_layout.setContentsMargins(responsive_margin, responsive_margin, 
                                      responsive_margin, responsive_margin)
-        main_layout.setSpacing(ResponsiveHelper.scale_size(20, 16, 24))
+        main_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
         
         # Page header
         header = PageHeader("Trial Balance", "Verify that total debits equal total credits")

@@ -443,15 +443,14 @@ class ReportsPage(QWidget):
                 background: rgba(255, 255, 255, 0.5);
             }
         """)
-        
-        # Scroll content widget
+          # Scroll content widget
         scroll_widget = QWidget()
         main_layout = QVBoxLayout(scroll_widget)
-        main_layout.setContentsMargins(ResponsiveHelper.scale_size(20, 16, 24), 
-                                     ResponsiveHelper.scale_size(20, 16, 24),
-                                     ResponsiveHelper.scale_size(20, 16, 24), 
-                                     ResponsiveHelper.scale_size(20, 16, 24))
-        main_layout.setSpacing(ResponsiveHelper.scale_size(20, 16, 24))
+        main_layout.setContentsMargins(ResponsiveHelper.scale_size(32, 24, 48), 
+                                     ResponsiveHelper.scale_size(32, 24, 48),
+                                     ResponsiveHelper.scale_size(32, 24, 48), 
+                                     ResponsiveHelper.scale_size(32, 24, 48))
+        main_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
         
         # Page header
         header = PageHeader("Reports", "Comprehensive financial reporting and analysis")
