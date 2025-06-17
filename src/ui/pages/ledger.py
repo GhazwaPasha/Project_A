@@ -416,10 +416,8 @@ class LedgerDocumentView(QWidget):
             font-size: 11px;
             font-style: italic;
             background: transparent;
-            border: none;
-        """)
+            border: none;        """)
         footer_layout.addWidget(date_generated)
-        
         layout.addLayout(footer_layout)
         
     def _load_ledger_data(self):
@@ -429,27 +427,17 @@ class LedgerDocumentView(QWidget):
             return
             
         try:
-            # Get transactions for this account
+            # Get transactions for this account using the get_ledger method
             if self.from_date and self.to_date:
                 from_date_str = self.from_date.toString("yyyy-MM-dd")
                 to_date_str = self.to_date.toString("yyyy-MM-dd")
-                entries = self.system.get_journal_entries_by_date_range(from_date_str, to_date_str)
+                account_entries = self.system.get_ledger(self.account_name, from_date_str, to_date_str)
             else:
-                entries = self.system.get_journal_entries()
-            
-            # Filter entries for this account
-            account_entries = []
-            for entry in entries:
-                if len(entry) >= 6:
-                    debit_account = entry[3]
-                    credit_account = entry[4]
-                    if self.account_name in [debit_account, credit_account]:
-                        account_entries.append(entry)
-            
+                account_entries = self.system.get_ledger(self.account_name)
+                
             # Sort by date
-            account_entries.sort(key=lambda x: x[1])  # Sort by date
-            
-            # Calculate running balance and totals
+            account_entries.sort(key=lambda x: x[0])  # Sort by date
+              # Calculate running balance and totals
             running_balance = 0.0
             total_debits = 0.0
             total_credits = 0.0
@@ -474,7 +462,7 @@ class LedgerDocumentView(QWidget):
                 self.transactions_layout.addWidget(no_data)
             else:
                 for i, entry in enumerate(account_entries):
-                    entry_id, date, description, debit_account, credit_account, amount, timestamp = entry
+                    date, description, debit_account, credit_account, amount = entry
                     
                     is_debit = self.account_name == debit_account
                     debit_amount = amount if is_debit else 0

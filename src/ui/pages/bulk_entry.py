@@ -6,7 +6,7 @@ Refactored to use shared styles and eliminate code duplication
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QLineEdit, QFrame, QDateEdit, QMessageBox, 
-    QScrollArea, QSizePolicy, QFileDialog
+    QScrollArea, QSizePolicy, QFileDialog, QApplication
 )
 from PyQt6.QtCore import Qt, QDate, pyqtSignal, QTimer
 import pandas as pd
@@ -14,12 +14,16 @@ from ..components.widgets import PageHeader, EditableAccountComboBox
 from ..components.card_based_entry import CardBasedTransactionEntry
 from ..components.shared_styles import get_field_style, get_button_style, load_accounts_from_system, populate_account_combo
 from ..components.styles import ModernStyles, GlassmorphismHelper
+from ..components.progress_dialog import CircularProgressDialog
 from ..common import ResponsiveHelper
 
 
 class BulkEntryPage(QWidget):
     """Clean bulk entry page."""
     
+    # Constants for entry limits
+    SOFT_LIMIT = 1000  # Show warning above this
+    HARD_LIMIT = 5000  # Reject import above this
     entries_saved = pyqtSignal()
     
     def __init__(self, system, parent=None):
@@ -27,10 +31,14 @@ class BulkEntryPage(QWidget):
         self.system = system
         self.entry_cards = []
         self.next_card_number = 1
-        self._setup_ui()
-        self._apply_styling()
-        self._add_initial_cards()
         
+        # Load accounts once for all cards
+        accounts_data = self.system.get_postable_accounts()
+        self.formatted_accounts = [f"{acc[2]} - {acc[0]}" for acc in accounts_data]
+        
+        self._setup_ui()
+        self._add_new_card()  # Start with one empty card
+
     def _apply_styling(self):
         """Apply modern glassmorphism styling."""
         GlassmorphismHelper.apply_main_container_effect(self)
@@ -151,6 +159,11 @@ class BulkEntryPage(QWidget):
         card = CardBasedTransactionEntry(self.system, self.next_card_number)
         card.remove_requested.connect(self._remove_card)
         card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        
+        # Use shared account list
+        card.debit_combo.setAccountList(self.formatted_accounts)
+        card.credit_combo.setAccountList(self.formatted_accounts)
+        
         # Connect to validation changes
         card.desc_edit.textChanged.connect(self._check_auto_add_card)
         card.debit_combo.currentTextChanged.connect(self._check_auto_add_card)
@@ -162,9 +175,11 @@ class BulkEntryPage(QWidget):
         card.debit_combo.currentTextChanged.connect(self._update_validation_and_save_state)
         card.credit_combo.currentTextChanged.connect(self._update_validation_and_save_state)
         card.amount_edit.textChanged.connect(self._update_validation_and_save_state)
+        
         self.cards_layout.insertWidget(len(self.entry_cards), card)
         self.entry_cards.append(card)
         self.next_card_number += 1
+        self._update_validation_and_save_state()
         
     def _check_auto_add_card(self):
         """Auto-add a new card if the last one has data."""
@@ -233,7 +248,8 @@ class BulkEntryPage(QWidget):
                 f"Cannot save: {invalid_count} entry card(s) have invalid or missing account information.\n\n"
                 f"Please check cards: {card_list}\n\n"
                 "⚠ Account fields with red borders contain invalid accounts.\n"
-                "⚠ Account fields with orange borders are required but empty."            )
+                "⚠ Account fields with orange borders are required but empty."
+            )
             return
         
         if not valid_entries:
@@ -241,29 +257,70 @@ class BulkEntryPage(QWidget):
             return
         
         try:
-            for entry in valid_entries:
-                if hasattr(self.system, 'add_journal_entry'):
-                    self.system.add_journal_entry(
-                        entry['date'],
-                        entry['description'],
-                        entry['debit_account'],
-                        entry['credit_account'],
-                        entry['amount']
-                    )
+            # Create and show progress dialog
+            progress = CircularProgressDialog(self)
+            progress.set_progress(0, "Preparing to save entries...")
+            progress.show()
+            QApplication.processEvents()
             
-            QMessageBox.information(self, "Success", f"Successfully saved {len(valid_entries)} entries!")
-            self._clear_all_entries()
-            self.entries_saved.emit()
+            def progress_callback(current, total, entry):
+                if progress.was_cancelled():
+                    return False
+                
+                progress_value = int((current / total) * 100)
+                progress.set_progress(
+                    progress_value,
+                    f"Saving entries... ({current}/{total})"
+                )
+                QApplication.processEvents()
+                return True
+            
+            # Save entries one by one with progress
+            success_count, failed_entries = self.system.add_journal_entries_with_progress(
+                valid_entries,
+                progress_callback
+            )
+            
+            # Handle results
+            if progress.was_cancelled():
+                plural = "entry" if success_count == 1 else "entries"
+                QMessageBox.information(
+                    self,
+                    "Save Cancelled",
+                    f"Save operation cancelled. {success_count} {plural} were saved successfully before cancellation."
+                )
+            elif failed_entries:
+                failed_msg = "\n".join(f"Entry {i+1}: {err}" for i, err in failed_entries[:5])
+                if len(failed_entries) > 5:
+                    failed_msg += f"\n... and {len(failed_entries) - 5} more errors"
+                
+                QMessageBox.warning(
+                    self, 
+                    "Partial Save Completed",
+                    f"Saved {success_count} entries successfully, but {len(failed_entries)} entries failed:\n\n{failed_msg}"
+                )
+            else:
+                plural = "entry" if success_count == 1 else "entries"
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    f"Successfully saved {success_count} {plural}!"
+                )
+            
+            progress.close()
+            
+            if success_count > 0:
+                self._clear_all_entries()
+                self.entries_saved.emit()
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save entries: {e}")
-
+    
     def _clear_all_entries(self):
         """Clear all entry cards."""
-        for card in self.entry_cards:
-            card.clear_entry()
+        for card in self.entry_cards:            card.clear_entry()
         self._update_summary()
-
+        
     def _import_file(self):
         """Import entries from CSV/Excel file."""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -273,18 +330,84 @@ class BulkEntryPage(QWidget):
         
         if file_path:
             try:
+                # Read the file
                 if file_path.endswith(('.xlsx', '.xls')):
                     df = pd.read_excel(file_path)
                 else:
                     df = pd.read_csv(file_path)
                 
+                total_entries = len(df)
+                
+                # Check hard limit first
+                if total_entries > self.HARD_LIMIT:
+                    QMessageBox.critical(
+                        self,
+                        "Import Error",
+                        f"Cannot import: File contains {total_entries:,} entries, which exceeds the maximum limit of {self.HARD_LIMIT:,} entries.\n\n"
+                        f"Please split your data into smaller files of {self.HARD_LIMIT:,} entries or fewer."
+                    )
+                    return
+                
+                # Warn on soft limit
+                if total_entries > self.SOFT_LIMIT:
+                    response = QMessageBox.warning(
+                        self,
+                        "Large Import Warning",
+                        f"You are about to import {total_entries:,} entries, which is more than the recommended maximum of {self.SOFT_LIMIT:,} entries.\n\n"
+                        "Importing a large number of entries may cause the application to become slow or unresponsive.\n\n"
+                        "Do you want to continue?",
+                        QMessageBox.Yes | QMessageBox.No,
+                        QMessageBox.No
+                    )
+                    if response == QMessageBox.No:
+                        return
+                
+                # Create and show progress dialog
+                progress = CircularProgressDialog(self)
+                progress.set_progress(0, "Reading file...")
+                progress.show()
+                QApplication.processEvents()  # Ensure dialog shows immediately
+                
+                if progress.was_cancelled():
+                    progress.close()
+                    self._clear_all_entries()
+                    return
+
+                progress.set_progress(10, "Preparing entry cards...")
+                QApplication.processEvents()
+                
+                # Store the initial state so we can revert if cancelled
+                initial_card_count = len(self.entry_cards)
                 self._clear_all_entries()
                 
-                while len(self.entry_cards) < len(df):
+                # Create required cards
+                total_entries = len(df)
+                while len(self.entry_cards) < total_entries:
+                    if progress.was_cancelled():
+                        # Revert to initial state
+                        self._clear_all_entries()
+                        for _ in range(initial_card_count):
+                            self._add_new_card()
+                        progress.close()
+                        return
+                        
                     self._add_new_card()
+                    progress.set_progress(
+                        10 + (20 * len(self.entry_cards) // total_entries),
+                        f"Creating entry cards... ({len(self.entry_cards)}/{total_entries})"
+                    )
+                    QApplication.processEvents()
                 
                 # Import data and ensure validation/updates are triggered
                 for i, row in df.iterrows():
+                    if progress.was_cancelled():
+                        # Revert to initial state
+                        self._clear_all_entries()
+                        for _ in range(initial_card_count):
+                            self._add_new_card()
+                        progress.close()
+                        return
+                        
                     if i < len(self.entry_cards):
                         card = self.entry_cards[i]
                         card.set_entry_data({
@@ -297,6 +420,26 @@ class BulkEntryPage(QWidget):
                         # Force UI updates for account fields
                         card.debit_combo.repaint()
                         card.credit_combo.repaint()
+                        
+                        # Update progress
+                        progress_value = 30 + (70 * (i + 1) // total_entries)
+                        progress.set_progress(
+                            progress_value,
+                            f"Processing entries... ({i + 1}/{total_entries})"
+                        )
+                        QApplication.processEvents()
+                
+                if progress.was_cancelled():
+                    # Revert to initial state
+                    self._clear_all_entries()
+                    for _ in range(initial_card_count):
+                        self._add_new_card()
+                    progress.close()
+                    return
+                    
+                progress.set_progress(100, "Import complete!")
+                QApplication.processEvents()
+                QTimer.singleShot(500, progress.close)  # Close after brief delay
                 
                 # Trigger validation and UI updates after import
                 self._update_validation_and_save_state()
@@ -309,6 +452,10 @@ class BulkEntryPage(QWidget):
                 
             except Exception as e:
                 QMessageBox.critical(self, "Import Error", f"Failed to import file: {e}")
+                # Clean up on error
+                self._clear_all_entries()
+                for _ in range(initial_card_count):
+                    self._add_new_card()
     
     def refresh_accounts_from_system(self):
         """Reload accounts from the system and refresh all entry cards."""

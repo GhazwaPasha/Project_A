@@ -753,3 +753,88 @@ class AccountingSystem:
                 cursor.execute('UPDATE accounts SET code = ?, level = ?, is_postable = ? WHERE name = ?',                              (new_code, new_level, new_is_postable, name))
         
         self.conn.commit()
+
+    def clear_journal_entries(self):
+        """Remove all journal entries from the system."""
+        cursor = self.conn.cursor()
+        cursor.execute('DELETE FROM journal_entries')
+        self.conn.commit()
+        return cursor.rowcount  # Return number of entries deleted
+
+    def begin_transaction(self):
+        """Start a transaction batch."""
+        self.conn.execute('BEGIN TRANSACTION')
+        
+    def commit_transaction(self):
+        """Commit the current transaction batch."""
+        self.conn.commit()
+        
+    def add_journal_entries_batch(self, entries):
+        """Add multiple journal entries in a batch for better performance."""
+        cursor = self.conn.cursor()
+        self.begin_transaction()
+        try:
+            for entry in entries:
+                cursor.execute('''
+                    INSERT INTO journal_entries 
+                    (id, date, description, debit_account, credit_account, amount, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    str(uuid.uuid4()),
+                    entry['date'],
+                    entry['description'],
+                    entry['debit_account'],
+                    entry['credit_account'],
+                    entry['amount'],
+                    datetime.now().isoformat()
+                ))
+            self.commit_transaction()
+            return len(entries)
+        except Exception as e:
+            self.conn.rollback()
+            raise e
+
+    def add_journal_entries_with_progress(self, entries, progress_callback=None):
+        """Add multiple journal entries with progress tracking and single-entry commit.
+        
+        Args:
+            entries: List of entry dictionaries with date, description, debit_account, credit_account, amount
+            progress_callback: Optional callback function(current_entry, total_entries, entry_data) to report progress
+            
+        Returns:
+            tuple: (success_count, failed_entries) where failed_entries is a list of (index, error_msg)
+        """
+        cursor = self.conn.cursor()
+        failed_entries = []
+        success_count = 0
+        total = len(entries)
+        
+        for i, entry in enumerate(entries):
+            if progress_callback:
+                # Allow cancellation through the callback
+                if progress_callback(i + 1, total, entry) is False:
+                    break
+                    
+            try:
+                # Begin transaction for this single entry
+                self.begin_transaction()
+                cursor.execute('''
+                    INSERT INTO journal_entries 
+                    (id, date, description, debit_account, credit_account, amount, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    str(uuid.uuid4()),
+                    entry['date'],
+                    entry['description'],
+                    entry['debit_account'],
+                    entry['credit_account'],
+                    entry['amount'],
+                    datetime.now().isoformat()
+                ))
+                self.commit_transaction()
+                success_count += 1
+            except Exception as e:
+                self.conn.rollback()
+                failed_entries.append((i, str(e)))
+                
+        return success_count, failed_entries

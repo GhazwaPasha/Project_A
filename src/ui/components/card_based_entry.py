@@ -22,21 +22,9 @@ class CardBasedTransactionEntry(QFrame):
         super().__init__(parent)
         self.system = system
         self.card_number = card_number
-        self.accounts = []
-        self._load_accounts()
         self._setup_ui()
-        
-    def _load_accounts(self):
-        """Load accounts from the system."""
-        try:
-            if hasattr(self.system, 'get_all_accounts'):
-                accounts_data = self.system.get_all_accounts()
-                self.accounts = [f"{acc[2]} - {acc[0]}" for acc in accounts_data if acc[5]]
-            else:
-                self.accounts = ["1001 - Cash", "2001 - Accounts Payable"]
-        except Exception as e:
-            print(f"Error loading accounts: {e}")
-            self.accounts = ["1001 - Cash", "2001 - Accounts Payable"]
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_context_menu)
         
     def _setup_ui(self):
         """Setup the card-based UI."""
@@ -102,7 +90,8 @@ class CardBasedTransactionEntry(QFrame):
         self.desc_edit.setStyleSheet(self._get_single_row_field_style())
         desc_container.addWidget(desc_label)
         desc_container.addWidget(self.desc_edit)
-          # Debit account field
+        
+        # Debit account field
         debit_container = QVBoxLayout()
         debit_container.setSpacing(3)
         debit_container.setContentsMargins(0, 0, 0, 0)
@@ -112,9 +101,8 @@ class CardBasedTransactionEntry(QFrame):
         debit_label.setFixedHeight(14)  # Ensure label has proper height
         self.debit_combo = EditableAccountComboBox()
         self.debit_combo.setFixedHeight(28)
-        self.debit_combo.setMinimumWidth(160)  # Increased from 120
+        self.debit_combo.setMinimumWidth(160)
         self.debit_combo.setStyleSheet(self._get_single_row_field_style())
-        self._populate_account_combo(self.debit_combo)
         debit_container.addWidget(debit_label)
         debit_container.addWidget(self.debit_combo)
         
@@ -128,9 +116,8 @@ class CardBasedTransactionEntry(QFrame):
         credit_label.setFixedHeight(14)  # Ensure label has proper height
         self.credit_combo = EditableAccountComboBox()
         self.credit_combo.setFixedHeight(28)
-        self.credit_combo.setMinimumWidth(160)  # Increased from 120
+        self.credit_combo.setMinimumWidth(160)
         self.credit_combo.setStyleSheet(self._get_single_row_field_style())
-        self._populate_account_combo(self.credit_combo)
         credit_container.addWidget(credit_label)
         credit_container.addWidget(self.credit_combo)
         
@@ -156,9 +143,11 @@ class CardBasedTransactionEntry(QFrame):
         fields_layout.addLayout(desc_container, 1)  # Description expands
         fields_layout.addLayout(debit_container)
         fields_layout.addLayout(credit_container)
-        fields_layout.addLayout(amount_container)        
+        fields_layout.addLayout(amount_container)
+        
         main_layout.addLayout(fields_layout)
-          # Set tooltip to indicate right-click functionality
+        
+        # Set tooltip to indicate right-click functionality
         self.setToolTip("Right-click to delete this transaction entry")
         
     def _get_single_row_label_style(self, field_type=None):
