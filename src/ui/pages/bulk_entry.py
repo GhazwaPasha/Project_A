@@ -228,11 +228,13 @@ class BulkEntryPage(QWidget):
     def _save_all_entries(self):
         """Save all valid entries."""
         valid_entries = []
+        valid_cards = []  # Keep track of valid cards
         invalid_cards = []
         
         for i, card in enumerate(self.entry_cards):
             if card.is_valid():
                 valid_entries.append(card.get_entry_data())
+                valid_cards.append(card)  # Store the card reference
             elif card._has_any_data():
                 invalid_cards.append(i + 1)
         
@@ -267,6 +269,13 @@ class BulkEntryPage(QWidget):
                 if progress.was_cancelled():
                     return False
                 
+                # Remove the successfully saved card
+                if current > 0:  # Skip for the first progress update
+                    card_to_remove = valid_cards[current - 1]
+                    self.cards_layout.removeWidget(card_to_remove)
+                    card_to_remove.deleteLater()
+                    QApplication.processEvents()  # Ensure UI updates
+                
                 progress_value = int((current / total) * 100)
                 progress.set_progress(
                     progress_value,
@@ -280,6 +289,13 @@ class BulkEntryPage(QWidget):
                 valid_entries,
                 progress_callback
             )
+            
+            # Remove any remaining successful cards if we were cancelled
+            remaining_successful = success_count - 1  # -1 because the callback already handled the last one
+            if remaining_successful >= 0 and remaining_successful < len(valid_cards):
+                card_to_remove = valid_cards[remaining_successful]
+                self.cards_layout.removeWidget(card_to_remove)
+                card_to_remove.deleteLater()
             
             # Handle results
             if progress.was_cancelled():
@@ -310,8 +326,16 @@ class BulkEntryPage(QWidget):
             progress.close()
             
             if success_count > 0:
-                self._clear_all_entries()
+                # Only emit the saved signal since cards are already removed
                 self.entries_saved.emit()
+                
+                # Renumber remaining cards if any
+                self._renumber_cards()
+                # Update the summary to reflect the new count
+                self._update_summary()
+                # Add a new empty card if all were saved
+                if not self.entry_cards:
+                    self._add_new_card()
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save entries: {e}")
