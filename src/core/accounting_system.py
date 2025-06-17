@@ -901,3 +901,56 @@ class AccountingSystem:
                 failed_entries.append((i, str(e)))
                 
         return success_count, failed_entries
+
+    def generate_statement_of_equity(self, from_date=None, to_date=None):
+        """Generate statement of owner's equity for a period."""
+        # Get beginning equity balance
+        beginning_equity = 0.0
+        if from_date:
+            # Calculate equity at beginning of period
+            balance_sheet_start = self.generate_balance_sheet_breakdown(from_date)
+            beginning_equity = balance_sheet_start.get('total_equity', 0)
+        
+        # Get ending equity balance
+        balance_sheet_end = self.generate_balance_sheet_breakdown(to_date)
+        ending_equity = balance_sheet_end.get('total_equity', 0)
+        
+        # Get net income for the period
+        income_statement = self.generate_income_statement_breakdown(from_date, to_date)
+        net_income = income_statement.get('net_income', 0)
+        
+        # Calculate owner investments and withdrawals from journal entries
+        cursor = self.conn.cursor()
+        query = '''SELECT debit_account, credit_account, amount, description FROM journal_entries'''
+        params = ()
+        if from_date and to_date:
+            query += ' WHERE date BETWEEN ? AND ?'
+            params = (from_date, to_date)
+        cursor.execute(query, params)
+        
+        owner_investments = 0.0
+        owner_withdrawals = 0.0
+        
+        for debit, credit, amount, desc in cursor.fetchall():
+            desc = desc.lower() if desc else ''
+            # Look for owner-related transactions
+            if any(word in desc for word in ['owner', 'capital', 'investment', 'contribution']):
+                if 'equity' in credit.lower() or 'capital' in credit.lower():
+                    owner_investments += amount
+                elif 'equity' in debit.lower() or 'capital' in debit.lower():
+                    owner_withdrawals += amount
+            elif any(word in desc for word in ['withdrawal', 'drawing', 'distribution']):
+                if 'equity' in debit.lower() or 'capital' in debit.lower():
+                    owner_withdrawals += amount
+        
+        # Calculate total changes
+        total_changes = net_income + owner_investments - owner_withdrawals
+        
+        return {
+            'beginning_equity': beginning_equity,
+            'net_income': net_income,
+            'owner_investments': owner_investments,
+            'owner_withdrawals': owner_withdrawals,
+            'total_changes': total_changes,
+            'ending_equity': ending_equity
+        }

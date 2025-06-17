@@ -11,10 +11,13 @@ Built with ledger-style card design and glassmorphism UI.
 
 from ..common import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QScrollArea,
-    ResponsiveHelper, Qt, QGridLayout, QSizePolicy, QSpacerItem
+    ResponsiveHelper, Qt, QGridLayout, QSizePolicy, QSpacerItem, QStackedWidget
 )
 from PyQt6.QtWidgets import QMessageBox
 from ..components.widgets import PageHeader, DateRangeSelector
+from ..components.report_views import (
+    IncomeStatementView, BalanceSheetView, CashFlowStatementView, StatementOfEquityView
+)
 from PyQt6.QtCore import QPropertyAnimation, QEasingCurve, pyqtSignal
 from PyQt6.QtGui import QFont, QCursor
 
@@ -381,6 +384,40 @@ class ReportsPage(QWidget):
         
     def _setup_ui(self):
         """Setup the main UI structure."""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Create stacked widget for switching views
+        self.stacked_widget = QStackedWidget()
+        
+        # Create overview page
+        self.overview_page = self._create_overview_page()
+        self.stacked_widget.addWidget(self.overview_page)
+        
+        # Create detailed report views
+        self.income_statement_view = IncomeStatementView()
+        self.income_statement_view.backToReports.connect(self._show_overview)
+        self.stacked_widget.addWidget(self.income_statement_view)
+        
+        self.balance_sheet_view = BalanceSheetView()
+        self.balance_sheet_view.backToReports.connect(self._show_overview)
+        self.stacked_widget.addWidget(self.balance_sheet_view)
+        
+        self.cash_flow_view = CashFlowStatementView()
+        self.cash_flow_view.backToReports.connect(self._show_overview)
+        self.stacked_widget.addWidget(self.cash_flow_view)
+        
+        self.equity_statement_view = StatementOfEquityView()
+        self.equity_statement_view.backToReports.connect(self._show_overview)
+        self.stacked_widget.addWidget(self.equity_statement_view)
+        
+        layout.addWidget(self.stacked_widget)
+        
+    def _create_overview_page(self):
+        """Create the reports overview page."""
+        page = QWidget()
+        
         # Main scroll area
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
@@ -426,7 +463,8 @@ class ReportsPage(QWidget):
         
         # Top KPI section (non-expandable)
         self._create_kpi_section(main_layout)
-          # Financial Statements section (expandable)
+        
+        # Financial Statements section (expandable)
         self.statements_section = ExpandableSection("Financial Statements", "Core financial documents and statements", "📋")
         main_layout.addWidget(self.statements_section)
         
@@ -441,10 +479,16 @@ class ReportsPage(QWidget):
         # Set scroll widget
         scroll_area.setWidget(scroll_widget)
         
-        # Main page layout
-        page_layout = QVBoxLayout(self)
+        # Page layout
+        page_layout = QVBoxLayout(page)
         page_layout.setContentsMargins(0, 0, 0, 0)
         page_layout.addWidget(scroll_area)
+        
+        return page
+        
+    def _show_overview(self):
+        """Show the reports overview page."""
+        self.stacked_widget.setCurrentIndex(0)
         
     def _create_kpi_section(self, main_layout):
         """Create the top KPI section (non-expandable, max 2 rows)."""
@@ -547,6 +591,11 @@ class ReportsPage(QWidget):
     
     def _handle_statement_click(self, statement_name):
         """Handle financial statement card clicks."""
+        # Get current date range and convert to string format
+        from_date_obj, to_date_obj = self.date_selector.get_date_range()
+        from_date = from_date_obj.toString("yyyy-MM-dd") if from_date_obj else None
+        to_date = to_date_obj.toString("yyyy-MM-dd") if to_date_obj else None
+        
         # Navigate to existing tabs for Ledger and Trial Balance
         if statement_name == "General Ledger":
             # Navigate to Ledger tab (index 2)
@@ -558,6 +607,19 @@ class ReportsPage(QWidget):
             main_window = self.window()
             if hasattr(main_window, 'setCurrentIndexByName'):
                 main_window.setCurrentIndexByName("Trial Balance")
+        # Navigate to detailed report views for financial statements
+        elif statement_name == "Income Statement":
+            self.income_statement_view.show_income_statement(self.system, from_date, to_date)
+            self.stacked_widget.setCurrentIndex(1)  # Income Statement view
+        elif statement_name == "Balance Sheet":
+            self.balance_sheet_view.show_balance_sheet(self.system, to_date)
+            self.stacked_widget.setCurrentIndex(2)  # Balance Sheet view
+        elif statement_name == "Cash Flow Statement":
+            self.cash_flow_view.show_cash_flow_statement(self.system, from_date, to_date)
+            self.stacked_widget.setCurrentIndex(3)  # Cash Flow view
+        elif statement_name == "Statement of Equity":
+            self.equity_statement_view.show_statement_of_equity(self.system, from_date, to_date)
+            self.stacked_widget.setCurrentIndex(4)  # Equity Statement view
         else:
             QMessageBox.information(self, "Financial Statement", 
                                   f"Generating {statement_name}...\nThis feature will be implemented soon!")
