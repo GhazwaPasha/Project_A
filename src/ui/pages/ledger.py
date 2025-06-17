@@ -22,9 +22,10 @@ class AccountCard(QFrame):
     
     accountSelected = pyqtSignal(str)  # Account name
     
-    def __init__(self, account_data, parent=None):
+    def __init__(self, account_data, account_level=1, parent=None):
         super().__init__(parent)
         self.account_data = account_data  # (name, type, code, parent_code)
+        self.account_level = account_level
         self.balance = 0.0
         self.transaction_count = 0
         self.is_expanded = False
@@ -49,8 +50,7 @@ class AccountCard(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(8)
-        
-        # Header row
+          # Header row
         header_layout = QHBoxLayout()
         header_layout.setSpacing(8)
         
@@ -63,10 +63,31 @@ class AccountCard(QFrame):
             background: rgba(100, 181, 246, 0.2);
             padding: 2px 6px;
             border-radius: 4px;
-            border: none;
-        """)
+            border: none;        """)
         code_label.setFixedWidth(50)
         header_layout.addWidget(code_label)
+        
+        # Level tag with color coding
+        level_colors = {
+            1: {"bg": "rgba(100, 150, 255, 0.2)", "color": "#6496FF"},  # Blue
+            2: {"bg": "rgba(150, 200, 100, 0.2)", "color": "#96C864"},  # Green  
+            3: {"bg": "rgba(255, 200, 100, 0.2)", "color": "#FFC864"}   # Orange
+        }
+        
+        level_style = level_colors.get(self.account_level, level_colors[1])
+        level_label = QLabel(f"lvl. {self.account_level}")
+        level_label.setStyleSheet(f"""
+            color: {level_style["color"]};
+            font-weight: 600;
+            font-size: 11px;
+            background: {level_style["bg"]};
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: none;
+        """)
+        level_label.setFixedWidth(50)
+        level_label.setToolTip(f"Account Level {self.account_level}")
+        header_layout.addWidget(level_label)
         
         header_layout.addStretch()
         
@@ -1074,14 +1095,16 @@ class LedgerPage(QWidget):
         # Clear existing cards
         for card in self.account_cards:
             card.setParent(None)
-        self.account_cards.clear()
-        
-        # Create new cards
+        self.account_cards.clear()          # Create new cards
         row, col = 0, 0
         max_cols = 3
         
         for account in accounts:
-            card = AccountCard(account)
+            # account is (name, type, code, parent_code, level, is_postable, description)
+            account_data = account[:4]  # (name, type, code, parent_code)
+            account_level = account[4]  # level
+            
+            card = AccountCard(account_data, account_level)
             card.accountSelected.connect(self._show_account_details)
             self.account_cards.append(card)
             
@@ -1091,7 +1114,8 @@ class LedgerPage(QWidget):
             if col >= max_cols:
                 col = 0
                 row += 1
-                  # Add stretch to fill remaining space
+                
+        # Add stretch to fill remaining space
         self.accounts_layout.setRowStretch(row + 1, 1)
         
     def _filter_accounts(self):
@@ -1101,7 +1125,8 @@ class LedgerPage(QWidget):
         
         filtered_accounts = []
         for account in self.all_accounts:
-            name, acc_type, code, parent_code = account
+            # account is (name, type, code, parent_code, level, is_postable, description)
+            name, acc_type, code, parent_code = account[:4]
             
             # Apply search filter
             if search_text and search_text not in name.lower() and search_text not in (code or "").lower():
