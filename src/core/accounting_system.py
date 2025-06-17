@@ -171,26 +171,67 @@ class AccountingSystem:
         return results
 
     def get_trial_balance(self, from_date=None, to_date=None):
+        """Get trial balance with proper account name matching."""
         cursor = self.conn.cursor()
+        
+        # Get all accounts first
+        all_accounts = self.get_all_accounts()
+        account_balances = {}
+        
+        # Initialize account balances
+        for account in all_accounts:
+            name, account_type, code, parent_code, level, is_postable, description = account
+            account_balances[name] = 0.0
+        
+        # Get journal entries
         if from_date and to_date:
             cursor.execute('''
-                SELECT debit_account AS account, SUM(amount) AS debit, 0 AS credit FROM journal_entries WHERE date BETWEEN ? AND ? GROUP BY debit_account
-                UNION ALL
-                SELECT credit_account AS account, 0 AS debit, SUM(amount) AS credit FROM journal_entries WHERE date BETWEEN ? AND ? GROUP BY credit_account
-            ''', (from_date, to_date, from_date, to_date))
+                SELECT debit_account, credit_account, amount FROM journal_entries WHERE date BETWEEN ? AND ?
+            ''', (from_date, to_date))
         else:
             cursor.execute('''
-                SELECT debit_account AS account, SUM(amount) AS debit, 0 AS credit FROM journal_entries GROUP BY debit_account
-                UNION ALL
-                SELECT credit_account AS account, 0 AS debit, SUM(amount) AS credit FROM journal_entries GROUP BY credit_account
+                SELECT debit_account, credit_account, amount FROM journal_entries
             ''')
-        rows = cursor.fetchall()
-        balance = {}
-        for account, debit, credit in rows:
-            if account not in balance:
-                balance[account] = 0
-            balance[account] += (debit - credit)
-        return balance
+        
+        entries = cursor.fetchall()
+        
+        # Helper function to match accounts (handles "code - name" format)
+        def find_matching_account(stored_account_name, account_balances):
+            """Find the account in account_balances that matches the stored account name."""
+            # First try exact match
+            if stored_account_name in account_balances:
+                return stored_account_name
+            
+            # If stored account is in "code - name" format, try to match
+            if ' - ' in stored_account_name:
+                # Extract the name part after " - "
+                parts = stored_account_name.split(' - ', 1)
+                if len(parts) == 2:
+                    account_name = parts[1]
+                    if account_name in account_balances:
+                        return account_name
+            
+            # Try partial matching
+            for account_name in account_balances:
+                if account_name in stored_account_name or stored_account_name in account_name:
+                    return account_name
+            
+            return None
+        
+        # Process entries
+        for debit_account, credit_account, amount in entries:
+            amount = float(amount)
+            
+            # Find matching accounts
+            debit_match = find_matching_account(debit_account, account_balances)
+            credit_match = find_matching_account(credit_account, account_balances)
+            
+            if debit_match:
+                account_balances[debit_match] += amount
+            if credit_match:
+                account_balances[credit_match] -= amount
+        
+        return account_balances
 
     # Placeholder for report generation methods
     def generate_income_statement(self, period_start=None, period_end=None):

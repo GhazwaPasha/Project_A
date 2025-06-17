@@ -439,49 +439,35 @@ class TrialBalancePage(QWidget):
             print(f"Error refreshing trial balance: {e}")
             
     def _calculate_trial_balance(self, from_date, to_date):
-        """Calculate professional trial balance."""
+        """Calculate trial balance using the accounting system method."""
         try:
-            # Get entries
+            # Use the accounting system's get_trial_balance method
             if from_date and to_date:
                 from_str = from_date.toString("yyyy-MM-dd")
                 to_str = to_date.toString("yyyy-MM-dd")
-                entries = self.system.get_journal_entries_by_date_range(from_str, to_str)
+                account_balances = self.system.get_trial_balance(from_str, to_str)
             else:
-                entries = self.system.get_journal_entries()
+                account_balances = self.system.get_trial_balance()
             
-            # Get accounts
+            # Get account metadata for codes and types
             accounts = self.system.get_all_accounts()
-            
-            # Initialize balances
-            account_balances = {}
+            account_info = {}
             for account in accounts:
-                name, account_type, code, parent = account
-                account_balances[name] = {
+                name, account_type, code, parent_code, level, is_postable, description = account
+                account_info[name] = {
                     'type': account_type,
-                    'code': code or '',
-                    'balance': 0.0
+                    'code': code or ''
                 }
             
-            # Process entries
-            for entry in entries:
-                if len(entry) >= 6:
-                    _, _, _, debit_account, credit_account, amount, _ = entry
-                    amount = float(amount)
-                    
-                    if debit_account in account_balances:
-                        account_balances[debit_account]['balance'] += amount
-                    if credit_account in account_balances:
-                        account_balances[credit_account]['balance'] -= amount
-            
-            # Build trial balance
+            # Build trial balance data in the format expected by the UI
             trial_accounts = []
             total_debits = 0.0
             total_credits = 0.0
             
-            for account_name, account_info in account_balances.items():
-                balance = account_info['balance']
-                
+            for account_name, balance in account_balances.items():
                 if abs(balance) >= 0.01:  # Only non-zero balances
+                    info = account_info.get(account_name, {'type': 'Unknown', 'code': ''})
+                    
                     if balance > 0:
                         debit_amount = balance
                         credit_amount = 0.0
@@ -493,12 +479,12 @@ class TrialBalancePage(QWidget):
                     
                     trial_accounts.append({
                         'name': account_name,
-                        'code': account_info['code'],
+                        'code': info['code'],
                         'debit': debit_amount,
                         'credit': credit_amount
                     })
             
-            # Sort alphabetically
+            # Sort alphabetically by account name
             trial_accounts.sort(key=lambda x: x['name'])
             
             difference = abs(total_debits - total_credits)
@@ -514,7 +500,7 @@ class TrialBalancePage(QWidget):
             }
             
         except Exception as e:
-            print(f"Calculation error: {e}")
+            print(f"Error calculating trial balance: {e}")
             return {
                 'accounts': [],
                 'total_debits': 0.0,
