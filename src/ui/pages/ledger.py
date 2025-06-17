@@ -986,8 +986,7 @@ class LedgerPage(QWidget):
                 border-radius: 4px;
                 margin: 2px;
             }
-            QComboBox QAbstractItemView::item:hover {
-                background: rgba(100, 181, 246, 0.2);
+            QComboBox QAbstractItemView::item:hover {                background: rgba(100, 181, 246, 0.2);
             }
             QComboBox QAbstractItemView::item:selected {
                 background: rgba(100, 181, 246, 0.3);
@@ -996,7 +995,7 @@ class LedgerPage(QWidget):
         self.type_filter.currentTextChanged.connect(self._filter_accounts)
         filter_layout.addWidget(self.type_filter)
         
-        filter_layout.addSpacing(16)
+        filter_layout.addSpacing(4)
         
         # Search box - now next to the type filter
         self.search_box = QLineEdit()

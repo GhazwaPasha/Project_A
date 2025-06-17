@@ -79,13 +79,10 @@ class TrialBalancePage(QWidget):
         # Date range selector
         self.date_selector = DateRangeSelector(callback=self._on_date_range_changed)
         main_layout.addWidget(self.date_selector)
-        
-        # Compact balance metrics - only 3 cards
+          # Compact balance metrics - only 3 cards
         self._create_compact_balance_metrics(main_layout)
         
-        # Search functionality
-        self._create_search_section(main_layout)
-          # Professional trial balance table with date info
+        # Professional trial balance table with date info
         self._create_trial_balance_table(main_layout)
         
         # Push content to top
@@ -241,8 +238,7 @@ class TrialBalancePage(QWidget):
                     margin: 0px;
                     padding: 0px;
                     font-weight: 500;
-                }}
-            """)
+                }}            """)
             subtitle_label.setText(t)
             # Show/hide based on content
             if t and t.strip():
@@ -257,63 +253,46 @@ class TrialBalancePage(QWidget):
         
         return card
         
-    def _create_search_section(self, main_layout):
-        """Create search bar for accounts."""
-        search_layout = QHBoxLayout()
-        search_layout.setSpacing(ResponsiveHelper.scale_size(12, 10, 16))
-        
-        search_label = QLabel("Search Accounts:")
-        search_label.setStyleSheet(f"""
-            QLabel {{
-                color: rgba(255, 255, 255, 0.8);
-                font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
-                font-weight: 500;
-                background: transparent;
-            }}
-        """)
-        search_layout.addWidget(search_label)
-        
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Type account name or code...")
-        self.search_input.setStyleSheet(f"""
-            QLineEdit {{
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 8px;
-                padding: {ResponsiveHelper.scale_size(8, 6, 12)}px 16px;
-                color: white;
-                font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
-                min-width: {ResponsiveHelper.scale_size(300, 250, 400)}px;
-            }}
-            QLineEdit:focus {{
-                border-color: #FF9800;
-                background: rgba(255, 255, 255, 0.15);
-            }}
-            QLineEdit::placeholder {{
-                color: rgba(255, 255, 255, 0.5);
-            }}
-        """)
-        self.search_input.textChanged.connect(self._filter_accounts)
-        search_layout.addWidget(self.search_input)
-        
-        search_layout.addStretch()
-        main_layout.addLayout(search_layout)
-        
     def _create_trial_balance_table(self, main_layout):
         """Create professional trial balance table with date info."""
-        # Header with title and date info
+        # Header with title and search box
         header_layout = QHBoxLayout()
         
         title = QLabel("Account Balances")
         title.setStyleSheet(f"""
             QLabel {{
-                color: white;
-                font-size: {ResponsiveHelper.scale_size(20, 16, 24)}px;
+                color: white;                font-size: {ResponsiveHelper.scale_size(20, 16, 24)}px;
                 font-weight: 600;
                 background: transparent;
             }}
         """)
         header_layout.addWidget(title)
+        
+        header_layout.addSpacing(4)
+        
+        # Search box - same as ledger tab
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search accounts...")
+        self.search_input.setFixedWidth(250)
+        self.search_input.setStyleSheet("""
+            QLineEdit {
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 6px;
+                padding: 6px 8px;
+                color: white;
+                font-size: 12px;
+            }
+            QLineEdit:focus {
+                border-color: #64B5F6;
+                background: rgba(255, 255, 255, 0.15);
+            }
+            QLineEdit::placeholder {
+                color: rgba(255, 255, 255, 0.5);
+            }
+        """)
+        self.search_input.textChanged.connect(self._filter_accounts)
+        header_layout.addWidget(self.search_input)
         
         header_layout.addStretch()
         
