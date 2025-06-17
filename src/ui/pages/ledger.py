@@ -938,18 +938,13 @@ class LedgerPage(QWidget):
         # Page header
         header = PageHeader("General Ledger", "Account balances and transaction details")
         layout.addWidget(header)
-        
-        # Date range selector
+          # Date range selector
         self.date_selector = DateRangeSelector()
         self.date_selector.dateRangeChanged.connect(self._refresh_balances)
         layout.addWidget(self.date_selector)
         
         # Filter bar with search and account type filter
         filter_layout = QHBoxLayout()
-        
-        filter_label = QLabel("Account Type:")
-        filter_label.setStyleSheet("color: rgba(255, 255, 255, 0.7); font-weight: 500; background: transparent; border: none;")
-        filter_layout.addWidget(filter_label)
         
         self.type_filter = QComboBox()
         self.type_filter.addItems(["All Types", "Asset", "Liability", "Equity", "Income", "Expense"])
@@ -976,15 +971,32 @@ class LedgerPage(QWidget):
                 border-top: 4px solid rgba(255, 255, 255, 0.7);
                 margin-right: 8px;
             }
+            QComboBox QAbstractItemView {
+                background: rgba(40, 40, 40, 0.95);
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                border-radius: 6px;
+                color: white;
+                selection-background-color: rgba(100, 181, 246, 0.3);
+                selection-color: white;
+                padding: 4px;
+            }
+            QComboBox QAbstractItemView::item {
+                padding: 8px 12px;
+                border: none;
+                border-radius: 4px;
+                margin: 2px;
+            }
+            QComboBox QAbstractItemView::item:hover {
+                background: rgba(100, 181, 246, 0.2);
+            }
+            QComboBox QAbstractItemView::item:selected {
+                background: rgba(100, 181, 246, 0.3);
+            }
         """)
         self.type_filter.currentTextChanged.connect(self._filter_accounts)
         filter_layout.addWidget(self.type_filter)
         
         filter_layout.addSpacing(16)
-        
-        search_label = QLabel("Search:")
-        search_label.setStyleSheet("color: rgba(255, 255, 255, 0.7); font-weight: 500; background: transparent; border: none;")
-        filter_layout.addWidget(search_label)
         
         # Search box - now next to the type filter
         self.search_box = QLineEdit()
