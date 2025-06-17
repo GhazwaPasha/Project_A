@@ -454,8 +454,7 @@ class LedgerDocumentView(QWidget):
                     color: #666;
                     font-size: 16px;
                     text-align: center;
-                    padding: 40px;
-                    background: transparent;
+                    padding: 40px;                    background: transparent;
                     border: none;
                 """)
                 no_data.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -464,7 +463,18 @@ class LedgerDocumentView(QWidget):
                 for i, entry in enumerate(account_entries):
                     date, description, debit_account, credit_account, amount = entry
                     
-                    is_debit = self.account_name == debit_account
+                    # Handle account name matching (accounts stored as "code - name" format)
+                    def account_matches(stored_account, target_account):
+                        if stored_account == target_account:
+                            return True
+                        # Check if it's in "code - name" format and matches
+                        if ' - ' in stored_account and stored_account.endswith(target_account):
+                            return True
+                        if ' - ' in stored_account and target_account in stored_account:
+                            return True
+                        return False
+                    
+                    is_debit = account_matches(debit_account, self.account_name)
                     debit_amount = amount if is_debit else 0
                     credit_amount = amount if not is_debit else 0
                     
@@ -610,36 +620,38 @@ class LedgerDocumentView(QWidget):
         total_debits = self.total_debits_label.text()
         total_credits = self.total_credits_label.text()
         closing_balance = self.closing_balance_label.text()
-        
-        # Get transactions (we'll need to recreate this from the system)
+          # Get transactions (we'll need to recreate this from the system)
         transactions_html = ""
         try:
             if self.system and self.account_name:
+                # Use the same get_ledger method we fixed earlier
                 if self.from_date and self.to_date:
                     from_date_str = self.from_date.toString("yyyy-MM-dd")
                     to_date_str = self.to_date.toString("yyyy-MM-dd")
-                    entries = self.system.get_journal_entries_by_date_range(from_date_str, to_date_str)
+                    account_entries = self.system.get_ledger(self.account_name, from_date_str, to_date_str)
                 else:
-                    entries = self.system.get_journal_entries()
-                
-                # Filter entries for this account
-                account_entries = []
-                for entry in entries:
-                    if len(entry) >= 6:
-                        debit_account = entry[3]
-                        credit_account = entry[4]
-                        if self.account_name in [debit_account, credit_account]:
-                            account_entries.append(entry)
+                    account_entries = self.system.get_ledger(self.account_name)
                 
                 # Sort by date
-                account_entries.sort(key=lambda x: x[1])
+                account_entries.sort(key=lambda x: x[0])
+                
+                # Helper function to match accounts (same as in _load_ledger_data)
+                def account_matches(stored_account, target_account):
+                    if stored_account == target_account:
+                        return True
+                    # Check if it's in "code - name" format and matches
+                    if ' - ' in stored_account and stored_account.endswith(target_account):
+                        return True
+                    if ' - ' in stored_account and target_account in stored_account:
+                        return True
+                    return False
                 
                 # Generate transaction rows
                 running_balance = 0.0
                 for entry in account_entries:
-                    entry_id, date, description, debit_account, credit_account, amount, timestamp = entry
+                    date, description, debit_account, credit_account, amount = entry
                     
-                    is_debit = self.account_name == debit_account
+                    is_debit = account_matches(debit_account, self.account_name)
                     debit_amount = amount if is_debit else 0
                     credit_amount = amount if not is_debit else 0
                     
@@ -651,11 +663,14 @@ class LedgerDocumentView(QWidget):
                     
                     from ...core.utils import format_currency
                     
+                    # Create a simple entry ID (since get_ledger doesn't return entry_id)
+                    entry_ref = f"JE-{hash(f'{date}{description}{amount}') % 10000:04d}"
+                    
                     transactions_html += f"""
                     <tr>
                         <td>{date}</td>
                         <td>{description}</td>
-                        <td>JE-{entry_id}</td>
+                        <td>{entry_ref}</td>
                         <td style="text-align: center;">{format_currency(debit_amount) if debit_amount > 0 else ''}</td>
                         <td style="text-align: center;">{format_currency(credit_amount) if credit_amount > 0 else ''}</td>
                         <td style="text-align: center;">{format_currency(abs(running_balance))}</td>
@@ -1076,8 +1091,7 @@ class LedgerPage(QWidget):
             if col >= max_cols:
                 col = 0
                 row += 1
-                
-        # Add stretch to fill remaining space
+                  # Add stretch to fill remaining space
         self.accounts_layout.setRowStretch(row + 1, 1)
         
     def _filter_accounts(self):
@@ -1116,25 +1130,44 @@ class LedgerPage(QWidget):
             account_balances = {}
             account_counts = {}
             
+            # Helper function to match account names (handles "code - name" format)
+            def find_matching_account_name(stored_account, account_name):
+                """Check if the stored account matches the account name."""
+                if stored_account == account_name:
+                    return True
+                # Check if it's in "code - name" format
+                if ' - ' in stored_account and stored_account.endswith(account_name):
+                    return True
+                if ' - ' in stored_account and account_name in stored_account:
+                    return True
+                return False
+            
             for entry in entries:
                 if len(entry) >= 6:
                     debit_account = entry[3]
                     credit_account = entry[4]
                     amount = float(entry[5])
                     
-                    # Update debit account
-                    if debit_account not in account_balances:
-                        account_balances[debit_account] = 0.0
-                        account_counts[debit_account] = 0
-                    account_balances[debit_account] += amount
-                    account_counts[debit_account] += 1
-                    
-                    # Update credit account
-                    if credit_account not in account_balances:
-                        account_balances[credit_account] = 0.0
-                        account_counts[credit_account] = 0
-                    account_balances[credit_account] -= amount
-                    account_counts[credit_account] += 1
+                    # Process each account in our cards
+                    for card in self.account_cards:
+                        account_name = card.account_data[0]
+                        
+                        # Check if this entry affects this account
+                        is_debit_match = find_matching_account_name(debit_account, account_name)
+                        is_credit_match = find_matching_account_name(credit_account, account_name)
+                        
+                        if is_debit_match or is_credit_match:
+                            if account_name not in account_balances:
+                                account_balances[account_name] = 0.0
+                                account_counts[account_name] = 0
+                            
+                            if is_debit_match:
+                                account_balances[account_name] += amount
+                                account_counts[account_name] += 1
+                            
+                            if is_credit_match:
+                                account_balances[account_name] -= amount
+                                account_counts[account_name] += 1
             
             # Update card balances
             for card in self.account_cards:

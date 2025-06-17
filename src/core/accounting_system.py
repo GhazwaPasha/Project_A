@@ -126,14 +126,16 @@ class AccountingSystem:
         credit_name = resolve_account(credit_account)
         
         cursor.execute('''
-            INSERT INTO journal_entries (id, date, description, debit_account, credit_account, amount, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO journal_entries (id, date, description, debit_account, credit_account, amount, timestamp)            VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (entry_id, date, description, debit_name, credit_name, amount, timestamp))
         self.conn.commit()
         return entry_id
 
     def get_ledger(self, account_name, from_date=None, to_date=None):
         cursor = self.conn.cursor()
+        
+        # Handle account name lookup - check if it's stored as "code - name" format
+        # First try exact match
         if from_date and to_date:
             cursor.execute('''
                 SELECT date, description, debit_account, credit_account, amount FROM journal_entries
@@ -146,7 +148,27 @@ class AccountingSystem:
                 WHERE debit_account = ? OR credit_account = ?
                 ORDER BY date
             ''', (account_name, account_name))
-        return cursor.fetchall()
+        
+        results = cursor.fetchall()
+        
+        # If no exact matches found, try partial matches (for "code - name" format)
+        if not results:
+            if from_date and to_date:
+                cursor.execute('''
+                    SELECT date, description, debit_account, credit_account, amount FROM journal_entries
+                    WHERE (debit_account LIKE ? OR credit_account LIKE ?) AND date BETWEEN ? AND ?
+                    ORDER BY date
+                ''', (f'%{account_name}%', f'%{account_name}%', from_date, to_date))
+            else:
+                cursor.execute('''
+                    SELECT date, description, debit_account, credit_account, amount FROM journal_entries
+                    WHERE debit_account LIKE ? OR credit_account LIKE ?
+                    ORDER BY date
+                ''', (f'%{account_name}%', f'%{account_name}%'))
+            
+            results = cursor.fetchall()
+        
+        return results
 
     def get_trial_balance(self, from_date=None, to_date=None):
         cursor = self.conn.cursor()
