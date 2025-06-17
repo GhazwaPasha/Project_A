@@ -531,8 +531,7 @@ class ReportsPage(QWidget):
             ("Cost Analysis", "Expense Breakdown", "Analyze", "#00BCD4"),
             ("Revenue Analysis", "Income Sources", "Analyze", "#F44336"),
             ("Seasonal Analysis", "Periodic Patterns", "Analyze", "#795548"),
-            ("Competitive Analysis", "Benchmarking", "Compare", "#607D8B"),
-        ]
+            ("Competitive Analysis", "Benchmarking", "Compare", "#607D8B"),        ]
         
         for i, (title, subtitle, value, color) in enumerate(analysis_data):
             card = ReportCard(title, subtitle, value, color)
@@ -548,8 +547,20 @@ class ReportsPage(QWidget):
     
     def _handle_statement_click(self, statement_name):
         """Handle financial statement card clicks."""
-        QMessageBox.information(self, "Financial Statement", 
-                              f"Generating {statement_name}...\nThis feature will be implemented soon!")
+        # Navigate to existing tabs for Ledger and Trial Balance
+        if statement_name == "General Ledger":
+            # Navigate to Ledger tab (index 2)
+            main_window = self.window()
+            if hasattr(main_window, 'setCurrentIndexByName'):
+                main_window.setCurrentIndexByName("Ledger")
+        elif statement_name == "Trial Balance":
+            # Navigate to Trial Balance tab (index 3)
+            main_window = self.window()
+            if hasattr(main_window, 'setCurrentIndexByName'):
+                main_window.setCurrentIndexByName("Trial Balance")
+        else:
+            QMessageBox.information(self, "Financial Statement", 
+                                  f"Generating {statement_name}...\nThis feature will be implemented soon!")
     
     def _handle_ratio_click(self, ratio_name):
         """Handle ratio card clicks."""
