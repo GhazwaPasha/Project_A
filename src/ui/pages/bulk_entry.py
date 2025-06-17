@@ -117,24 +117,30 @@ class BulkEntryPage(QWidget):
             font-weight: 400;
             background: transparent;
             border: none;
-        """)
-          # Buttons
-        add_btn = QPushButton("➕ Add Entry")
+        """)        # Buttons - all with equal sizing
+        button_width = 100
+        button_height = 32
+        
+        add_btn = QPushButton("Add Entry")
         add_btn.setStyleSheet(get_button_style())
+        add_btn.setFixedSize(button_width, button_height)
         add_btn.clicked.connect(self._add_new_card)
         
-        import_btn = QPushButton("📁 Import CSV/Excel")
+        import_btn = QPushButton("Import")
         import_btn.setStyleSheet(get_button_style())
+        import_btn.setFixedSize(button_width, button_height)
         import_btn.clicked.connect(self._import_file)
         
-        save_all_btn = QPushButton("💾 Save All")
+        save_all_btn = QPushButton("Save All")
         save_all_btn.setStyleSheet(get_button_style(primary=True))
+        save_all_btn.setFixedSize(button_width, button_height)
         save_all_btn.clicked.connect(self._save_all_entries)
         self.save_all_btn = save_all_btn  # Store reference for validation management
         
-        clear_all_btn = QPushButton("🗑️ Clear All")
+        clear_all_btn = QPushButton("Delete All")
         clear_all_btn.setStyleSheet(get_button_style(secondary=True))
-        clear_all_btn.clicked.connect(self._clear_all_entries)
+        clear_all_btn.setFixedSize(button_width, button_height)
+        clear_all_btn.clicked.connect(self._delete_all_entries)
         
         toolbar_layout.addWidget(title_label)
         toolbar_layout.addWidget(self.summary_label)
@@ -375,6 +381,34 @@ class BulkEntryPage(QWidget):
             card.clear_entry()
         self._update_summary()
         
+    def _delete_all_entries(self):
+        """Delete all entry cards one by one with animation."""
+        if len(self.entry_cards) <= 1:
+            # If only one card, just clear it instead of deleting
+            if self.entry_cards:
+                self.entry_cards[0].clear_entry()
+            self._update_summary()
+            return
+            
+        # Create a timer to delete cards one by one
+        self._deletion_timer = QTimer()
+        self._deletion_timer.timeout.connect(self._delete_next_card)
+        self._deletion_timer.start(150)  # Delete one card every 150ms
+        
+    def _delete_next_card(self):
+        """Delete the next card in the deletion sequence."""
+        if len(self.entry_cards) > 1:
+            # Always delete the last card to avoid index issues
+            card_to_delete = self.entry_cards[-1]
+            self._remove_card(card_to_delete)
+        else:
+            # Stop the timer when only one card remains
+            self._deletion_timer.stop()
+            # Clear the remaining card
+            if self.entry_cards:
+                self.entry_cards[0].clear_entry()
+            self._update_summary()
+    
     def _import_file(self):
         """Import entries from CSV/Excel file."""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -567,9 +601,7 @@ class BulkEntryPage(QWidget):
             
             # Only update if state actually changed to avoid unnecessary style updates
             if should_enable != current_enabled:
-                self.save_all_btn.setEnabled(should_enable)
-                
-                # Visual feedback for disabled state
+                self.save_all_btn.setEnabled(should_enable)                # Visual feedback for disabled state
                 if has_incomplete_cards:
                     self.save_all_btn.setStyleSheet("""
                         QPushButton {
@@ -579,6 +611,8 @@ class BulkEntryPage(QWidget):
                             border-radius: 8px;
                             padding: 8px 16px;
                             font-weight: 500;
+                            font-size: 11px;
+                            min-height: 26px;
                         }
                     """)
                 else:

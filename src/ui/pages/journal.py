@@ -362,7 +362,7 @@ class SingleEntryTab(QWidget):
             grid.addWidget(label, 0, i)        # Input fields
         self.date_edit = QDateEdit()
         self.date_edit.setDate(QDate.currentDate())
-        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setFixedHeight(28)
         self.date_edit.setFixedWidth(120)
         self.date_edit.setStyleSheet(get_field_style("date"))
         
