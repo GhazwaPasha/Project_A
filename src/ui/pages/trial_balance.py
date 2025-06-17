@@ -96,8 +96,7 @@ class TrialBalancePage(QWidget):
         """Create compact balance status metrics - 4 essential cards."""
         # Single row of compact metrics
         metrics_layout = QHBoxLayout()
-        metrics_layout.setSpacing(ResponsiveHelper.scale_size(16, 12, 20))
-        
+        metrics_layout.setSpacing(ResponsiveHelper.scale_size(16, 12, 20))        
         # Create compact metric cards
         self.card_balance_status = self._create_compact_card("Balance Status", "Checking...", "")
         self.card_total_debits = self._create_compact_card("Total Debits", "0.00", "")
@@ -107,19 +106,16 @@ class TrialBalancePage(QWidget):
         for card in [self.card_balance_status, self.card_total_debits, self.card_total_credits, self.card_difference]:
             metrics_layout.addWidget(card)
             
-        # Add stretch to prevent cards from expanding too much
-        metrics_layout.addStretch()
+        # Remove stretch to allow cards to fill the available space
         main_layout.addLayout(metrics_layout)
         
     def _create_compact_card(self, title, value, subtitle):
         """Create a compact metric card with proper sizing to match action cards."""
-        card = QFrame()
-        
-        # Match ActionCard sizing - minimum and maximum height instead of fixed
-        card.setMinimumHeight(ResponsiveHelper.scale_size(140, 120, 160))
-        card.setMaximumHeight(ResponsiveHelper.scale_size(180, 160, 200))
+        card = QFrame()        # Reduced height since we removed the subtitle row
+        card.setMinimumHeight(ResponsiveHelper.scale_size(100, 90, 120))
+        card.setMaximumHeight(ResponsiveHelper.scale_size(140, 130, 160))
         card.setMinimumWidth(ResponsiveHelper.scale_size(240, 220, 260))
-        card.setMaximumWidth(ResponsiveHelper.scale_size(280, 260, 300))
+        # Remove maximum width constraint to allow cards to stretch
         card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         # Card styling - improved to remove border boxes
@@ -169,32 +165,11 @@ class TrialBalancePage(QWidget):
                 background: transparent;
                 border: none;
                 outline: none;
-                margin: 0px;
-                padding: 0px;
+                margin: 0px;                padding: 0px;
             }}
         """)
         value_label.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         layout.addWidget(value_label)
-          # Subtitle/ticker - only show when there's content
-        subtitle_label = QLabel(subtitle if subtitle else "")
-        subtitle_label.setStyleSheet(f"""
-            QLabel {{
-                color: rgba(255, 255, 255, 0.6);
-                font-size: {ResponsiveHelper.scale_size(11, 10, 12)}px;
-                background: transparent;
-                border: none;
-                outline: none;
-                margin: 0px;
-                padding: 0px;
-            }}
-        """)
-        subtitle_label.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        
-        # Only add subtitle to layout if it has content
-        if subtitle and subtitle.strip():
-            layout.addWidget(subtitle_label)
-        else:
-            subtitle_label.setVisible(False)
         
         # Add stretch to push content to top like ActionCard
         layout.addStretch()
@@ -206,50 +181,21 @@ class TrialBalancePage(QWidget):
         shadow.setYOffset(ResponsiveHelper.scale_size(3, 2, 4))
         shadow.setColor(QColor(0, 0, 0, 60))
         card.setGraphicsEffect(shadow)
-          # Store references for updates
+        
+        # Store references for updates (removed subtitle_label)
         card.title_label = title_label
         card.value_label = value_label
-        card.subtitle_label = subtitle_label
         card.layout = layout
         
-        # Improved set_value function that handles subtitle visibility
-        def set_value_with_subtitle(v, s=""):
+        # Simplified set_value function without subtitle
+        def set_value_simple(v, s=""):
             value_label.setText(v)
-            subtitle_label.setText(s)
-            # Show/hide subtitle based on content
-            if s and s.strip():
-                if not subtitle_label.isVisible():
-                    subtitle_label.setVisible(True)
-                    if subtitle_label not in [layout.itemAt(i).widget() for i in range(layout.count()) if layout.itemAt(i)]:
-                        layout.insertWidget(2, subtitle_label)  # Insert before stretch
-            else:
-                subtitle_label.setVisible(False)        
-        card.set_value = set_value_with_subtitle
+        card.set_value = set_value_simple
         
-        # Improved set_ticker function that handles visibility and styling
-        def set_ticker_with_visibility(t, color="#FFFFFF"):
-            subtitle_label.setStyleSheet(f"""
-                QLabel {{
-                    color: {color};
-                    font-size: {ResponsiveHelper.scale_size(11, 10, 12)}px;
-                    background: transparent;
-                    border: none;
-                    outline: none;
-                    margin: 0px;
-                    padding: 0px;
-                    font-weight: 500;
-                }}            """)
-            subtitle_label.setText(t)
-            # Show/hide based on content
-            if t and t.strip():
-                if not subtitle_label.isVisible():
-                    subtitle_label.setVisible(True)
-                    if subtitle_label not in [layout.itemAt(i).widget() for i in range(layout.count()) if layout.itemAt(i)]:
-                        layout.insertWidget(2, subtitle_label)  # Insert before stretch
-            else:
-                subtitle_label.setVisible(False)
-        
-        card.set_ticker = set_ticker_with_visibility
+        # Simplified set_ticker function without subtitle
+        def set_ticker_simple(t, color="#FFFFFF"):
+            pass  # No subtitle to update
+        card.set_ticker = set_ticker_simple
         
         return card
         
@@ -485,29 +431,24 @@ class TrialBalancePage(QWidget):
                 'total_credits': 0.0,
                 'difference': 0.0,
                 'is_balanced': True,
-                'as_of_date': "Error"
-            }
+                'as_of_date': "Error"            }
             
     def _update_balance_metrics(self, trial_data):
         """Update compact metrics cards and date info."""
         symbol = self._get_currency_symbol()
-          # Balance status
+        
+        # Balance status (removed emoji)
         if trial_data['is_balanced']:
-            self.card_balance_status.set_value("✅ BALANCED", "")
-            self.card_balance_status.set_ticker("Perfect Balance", "#4CAF50")
+            self.card_balance_status.set_value("BALANCED", "")
         else:
-            self.card_balance_status.set_value("⚠️ UNBALANCED", "")
-            self.card_balance_status.set_ticker(f"Diff: {symbol}{trial_data['difference']:,.2f}", "#F44336")
-          # Amounts - include currency symbol in the main value, no subtitle
+            self.card_balance_status.set_value("UNBALANCED", "")
+        
+        # Amounts - include currency symbol in the main value, no subtitle
         self.card_total_debits.set_value(f"{symbol}{trial_data['total_debits']:,.2f}", "")
         self.card_total_credits.set_value(f"{symbol}{trial_data['total_credits']:,.2f}", "")
         
         # Difference card - include currency symbol in the main value
         self.card_difference.set_value(f"{symbol}{trial_data['difference']:,.2f}", "")
-        if trial_data['is_balanced']:
-            self.card_difference.set_ticker("✅ Balanced", "#4CAF50")
-        else:
-            self.card_difference.set_ticker("⚠️ Check entries", "#F44336")
         
         # Update date info near the table (not in a card)
         account_count = len(trial_data['accounts'])
