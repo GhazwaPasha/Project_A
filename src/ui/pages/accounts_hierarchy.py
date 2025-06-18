@@ -5,288 +5,284 @@ This module provides an intuitive hierarchical UI for managing account structure
 
 from ..common import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
-    QTreeWidget, QTreeWidgetItem, QHeaderView, QDialog, QLineEdit, 
+    QTreeWidget, QTreeWidgetItem, QHeaderView, QLineEdit, QGridLayout,
     QComboBox, QCheckBox, QTextEdit, QSplitter, QGroupBox,
     Qt, QColor, QIcon, QFont, QSize, QSizePolicy,
-    ResponsiveHelper, MODERN_BUTTON_STYLE
+    ResponsiveHelper
 )
-from PyQt6.QtWidgets import QAbstractItemView, QGraphicsDropShadowEffect, QSpacerItem
+from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtWidgets import (
+    QAbstractItemView, QStackedWidget, QMessageBox,
+    QGraphicsDropShadowEffect, QSpacerItem
+)
 from ..components.styles import ModernStyles, GlassmorphismHelper
 from ..components.widgets import PageHeader
 
 
-class HierarchyAccountDialog(QDialog):
-    """Modern dialog for adding/editing accounts in the 3-level hierarchy."""
+class AccountFormCard(QFrame):
+    """Modern card-based form for adding/editing accounts."""
     
-    def __init__(self, parent=None, system=None, edit_mode=False, account_data=None):
+    formSubmitted = pyqtSignal(dict)  # Emits the form data when submitted
+    formCancelled = pyqtSignal()      # Emits when form is cancelled
+    
+    def __init__(self, system=None, edit_mode=False, account_data=None, parent=None):
         super().__init__(parent)
         self.system = system
         self.edit_mode = edit_mode
         self.account_data = account_data
-        
-        if edit_mode and account_data:
-            self.setWindowTitle("Edit Account")
-        else:
-            self.setWindowTitle("Add New Account")
-            
         self._setup_ui()
-        self._apply_styling()
         
     def _setup_ui(self):
-        """Setup the enhanced dialog UI."""
-        # Responsive dialog sizing - larger for more fields
-        dialog_width = ResponsiveHelper.scale_size(500, 400, 600)
-        dialog_height = ResponsiveHelper.scale_size(600, 500, 700)
-        self.setFixedSize(dialog_width, dialog_height)
-        self.setModal(True)
-        
-        # Main layout
+        """Setup the card UI."""
         layout = QVBoxLayout(self)
-        margins = ResponsiveHelper.scale_size(32, 24, 40)
-        layout.setContentsMargins(margins, 
-                                 ResponsiveHelper.scale_size(24, 18, 30), 
-                                 margins, 
-                                 ResponsiveHelper.scale_size(24, 18, 30))
-        layout.setSpacing(ResponsiveHelper.scale_size(20, 15, 25))
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(16)
         
-        self._create_title(layout)
+        # Title section
+        title_text = "Edit Account" if self.edit_mode else "Add New Account"
+        title = QLabel(title_text)
+        title.setStyleSheet("""
+            QLabel {
+                color: white;
+                font-size: 18px;
+                font-weight: 600;
+            }
+        """)
+        layout.addWidget(title)
+        
+        # Form fields
         self._create_form_fields(layout)
-        self._create_buttons(layout)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(8)
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setStyleSheet(self._get_cancel_button_style())
+        cancel_btn.clicked.connect(self._on_cancel)
+        
+        save_text = "Update" if self.edit_mode else "Add"
+        save_btn = QPushButton(save_text)
+        save_btn.setStyleSheet(self._get_save_button_style())
+        save_btn.clicked.connect(self._on_submit)
+        
+        button_layout.addStretch()
+        button_layout.addWidget(cancel_btn)
+        button_layout.addWidget(save_btn)
+        
+        layout.addLayout(button_layout)
+        
+        # Apply card styling
+        self.setStyleSheet("""
+            AccountFormCard {
+                background: rgba(0, 0, 0, 0.2);
+                border: 1px solid rgba(0, 0, 0, 0.6);
+                border-radius: 4px;
+            }
+        """)
         
         # Pre-fill data if editing
         if self.edit_mode and self.account_data:
             self._populate_edit_data()
-        
-    def _create_title(self, layout):
-        """Create dialog title."""
-        title_text = "Edit Account" if self.edit_mode else "Add New Account"
-        title = QLabel(title_text)
-        title.setStyleSheet(f"""
-            QLabel {{
-                color: white;
-                font-size: {ResponsiveHelper.scale_size(22, 18, 26)}px;
-                font-weight: 700;
-                background: transparent;
-                margin-bottom: {ResponsiveHelper.scale_size(8, 6, 10)}px;
-            }}
-        """)
-        layout.addWidget(title)
-        
-        # Subtitle
-        subtitle = QLabel("Configure account details and hierarchy settings")
-        subtitle.setStyleSheet(f"""
-            QLabel {{
-                color: rgba(255, 255, 255, 0.7);
-                font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
-                font-weight: 400;
-                background: transparent;
-                margin-bottom: {ResponsiveHelper.scale_size(16, 12, 20)}px;
-            }}
-        """)
-        layout.addWidget(subtitle)
-        
+            
     def _create_form_fields(self, layout):
-        """Create comprehensive form fields."""
-        # Basic Information Group
-        basic_group = self._create_group("Basic Information", layout)
-        self._create_basic_fields(basic_group)
+        """Create form input fields."""
+        form_layout = QGridLayout()
+        form_layout.setSpacing(12)
+        row = 0
         
-        # Hierarchy Settings Group
-        hierarchy_group = self._create_group("Hierarchy Settings", layout)
-        self._create_hierarchy_fields(hierarchy_group)
-          # Account Properties Group
-        properties_group = self._create_group("Account Properties", layout)
-        self._create_properties_fields(properties_group)
-        
-    def _create_group(self, title, parent_layout):
-        """Create a grouped section."""
-        group = QGroupBox(title)
-        group.setStyleSheet(f"""
-            QGroupBox {{
-                color: rgba(255, 255, 255, 0.9);
-                font-size: {ResponsiveHelper.scale_size(14, 12, 16)}px;
-                font-weight: 600;
-                border: none;
-                border-radius: 8px;
-                margin-top: 8px;
-                padding-top: 12px;
-                background: transparent;
-            }}
-            QGroupBox::title {{
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 8px 0 8px;
-                background: transparent;
-                color: rgba(255, 255, 255, 0.9);
-            }}
-        """)
-        
-        group_layout = QVBoxLayout(group)
-        group_layout.setSpacing(ResponsiveHelper.scale_size(12, 8, 16))
-        
-        parent_layout.addWidget(group)
-        return group_layout
-        
-    def _create_basic_fields(self, layout):
-        """Create basic account information fields."""
         # Account Name
-        name_label = QLabel("Account Name:")
+        name_label = QLabel("Account Name")
         name_label.setStyleSheet(self._get_label_style())
-        layout.addWidget(name_label)
-        
         self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("Enter descriptive account name...")
+        self.name_edit.setPlaceholderText("Enter account name")
         self.name_edit.setStyleSheet(self._get_input_style())
-        layout.addWidget(self.name_edit)
+        form_layout.addWidget(name_label, row, 0)
+        form_layout.addWidget(self.name_edit, row, 1)
+        row += 1
         
         # Account Code
-        code_label = QLabel("Account Code:")
+        code_label = QLabel("Account Code")
         code_label.setStyleSheet(self._get_label_style())
-        layout.addWidget(code_label)
-        
         self.code_edit = QLineEdit()
-        self.code_edit.setPlaceholderText("4-digit code (auto-generated if empty)")
-        self.code_edit.setMaxLength(4)
+        self.code_edit.setPlaceholderText("Auto-generated if empty")
         self.code_edit.setStyleSheet(self._get_input_style())
-        layout.addWidget(self.code_edit)
+        form_layout.addWidget(code_label, row, 0)
+        form_layout.addWidget(self.code_edit, row, 1)
+        row += 1
         
         # Account Type
-        type_label = QLabel("Account Type:")
+        type_label = QLabel("Account Type")
         type_label.setStyleSheet(self._get_label_style())
-        layout.addWidget(type_label)
-        
         self.type_combo = QComboBox()
         self.type_combo.addItems(["Asset", "Liability", "Equity", "Revenue", "Expense"])
         self.type_combo.setStyleSheet(self._get_combo_style())
-        self.type_combo.currentIndexChanged.connect(self._on_type_changed)
-        layout.addWidget(self.type_combo)
+        form_layout.addWidget(type_label, row, 0)
+        form_layout.addWidget(self.type_combo, row, 1)
+        row += 1
         
-    def _create_hierarchy_fields(self, layout):
-        """Create hierarchy-related fields."""
-        # Level Selection
-        level_label = QLabel("Hierarchy Level:")
+        # Level
+        level_label = QLabel("Level")
         level_label.setStyleSheet(self._get_label_style())
-        layout.addWidget(level_label)
-        
         self.level_combo = QComboBox()
         self.level_combo.addItems([
-            "Level 1 - Major Account Type (Non-postable)",
-            "Level 2 - Primary Account Category", 
-            "Level 3 - Detailed Sub-account"
+            "Level 1 - Major Category",
+            "Level 2 - Sub Category",
+            "Level 3 - Detail Account"
         ])
         self.level_combo.setStyleSheet(self._get_combo_style())
         self.level_combo.currentIndexChanged.connect(self._on_level_changed)
-        layout.addWidget(self.level_combo)
+        form_layout.addWidget(level_label, row, 0)
+        form_layout.addWidget(self.level_combo, row, 1)
+        row += 1
         
         # Parent Account
-        parent_label = QLabel("Parent Account:")
+        parent_label = QLabel("Parent Account")
         parent_label.setStyleSheet(self._get_label_style())
-        layout.addWidget(parent_label)
-        
         self.parent_combo = QComboBox()
         self.parent_combo.setStyleSheet(self._get_combo_style())
-        layout.addWidget(self.parent_combo)
+        form_layout.addWidget(parent_label, row, 0)
+        form_layout.addWidget(self.parent_combo, row, 1)
+        row += 1
         
-        # Update parent options when level changes
+        # Postable Checkbox
+        self.postable_check = QCheckBox("Allow transactions to be posted to this account")
+        self.postable_check.setStyleSheet("""
+            QCheckBox {
+                color: rgba(255, 255, 255, 0.9);
+                font-size: 13px;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+                border: 1px solid rgba(0, 0, 0, 0.6);
+                border-radius: 3px;
+                background: rgba(0, 0, 0, 0.2);
+            }
+            QCheckBox::indicator:checked {
+                background: rgba(0, 120, 215, 1.0);
+                border-color: rgba(0, 0, 0, 0.6);
+            }
+            QCheckBox::indicator:hover {
+                border-color: rgba(0, 120, 215, 0.8);
+            }
+        """)
+        form_layout.addWidget(self.postable_check, row, 0, 1, 2)
+        
+        # Add form layout to main layout
+        layout.addLayout(form_layout)
+        
+        # Update parent options
         self._update_parent_options()
         
-    def _create_properties_fields(self, layout):
-        """Create account properties fields."""
-        # Postable Checkbox
-        self.postable_checkbox = QCheckBox("Allow transactions to be posted to this account")
-        self.postable_checkbox.setChecked(True)  # Default to postable
-        self.postable_checkbox.setStyleSheet(f"""
-            QCheckBox {{
+    def _get_label_style(self):
+        return """
+            QLabel {
                 color: rgba(255, 255, 255, 0.9);
-                font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
+                font-size: 13px;
                 font-weight: 500;
-                spacing: 8px;
-            }}
-            QCheckBox::indicator {{
-                width: 16px;
-                height: 16px;
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                border-radius: 3px;
-                background: rgba(255, 255, 255, 0.1);
-            }}
-            QCheckBox::indicator:checked {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-                            stop:0 rgba(46, 125, 50, 0.8), 
-                            stop:1 rgba(67, 160, 71, 0.8));
-                border-color: rgba(67, 160, 71, 0.8);
-            }}
-        """)
-        layout.addWidget(self.postable_checkbox)
+            }
+        """
         
-        # Description
-        desc_label = QLabel("Description (Optional):")
-        desc_label.setStyleSheet(self._get_label_style())
-        layout.addWidget(desc_label)
-        
-        self.description_edit = QTextEdit()
-        self.description_edit.setPlaceholderText("Enter account description or notes...")
-        self.description_edit.setMaximumHeight(80)
-        self.description_edit.setStyleSheet(f"""
-            QTextEdit {{
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 8px;
+    def _get_input_style(self):
+        return """
+            QLineEdit {
+                background: rgba(0, 0, 0, 0.2);
+                border: 1px solid rgba(0, 0, 0, 0.6);
+                border-radius: 4px;
                 padding: 8px 12px;
                 color: white;
-                font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
-            }}
-            QTextEdit:focus {{
-                background: rgba(255, 255, 255, 0.15);
-                border-color: rgba(0, 120, 215, 0.6);
-            }}
-        """)
-        layout.addWidget(self.description_edit)
-        
-    def _create_buttons(self, layout):
-        """Create dialog action buttons."""
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(12)
-        
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.setStyleSheet(self._get_cancel_button_style())
-        cancel_btn.clicked.connect(self.reject)
-        
-        button_text = "Update Account" if self.edit_mode else "Add Account"
-        self.save_btn = QPushButton(button_text)
-        self.save_btn.setStyleSheet(self._get_save_button_style())
-        self.save_btn.clicked.connect(self.accept)
-        
-        button_layout.addStretch()
-        button_layout.addWidget(cancel_btn)
-        button_layout.addWidget(self.save_btn)
-        
-        layout.addLayout(button_layout)
-        
-    def _on_type_changed(self):
-        """Handle account type change."""
-        if not self.code_edit.text() and self.system:
-            acc_type = self.type_combo.currentText()
-            prefix_map = {
-                'Asset': '1',
-                'Liability': '2',
-                'Equity': '3', 
-                'Revenue': '4',
-                'Expense': '5'
+                font-size: 13px;
             }
-            prefix = prefix_map.get(acc_type, '')
-            if prefix:
-                self.code_edit.setPlaceholderText(f"{prefix}XXX - Auto-generated")
-                
+            QLineEdit:focus {
+                background: rgba(0, 0, 0, 0.3);
+                border: 1px solid rgba(0, 120, 215, 0.7);
+            }
+            QLineEdit:hover {
+                background: rgba(0, 0, 0, 0.25);
+                border: 1px solid rgba(0, 0, 0, 0.7);
+            }
+        """
+        
+    def _get_combo_style(self):
+        return """
+            QComboBox {
+                background: rgba(0, 0, 0, 0.2);
+                border: 1px solid rgba(0, 0, 0, 0.6);
+                border-radius: 4px;
+                padding: 8px 12px;
+                color: white;
+                font-size: 13px;
+            }
+            QComboBox:hover {
+                background: rgba(0, 0, 0, 0.25);
+                border: 1px solid rgba(0, 0, 0, 0.7);
+            }
+            QComboBox:focus {
+                border: 1px solid rgba(0, 120, 215, 0.7);
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 20px;
+            }
+            QComboBox::down-arrow {
+                image: url(assets/icons/minimize.svg);
+                width: 12px;
+                height: 12px;
+            }
+            QComboBox QAbstractItemView {
+                background: rgb(32, 32, 32);
+                border: 1px solid rgba(0, 0, 0, 0.6);
+                border-radius: 4px;
+                selection-background-color: rgba(0, 120, 215, 0.4);
+            }
+        """
+        
+    def _get_cancel_button_style(self):
+        return """
+            QPushButton {
+                background: rgba(0, 0, 0, 0.2);
+                border: 1px solid rgba(0, 0, 0, 0.6);
+                border-radius: 4px;
+                padding: 8px 20px;
+                color: white;
+                font-size: 13px;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background: rgba(0, 0, 0, 0.3);
+                border: 1px solid rgba(0, 0, 0, 0.7);
+            }
+        """
+        
+    def _get_save_button_style(self):
+        return """
+            QPushButton {
+                background: rgba(0, 120, 215, 0.9);
+                border: 1px solid rgba(0, 0, 0, 0.6);
+                border-radius: 4px;
+                padding: 8px 20px;
+                color: white;
+                font-size: 13px;
+                font-weight: 600;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background: rgba(0, 120, 215, 1.0);
+                border: 1px solid rgba(0, 0, 0, 0.7);
+            }
+        """
+    
     def _on_level_changed(self):
         """Handle hierarchy level change."""
         level = self.level_combo.currentIndex() + 1
         
         # Level 1 accounts cannot be postable (they are category headers)
         if level == 1:
-            self.postable_checkbox.setChecked(False)
-            self.postable_checkbox.setEnabled(False)
+            self.postable_check.setChecked(False)
+            self.postable_check.setEnabled(False)
         else:
-            self.postable_checkbox.setEnabled(True)
+            self.postable_check.setEnabled(True)
             
         self._update_parent_options()
         
@@ -310,185 +306,61 @@ class HierarchyAccountDialog(QDialog):
             max_parent_level = level - 1
             potential_parents = self.system.get_parent_accounts(max_parent_level)
             
-            for name, acc_type, code, parent_code, acc_level, is_postable, description in potential_parents:
+            for name, acc_type, code, parent_code, acc_level, is_postable, _ in potential_parents:
                 # Only show accounts of the same type and appropriate level
                 if acc_type == self.type_combo.currentText() and acc_level < level:
                     indent = "  " * (acc_level - 1)
                     display_text = f"{indent}{code} - {name}"
                     self.parent_combo.addItem(display_text, code)
     
-    def _populate_edit_data(self):
-        """Populate form with existing account data for editing."""
-        if not self.account_data:
+    def set_account_data(self, account_data):
+        """Set form data for editing."""
+        if not account_data:
             return
             
-        name, acc_type, code, parent_code, level, is_postable, description = self.account_data
-        
-        self.name_edit.setText(name)
-        self.code_edit.setText(code or "")
+        self.name_edit.setText(account_data['name'])
+        self.code_edit.setText(account_data['code'] or "")
         
         # Set account type
-        type_index = self.type_combo.findText(acc_type)
+        type_index = self.type_combo.findText(account_data['type'])
         if type_index >= 0:
             self.type_combo.setCurrentIndex(type_index)
             
         # Set level
-        if level and 1 <= level <= 3:
-            self.level_combo.setCurrentIndex(level - 1)
+        if account_data['level'] and 1 <= account_data['level'] <= 3:
+            self.level_combo.setCurrentIndex(account_data['level'] - 1)
             
         # Set postable status
-        self.postable_checkbox.setChecked(bool(is_postable))
+        self.postable_check.setChecked(account_data['is_postable'])
         
-        # Set description
-        if description:
-            self.description_edit.setPlainText(description)
-            
         # Update parent options and set parent
         self._update_parent_options()
-        if parent_code:
+        if account_data['parent_code']:
             for i in range(self.parent_combo.count()):
-                if self.parent_combo.itemData(i) == parent_code:
+                if self.parent_combo.itemData(i) == account_data['parent_code']:
                     self.parent_combo.setCurrentIndex(i)
                     break
-    
-    def get_account_data(self):
-        """Get the form data."""
-        level = self.level_combo.currentIndex() + 1
-        return {
+                    
+    def _on_submit(self):
+        """Handle form submission."""
+        data = {
             'name': self.name_edit.text().strip(),
-            'type': self.type_combo.currentText(),            'code': self.code_edit.text().strip(),
+            'type': self.type_combo.currentText(),
+            'code': self.code_edit.text().strip(),
             'parent_code': self.parent_combo.currentData() or None,
-            'level': level,
-            'is_postable': self.postable_checkbox.isChecked(),
-            'description': self.description_edit.toPlainText().strip()
+            'level': self.level_combo.currentIndex() + 1,
+            'is_postable': self.postable_check.isChecked()
         }
+        
+        if self.edit_mode and self.account_data:
+            data['old_name'] = self.account_data['name']
+            
+        self.formSubmitted.emit(data)
+        
+    def _on_cancel(self):
+        """Handle form cancellation."""
+        self.formCancelled.emit()
     
-    def _get_label_style(self):
-        """Get label styling."""
-        return f"""
-            QLabel {{
-                color: rgba(255, 255, 255, 0.9);
-                font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
-                font-weight: 500;
-                background: transparent;
-                border: none;
-                margin-bottom: 4px;
-                padding: 0px;
-            }}
-        """
-        
-    def _get_input_style(self):
-        """Get input field styling."""
-        return f"""
-            QLineEdit {{
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 8px;
-                padding: 10px 12px;
-                color: white;
-                font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
-            }}
-            QLineEdit:focus {{
-                background: rgba(255, 255, 255, 0.15);
-                border-color: rgba(0, 120, 215, 0.6);
-            }}
-            QLineEdit::placeholder {{
-                color: rgba(255, 255, 255, 0.5);
-            }}
-        """
-        
-    def _get_combo_style(self):
-        """Get combo box styling."""
-        return f"""
-            QComboBox {{
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 8px;
-                padding: 10px 12px;
-                color: white;
-                font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
-            }}
-            QComboBox:hover {{
-                background: rgba(255, 255, 255, 0.15);
-                border-color: rgba(255, 255, 255, 0.3);
-            }}
-            QComboBox::drop-down {{
-                border: none;
-                width: 24px;
-            }}
-            QComboBox::down-arrow {{
-                image: none;
-                border: none;
-            }}
-            QComboBox QAbstractItemView {{
-                background: rgba(32, 32, 32, 0.95);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 8px;
-                color: white;
-                selection-background-color: rgba(0, 120, 215, 0.3);
-            }}
-        """
-        
-    def _get_cancel_button_style(self):
-        """Get cancel button styling."""
-        return """
-            QPushButton {
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 8px;
-                padding: 12px 24px;
-                color: white;
-                font-size: 13px;
-                font-weight: 500;
-                min-width: 100px;
-            }
-            QPushButton:hover {
-                background: rgba(255, 255, 255, 0.15);
-                border-color: rgba(255, 255, 255, 0.3);
-            }
-            QPushButton:pressed {
-                background: rgba(255, 255, 255, 0.2);
-            }
-        """
-        
-    def _get_save_button_style(self):
-        """Get save button styling."""
-        return """
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-                            stop:0 rgba(46, 125, 50, 0.8), 
-                            stop:1 rgba(67, 160, 71, 0.8));
-                border: 1px solid rgba(46, 125, 50, 0.6);
-                border-radius: 8px;
-                padding: 12px 24px;
-                color: white;
-                font-size: 13px;
-                font-weight: 600;
-                min-width: 120px;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-                            stop:0 rgba(46, 125, 50, 1.0), 
-                            stop:1 rgba(67, 160, 71, 1.0));
-                border-color: rgba(67, 160, 71, 0.8);
-            }
-            QPushButton:pressed {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-                            stop:0 rgba(26, 105, 30, 1.0), 
-                            stop:1 rgba(47, 140, 51, 1.0));
-            }
-        """
-        
-    def _apply_styling(self):
-        """Apply dialog styling."""
-        self.setStyleSheet("""
-            QDialog {
-                background: rgba(32, 32, 32, 0.95);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 16px;
-            }
-        """)
-
 
 class HierarchicalAccountsPage(QWidget):
     """Enhanced Chart of Accounts page with intuitive 3-level hierarchy."""
@@ -506,17 +378,16 @@ class HierarchicalAccountsPage(QWidget):
         responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
         layout.setContentsMargins(responsive_margin, responsive_margin, 
                                  responsive_margin, responsive_margin)
-        # Use same spacing as other pages for consistency
         layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
         
         # Page header with enhanced description
         header = PageHeader(
             "Chart of Accounts", 
-            "Manage your 3-level account hierarchy: Major Types → Primary Categories → Detailed Sub-accounts"
+            "Manage your 3-level account hierarchy: Major Types → Primary Categories → Sub-accounts"
         )
         layout.addWidget(header)
         
-        # Create toolbar first (move to top)
+        # Create toolbar first
         self._create_toolbar(layout)
         
         # Create main content area
@@ -531,14 +402,15 @@ class HierarchicalAccountsPage(QWidget):
         # Left panel - Hierarchy tree
         self._create_hierarchy_panel(splitter)
         
-        # Right panel - Account details
-        self._create_details_panel(splitter)
+        # Right panel - Account details/form
+        self.details_panel = AccountDetailsPanel(system=self.system)
+        splitter.addWidget(self.details_panel)
         
         # Set splitter proportions (70% tree, 30% details)
         splitter.setSizes([700, 300])
         
         layout.addWidget(splitter, stretch=1)
-        
+    
     def _create_hierarchy_panel(self, parent):
         """Create the left panel with hierarchical tree view."""
         tree_frame = QFrame()
@@ -554,7 +426,8 @@ class HierarchicalAccountsPage(QWidget):
         tree_layout = QVBoxLayout(tree_frame)
         tree_layout.setContentsMargins(16, 16, 16, 16)
         tree_layout.setSpacing(12)
-          # Tree header
+        
+        # Tree header
         tree_header = QLabel("Account Hierarchy")
         tree_header.setStyleSheet(f"""
             QLabel {{
@@ -586,128 +459,60 @@ class HierarchicalAccountsPage(QWidget):
         tree_layout.addWidget(self.tree)
         parent.addWidget(tree_frame)
         
-    def _create_details_panel(self, parent):
-        """Create the right panel with account details."""
-        details_frame = QFrame()
-        details_frame.setStyleSheet("""
-            QFrame {
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 12px;
-                margin: 4px;
-            }
-        """)
-        
-        details_layout = QVBoxLayout(details_frame)
-        details_layout.setContentsMargins(16, 16, 16, 16)
-        details_layout.setSpacing(16)
-          # Details header
-        details_header = QLabel("Account Details")
-        details_header.setStyleSheet(f"""
-            QLabel {{
-                color: white;
-                font-size: {ResponsiveHelper.scale_size(16, 14, 18)}px;
-                font-weight: 600;
-                background: transparent;
-                border: none;
-                margin-bottom: 8px;
-                padding: 0px;
-            }}
-        """)
-        details_layout.addWidget(details_header)
-        
-        # Account info display
-        self.info_widget = self._create_info_widget()
-        details_layout.addWidget(self.info_widget)
-        
-        # Add stretch
-        details_layout.addStretch()
-        
-        parent.addWidget(details_frame)
-        
-    def _create_info_widget(self):
-        """Create widget to display selected account information."""
-        info_frame = QFrame()
-        info_frame.setStyleSheet("""
-            QFrame {
-                background: rgba(255, 255, 255, 0.03);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 8px;
-                padding: 12px;
-            }
-        """)
-        
-        layout = QVBoxLayout(info_frame)
-        layout.setSpacing(12)
-          # Default message
-        self.info_label = QLabel("Select an account to view details")
-        self.info_label.setStyleSheet(f"""
-            QLabel {{
-                color: rgba(255, 255, 255, 0.7);
-                font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
-                font-style: italic;
-                background: transparent;
-                border: none;
-                padding: 20px;
-                text-align: center;
-            }}
-        """)
-        self.info_label.setWordWrap(True)
-        self.info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.info_label)
-        
-        return info_frame
-        
     def _create_toolbar(self, layout):
         """Create enhanced toolbar with hierarchy-specific actions."""
         toolbar_layout = QHBoxLayout()
-        toolbar_layout.setSpacing(12)
+        toolbar_layout.setSpacing(16)
+        toolbar_layout.setContentsMargins(0, 8, 0, 8)
         
-        # Level filter buttons
+        # Create level filter buttons
         self._create_level_filters(toolbar_layout)
         
         toolbar_layout.addStretch()
-          # Action buttons
+        
+        # Action buttons
         self._create_action_buttons(toolbar_layout)
         
         layout.addLayout(toolbar_layout)
         
     def _create_level_filters(self, layout):
-        """Create level filter buttons."""
-        filter_label = QLabel("Show:")
-        filter_label.setStyleSheet(f"""
-            QLabel {{
-                color: rgba(255, 255, 255, 0.8);
-                font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
-                font-weight: 500;
-                background: transparent;
-                border: none;
-                margin-right: 8px;
-                padding: 0px;
-            }}
-        """)
-        layout.addWidget(filter_label)
-        
+        """Create modern level filter buttons."""
         # Level filter buttons
         self.level_filters = {}
         levels = [
-            ("All Levels", "all"),
-            ("Level 1 Only", "1"), 
-            ("Level 2 Only", "2"),
-            ("Level 3 Only", "3"),
-            ("Postable Only", "postable")
+            ("All", "all"),
+            ("Level 1", "1"), 
+            ("Level 2", "2"),
+            ("Level 3", "3"),
+            ("Postable", "postable")
         ]
+        
+        filter_group = QFrame()
+        filter_group.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 8px;
+                padding: 4px;
+            }
+        """)
+        
+        filter_layout = QHBoxLayout(filter_group)
+        filter_layout.setSpacing(4)
+        filter_layout.setContentsMargins(4, 4, 4, 4)
         
         for label, level in levels:
             btn = QPushButton(label)
             btn.setCheckable(True)
             if level == "all":
-                btn.setChecked(True)  # Default to show all
+                btn.setChecked(True)
             btn.setStyleSheet(self._get_filter_button_style())
             btn.clicked.connect(lambda checked, l=level: self._filter_by_level(l))
             self.level_filters[level] = btn
-            layout.addWidget(btn)
+            filter_layout.addWidget(btn)
             
+        layout.addWidget(filter_group)
+        
     def _create_action_buttons(self, layout):
         """Create action buttons."""
         # Add Account button
@@ -763,78 +568,126 @@ class HierarchicalAccountsPage(QWidget):
         self.delete_btn.clicked.connect(self._delete_selected_account)
         layout.addWidget(self.delete_btn)
         
-    def _style_tree(self):
-        """Apply modern styling to the tree widget."""
-        self.tree.setStyleSheet(f"""
-            QTreeWidget {{
-                background: transparent;
-                border: none;
-                color: white;
-                font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
-                selection-background-color: rgba(0, 120, 215, 0.3);
-                gridline-color: rgba(255, 255, 255, 0.1);
-                outline: none;
-            }}
-            QTreeWidget::item {{
-                border: none;
-                padding: 8px 4px;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            }}
-            QTreeWidget::item:hover {{
-                background: rgba(255, 255, 255, 0.08);
-            }}
-            QTreeWidget::item:selected {{
-                background: rgba(0, 120, 215, 0.3);
-                color: white;
-            }}
-            QTreeWidget::branch:has-siblings:!adjoins-item {{
-                border-image: none;
-                image: none;
-            }}
-            QTreeWidget::branch:has-siblings:adjoins-item {{
-                border-image: none;
-                image: none;
-            }}
-            QTreeWidget::branch:!has-children:!has-siblings:adjoins-item {{
-                border-image: none;
-                image: none;
-            }}
-            QTreeWidget::branch:has-children:!has-siblings:closed,
-            QTreeWidget::branch:closed:has-children:has-siblings {{
-                image: none;
-                border-image: none;
-            }}
-            QTreeWidget::branch:open:has-children:!has-siblings,
-            QTreeWidget::branch:open:has-children:has-siblings {{
-                image: none;
-                border-image: none;
-            }}
-            QHeaderView::section {{
-                background: rgba(255, 255, 255, 0.1);
-                border: none;
-                border-bottom: 2px solid rgba(0, 120, 215, 0.6);
-                padding: 12px 8px;
-                color: white;
-                font-size: {ResponsiveHelper.scale_size(12, 10, 14)}px;
-                font-weight: 600;
-                text-align: left;
-            }}
-            QHeaderView::section:first {{
-                border-top-left-radius: 8px;
-            }}
-            QHeaderView::section:last {{
-                border-top-right-radius: 8px;
-            }}
-        """)
+    def _add_account(self):
+        """Show form to add a new account."""
+        self.details_panel.show_form(edit_mode=False)
         
-        # Configure tree headers
-        header = self.tree.header()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Code
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)           # Name
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Type
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Level
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Postable
+    def _edit_selected_account(self):
+        """Edit the currently selected account."""
+        selected_items = self.tree.selectedItems()
+        if not selected_items:
+            return
+            
+        item = selected_items[0]
+        account_data = item.data(0, Qt.ItemDataRole.UserRole)
+        if not account_data:
+            return
+            
+        self.details_panel.show_form(edit_mode=True, account_data=account_data)
         
+    def _delete_selected_account(self):
+        """Delete the currently selected account."""
+        selected_items = self.tree.selectedItems()
+        if not selected_items:
+            return
+            
+        item = selected_items[0]
+        account_data = item.data(0, Qt.ItemDataRole.UserRole)
+        if not account_data:
+            return
+            
+        # Check if account has children
+        if item.childCount() > 0:
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setText("Cannot delete account with sub-accounts")
+            msg.setInformativeText("Please delete or reassign all sub-accounts first.")
+            msg.setWindowTitle("Delete Account")
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.exec()
+            return
+            
+        # Show confirmation dialog
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Icon.Question)
+        msg.setText(f"Delete account '{account_data['name']}'?")
+        msg.setInformativeText("This action cannot be undone.")
+        msg.setWindowTitle("Delete Account")
+        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        msg.setDefaultButton(QMessageBox.StandardButton.No)
+        
+        if msg.exec() == QMessageBox.StandardButton.Yes:
+            try:
+                self.system.delete_account(account_data['name'])
+                self._load_data()  # Refresh tree
+                self.details_panel.show_info(None)  # Clear details panel
+            except Exception as e:
+                error_msg = QMessageBox()
+                error_msg.setIcon(QMessageBox.Icon.Critical)
+                error_msg.setText("Error deleting account")
+                error_msg.setInformativeText(str(e))
+                error_msg.setWindowTitle("Error")
+                error_msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+                error_msg.exec()
+                
+    def _on_tree_selection_changed(self):
+        """Handle tree selection changes."""
+        selected_items = self.tree.selectedItems()
+        
+        if selected_items:
+            self.edit_btn.setEnabled(True)
+            self.delete_btn.setEnabled(True)
+            account_data = selected_items[0].data(0, Qt.ItemDataRole.UserRole)
+            self.details_panel.show_info(account_data)
+        else:
+            self.edit_btn.setEnabled(False)
+            self.delete_btn.setEnabled(False)
+            self.details_panel.show_info(None)
+            
+    def _filter_by_level(self, level):
+        """Filter tree display by level."""
+        # Update button states
+        for btn_level, btn in self.level_filters.items():
+            btn.setChecked(btn_level == level)
+            
+        # Apply filter
+        self._apply_tree_filter(level)
+        
+    def _apply_tree_filter(self, level):
+        """Apply filtering to tree items."""
+        def filter_item(item):
+            account_data = item.data(0, Qt.ItemDataRole.UserRole)
+            if not account_data:
+                return False
+                
+            # Show item based on filter
+            if level == "all":
+                show = True
+            elif level == "postable":
+                show = account_data['is_postable']
+            else:
+                show = account_data['level'] == int(level)
+                
+            item.setHidden(not show)
+            
+            # Recursively filter children
+            child_visible = False
+            for i in range(item.childCount()):
+                child = item.child(i)
+                if filter_item(child):
+                    child_visible = True
+                    
+            # Show parent if any child is visible
+            if child_visible and not show:
+                item.setHidden(False)
+                return True
+                
+            return show
+            
+        # Apply filter to all top-level items
+        for i in range(self.tree.topLevelItemCount()):
+            filter_item(self.tree.topLevelItem(i))
+            
     def _load_data(self):
         """Load account data into the tree."""
         self._populate_tree()
@@ -906,302 +759,195 @@ class HierarchicalAccountsPage(QWidget):
         # Expand all by default for better visibility
         self.tree.expandAll()
         
-    def _filter_by_level(self, level):
-        """Filter tree display by level."""
-        # Update button states
-        for btn_level, btn in self.level_filters.items():
-            btn.setChecked(btn_level == level)
-            
-        # Apply filter
-        self._apply_tree_filter(level)
+    def _style_tree(self):
+        """Apply modern styling to the tree widget."""
+        self.tree.setStyleSheet(f"""
+            QTreeWidget {{
+                background: rgba(0, 0, 0, 0.2);
+                border: 1px solid rgba(0, 0, 0, 0.6);
+                border-radius: 4px;
+                color: white;
+                font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
+                selection-background-color: rgba(0, 120, 215, 0.25);
+                gridline-color: rgba(0, 0, 0, 0.6);
+                outline: none;
+                padding: 4px;
+            }}
+            QTreeWidget::item {{
+                border: none;
+                padding: 8px;
+                margin: 2px 4px;
+                border-radius: 4px;
+            }}
+            QTreeWidget::item:hover {{
+                background: rgba(255, 255, 255, 0.05);
+            }}
+            QTreeWidget::item:selected {{
+                background: rgba(0, 120, 215, 0.25);
+                color: white;
+            }}
+            QTreeWidget::item:selected:hover {{
+                background: rgba(0, 120, 215, 0.35);
+            }}
+            QTreeWidget::branch:has-children {{
+                background: transparent;
+                border-image: none;
+                padding-left: 4px;
+            }}
+            QTreeWidget::branch:has-children:!has-siblings:closed,
+            QTreeWidget::branch:closed:has-children:has-siblings {{
+                image: url(assets/icons/maximize.svg);
+            }}
+            QTreeWidget::branch:open:has-children:!has-siblings,
+            QTreeWidget::branch:open:has-children:has-siblings {{
+                image: url(assets/icons/minimize.svg);
+            }}
+            QHeaderView::section {{
+                background: rgba(0, 0, 0, 0.3);
+                border: none;
+                border-bottom: 1px solid rgba(0, 0, 0, 0.6);
+                padding: 12px;
+                color: rgba(255, 255, 255, 0.9);
+                font-size: {ResponsiveHelper.scale_size(12, 10, 14)}px;
+                font-weight: 600;
+            }}
+            QHeaderView::section:first {{
+                border-top-left-radius: 4px;
+                padding-left: 16px;
+            }}
+            QHeaderView::section:last {{
+                border-top-right-radius: 4px;
+            }}
+            QScrollBar:vertical {{
+                width: 12px;
+                background: transparent;
+                margin: 0;
+            }}
+            QScrollBar::handle:vertical {{
+                background: rgba(255, 255, 255, 0.2);
+                border-radius: 6px;
+                min-height: 40px;
+                margin: 2px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: rgba(255, 255, 255, 0.3);
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0;
+            }}
+            QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical,
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                background: transparent;
+            }}
+        """)
         
-    def _apply_tree_filter(self, level):
-        """Apply filtering to tree items."""
-        def filter_item(item):
-            account_data = item.data(0, Qt.ItemDataRole.UserRole)
-            if not account_data:
-                return False
-                
-            # Show item based on filter
-            if level == "all":
-                show = True
-            elif level == "postable":
-                show = account_data['is_postable']
-            else:
-                show = account_data['level'] == int(level)
-                
-            item.setHidden(not show)
-            
-            # Recursively filter children
-            child_visible = False
-            for i in range(item.childCount()):
-                child = item.child(i)
-                if filter_item(child):
-                    child_visible = True
-                    
-            # Show parent if any child is visible
-            if child_visible and not show:
-                item.setHidden(False)
-                return True
-                
-            return show
-            
-        # Apply filter to all top-level items
-        for i in range(self.tree.topLevelItemCount()):
-            filter_item(self.tree.topLevelItem(i))
-            
-    def _on_tree_selection_changed(self):
-        """Handle tree selection changes."""
-        selected_items = self.tree.selectedItems()
-        
-        if selected_items:
-            self.edit_btn.setEnabled(True)
-            self.delete_btn.setEnabled(True)
-            self._update_details_panel(selected_items[0])
-        else:
-            self.edit_btn.setEnabled(False)
-            self.delete_btn.setEnabled(False)
-            self._clear_details_panel()
-            
-    def _update_details_panel(self, item):
-        """Update the details panel with selected account info."""
-        account_data = item.data(0, Qt.ItemDataRole.UserRole)
-        if not account_data:
-            return
-            
-        # Create detailed info display
-        info_html = f"""
-        <div style="color: white; font-family: Arial, sans-serif;">
-            <h3 style="color: #4CAF50; margin-bottom: 16px;">{account_data['name']}</h3>
-            
-            <p><strong>Account Code:</strong> {account_data['code']}</p>
-            <p><strong>Account Type:</strong> {account_data['type']}</p>
-            <p><strong>Hierarchy Level:</strong> Level {account_data['level']}</p>
-            <p><strong>Postable:</strong> {"Yes" if account_data['is_postable'] else "No"}</p>
-            
-            {f"<p><strong>Parent Account:</strong> {account_data['parent_code']}</p>" if account_data['parent_code'] else ""}
-            
-            {f"<div style='margin-top: 16px;'><strong>Description:</strong><br/><em>{account_data['description']}</em></div>" if account_data['description'] else ""}
-            
-            <div style="margin-top: 20px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 6px;">
-                <small style="color: #CCCCCC;">
-                    Level {account_data['level']} accounts are 
-                    {"" if account_data['level'] == 1 else "typically "}
-                    {"for organizing major account categories" if account_data['level'] == 1 
-                     else "for grouping related accounts" if account_data['level'] == 2 
-                     else "for detailed transaction recording"}.
-                    {"" if account_data['is_postable'] else " This account cannot have direct transactions."}
-                </small>
-            </div>
-        </div>
-        """
-        
-        self.info_label.setText(info_html)
-        self.info_label.setTextFormat(Qt.TextFormat.RichText)
-        
-    def _clear_details_panel(self):
-        """Clear the details panel."""
-        self.info_label.setText("Select an account to view details")
-        self.info_label.setTextFormat(Qt.TextFormat.PlainText)
-        
-    def _add_account(self):
-        """Show dialog to add a new account."""
-        dialog = HierarchyAccountDialog(self, system=self.system)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            data = dialog.get_account_data()
-            if data['name']:
-                try:
-                    self.system.add_account(
-                        data['name'], 
-                        data['type'],
-                        data['code'] or None,
-                        data['parent_code'],
-                        data['level'],
-                        data['is_postable'],
-                        data['description']
-                    )
-                    self._load_data()  # Refresh tree
-                except Exception as e:
-                    # Could show error dialog here
-                    print(f"Error adding account: {e}")
-                    
-    def _edit_selected_account(self):
-        """Edit the currently selected account."""
-        selected_items = self.tree.selectedItems()
-        if not selected_items:
-            return
-            
-        item = selected_items[0]
-        account_data = item.data(0, Qt.ItemDataRole.UserRole)
-        if not account_data:
-            return
-            
-        # Convert to tuple format expected by dialog
-        data_tuple = (
-            account_data['name'],
-            account_data['type'], 
-            account_data['code'],
-            account_data['parent_code'],
-            account_data['level'],
-            account_data['is_postable'],
-            account_data['description']
-        )
-        
-        dialog = HierarchyAccountDialog(self, system=self.system, edit_mode=True, account_data=data_tuple)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            new_data = dialog.get_account_data()
-            if new_data['name']:
-                try:
-                    self.system.edit_account(
-                        account_data['name'],  # old name
-                        new_data['name'],
-                        new_data['type'],
-                        new_data['code'] or None,
-                        new_data['parent_code'],
-                        new_data['level'],
-                        new_data['is_postable'],
-                        new_data['description']
-                    )
-                    self._load_data()  # Refresh tree
-                except Exception as e:
-                    print(f"Error editing account: {e}")
-                    
-    def _delete_selected_account(self):
-        """Delete the currently selected account."""
-        selected_items = self.tree.selectedItems()
-        if not selected_items:
-            return
-            
-        item = selected_items[0]
-        account_data = item.data(0, Qt.ItemDataRole.UserRole)
-        if not account_data:
-            return
-            
-        # TODO: Add confirmation dialog
-        try:
-            self.system.delete_account(account_data['name'])
-            self._load_data()  # Refresh tree
-        except Exception as e:
-            print(f"Error deleting account: {e}")
-    
     def _get_filter_button_style(self):
-        """Get filter button styling."""
+        """Get Windows 11 style filter button styling."""
         return """
             QPushButton {
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 6px;
-                padding: 6px 12px;
-                color: white;
-                font-size: 12px;
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 13px;
                 font-weight: 500;
-                margin: 0 2px;
+                margin: 0;
+                min-width: 70px;
             }
             QPushButton:hover {
-                background: rgba(255, 255, 255, 0.15);
-                border-color: rgba(255, 255, 255, 0.3);
+                background: rgba(255, 255, 255, 0.08);
+                color: white;
             }
             QPushButton:checked {
                 background: rgba(0, 120, 215, 0.3);
-                border-color: rgba(0, 120, 215, 0.5);
                 color: white;
+            }
+            QPushButton:checked:hover {
+                background: rgba(0, 120, 215, 0.4);
             }
         """
         
     def _get_add_button_style(self):
-        """Get add button styling."""
+        """Get Windows 11 style add button styling."""
         return """
             QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-                            stop:0 rgba(46, 125, 50, 0.8), 
-                            stop:1 rgba(67, 160, 71, 0.8));
-                border: 1px solid rgba(46, 125, 50, 0.6);
-                border-radius: 8px;
-                padding: 10px 18px;
+                background: rgba(0, 120, 215, 0.9);
+                border: 1px solid rgba(0, 0, 0, 0.6);
+                border-radius: 4px;
+                padding: 8px 20px;
                 color: white;
                 font-size: 13px;
                 font-weight: 600;
                 text-align: left;
-                icon-size: 14px;
+                icon-size: 16px;
             }
             QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-                            stop:0 rgba(46, 125, 50, 1.0), 
-                            stop:1 rgba(67, 160, 71, 1.0));
-                border-color: rgba(67, 160, 71, 0.8);
+                background: rgba(0, 120, 215, 1.0);
+                border: 1px solid rgba(0, 0, 0, 0.7);
             }
             QPushButton:pressed {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-                            stop:0 rgba(26, 105, 30, 1.0), 
-                            stop:1 rgba(47, 140, 51, 1.0));
+                background: rgba(0, 100, 195, 1.0);
+                border: 1px solid rgba(0, 0, 0, 0.8);
             }
         """
         
     def _get_edit_button_style(self):
-        """Get edit button styling."""
+        """Get Windows 11 style edit button styling."""
         return """
             QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-                            stop:0 rgba(33, 150, 243, 0.8), 
-                            stop:1 rgba(13, 71, 161, 0.8));
-                border: 1px solid rgba(33, 150, 243, 0.6);
-                border-radius: 8px;
-                padding: 10px 18px;
+                background: rgba(0, 0, 0, 0.2);
+                border: 1px solid rgba(0, 0, 0, 0.6);
+                border-radius: 4px;
+                padding: 8px 20px;
                 color: white;
                 font-size: 13px;
                 font-weight: 500;
                 text-align: left;
-                icon-size: 14px;
+                icon-size: 16px;
             }
             QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-                            stop:0 rgba(33, 150, 243, 1.0), 
-                            stop:1 rgba(13, 71, 161, 1.0));
-                border-color: rgba(33, 150, 243, 0.8);
+                background: rgba(0, 0, 0, 0.3);
+                border: 1px solid rgba(0, 0, 0, 0.7);
             }
             QPushButton:pressed {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-                            stop:0 rgba(13, 71, 161, 1.0), 
-                            stop:1 rgba(33, 150, 243, 1.0));
+                background: rgba(0, 0, 0, 0.4);
+                border: 1px solid rgba(0, 0, 0, 0.8);
             }
             QPushButton:disabled {
-                background: rgba(255, 255, 255, 0.05);
-                border-color: rgba(255, 255, 255, 0.1);
+                background: rgba(0, 0, 0, 0.1);
+                border: 1px solid rgba(0, 0, 0, 0.4);
                 color: rgba(255, 255, 255, 0.3);
             }
         """
         
     def _get_delete_button_style(self):
-        """Get delete button styling."""
+        """Get Windows 11 style delete button styling."""
         return """
             QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-                            stop:0 rgba(211, 47, 47, 0.8), 
-                            stop:1 rgba(183, 28, 28, 0.8));
-                border: 1px solid rgba(211, 47, 47, 0.6);
-                border-radius: 8px;
-                padding: 10px 18px;
-                color: white;
+                background: rgba(0, 0, 0, 0.2);
+                border: 1px solid rgba(0, 0, 0, 0.6);
+                border-radius: 4px;
+                padding: 8px 20px;
+                color: rgba(255, 69, 58, 0.9);
                 font-size: 13px;
                 font-weight: 500;
                 text-align: left;
-                icon-size: 14px;
+                icon-size: 16px;
             }
             QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-                            stop:0 rgba(211, 47, 47, 1.0), 
-                            stop:1 rgba(183, 28, 28, 1.0));
-                border-color: rgba(211, 47, 47, 0.8);
+                background: rgba(255, 69, 58, 0.1);
+                border: 1px solid rgba(255, 69, 58, 0.3);
+                color: rgba(255, 69, 58, 1.0);
             }
             QPushButton:pressed {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-                            stop:0 rgba(183, 28, 28, 1.0), 
-                            stop:1 rgba(211, 47, 47, 1.0));
+                background: rgba(255, 69, 58, 0.15);
+                border: 1px solid rgba(255, 69, 58, 0.4);
             }
             QPushButton:disabled {
-                background: rgba(255, 255, 255, 0.05);
-                border-color: rgba(255, 255, 255, 0.1);
-                color: rgba(255, 255, 255, 0.3);
+                background: rgba(0, 0, 0, 0.1);
+                border: 1px solid rgba(0, 0, 0, 0.4);
+                color: rgba(255, 69, 58, 0.4);
             }
         """
         
@@ -1209,3 +955,193 @@ class HierarchicalAccountsPage(QWidget):
         """Apply glassmorphism styling to the page."""
         GlassmorphismHelper.apply_main_container_effect(self)
         self.setStyleSheet(ModernStyles.get_complete_stylesheet())
+
+
+class AccountDetailsPanel(QStackedWidget):
+    """A stacked widget that switches between account info and account form."""
+    
+    def __init__(self, system=None, parent=None):
+        super().__init__(parent)
+        self.system = system
+        self._setup_ui()
+        
+    def _setup_ui(self):
+        """Setup the stacked widget UI."""
+        # Create the info card
+        self.info_card = self._create_info_widget()
+        self.addWidget(self.info_card)
+        
+        # Create the form card (initially hidden)
+        self.form_card = None
+        
+        # Set initial widget
+        self.setCurrentWidget(self.info_card)
+        
+    def show_form(self, edit_mode=False, account_data=None):
+        """Show the account form."""
+        # Create new form if needed
+        if not self.form_card:
+            self.form_card = AccountFormCard(
+                system=self.system,
+                edit_mode=edit_mode,
+                account_data=account_data
+            )
+            self.form_card.formSubmitted.connect(self._on_form_submitted)
+            self.form_card.formCancelled.connect(self._on_form_cancelled)
+            self.addWidget(self.form_card)
+        
+        # Update form data if editing
+        if edit_mode and account_data:
+            self.form_card.set_account_data(account_data)
+            
+        # Show the form
+        self.setCurrentWidget(self.form_card)
+        
+    def show_info(self, account_data=None):
+        """Show the account info card."""
+        if account_data:
+            self._update_info(account_data)
+        self.setCurrentWidget(self.info_card)
+        
+    def _create_info_widget(self):
+        """Create widget to display selected account information."""
+        info_frame = QFrame()
+        info_frame.setStyleSheet("""
+            QFrame {
+                background: rgba(0, 0, 0, 0.2);
+                border: 1px solid rgba(0, 0, 0, 0.6);
+                border-radius: 4px;
+                padding: 16px;
+                max-height: 200px;
+            }
+        """)
+        
+        layout = QVBoxLayout(info_frame)
+        layout.setSpacing(0)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Info content
+        self.info_label = QLabel()
+        self.info_label.setStyleSheet("""
+            QLabel {
+                background: transparent;
+                border: none;
+                text-align: center;
+            }
+        """)
+        self.info_label.setWordWrap(True)
+        self.info_label.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(self.info_label)
+        
+        # Set initial empty state
+        self._clear_info()
+        
+        return info_frame
+        
+    def _update_info(self, account_data):
+        """Update the info panel with selected account info."""
+        if not account_data:
+            self._clear_info()
+            return
+            
+        level_colors = {
+            1: "#4CAF50",  # Green for level 1
+            2: "#2196F3",  # Blue for level 2
+            3: "#FF9800"   # Orange for level 3
+        }
+        
+        level_color = level_colors.get(account_data['level'], "#FFFFFF")
+        
+        # Create detailed info display with modern Windows 11 styling
+        info_html = f"""
+        <div style="color: white; font-family: Segoe UI, Arial, sans-serif;">
+            <div style="margin-bottom: 16px;">
+                <h3 style="color: {level_color}; margin: 0 0 4px 0; font-size: 20px; font-weight: 600;">
+                    {account_data['name']}
+                </h3>
+                <div style="color: rgba(255,255,255,0.7); font-size: 13px;">
+                    {account_data['code']}
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center;">
+                <div style="color: rgba(255,255,255,0.7); font-weight: 500;">Type</div>
+                <div style="color: white;">{account_data['type']}</div>
+                
+                <div style="color: rgba(255,255,255,0.7); font-weight: 500;">Level</div>
+                <div style="color: white;">Level {account_data['level']}</div>
+                
+                <div style="color: rgba(255,255,255,0.7); font-weight: 500;">Postable</div>
+                <div style="color: white;">{"Yes" if account_data['is_postable'] else "No"}</div>
+                
+                {f'''<div style="color: rgba(255,255,255,0.7); font-weight: 500;">Parent</div>
+                <div style="color: white;">{account_data['parent_code']}</div>''' if account_data['parent_code'] else ""}
+            </div>
+        </div>
+        """
+        
+        self.info_label.setText(info_html)
+        self.info_label.setTextFormat(Qt.TextFormat.RichText)
+        
+    def _clear_info(self):
+        """Clear the info panel with a modern empty state."""
+        empty_html = """
+        <div style="color: rgba(255,255,255,0.5); font-family: Segoe UI, Arial, sans-serif; text-align: center;">
+            <div style="margin-bottom: 16px; opacity: 0.7;">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+            <div style="font-size: 15px; font-weight: 500; margin-bottom: 8px;">
+                No Account Selected
+            </div>
+            <div style="font-size: 13px; color: rgba(255,255,255,0.4);">
+                Select an account from the list to view its details
+            </div>
+        </div>
+        """
+        self.info_label.setText(empty_html)
+        self.info_label.setTextFormat(Qt.TextFormat.RichText)
+        
+    def _on_form_submitted(self, data):
+        """Handle form submission."""
+        try:
+            if self.form_card.edit_mode:
+                self.system.edit_account(
+                    data['old_name'],
+                    data['name'],
+                    data['type'],
+                    data['code'] or None,
+                    data['parent_code'],
+                    data['level'],
+                    data['is_postable'],
+                    ""  # No description in new design
+                )
+            else:
+                self.system.add_account(
+                    data['name'],
+                    data['type'],
+                    data['code'] or None,
+                    data['parent_code'],
+                    data['level'],
+                    data['is_postable'],
+                    ""  # No description in new design
+                )
+            
+            # Switch back to info view and refresh parent page
+            self.show_info()
+            if isinstance(self.parent(), HierarchicalAccountsPage):
+                self.parent()._load_data()
+        except Exception as e:
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Icon.Critical)
+            msg.setText("Error saving account")
+            msg.setInformativeText(str(e))
+            msg.setWindowTitle("Error")
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.exec()
+        
+    def _on_form_cancelled(self):
+        """Handle form cancellation."""
