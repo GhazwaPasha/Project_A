@@ -75,9 +75,9 @@ class AccountFormCard(QFrame):
         # Apply card styling
         self.setStyleSheet("""
             AccountFormCard {
-                background: rgba(0, 0, 0, 0.2);
-                border: 1px solid rgba(0, 0, 0, 0.6);
-                border-radius: 4px;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 8px;
             }
         """)
         
@@ -185,10 +185,9 @@ class AccountFormCard(QFrame):
         """
         
     def _get_input_style(self):
-        return """
-            QLineEdit {
-                background: rgba(0, 0, 0, 0.2);
-                border: 1px solid rgba(0, 0, 0, 0.6);
+        return """            QLineEdit {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 4px;
                 padding: 8px 12px;
                 color: white;
@@ -205,10 +204,9 @@ class AccountFormCard(QFrame):
         """
         
     def _get_combo_style(self):
-        return """
-            QComboBox {
-                background: rgba(0, 0, 0, 0.2);
-                border: 1px solid rgba(0, 0, 0, 0.6);
+        return """            QComboBox {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 4px;
                 padding: 8px 12px;
                 color: white;
@@ -408,7 +406,7 @@ class HierarchicalAccountsPage(QWidget):
         layout = QVBoxLayout(self)
         responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
         layout.setContentsMargins(responsive_margin, responsive_margin, 
-                                 responsive_margin, responsive_margin)
+                                responsive_margin, responsive_margin)
         layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
         
         # Page header with enhanced description
@@ -421,17 +419,90 @@ class HierarchicalAccountsPage(QWidget):
         # Create toolbar first
         self._create_toolbar(layout)
         
-        # Create main content area
-        self._create_content_area(layout)
-        
-    def _create_content_area(self, layout):
-        """Create the main content area with splitter."""
-        # Use splitter for resizable panels
+        # Create main content area with splitter
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
         
-        # Left panel - Hierarchy tree
-        self._create_hierarchy_panel(splitter)
+        # Create tree widget
+        self.tree = QTreeWidget()
+        self.tree.setHeaderLabels(["Code", "Account Name", "Type", "Level", "Postable"])
+        self.tree.setRootIsDecorated(True)
+        self.tree.setAnimated(True)
+        self.tree.setIndentation(20)
+        
+        # Modern tree styling
+        self.tree.setStyleSheet("""
+            QTreeWidget {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 8px;
+                color: white;
+                font-size: 13px;
+                selection-background-color: rgba(0, 120, 215, 0.25);
+                gridline-color: transparent;
+                outline: none;
+                padding: 8px;
+            }
+            QTreeWidget::item {
+                border: none;
+                padding: 8px;
+                margin: 2px 4px;
+                border-radius: 4px;
+            }
+            QTreeWidget::item:hover {
+                background: rgba(255, 255, 255, 0.05);
+            }
+            QTreeWidget::item:selected {
+                background: rgba(0, 120, 215, 0.25);
+                color: white;
+            }
+            QTreeWidget::item:selected:hover {
+                background: rgba(0, 120, 215, 0.35);
+            }
+            QHeaderView::section {
+                background: rgba(255, 255, 255, 0.08);
+                border: none;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+                padding: 12px;
+                color: rgba(255, 255, 255, 0.9);
+                font-size: 12px;
+                font-weight: 600;
+            }
+            QHeaderView::section:first {
+                border-top-left-radius: 8px;
+                padding-left: 16px;
+            }
+            QHeaderView::section:last {
+                border-top-right-radius: 8px;
+            }
+            QScrollBar:vertical {
+                width: 12px;
+                background: transparent;
+                margin: 0;
+            }
+            QScrollBar::handle:vertical {
+                background: rgba(255, 255, 255, 0.2);
+                border-radius: 6px;
+                min-height: 40px;
+                margin: 2px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: rgba(255, 255, 255, 0.3);
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0;
+            }
+            QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical,
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: transparent;
+            }
+        """)
+        
+        # Connect tree selection
+        self.tree.itemSelectionChanged.connect(self._on_tree_selection_changed)
+        self.tree.itemDoubleClicked.connect(self._edit_selected_account)
+        
+        splitter.addWidget(self.tree)
         
         # Right panel - Account details/form
         self.details_panel = AccountDetailsPanel(system=self.system)
@@ -441,54 +512,6 @@ class HierarchicalAccountsPage(QWidget):
         splitter.setSizes([700, 300])
         
         layout.addWidget(splitter, stretch=1)
-    
-    def _create_hierarchy_panel(self, parent):
-        """Create the left panel with hierarchical tree view."""
-        tree_frame = QFrame()
-        tree_frame.setStyleSheet("""
-            QFrame {
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 12px;
-                margin: 4px;
-            }
-        """)
-        
-        tree_layout = QVBoxLayout(tree_frame)
-        tree_layout.setContentsMargins(16, 16, 16, 16)
-        tree_layout.setSpacing(12)
-        
-        # Tree header
-        tree_header = QLabel("Account Hierarchy")
-        tree_header.setStyleSheet(f"""
-            QLabel {{
-                color: white;
-                font-size: {ResponsiveHelper.scale_size(16, 14, 18)}px;
-                font-weight: 600;
-                background: transparent;
-                border: none;
-                margin-bottom: 8px;
-                padding: 0px;
-            }}
-        """)
-        tree_layout.addWidget(tree_header)
-        
-        # Create tree widget
-        self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Code", "Account Name", "Type", "Level", "Postable"])
-        self.tree.setRootIsDecorated(True)
-        self.tree.setAnimated(True)
-        self.tree.setIndentation(20)
-        
-        # Configure tree appearance
-        self._style_tree()
-        
-        # Connect tree selection
-        self.tree.itemSelectionChanged.connect(self._on_tree_selection_changed)
-        self.tree.itemDoubleClicked.connect(self._edit_selected_account)
-        
-        tree_layout.addWidget(self.tree)
-        parent.addWidget(tree_frame)
         
     def _create_toolbar(self, layout):
         """Create enhanced toolbar with hierarchy-specific actions."""
@@ -522,7 +545,7 @@ class HierarchicalAccountsPage(QWidget):
         filter_group.setStyleSheet("""
             QFrame {
                 background: rgba(255, 255, 255, 0.03);
-                border: 1px solid rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(255, 255, 255, 0.05);
                 border-radius: 8px;
                 padding: 4px;
             }
@@ -1026,7 +1049,7 @@ class HierarchicalAccountsPage(QWidget):
             QPushButton {
                 background: transparent;
                 border: none;
-                border-radius: 4px;
+                border-radius: 6px;
                 padding: 8px 16px;
                 color: rgba(255, 255, 255, 0.8);
                 font-size: 13px;
@@ -1276,9 +1299,9 @@ class AccountDetailsPanel(QStackedWidget):
         info_frame = QFrame()
         info_frame.setStyleSheet("""
             QFrame {
-                background: rgba(0, 0, 0, 0.2);
-                border: 1px solid rgba(0, 0, 0, 0.6);
-                border-radius: 4px;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 8px;
                 padding: 16px;
                 max-height: 200px;
             }
