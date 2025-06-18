@@ -27,11 +27,11 @@ class ModernSidebarButton(QPushButton):
         self.update_text()
         self.setObjectName("ModernSidebarButton")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        
-        # Responsive height
+          # Responsive height
         button_height = ResponsiveHelper.scale_size(48, 44, 56)
         self.setMinimumHeight(button_height)
-          # Apply modern styling
+        
+        # Apply modern styling
         self._apply_modern_styling()
         
     def set_expanded(self, expanded):
@@ -40,7 +40,11 @@ class ModernSidebarButton(QPushButton):
         self._apply_modern_styling()  # Reapply styling when state changes
         
     def update_text(self):
-        self.setText(self.text_label if self.expanded else "")
+        # Always keep the text for proper left alignment, but make it invisible when collapsed
+        if self.expanded:
+            self.setText(self.text_label)
+        else:
+            self.setText("")  # Remove text when collapsed
         self.setToolTip(self.text_label)
         
     def _apply_modern_styling(self):
@@ -50,24 +54,21 @@ class ModernSidebarButton(QPushButton):
         border_radius = ResponsiveHelper.scale_size(10, 8, 12)
         padding_v = ResponsiveHelper.scale_size(12, 10, 16)
         
-        # Adjust padding based on expanded state - less horizontal padding when collapsed
-        if self.expanded:
-            padding_h = ResponsiveHelper.scale_size(16, 12, 20)
-            text_align = "left"
-        else:
-            padding_h = ResponsiveHelper.scale_size(8, 6, 10)  # Reduced padding for collapsed
-            text_align = "center"
+        # CRITICAL: Icon should stay at the same position relative to the button's left edge
+        # regardless of whether text is present or not
+        icon_padding_left = ResponsiveHelper.scale_size(16, 12, 20)
         
+        # Both states use the same left padding to keep icon position stable
         self.setStyleSheet(f"""
             QPushButton#ModernSidebarButton {{
                 background: transparent;
                 border: none;
                 border-radius: {border_radius}px;
-                padding: {padding_v}px {padding_h}px;
+                padding: {padding_v}px {icon_padding_left}px;
                 color: rgba(255, 255, 255, 0.7);
                 font-size: {font_size}px;
                 font-weight: 500;
-                text-align: {text_align};
+                text-align: left;
                 margin: 2px 0px;
                 outline: none;
             }}
@@ -97,7 +98,6 @@ class ModernSidebarButton(QPushButton):
                 border: none;
             }}
         """)
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -458,8 +458,7 @@ class MainWindow(QMainWindow):
             
         layout.addLayout(nav_container)
         layout.addStretch()
-        
-        # Apply translucent sidebar styling
+          # Apply translucent sidebar styling
         self._apply_sidebar_styling(sidebar)
         return sidebar
         
@@ -470,13 +469,10 @@ class MainWindow(QMainWindow):
         border_radius = ResponsiveHelper.scale_size(10, 8, 12)
         padding_v = ResponsiveHelper.scale_size(12, 10, 16)
         
-        # Adjust padding based on sidebar state for consistency
-        if self.sidebar_expanded:
-            padding_h = ResponsiveHelper.scale_size(16, 12, 20)
-            text_align = "left"
-        else:
-            padding_h = ResponsiveHelper.scale_size(8, 6, 10)  # Reduced padding for collapsed
-            text_align = "center"
+        # CRITICAL: Use the same icon position as the sidebar buttons
+        # Keep toggle button icon in the same position as other icons
+        icon_position_from_left = ResponsiveHelper.scale_size(16, 12, 20)
+        padding_h = icon_position_from_left  # Same padding for both states
         
         self.toggle_btn.setStyleSheet(f"""
             QPushButton#SidebarToggle {{
@@ -487,7 +483,6 @@ class MainWindow(QMainWindow):
                 color: rgba(255, 255, 255, 0.7);
                 font-size: {font_size}px;
                 font-weight: 500;
-                text-align: {text_align};
                 margin: 2px 0px;
             }}
             QPushButton#SidebarToggle:hover {{
