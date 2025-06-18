@@ -589,23 +589,24 @@ class HierarchicalAccountsPage(QWidget):
             
         refresh_btn.setStyleSheet("""
             QPushButton {
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 4px;
-                padding: 8px 20px;
-                color: white;
-                font-size: 13px;
-                font-weight: 500;
+                background: rgba(100, 181, 246, 0.15);
+                border: 1px solid rgba(100, 181, 246, 0.3);
+                border-radius: 8px;
+                padding: 8px 16px;
+                color: #90CAF9;
+                font-size: 12px;
+                font-weight: 600;
                 text-align: left;
                 icon-size: 16px;
+                min-height: 32px;
             }
             QPushButton:hover {
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
+                background: rgba(100, 181, 246, 0.2);
+                border: 1px solid rgba(100, 181, 246, 0.5);
             }
             QPushButton:pressed {
-                background: rgba(255, 255, 255, 0.15);
-                border: 1px solid rgba(255, 255, 255, 0.3);
+                background: rgba(100, 181, 246, 0.1);
+                border: 1px solid rgba(100, 181, 246, 0.4);
             }
         """)
         refresh_btn.clicked.connect(self._refresh_data)
@@ -1074,23 +1075,24 @@ class HierarchicalAccountsPage(QWidget):
         """Get Windows 11 style add button styling."""
         return """
             QPushButton {
-                background: rgba(0, 120, 215, 0.9);
-                border: 1px solid rgba(0, 0, 0, 0.6);
-                border-radius: 4px;
-                padding: 8px 20px;
-                color: white;
-                font-size: 13px;
+                background: rgba(100, 181, 246, 0.15);
+                border: 1px solid rgba(100, 181, 246, 0.3);
+                border-radius: 8px;
+                padding: 8px 16px;
+                color: #90CAF9;
+                font-size: 12px;
                 font-weight: 600;
                 text-align: left;
                 icon-size: 16px;
+                min-height: 32px;
             }
             QPushButton:hover {
-                background: rgba(0, 120, 215, 1.0);
-                border: 1px solid rgba(0, 0, 0, 0.7);
+                background: rgba(100, 181, 246, 0.2);
+                border: 1px solid rgba(100, 181, 246, 0.5);
             }
             QPushButton:pressed {
-                background: rgba(0, 100, 195, 1.0);
-                border: 1px solid rgba(0, 0, 0, 0.8);
+                background: rgba(100, 181, 246, 0.1);
+                border: 1px solid rgba(100, 181, 246, 0.4);
             }
         """
         
@@ -1098,27 +1100,28 @@ class HierarchicalAccountsPage(QWidget):
         """Get Windows 11 style edit button styling."""
         return """
             QPushButton {
-                background: rgba(0, 0, 0, 0.2);
-                border: 1px solid rgba(0, 0, 0, 0.6);
-                border-radius: 4px;
-                padding: 8px 20px;
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                padding: 8px 16px;
                 color: white;
-                font-size: 13px;
+                font-size: 12px;
                 font-weight: 500;
                 text-align: left;
                 icon-size: 16px;
+                min-height: 32px;
             }
             QPushButton:hover {
-                background: rgba(0, 0, 0, 0.3);
-                border: 1px solid rgba(0, 0, 0, 0.7);
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(255, 255, 255, 0.4);
             }
             QPushButton:pressed {
-                background: rgba(0, 0, 0, 0.4);
-                border: 1px solid rgba(0, 0, 0, 0.8);
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.3);
             }
             QPushButton:disabled {
-                background: rgba(0, 0, 0, 0.1);
-                border: 1px solid rgba(0, 0, 0, 0.4);
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.1);
                 color: rgba(255, 255, 255, 0.3);
             }
         """
@@ -1127,28 +1130,29 @@ class HierarchicalAccountsPage(QWidget):
         """Get Windows 11 style delete button styling."""
         return """
             QPushButton {
-                background: rgba(0, 0, 0, 0.2);
-                border: 1px solid rgba(0, 0, 0, 0.6);
-                border-radius: 4px;
-                padding: 8px 20px;
+                background: rgba(255, 69, 58, 0.08);
+                border: 1px solid rgba(255, 69, 58, 0.2);
+                border-radius: 8px;
+                padding: 8px 16px;
                 color: rgba(255, 69, 58, 0.9);
-                font-size: 13px;
+                font-size: 12px;
                 font-weight: 500;
                 text-align: left;
                 icon-size: 16px;
+                min-height: 32px;
             }
             QPushButton:hover {
-                background: rgba(255, 69, 58, 0.1);
-                border: 1px solid rgba(255, 69, 58, 0.3);
-                color: rgba(255, 69, 58, 1.0);
-            }
-            QPushButton:pressed {
                 background: rgba(255, 69, 58, 0.15);
                 border: 1px solid rgba(255, 69, 58, 0.4);
+                color: rgb(255, 69, 58);
+            }
+            QPushButton:pressed {
+                background: rgba(255, 69, 58, 0.1);
+                border: 1px solid rgba(255, 69, 58, 0.3);
             }
             QPushButton:disabled {
-                background: rgba(0, 0, 0, 0.1);
-                border: 1px solid rgba(0, 0, 0, 0.4);
+                background: rgba(255, 69, 58, 0.05);
+                border: 1px solid rgba(255, 69, 58, 0.1);
                 color: rgba(255, 69, 58, 0.4);
             }
         """
