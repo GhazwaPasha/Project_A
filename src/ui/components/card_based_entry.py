@@ -14,14 +14,14 @@ from ..components.widgets import EditableAccountComboBox
 
 
 class CardBasedTransactionEntry(QFrame):
-    """Self-contained transaction entry card with internal labels."""
-    
+    """Self-contained transaction entry card with internal labels."""    
     remove_requested = pyqtSignal(object)
     
     def __init__(self, system, card_number=1, parent=None):
         super().__init__(parent)
         self.system = system
         self.card_number = card_number
+        self.accounts = []  # Initialize empty accounts list
         self._setup_ui()
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_context_menu)
@@ -408,3 +408,39 @@ class CardBasedTransactionEntry(QFrame):
         """Reset cursor when leaving the card."""
         self.setCursor(Qt.CursorShape.ArrowCursor)
         super().leaveEvent(event)
+    
+    def refresh_accounts(self, new_accounts):
+        """Refresh the account lists when accounts change."""
+        try:
+            self.accounts = new_accounts
+            
+            # Save current selections
+            current_debit = self.debit_combo.currentText()
+            current_credit = self.credit_combo.currentText()
+            
+            # Update the account lists
+            self._populate_account_combo(self.debit_combo)
+            self._populate_account_combo(self.credit_combo)
+            
+            # Restore selections if they still exist
+            if current_debit in new_accounts:
+                self.debit_combo.setCurrentText(current_debit)
+            if current_credit in new_accounts:
+                self.credit_combo.setCurrentText(current_credit)
+                
+        except Exception as e:
+            print(f"Error refreshing accounts in card: {e}")
+    
+    def _is_account_valid(self, account_text):
+        """Check if an account exists in the system."""
+        if not account_text or not account_text.strip():
+            return False
+        
+        try:
+            # Check if account exists in the system
+            all_accounts = self.system.get_postable_accounts()
+            formatted_accounts = [f"{acc[2]} - {acc[0]}" for acc in all_accounts]
+            
+            return account_text.strip() in formatted_accounts
+        except:
+            return False

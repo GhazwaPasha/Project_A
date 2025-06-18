@@ -1,6 +1,7 @@
 import sqlite3
 import uuid
 from datetime import datetime, timedelta
+from .events import accounting_events
 import random
 
 class AccountingSystem:
@@ -129,12 +130,25 @@ class AccountingSystem:
             row = cursor.fetchone()
             if row:
                 return row[0]
-                
-            # If account not found, return None (account must exist in chart of accounts)
+                  # If account not found, return None (account must exist in chart of accounts)
             return None
             
         debit_type = get_or_add_account_type(debit_account)
         credit_type = get_or_add_account_type(credit_account)
+        
+        # CRITICAL: Validate that both accounts exist before creating entry
+        if debit_type is None:
+            raise ValueError(f"Debit account '{debit_account}' does not exist in the chart of accounts. Please create the account first or check the account name.")
+        
+        if credit_type is None:
+            raise ValueError(f"Credit account '{credit_account}' does not exist in the chart of accounts. Please create the account first or check the account name.")
+        
+        # Validate that accounts are postable (can have transactions)
+        if not self.is_account_postable(debit_account):
+            raise ValueError(f"Debit account '{debit_account}' is not postable. Only leaf accounts can have transactions posted to them.")
+            
+        if not self.is_account_postable(credit_account):
+            raise ValueError(f"Credit account '{credit_account}' is not postable. Only leaf accounts can have transactions posted to them.")
         
         # Enforce double-entry: one debit, one credit, same amount
         entry_id = str(uuid.uuid4())
@@ -545,9 +559,12 @@ class AccountingSystem:
                 'INSERT INTO accounts (name, type, code, parent_code, level, is_postable, description) VALUES (?, ?, ?, ?, ?, ?, ?)', 
                 (name, acc_type, code, parent_code, level, is_postable, description)
             )
-            
-            # Commit immediately
+              # Commit immediately
             self.conn.commit()
+            
+            # Emit event to notify UI components
+            accounting_events.accounts_changed.emit()
+            
             return code
             
         except Exception as e:
@@ -573,8 +590,7 @@ class AccountingSystem:
                 new_code = self.generate_account_code(new_type)
             else:
                 new_code = old_code
-                
-        # Keep existing values if new ones not provided
+                  # Keep existing values if new ones not provided
         if new_parent_code is None:
             new_parent_code = old_parent
         if new_level is None:
@@ -583,15 +599,20 @@ class AccountingSystem:
             new_is_postable = old_is_postable
         if new_description is None:
             new_description = old_description
-                
-        cursor.execute('UPDATE accounts SET name = ?, type = ?, code = ?, parent_code = ?, level = ?, is_postable = ?, description = ? WHERE name = ?', 
+            
+        cursor.execute('UPDATE accounts SET name = ?, type = ?, code = ?, parent_code = ?, level = ?, is_postable = ?, description = ? WHERE name = ?',
                       (new_name, new_type, new_code, new_parent_code, new_level, new_is_postable, new_description, old_name))
         self.conn.commit()
-
+          # Emit event to notify UI components
+        accounting_events.accounts_changed.emit()
+    
     def delete_account(self, name):
         cursor = self.conn.cursor()
         cursor.execute('DELETE FROM accounts WHERE name = ?', (name,))
         self.conn.commit()
+        
+        # Emit event to notify UI components
+        accounting_events.accounts_changed.emit()
 
     def close(self):
         self.conn.close()

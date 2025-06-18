@@ -17,6 +17,7 @@ from PyQt6.QtCore import pyqtSignal, QTimer
 from PyQt6.QtWidgets import QGraphicsDropShadowEffect, QProgressDialog
 from PyQt6.QtGui import QPalette, QPixmap, QPainter
 
+from ...core.events import accounting_events
 from ..components.scrollbar_styles import ModernScrollbarStyles
 from ..components.widgets import PageHeader
 from ..components.styles import ModernStyles, GlassmorphismHelper
@@ -405,6 +406,21 @@ class HierarchicalAccountsPage(QWidget):
         self._apply_styling()
         self._load_data()
         
+        # Connect to account change events
+        accounting_events.accounts_changed.connect(self._refresh_account_data)
+    
+    def _refresh_account_data(self):
+        """Refresh account data when accounts change."""
+        try:
+            self._load_data()
+        except Exception as e:
+            print(f"Error refreshing account data: {e}")
+            
+    def refresh_currency_display(self):
+        """Refresh currency formatting (for consistency with other pages)."""
+        # This page doesn't display currency directly, so this is a no-op
+        pass
+    
     def _setup_ui(self):
         """Setup the enhanced accounts page UI."""
         layout = QVBoxLayout(self)

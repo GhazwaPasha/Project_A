@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QDate
 from datetime import datetime
 from ...core.accounting_system import AccountingSystem
+from ...core.events import accounting_events
 from ..components.scrollbar_styles import ModernScrollbarStyles
 from ..components.widgets import PageHeader, EditableAccountComboBox
 from ..components.styles import ModernStyles, GlassmorphismHelper
@@ -204,6 +205,9 @@ class SingleEntryTab(QWidget):
         self.system = system
         self.accounts = []
         self._load_accounts()
+        
+        # Connect to account changes for real-time updates
+        accounting_events.accounts_changed.connect(self._on_accounts_changed)
         self._setup_ui()
         self._load_transactions()
         
@@ -879,3 +883,13 @@ class SingleEntryTab(QWidget):
             """)
             error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.transactions_layout.addWidget(error_label)
+    
+    def _on_accounts_changed(self):
+        """Handle account changes by refreshing the account list."""
+        self._load_accounts()
+        # Update the combo boxes if they exist
+        if hasattr(self, 'debit_combo'):
+            self.debit_combo.setAccountList(self.accounts)
+        if hasattr(self, 'credit_combo'):
+            self.credit_combo.setAccountList(self.accounts)
+        print("✅ Account list refreshed in single entry tab")
