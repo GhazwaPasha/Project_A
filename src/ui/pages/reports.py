@@ -138,7 +138,7 @@ class KPICard(QFrame):
         
     def _setup_ui(self):
         """Setup the KPI card UI."""
-        self.setFixedHeight(120)
+        self.setFixedHeight(120)  # Back to original height
         self.setStyleSheet("""
             QFrame {
                 background: rgba(255, 255, 255, 0.08);
@@ -149,8 +149,8 @@ class KPICard(QFrame):
         """)
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(8)
+        layout.setContentsMargins(16, 14, 16, 14)  # Back to original margins
+        layout.setSpacing(8)  # Back to original spacing
         
         # Title
         title_label = QLabel(self.title)
@@ -162,11 +162,10 @@ class KPICard(QFrame):
             border: none;
         """)
         layout.addWidget(title_label)
-        
-        # Value
+          # Value
         value_label = QLabel(self.value)
         value_label.setStyleSheet(f"""
-            color: {self.color};
+            color: white;
             font-weight: 700;
             font-size: 18px;
             background: transparent;
@@ -486,8 +485,7 @@ class ReportsPage(QWidget):
         
         # Set scroll widget
         scroll_area.setWidget(scroll_widget)
-        
-        # Add scroll area to main page layout
+          # Add scroll area to main page layout
         page_layout.addWidget(scroll_area, 1)  # Give it stretch factor 1 to fill remaining space
         
         return page
@@ -498,21 +496,7 @@ class ReportsPage(QWidget):
         
     def _create_kpi_section(self, main_layout):
         """Create the top KPI section (non-expandable, max 2 rows)."""
-        # Section label
-        kpi_label = QLabel("📊 Key Performance Indicators")
-        kpi_label.setStyleSheet(f"""
-            QLabel {{
-                color: white;
-                font-size: {ResponsiveHelper.scale_size(18, 16, 22)}px;
-                font-weight: 600;
-                background: transparent;
-                border: none;
-                margin-bottom: {ResponsiveHelper.scale_size(8, 6, 12)}px;
-            }}
-        """)
-        main_layout.addWidget(kpi_label)
-        
-        # KPI cards grid (max 2 rows)
+        # KPI cards grid (max 2 rows) - no heading needed
         kpi_grid = QGridLayout()
         kpi_grid.setSpacing(ResponsiveHelper.scale_size(12, 10, 16))
         
@@ -521,16 +505,14 @@ class ReportsPage(QWidget):
             ("Total Revenue", "$128,900", "Monthly: +8.2%", "#2196F3"),
             ("Net Income", "$45,230", "vs Last Month: +12.5%", "#4CAF50"),
             ("Cash Flow", "$32,150", "Operating Activities", "#FF9800"),
-            ("ROE", "15.8%", "vs Last Quarter: +2.1%", "#00BCD4"),
-            ("A/R Days", "28 days", "Industry Avg: 31", "#9C27B0"),
+            ("ROE", "15.8%", "vs Last Quarter: +2.1%", "#00BCD4"),            ("A/R Days", "28 days", "Industry Avg: 31", "#9C27B0"),
             ("Debt Ratio", "0.45", "Healthy Range: <0.5", "#4CAF50"),
             ("Quick Ratio", "1.8", "Liquid Assets", "#4CAF50"),
-            ("Gross Margin", "69.6%", "Profit Efficiency", "#FF5722"),
-        ]
+            ("Gross Margin", "69.6%", "Profit Efficiency", "#FF5722"),        ]
         
         for i, (title, value, subtitle, color) in enumerate(kpi_data):
             card = KPICard(title, value, subtitle, color)
-            row = i // 4  # 4 cards per row
+            row = i // 4  # 4 cards per row (back to original)
             col = i % 4
             kpi_grid.addWidget(card, row, col)
         
