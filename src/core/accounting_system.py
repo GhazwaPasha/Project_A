@@ -109,86 +109,133 @@ class AccountingSystem:
             
         self.conn.commit()
     
-    def add_journal_entry(self, date, description, debit_account, credit_account, amount):
-        # Helper to get or add account type and generate code
-        def get_or_add_account_type(account):
-            if not account:
-                # If account is blank, do not prompt, just return None (for GUI safety)
-                return None
+    def resolve_account(self, account_input):
+        """
+        Resolve an account input to its full name, handling fuzzy matches.
+        Returns (full_name, account_type, code) or (None, None, None) if no match.
+        """
+        if not account_input:
+            return None, None, None
+            
+        cursor = self.conn.cursor()
+        search_term = account_input.lower().strip()
+        
+        # First try exact matches
+        cursor.execute('''
+            SELECT name, type, code 
+            FROM accounts 
+            WHERE (LOWER(name) = ? OR code = ?) AND is_postable = 1
+        ''', (search_term, account_input))
+        
+        result = cursor.fetchone()
+        if result:
+            return result
+            
+        # Try code-name format
+        if " - " in search_term:
+            parts = search_term.split(" - ", 1)
+            if len(parts) == 2:
+                code_part = parts[0].strip()
+                name_part = parts[1].strip()
                 
-            cursor = self.conn.cursor()
-            
-            # Handle "Code - Name" format (e.g., "5101 - Cost of Goods Sold")
-            if " - " in account:
-                parts = account.split(" - ", 1)
-                if len(parts) == 2:
-                    code_part = parts[0].strip()
-                    name_part = parts[1].strip()
-                    
-                    # Try code first
-                    if len(code_part) == 4 and code_part.isdigit():
-                        cursor.execute('SELECT type FROM accounts WHERE code = ?', (code_part,))
-                        row = cursor.fetchone()
-                        if row:
-                            return row[0]
-                    
-                    # Try name
-                    cursor.execute('SELECT type FROM accounts WHERE name = ?', (name_part,))
-                    row = cursor.fetchone()
-                    if row:
-                        return row[0]
-            
-            # Check if input is just an account code
-            if len(account) == 4 and account.isdigit():
-                cursor.execute('SELECT type FROM accounts WHERE code = ?', (account,))
-                row = cursor.fetchone()
-                if row:
-                    return row[0]
-                    
-            # Otherwise, look up by name (exact match)
-            cursor.execute('SELECT type FROM accounts WHERE name = ?', (account,))
-            row = cursor.fetchone()
-            if row:
-                return row[0]
-                  # If account not found, return None (account must exist in chart of accounts)
-            return None
-            
-        debit_type = get_or_add_account_type(debit_account)
-        credit_type = get_or_add_account_type(credit_account)
+                cursor.execute('''
+                    SELECT name, type, code
+                    FROM accounts 
+                    WHERE (code = ? OR LOWER(name) = ?) AND is_postable = 1
+                ''', (code_part, name_part))
+                
+                result = cursor.fetchone()
+                if result:
+                    return result
         
-        # CRITICAL: Validate that both accounts exist before creating entry
-        if debit_type is None:
-            raise ValueError(f"Debit account '{debit_account}' does not exist in the chart of accounts. Please create the account first or check the account name.")
-        
-        if credit_type is None:
-            raise ValueError(f"Credit account '{credit_account}' does not exist in the chart of accounts. Please create the account first or check the account name.")
-        
-        # Validate that accounts are postable (can have transactions)
-        if not self.is_account_postable(debit_account):            raise ValueError(f"Debit account '{debit_account}' is not marked as postable. Only accounts marked as postable can have transactions.")
+        # Try partial word matches
+        words = search_term.split()
+        if words:
+            # Create a dynamic query that matches any of the words
+            conditions = []
+            params = []
             
-        if not self.is_account_postable(credit_account):
-            raise ValueError(f"Credit account '{credit_account}' is not marked as postable. Only accounts marked as postable can have transactions.")
+            for word in words:
+                # Add conditions for start, contain, and end matches
+                conditions.extend([
+                    "LOWER(name) LIKE ?",
+                    "LOWER(name) LIKE ?",
+                    "LOWER(name) LIKE ?"
+                ])
+                params.extend([
+                    f"{word}%",      # Starts with
+                    f"% {word} %",   # Contains as whole word
+                    f"% {word}"      # Ends with
+                ])
+            
+            # Build the final query with ordering to prioritize better matches
+            query = f"""
+                SELECT name, type, code
+                FROM accounts 
+                WHERE is_postable = 1 AND ({" OR ".join(conditions)})
+                ORDER BY
+                    CASE 
+                        WHEN LOWER(name) LIKE ? THEN 1  -- Exact match
+                        WHEN LOWER(name) LIKE ? THEN 2  -- Starts with first word
+                        WHEN LOWER(name) LIKE ? THEN 3  -- Contains first word
+                        ELSE 4
+                    END,
+                    LENGTH(name) ASC
+                LIMIT 1
+            """
+            
+            # Add the ordering parameters
+            params.extend([
+                search_term,         # Exact match
+                f"{words[0]}%",      # Starts with first word
+                f"% {words[0]} %"    # Contains first word
+            ])
+            
+            cursor.execute(query, params)
+            result = cursor.fetchone()
+            if result:
+                return result
+            
+        return None, None, None
         
-        # Enforce double-entry: one debit, one credit, same amount
+    def add_journal_entry(self, date, description, debit_account, credit_account, amount):
+        """Add a new journal entry with smart account matching."""
+        # Resolve both accounts
+        debit_name, debit_type, debit_code = self.resolve_account(debit_account)
+        credit_name, credit_type, credit_code = self.resolve_account(credit_account)
+        
+        # Validate accounts exist
+        if not debit_name:
+            raise ValueError(
+                f"Could not find account '{debit_account}' in the chart of accounts. "
+                "Please check the account name or code."
+            )
+            
+        if not credit_name:
+            raise ValueError(
+                f"Could not find account '{credit_account}' in the chart of accounts. "
+                "Please check the account name or code."
+            )
+            
+        # Validate accounts are postable (this is redundant now since resolve_account only returns postable accounts,
+        # but we'll keep it for safety and clarity of error messages)
+        if not self.is_account_postable(debit_name):
+            raise ValueError(f"Account '{debit_name}' is not marked as postable. Only postable accounts can have transactions.")
+            
+        if not self.is_account_postable(credit_name):
+            raise ValueError(f"Account '{credit_name}' is not marked as postable. Only postable accounts can have transactions.")
+        
+        # Create the journal entry
         entry_id = str(uuid.uuid4())
         timestamp = datetime.now().isoformat()
         cursor = self.conn.cursor()
         
-        # Get the actual account names if codes were provided
-        def resolve_account(account):
-            if len(account) == 4 and account.isdigit():
-                cursor.execute('SELECT name FROM accounts WHERE code = ?', (account,))
-                row = cursor.fetchone()
-                if row:
-                    return row[0]
-            return account
-            
-        debit_name = resolve_account(debit_account)
-        credit_name = resolve_account(credit_account)
-        
+        # Insert the entry using the resolved account names
         cursor.execute('''
-            INSERT INTO journal_entries (id, date, description, debit_account, credit_account, amount, timestamp)            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO journal_entries (id, date, description, debit_account, credit_account, amount, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (entry_id, date, description, debit_name, credit_name, amount, timestamp))
+        
         self.conn.commit()
         return entry_id
 
@@ -1078,3 +1125,106 @@ class AccountingSystem:
             'total_changes': total_changes,
             'ending_equity': ending_equity
         }
+    
+    def _fuzzy_match_account(self, search_term):
+        """
+        Fuzzy match an account name or code.
+        Returns (matched_name, matched_type, matched_code) or (None, None, None) if no match
+        """
+        cursor = self.conn.cursor()
+        search_term = search_term.strip().lower()
+        
+        # First try exact matches
+        cursor.execute('''
+            SELECT name, type, code FROM accounts 
+            WHERE LOWER(name) = ? OR code = ?
+            AND is_postable = 1
+        ''', (search_term, search_term))
+        result = cursor.fetchone()
+        if result:
+            return result
+            
+        # Then try partial word matches
+        cursor.execute('''
+            SELECT name, type, code FROM accounts 
+            WHERE is_postable = 1
+            ORDER BY 
+                CASE 
+                    WHEN LOWER(name) LIKE ? THEN 1  -- Starts with term
+                    WHEN LOWER(name) LIKE ? THEN 2  -- Contains term as a word
+                    WHEN LOWER(name) LIKE ? THEN 3  -- Contains term anywhere
+                    ELSE 4
+                END,
+                LENGTH(name)  -- Prefer shorter names on tie
+            LIMIT 1
+        ''', (f"{search_term}%", f"% {search_term} %", f"%{search_term}%"))
+        result = cursor.fetchone()
+        if result:
+            return result
+            
+        return None, None, None
+    
+    def _find_matching_account(self, search_term):
+        """Find an account using fuzzy matching.
+        Returns tuple of (name, type, code) or None if no match found."""
+        if not search_term:
+            return None
+            
+        cursor = self.conn.cursor()
+        search_term = search_term.lower().strip()
+        
+        # First try exact matches
+        cursor.execute('''
+            SELECT name, type, code 
+            FROM accounts 
+            WHERE LOWER(name) = ? OR code = ?
+        ''', (search_term, search_term))
+        
+        result = cursor.fetchone()
+        if result:
+            return result
+            
+        # Try code-name format
+        if " - " in search_term:
+            parts = search_term.split(" - ", 1)
+            if len(parts) == 2:
+                code_part = parts[0].strip()
+                name_part = parts[1].lower().strip()
+                
+                cursor.execute('''
+                    SELECT name, type, code
+                    FROM accounts 
+                    WHERE code = ? OR LOWER(name) = ?
+                ''', (code_part, name_part))
+                
+                result = cursor.fetchone()
+                if result:
+                    return result
+        
+        # Try partial matches
+        cursor.execute('''
+            SELECT name, type, code
+            FROM accounts 
+            WHERE 
+                LOWER(name) LIKE ? OR
+                LOWER(name) LIKE ? OR
+                LOWER(name) LIKE ?
+            ORDER BY
+                CASE 
+                    WHEN LOWER(name) LIKE ? THEN 1  -- Starts with
+                    WHEN LOWER(name) LIKE ? THEN 2  -- Contains
+                    WHEN LOWER(name) LIKE ? THEN 3  -- Ends with
+                    ELSE 4
+                END,
+                LENGTH(name) ASC
+            LIMIT 1
+        ''', (
+            f"{search_term}%",      # Starts with
+            f"% {search_term} %",   # Contains as whole word
+            f"% {search_term}",     # Ends with
+            f"{search_term}%",      # Same patterns for ORDER BY
+            f"% {search_term} %",
+            f"% {search_term}"
+        ))
+        
+        return cursor.fetchone()

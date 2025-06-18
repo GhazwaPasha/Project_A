@@ -40,10 +40,13 @@ class AccountCard(QFrame):
         self.setStyleSheet("""
             QFrame {
                 background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(255, 255, 255, 0.12);                border-radius: 8px;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 8px;
                 border-color: rgba(0, 0, 0, 0.3);
                 margin: 4px;
-            }            QFrame:hover {
+            }
+            
+            QFrame:hover {
                 background: rgba(255, 255, 255, 0.12);
                 border-color: rgba(255, 255, 255, 0.25);
             }
@@ -183,7 +186,7 @@ class LedgerDocumentView(QWidget):
         self.from_date = None
         self.to_date = None
         self._setup_ui()
-        
+    
     def show_account_details(self, account_name, system, from_date, to_date):
         """Configure and show the ledger for a specific account."""
         self.account_name = account_name
@@ -203,11 +206,24 @@ class LedgerDocumentView(QWidget):
         
     def _setup_ui(self):
         """Setup the document-style ledger view."""
+        # Set base styling
         self.setStyleSheet("""
             QWidget {
                 background: white;
                 color: black;
                 font-family: 'Segoe UI', Arial, sans-serif;
+            }
+            QScrollArea {
+                border: 1px solid #E0E0E0;
+                background: white;
+                padding: 0px;
+                margin: 0px;
+            }
+            QWidget#transactionsContainer {
+                background: white;
+                border: none;
+                margin: 0px;
+                padding: 0px;
             }
         """)
         
@@ -395,32 +411,60 @@ class LedgerDocumentView(QWidget):
             header_layout.addWidget(header_label)
             
         table_layout.addWidget(header_frame)
-          # Scrollable transaction area with modern scrollbar
+        
+        # Create scroll area container
+        scroll_container = QWidget()
+        scroll_container.setObjectName("scrollContainer")
+        scroll_container_layout = QVBoxLayout(scroll_container)
+        scroll_container_layout.setContentsMargins(0, 0, 0, 0)
+        scroll_container_layout.setSpacing(0)
+        
+        # Scrollable transaction area
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setMinimumHeight(400)  # Ensure reasonable minimum height
         
-        # Apply modern scrollbar styling
+        # Transaction content widget
+        self.transactions_widget = QWidget()
+        self.transactions_widget.setObjectName("transactionsContainer")
+        self.transactions_layout = QVBoxLayout(self.transactions_widget)
+        self.transactions_layout.setContentsMargins(0, 0, 0, 0)
+        self.transactions_layout.setSpacing(0)
+        self.transactions_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        # Modern styling
         scroll_style = """
             QScrollArea {
                 border: 1px solid #E0E0E0;
                 background: white;
+                padding: 0px;
+                margin: 0px;
+            }
+            QWidget#scrollContainer {
+                background: white;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }
+            QWidget#transactionsContainer {
+                background: white;
+                border: none;
+                margin: 0px;
+                padding: 0px;
             }
         """ + ModernScrollbarStyles.get_vertical_scrollbar_style()
         scroll.setStyleSheet(scroll_style)
         
-        self.transactions_widget = QWidget()
-        self.transactions_layout = QVBoxLayout(self.transactions_widget)
-        self.transactions_layout.setContentsMargins(0, 0, 0, 0)
-        self.transactions_layout.setSpacing(0)
-        
+        # Set up the widget hierarchy
         scroll.setWidget(self.transactions_widget)
-        table_layout.addWidget(scroll)
+        scroll_container_layout.addWidget(scroll)
+        table_layout.addWidget(scroll_container)
         
-        layout.addWidget(self.table_widget)
+        # Add the table to the main layout with stretch
+        layout.addWidget(self.table_widget, 1)
         
         # Footer
         footer_layout = QHBoxLayout()
-        footer_layout.addStretch()
         
         date_generated = QLabel(f"Generated on: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
         date_generated.setStyleSheet("""
@@ -449,16 +493,25 @@ class LedgerDocumentView(QWidget):
                 
             # Sort by date
             account_entries.sort(key=lambda x: x[0])  # Sort by date
-              # Calculate running balance and totals
+            
+            # Calculate running balance and totals
             running_balance = 0.0
             total_debits = 0.0
             total_credits = 0.0
             
             # Clear existing transactions
-            for i in reversed(range(self.transactions_layout.count())):
-                child = self.transactions_layout.itemAt(i).widget()
-                if child:
-                    child.setParent(None)
+            while self.transactions_layout.count():
+                item = self.transactions_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+            
+            # Create a container widget to hold all transactions
+            transactions_container = QWidget()
+            transactions_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            container_layout = QVBoxLayout(transactions_container)
+            container_layout.setContentsMargins(0, 0, 0, 0)
+            container_layout.setSpacing(0)
+            container_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
             
             if not account_entries:
                 no_data = QLabel("No transactions found for this account in the selected period.")
@@ -466,11 +519,12 @@ class LedgerDocumentView(QWidget):
                     color: #666;
                     font-size: 16px;
                     text-align: center;
-                    padding: 40px;                    background: transparent;
+                    padding: 40px;
+                    background: transparent;
                     border: none;
                 """)
                 no_data.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.transactions_layout.addWidget(no_data)
+                container_layout.addWidget(no_data)
             else:
                 for i, entry in enumerate(account_entries):
                     date, description, debit_account, credit_account, amount = entry
@@ -497,15 +551,17 @@ class LedgerDocumentView(QWidget):
                     else:
                         running_balance -= amount
                         total_credits += amount
-                    
-                    # Create transaction row
+                      # Create transaction row with fixed height
                     row_frame = QFrame()
+                    row_frame.setFixedHeight(40)  # Fixed height for consistency
                     row_color = "#FAFAFA" if i % 2 == 0 else "white"
                     row_frame.setStyleSheet(f"""
                         QFrame {{
                             background: {row_color};
                             border: none;
                             border-bottom: 1px solid #F0F0F0;
+                            padding: 0px;
+                            margin: 0px;
                         }}
                         QFrame:hover {{
                             background: #E3F2FD;
@@ -556,13 +612,15 @@ class LedgerDocumentView(QWidget):
                     balance_label.setFixedWidth(120)
                     row_layout.addWidget(balance_label)
                     
-                    self.transactions_layout.addWidget(row_frame)
+                    container_layout.addWidget(row_frame)
             
-            # Update summary
-            self.opening_balance_label.setText(f"Opening Balance: {format_currency(0)}")  # Would need historical data
+            # Add the transactions container to the main layout
+            self.transactions_layout.addWidget(transactions_container)
+            
+            # Update summary labels
             self.total_debits_label.setText(f"Total Debits: {format_currency(total_debits)}")
             self.total_credits_label.setText(f"Total Credits: {format_currency(total_credits)}")
-            self.closing_balance_label.setText(f"Closing Balance: {format_currency(abs(running_balance))}")
+            self.closing_balance_label.setText(f"Closing Balance: {format_currency(running_balance)}")
             
             # Add stretch at the end
             self.transactions_layout.addStretch()
@@ -891,12 +949,12 @@ class LedgerPage(QWidget):
         self._setup_ui()
         self._apply_styling()
         self._load_accounts()
-        
+    
     def _apply_styling(self):
         """Apply modern glassmorphism styling to the ledger page."""
         GlassmorphismHelper.apply_main_container_effect(self)
         self.setStyleSheet(ModernStyles.get_complete_stylesheet())
-        
+    
     def _setup_ui(self):
         """Setup the main ledger UI."""
         layout = QVBoxLayout(self)
@@ -1237,3 +1295,64 @@ class LedgerPage(QWidget):
                     
         except Exception as e:
             print(f"Error refreshing currency display: {e}")
+    
+    def _create_transactions_area(self):
+        """Create the scrollable transactions area with proper layout."""
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(0)
+        
+        # Table header (stays fixed)
+        header = QWidget()
+        header.setStyleSheet("""
+            background: #1976D2;
+            border-radius: 4px 4px 0px 0px;
+        """)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(15, 12, 15, 12)
+        header_layout.setSpacing(0)
+        
+        headers = [
+            ("Date", 100),
+            ("Description", 300),
+            ("Reference", 120),
+            ("Debit", 120),
+            ("Credit", 120),
+            ("Balance", 120)
+        ]
+        
+        for header_text, width in headers:
+            label = QLabel(header_text)
+            label.setStyleSheet("""
+                color: white;
+                font-weight: 700;
+                font-size: 13px;
+                background: transparent;
+            """)
+            if header_text in ["Debit", "Credit", "Balance"]:
+                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setFixedWidth(width)
+            header_layout.addWidget(label)
+            
+        container_layout.addWidget(header)
+        
+        # Scrollable transactions area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet(ModernScrollbarStyles.get_vertical_scrollbar_style())
+        
+        # Container for transaction rows
+        self.transactions_widget = QWidget()
+        self.transactions_widget.setObjectName("transactionsContainer")
+        self.transactions_layout = QVBoxLayout(self.transactions_widget)
+        self.transactions_layout.setContentsMargins(0, 0, 0, 0)
+        self.transactions_layout.setSpacing(0)
+        self.transactions_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        scroll.setWidget(self.transactions_widget)
+        container_layout.addWidget(scroll, 1)  # Give scroll area stretch factor
+        
+        return container

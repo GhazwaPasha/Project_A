@@ -859,26 +859,38 @@ class EditableAccountComboBox(QComboBox):
         # Check if it's a valid account name that exists in our chart
         if text in self.valid_account_names:
             return True
-            
-        # For partial input during typing: check if it's a valid prefix
+              # For partial input during typing: check if it's a valid part of an account
         # But only if it's unique enough (at least 2 characters)
         if len(text) >= 2:
             text_lower = text.lower()
             
-            # Check for partial matches in account codes (must start with the text)
+            # Check for partial matches in account codes
             if text.isdigit():
-                matching_codes = [code for code in self.valid_account_codes if code.startswith(text)]
+                matching_codes = [code for code in self.valid_account_codes if text in code]
                 if len(matching_codes) >= 1:  # Allow if there's at least one match
                     return True
             
-            # Check for partial matches in full account strings
-            matching_accounts = [acc for acc in self.valid_accounts if acc.lower().startswith(text_lower)]
-            if len(matching_accounts) >= 1:  # Allow if there's at least one match
+            # Find matches in full account strings (including code and name)
+            matching_accounts = []
+            for acc in self.valid_accounts:
+                acc_lower = acc.lower()
+                # Match if:
+                # 1. Input is part of the account string
+                # 2. Input matches a word in the account name
+                if (text_lower in acc_lower or
+                    any(word.startswith(text_lower) for word in acc_lower.split())):
+                    matching_accounts.append(acc)
+            if matching_accounts:
                 return True
                 
-            # Check for partial matches in account names
-            matching_names = [name for name in self.valid_account_names if name.lower().startswith(text_lower)]
-            if len(matching_names) >= 1:  # Allow if there's at least one match
+            # Check for partial matches in account names (more flexible)
+            matching_names = []
+            for name in self.valid_account_names:
+                name_lower = name.lower()
+                # Match if the input is part of a word in the name
+                if text_lower in name_lower or any(word.startswith(text_lower) for word in name_lower.split()):
+                    matching_names.append(name)
+            if matching_names:
                 return True
         
         return False
@@ -904,12 +916,31 @@ class EditableAccountComboBox(QComboBox):
             account_name = account.split(" - ", 1)[1] if " - " in account else ""
             if account_name.lower() == text.lower():
                 return account
-                
-        # Try partial matching for the closest account
+                  # Try partial matching for the closest account
         text_lower = text.lower()
+        best_match = None
+        best_score = 0
+        
         for account in self.valid_accounts:
-            if account.lower().startswith(text_lower):
-                return account
+            account_lower = account.lower()
+            score = 0
+            
+            # Exact word match
+            if text_lower in account_lower.split():
+                score = 100
+            # Word starts with the text
+            elif any(word.startswith(text_lower) for word in account_lower.split()):
+                score = 75
+            # Contains the text
+            elif text_lower in account_lower:
+                score = 50
+                
+            # Prefer shorter matches with equal scores
+            if score > best_score or (score == best_score and len(account) < len(best_match or "")):
+                best_score = score
+                best_match = account
+                
+        return best_match if best_score > 0 else None
                 
         return None
     
@@ -989,12 +1020,15 @@ class EditableAccountComboBox(QComboBox):
             line_edit.setPlaceholderText(text)
     
     def _setup_completer(self):
-        """Setup the auto-completer for smart suggestions."""
-        # Create completer with case-insensitive matching
+        """Setup the auto-completer for smart suggestions."""        # Create completer with smart case-insensitive matching
         self.completer = QCompleter()
         self.completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        # Match if the text appears anywhere in the account string
         self.completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        # Pop up completion as soon as user starts typing
         self.completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        # Set max visible items to show more suggestions
+        self.completer.setMaxVisibleItems(10)
         
         # Set the completer on the line edit
         self.setCompleter(self.completer)
