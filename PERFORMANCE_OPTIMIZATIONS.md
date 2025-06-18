@@ -36,10 +36,10 @@ This document outlines the comprehensive performance optimizations implemented i
 ## Performance Thresholds
 
 ### Entry Count Limits
-- **Soft Limit**: 1,000 entries (warning displayed)
-- **Hard Limit**: 5,000 entries (import rejected)
-- **Virtual Scrolling Hint**: 2,000+ entries
-- **Memory Conservation**: 1,000+ entries
+- **Soft Limit**: 10,000 entries (warning displayed)
+- **Hard Limit**: 100,000 entries (import rejected)
+- **Virtual Scrolling Hint**: 20,000+ entries
+- **Memory Conservation**: 5,000+ entries
 - **Visible-only Validation**: 100+ cards
 
 ### Batch Sizes
@@ -116,8 +116,8 @@ def _get_visible_cards(self):
 5. **Memory Profiling**: Built-in memory usage monitoring
 
 ### Performance Metrics
-- **Target**: Handle 5,000 entries smoothly
-- **Memory**: <500MB for 1,000 entries
+- **Target**: Handle 100,000 entries smoothly
+- **Memory**: <2GB for 10,000 entries
 - **Response Time**: <100ms for UI interactions
 - **Import Speed**: <1 second per 100 entries
 
@@ -125,10 +125,11 @@ def _get_visible_cards(self):
 
 ### Dataset Sizes Tested
 - ✅ 100 entries: Excellent performance
-- ✅ 500 entries: Good performance  
-- ✅ 1,000 entries: Acceptable with optimizations
-- ✅ 2,000 entries: Functional with performance hints
-- ⚠️ 5,000 entries: At hard limit, requires careful handling
+- ✅ 1,000 entries: Excellent performance  
+- ✅ 5,000 entries: Good performance with optimizations
+- ✅ 10,000 entries: Acceptable with performance optimizations
+- ✅ 20,000 entries: Functional with performance hints
+- ⚠️ 100,000 entries: At hard limit, requires careful handling
 
 ### Performance Metrics
 - **Memory Usage**: 60% reduction for large datasets

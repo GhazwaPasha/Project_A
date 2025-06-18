@@ -23,10 +23,9 @@ from ..common import ResponsiveHelper
 
 class BulkEntryPage(QWidget):
     """Clean bulk entry page."""
-    
-    # Constants for entry limits
-    SOFT_LIMIT = 1000  # Show warning above this
-    HARD_LIMIT = 5000  # Reject import above this
+      # Constants for entry limits
+    SOFT_LIMIT = 10000  # Show warning above this
+    HARD_LIMIT = 100000  # Reject import above this
     entries_saved = pyqtSignal()
     
     def __init__(self, system, parent=None):
@@ -319,9 +318,8 @@ class BulkEntryPage(QWidget):
               # Enable bulk save mode for performance
             self._bulk_import_mode = True
             self._skip_validation_updates = True
-            
-            # Apply memory optimizations for large saves
-            if len(valid_entries) > 500:
+              # Apply memory optimizations for large saves
+            if len(valid_entries) > 2000:  # Increased threshold for memory optimization
                 self._optimize_memory_usage()
             
             success_count = 0
@@ -546,15 +544,14 @@ class BulkEntryPage(QWidget):
                     )
                     if response == QMessageBox.No:
                         return
-                
-                # Suggest virtual scrolling for very large imports
-                if total_entries > 2000:  # Suggest for very large imports
+                  # Suggest virtual scrolling for very large imports
+                if total_entries > 20000:  # Suggest for very large imports
                     response = QMessageBox.question(
                         self,
                         "Performance Optimization",
                         f"You are importing {total_entries:,} entries, which may impact performance.\n\n"
                         "For better performance with large datasets, consider:\n"
-                        "• Splitting the data into smaller files (under 1,000 entries each)\n"
+                        "• Splitting the data into smaller files (under 10,000 entries each)\n"
                         "• Using the 'Save All' button to save entries in batches\n"
                         "• Closing other applications to free memory\n\n"
                         "Do you want to continue with this import?",
@@ -765,19 +762,17 @@ class BulkEntryPage(QWidget):
         finally:
             # Restore state
             self._bulk_import_mode = was_bulk_mode
-            self._skip_validation_updates = was_skip_validation
-            
-            # Trigger single validation update after batch operation
+            self._skip_validation_updates = was_skip_validation            # Trigger single validation update after batch operation
             if not was_skip_validation:
                 QTimer.singleShot(50, self._update_validation_and_save_state)
     
     def _should_use_virtual_scrolling(self, entry_count):
         """Determine if virtual scrolling should be recommended for performance."""
-        return entry_count > 2000
+        return entry_count > 20000  # Increased threshold for virtual scrolling recommendation
     
     def _optimize_for_large_dataset(self, entry_count):
         """Apply optimizations for large datasets."""
-        if entry_count > 1000:
+        if entry_count > 5000:  # Increased threshold for memory conservation
             # Disable animations and visual effects
             self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)

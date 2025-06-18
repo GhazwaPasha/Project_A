@@ -68,8 +68,7 @@ class AccountingSystem:
                     description TEXT
                 )
             ''')
-        else:
-            # Check if new columns exist and add them if needed
+        else:            # Check if new columns exist and add them if needed
             cursor.execute("PRAGMA table_info(accounts)")
             columns = [column[1] for column in cursor.fetchall()]
             
@@ -108,8 +107,8 @@ class AccountingSystem:
                 # Update existing accounts with codes if needed
                 self._update_existing_accounts_data()
             
-            self.conn.commit()
-            
+        self.conn.commit()
+    
     def add_journal_entry(self, date, description, debit_account, credit_account, amount):
         # Helper to get or add account type and generate code
         def get_or_add_account_type(account):
@@ -118,15 +117,36 @@ class AccountingSystem:
                 return None
                 
             cursor = self.conn.cursor()
-            # Check if input is an account code
+            
+            # Handle "Code - Name" format (e.g., "5101 - Cost of Goods Sold")
+            if " - " in account:
+                parts = account.split(" - ", 1)
+                if len(parts) == 2:
+                    code_part = parts[0].strip()
+                    name_part = parts[1].strip()
+                    
+                    # Try code first
+                    if len(code_part) == 4 and code_part.isdigit():
+                        cursor.execute('SELECT type FROM accounts WHERE code = ?', (code_part,))
+                        row = cursor.fetchone()
+                        if row:
+                            return row[0]
+                    
+                    # Try name
+                    cursor.execute('SELECT type FROM accounts WHERE name = ?', (name_part,))
+                    row = cursor.fetchone()
+                    if row:
+                        return row[0]
+            
+            # Check if input is just an account code
             if len(account) == 4 and account.isdigit():
                 cursor.execute('SELECT type FROM accounts WHERE code = ?', (account,))
                 row = cursor.fetchone()
                 if row:
                     return row[0]
                     
-            # Otherwise, look up by name
-            cursor.execute('SELECT type, code FROM accounts WHERE name = ?', (account,))
+            # Otherwise, look up by name (exact match)
+            cursor.execute('SELECT type FROM accounts WHERE name = ?', (account,))
             row = cursor.fetchone()
             if row:
                 return row[0]
@@ -144,11 +164,10 @@ class AccountingSystem:
             raise ValueError(f"Credit account '{credit_account}' does not exist in the chart of accounts. Please create the account first or check the account name.")
         
         # Validate that accounts are postable (can have transactions)
-        if not self.is_account_postable(debit_account):
-            raise ValueError(f"Debit account '{debit_account}' is not postable. Only leaf accounts can have transactions posted to them.")
+        if not self.is_account_postable(debit_account):            raise ValueError(f"Debit account '{debit_account}' is not marked as postable. Only accounts marked as postable can have transactions.")
             
         if not self.is_account_postable(credit_account):
-            raise ValueError(f"Credit account '{credit_account}' is not postable. Only leaf accounts can have transactions posted to them.")
+            raise ValueError(f"Credit account '{credit_account}' is not marked as postable. Only accounts marked as postable can have transactions.")
         
         # Enforce double-entry: one debit, one credit, same amount
         entry_id = str(uuid.uuid4())
@@ -829,10 +848,29 @@ class AccountingSystem:
         cursor = self.conn.cursor()
         cursor.execute('SELECT name, type, code, parent_code, level, is_postable, description FROM accounts WHERE parent_code = ? ORDER BY code', (parent_code,))
         return cursor.fetchall()
-    
     def is_account_postable(self, account_name_or_code):
         """Check if an account is postable (can have transactions)."""
         cursor = self.conn.cursor()
+        
+        # Handle "Code - Name" format (e.g., "5101 - Cost of Goods Sold")
+        if " - " in account_name_or_code:
+            parts = account_name_or_code.split(" - ", 1)
+            if len(parts) == 2:
+                code_part = parts[0].strip()
+                name_part = parts[1].strip()
+                
+                # Try code first
+                if len(code_part) == 4 and code_part.isdigit():
+                    cursor.execute('SELECT is_postable FROM accounts WHERE code = ?', (code_part,))
+                    result = cursor.fetchone()
+                    if result:
+                        return result[0] == 1
+                
+                # Try name
+                cursor.execute('SELECT is_postable FROM accounts WHERE name = ?', (name_part,))
+                result = cursor.fetchone()
+                if result:
+                    return result[0] == 1
         
         # Try by name first
         cursor.execute('SELECT is_postable FROM accounts WHERE name = ?', (account_name_or_code,))
