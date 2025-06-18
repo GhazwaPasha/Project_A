@@ -301,14 +301,13 @@ class PageHeader(QWidget):
 
 class DateRangeSelector(QWidget):
     """Professional date range selector with quick filter buttons and custom range."""
-    
-    # Signal for compatibility with ledger
+      # Signal for compatibility with ledger
     from PyQt6.QtCore import pyqtSignal
     dateRangeChanged = pyqtSignal()
     
     def __init__(self, parent=None, callback=None):
         super().__init__(parent)
-        self.callback = callback or (lambda: None)
+        self.callback = callback or (lambda start_date, end_date: None)
         self._setup_ui()
         
     def _setup_ui(self):

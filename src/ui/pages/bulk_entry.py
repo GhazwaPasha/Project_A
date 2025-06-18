@@ -33,13 +33,14 @@ class BulkEntryPage(QWidget):
         self.system = system
         self.entry_cards = []
         self.next_card_number = 1
-        
-        # Load accounts once for all cards
+          # Load accounts once for all cards
         accounts_data = self.system.get_postable_accounts()
         self.formatted_accounts = [f"{acc[2]} - {acc[0]}" for acc in accounts_data]
         
         self._setup_ui()
-        self._add_new_card()  # Start with one empty card    def _apply_styling(self):
+        self._add_new_card()  # Start with one empty card
+    
+    def _apply_styling(self):
         """Apply modern glassmorphism styling."""
         GlassmorphismHelper.apply_main_container_effect(self)
         self.setStyleSheet(ModernStyles.get_complete_stylesheet())
@@ -47,9 +48,9 @@ class BulkEntryPage(QWidget):
     def _setup_ui(self):
         """Setup the main UI."""
         page_layout = QVBoxLayout(self)
-        responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
-        page_layout.setContentsMargins(responsive_margin, responsive_margin, 
-                                     responsive_margin, responsive_margin)
+        # Use 0 left/right margins when used as tab - parent JournalPage provides those
+        page_layout.setContentsMargins(0, ResponsiveHelper.scale_size(24, 16, 32),
+                                     0, ResponsiveHelper.scale_size(24, 16, 32))
         page_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
         
         # Toolbar
