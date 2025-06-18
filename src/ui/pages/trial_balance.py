@@ -12,6 +12,7 @@ from ..common import (
 )
 from PyQt6.QtWidgets import QScrollArea, QSizePolicy, QGraphicsDropShadowEffect
 from PyQt6.QtGui import QFont, QColor
+from ..components.scrollbar_styles import ModernScrollbarStyles
 from ..components.widgets import PageHeader, ActionCard, DateRangeSelector
 from ..components.styles import ModernStyles, GlassmorphismHelper
 from ..components.mica_effect import MicaEffect
@@ -36,31 +37,20 @@ class TrialBalancePage(QWidget):
         self._load_data()
         
     def _setup_ui(self):
-        """Setup clean professional trial balance UI with proper scrolling."""
-        # Create scroll area for better responsiveness
+        """Setup clean professional trial balance UI with proper scrolling."""        # Create scroll area for better responsiveness with modern scrollbar
         scroll_area = QScrollArea(self)
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll_area.setStyleSheet("""
+        
+        # Apply modern scrollbar styling
+        scroll_area_style = """
             QScrollArea {
                 border: none;
                 background: transparent;
             }
-            QScrollBar:vertical {
-                background: rgba(255, 255, 255, 0.1);
-                width: 12px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:vertical {
-                background: rgba(255, 255, 255, 0.3);
-                border-radius: 6px;
-                min-height: 20px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: rgba(255, 255, 255, 0.5);
-            }
-        """)
+        """ + ModernScrollbarStyles.get_combined_scrollbar_style()
+        scroll_area.setStyleSheet(scroll_area_style)
         
         # Content widget
         content_widget = QWidget()
@@ -302,9 +292,8 @@ class TrialBalancePage(QWidget):
         # Set column widths
         self.table.setColumnWidth(2, ResponsiveHelper.scale_size(120, 100, 140))
         self.table.setColumnWidth(3, ResponsiveHelper.scale_size(120, 100, 140))
-        
-        # Professional styling
-        self.table.setStyleSheet(f"""
+          # Professional styling with modern scrollbar
+        table_style = f"""
             QTableWidget {{
                 background: rgba(255, 255, 255, 0.08);
                 border: 1px solid rgba(0, 0, 0, 0.3);
@@ -347,57 +336,9 @@ class TrialBalancePage(QWidget):
                 background: rgba(255, 255, 255, 0.12);
                 border: 1px solid rgba(100, 181, 246, 0.3);
             }}
-            
-            QScrollBar:vertical {{
-                background: rgba(255, 255, 255, 0.08);
-                width: 12px;
-                border-radius: 6px;
-                margin: 0px;
-            }}
-            
-            QScrollBar::handle:vertical {{
-                background: rgba(255, 255, 255, 0.3);
-                border-radius: 6px;
-                min-height: 24px;
-            }}
-            
-            QScrollBar::handle:vertical:hover {{
-                background: rgba(255, 255, 255, 0.4);
-            }}
-            
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-                height: 0px;
-            }}
-            
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
-                background: none;
-            }}
-            
-            QScrollBar:horizontal {{
-                background: rgba(255, 255, 255, 0.08);
-                height: 12px;
-                border-radius: 6px;
-                margin: 0px;
-            }}
-            
-            QScrollBar::handle:horizontal {{
-                background: rgba(255, 255, 255, 0.3);
-                border-radius: 6px;
-                min-width: 24px;
-            }}
-            
-            QScrollBar::handle:horizontal:hover {{
-                background: rgba(255, 255, 255, 0.4);
-            }}
-            
-            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
-                width: 0px;
-            }}
-            
-            QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
-                background: none;
-            }}
-        """)
+        """ + ModernScrollbarStyles.get_combined_scrollbar_style()
+        
+        self.table.setStyleSheet(table_style)
         
         # Disable editing
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)

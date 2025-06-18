@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QDate, pyqtSignal, QTimer
 import pandas as pd
+from ..components.scrollbar_styles import ModernScrollbarStyles
 from ..components.widgets import PageHeader, EditableAccountComboBox
 from ..components.card_based_entry import CardBasedTransactionEntry
 from ..components.shared_styles import get_field_style, get_button_style, load_accounts_from_system, populate_account_combo
@@ -60,25 +61,21 @@ class BulkEntryPage(QWidget):
         self.cards_layout.setContentsMargins(0, 0, 0, 0)
         self.cards_layout.setSpacing(8)
         self.cards_layout.addStretch(1)
-        
-        # Scroll area
+          # Scroll area with modern scrollbar
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll_area.setStyleSheet("""
+        
+        # Apply modern scrollbar styling
+        scroll_area_style = """
             QScrollArea, QWidget#scrollAreaWidgetContents {
                 background: transparent;
                 border: none;
             }
             QWidget { background: transparent; }
-            QScrollBar:vertical {
-                background: rgba(255, 255, 255, 0.1);
-                width: 8px;
-                border-radius: 4px;
-                margin: 0;
-            }
-        """)
+        """ + ModernScrollbarStyles.get_vertical_scrollbar_style()
+        scroll_area.setStyleSheet(scroll_area_style)
         
         scroll_area.setWidget(self.cards_widget)
         page_layout.addWidget(scroll_area, 1)

@@ -8,15 +8,19 @@ from ..common import (
     QTreeWidget, QTreeWidgetItem, QHeaderView, QLineEdit, QGridLayout,
     QComboBox, QCheckBox, QTextEdit, QSplitter, QGroupBox,
     Qt, QColor, QIcon, QFont, QSize, QSizePolicy,
-    ResponsiveHelper
+    QApplication, QCompleter, QStringListModel, QMessageBox,
+    QScrollArea, QSpacerItem, QTabWidget, QStackedWidget,
+    QButtonGroup, QFileDialog, QTableWidget, QTableWidgetItem,
+    QAbstractScrollArea, QDialog
 )
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import (
-    QAbstractItemView, QStackedWidget, QMessageBox,
-    QGraphicsDropShadowEffect, QSpacerItem
-)
-from ..components.styles import ModernStyles, GlassmorphismHelper
+from PyQt6.QtCore import pyqtSignal, QTimer
+from PyQt6.QtWidgets import QGraphicsDropShadowEffect, QProgressDialog
+from PyQt6.QtGui import QPalette, QPixmap, QPainter
+
+from ..components.scrollbar_styles import ModernScrollbarStyles
 from ..components.widgets import PageHeader
+from ..components.styles import ModernStyles, GlassmorphismHelper
+from .dashboard import ResponsiveHelper
 
 
 class AccountFormCard(QFrame):
@@ -429,9 +433,8 @@ class HierarchicalAccountsPage(QWidget):
         self.tree.setRootIsDecorated(True)
         self.tree.setAnimated(True)
         self.tree.setIndentation(20)
-        
-        # Modern tree styling
-        self.tree.setStyleSheet("""
+          # Modern tree styling with shared scrollbar
+        tree_style = """
             QTreeWidget {
                 background: rgba(255, 255, 255, 0.05);
                 border: 1px solid rgba(255, 255, 255, 0.05);
@@ -475,28 +478,9 @@ class HierarchicalAccountsPage(QWidget):
             QHeaderView::section:last {
                 border-top-right-radius: 8px;
             }
-            QScrollBar:vertical {
-                width: 12px;
-                background: transparent;
-                margin: 0;
-            }
-            QScrollBar::handle:vertical {
-                background: rgba(255, 255, 255, 0.2);
-                border-radius: 6px;
-                min-height: 40px;
-                margin: 2px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: rgba(255, 255, 255, 0.3);
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0;
-            }
-            QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical,
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-                background: transparent;
-            }
-        """)
+        """ + ModernScrollbarStyles.get_vertical_scrollbar_style()
+        
+        self.tree.setStyleSheet(tree_style)
         
         # Connect tree selection
         self.tree.itemSelectionChanged.connect(self._on_tree_selection_changed)
@@ -964,7 +948,7 @@ class HierarchicalAccountsPage(QWidget):
             
     def _style_tree(self):
         """Apply modern styling to the tree widget."""
-        self.tree.setStyleSheet(f"""
+        tree_style = f"""
             QTreeWidget {{
                 background: rgba(0, 0, 0, 0.2);
                 border: 1px solid rgba(0, 0, 0, 0.6);
@@ -1021,28 +1005,9 @@ class HierarchicalAccountsPage(QWidget):
             QHeaderView::section:last {{
                 border-top-right-radius: 4px;
             }}
-            QScrollBar:vertical {{
-                width: 12px;
-                background: transparent;
-                margin: 0;
-            }}
-            QScrollBar::handle:vertical {{
-                background: rgba(255, 255, 255, 0.2);
-                border-radius: 6px;
-                min-height: 40px;
-                margin: 2px;
-            }}
-            QScrollBar::handle:vertical:hover {{
-                background: rgba(255, 255, 255, 0.3);
-            }}
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-                height: 0;
-            }}
-            QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical,
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
-                background: transparent;
-            }}
-        """)
+        """ + ModernScrollbarStyles.get_vertical_scrollbar_style()
+        
+        self.tree.setStyleSheet(tree_style)
         
     def _get_filter_button_style(self):
         """Get Windows 11 style filter button styling."""

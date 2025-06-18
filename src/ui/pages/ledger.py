@@ -13,6 +13,8 @@ from PyQt6.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve, QTime
 from PyQt6.QtGui import QFont, QColor, QPalette
 from datetime import datetime, timedelta
 from ...core.utils import format_currency
+
+from ..components.scrollbar_styles import ModernScrollbarStyles
 from ..components.widgets import DateRangeSelector, PageHeader
 from ..components.styles import ModernStyles, GlassmorphismHelper
 from ..common import ResponsiveHelper
@@ -393,29 +395,18 @@ class LedgerDocumentView(QWidget):
             header_layout.addWidget(header_label)
             
         table_layout.addWidget(header_frame)
-        
-        # Scrollable transaction area
+          # Scrollable transaction area with modern scrollbar
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("""
+        
+        # Apply modern scrollbar styling
+        scroll_style = """
             QScrollArea {
                 border: 1px solid #E0E0E0;
                 background: white;
             }
-            QScrollBar:vertical {
-                background: #F5F5F5;
-                width: 12px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:vertical {
-                background: #BDBDBD;
-                border-radius: 6px;
-                min-height: 20px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #9E9E9E;
-            }
-        """)
+        """ + ModernScrollbarStyles.get_vertical_scrollbar_style()
+        scroll.setStyleSheet(scroll_style)
         
         self.transactions_widget = QWidget()
         self.transactions_layout = QVBoxLayout(self.transactions_widget)
@@ -1071,26 +1062,18 @@ class LedgerPage(QWidget):
         filter_layout.addWidget(refresh_btn)
         
         layout.addLayout(filter_layout)
-        
-        # Accounts scroll area
+          # Accounts scroll area with modern scrollbar
         self.accounts_scroll = QScrollArea()
         self.accounts_scroll.setWidgetResizable(True)
-        self.accounts_scroll.setStyleSheet("""
+        
+        # Apply modern scrollbar styling
+        accounts_scroll_style = """
             QScrollArea {
                 border: none;
                 background: transparent;
             }
-            QScrollBar:vertical {
-                background: rgba(255, 255, 255, 0.1);
-                width: 8px;
-                border-radius: 4px;
-            }
-            QScrollBar::handle:vertical {
-                background: rgba(255, 255, 255, 0.3);
-                border-radius: 4px;
-                min-height: 20px;
-            }
-        """)
+        """ + ModernScrollbarStyles.get_vertical_scrollbar_style()
+        self.accounts_scroll.setStyleSheet(accounts_scroll_style)
         
         self.accounts_widget = QWidget()
         self.accounts_layout = QGridLayout(self.accounts_widget)

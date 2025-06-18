@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QDate
 from datetime import datetime
 from ...core.accounting_system import AccountingSystem
+from ..components.scrollbar_styles import ModernScrollbarStyles
 from ..components.widgets import PageHeader, EditableAccountComboBox
 from ..components.styles import ModernStyles, GlassmorphismHelper
 from ..common import ResponsiveHelper
@@ -299,24 +300,21 @@ class SingleEntryTab(QWidget):
         main_layout.addWidget(self.headers_frame)
         
         # Add the fixed content to main layout
-        tab_layout.addWidget(main_container)        # Scrollable transactions area
+        tab_layout.addWidget(main_container)        # Scrollable transactions area with modern scrollbar
         self.transactions_scroll = QScrollArea()
         self.transactions_scroll.setWidgetResizable(True)
         self.transactions_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.transactions_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.transactions_scroll.setStyleSheet("""
+        
+        # Apply modern scrollbar styling
+        transactions_scroll_style = """
             QScrollArea, QWidget#scrollAreaWidgetContents {
                 background: transparent;
                 border: none;
             }
-            QScrollBar:vertical {
-                background: rgba(255, 255, 255, 0.1);
-                width: 8px;
-                border-radius: 4px;
-                margin: 0;
-            }
             QWidget { background: transparent; }
-        """)
+        """ + ModernScrollbarStyles.get_vertical_scrollbar_style()
+        self.transactions_scroll.setStyleSheet(transactions_scroll_style)
           # Transactions container widget (scrollable content)
         self.transactions_widget = QWidget()
         self.transactions_widget.setObjectName("scrollAreaWidgetContents")

@@ -11,9 +11,14 @@ Built with ledger-style card design and glassmorphism UI.
 
 from ..common import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QScrollArea,
-    ResponsiveHelper, Qt, QGridLayout, QSizePolicy, QSpacerItem, QStackedWidget
+    ResponsiveHelper, Qt, QGridLayout, QSizePolicy, QSpacerItem, QStackedWidget,
+    QMessageBox
 )
-from PyQt6.QtWidgets import QMessageBox
+from PyQt6.QtCore import QPropertyAnimation, QEasingCurve, QTimer
+from PyQt6.QtWidgets import QGraphicsDropShadowEffect
+from PyQt6.QtGui import QFont, QColor
+
+from ..components.scrollbar_styles import ModernScrollbarStyles
 from ..components.widgets import PageHeader, DateRangeSelector
 from ..components.report_views import (
     IncomeStatementView, BalanceSheetView, CashFlowStatementView, StatementOfEquityView
@@ -467,32 +472,20 @@ class ReportsPage(QWidget):
         
         # Top KPI section (non-expandable, always visible)
         self._create_kpi_section(page_layout)
-        
-        # Scrollable sections area - only for expandable sections
+          # Scrollable sections area - only for expandable sections with modern scrollbar
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll_area.setStyleSheet("""
+        
+        # Apply modern scrollbar styling
+        scroll_area_style = """
             QScrollArea {
                 background: transparent;
                 border: none;
             }
-            QScrollBar:vertical {
-                background: rgba(255, 255, 255, 0.1);
-                width: 8px;
-                border-radius: 4px;
-                margin: 0;
-            }
-            QScrollBar::handle:vertical {
-                background: rgba(255, 255, 255, 0.3);
-                border-radius: 4px;
-                min-height: 20px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: rgba(255, 255, 255, 0.5);
-            }
-        """)
+        """ + ModernScrollbarStyles.get_vertical_scrollbar_style()
+        scroll_area.setStyleSheet(scroll_area_style)
         
         # Scroll content widget - only for expandable sections
         scroll_widget = QWidget()
