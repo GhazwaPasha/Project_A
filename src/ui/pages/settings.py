@@ -86,7 +86,11 @@ class SettingsPage(QWidget):
         """)
         
         self.currency_combo = QComboBox()
-        self.currency_combo.addItems(["USD ($)", "EUR (€)", "GBP (£)", "CAD (C$)", "AUD (A$)"])
+        self.currency_combo.addItems([
+            "USD ($)", "EUR (€)", "GBP (£)", "JPY (¥)", "CAD (C$)", 
+            "AUD (A$)", "CHF (CHF)", "CNY (¥)", "INR (₹)", "PKR (Rs)", 
+            "SAR (ر.س)", "AED (د.إ)", "KWD (د.ك)", "QAR (ر.ق)"
+        ])
         self.currency_combo.setStyleSheet(ModernStyles.get_input_style())
         
         currency_layout.addWidget(currency_label)
@@ -257,8 +261,12 @@ class SettingsPage(QWidget):
         main_window = self.window()
         if hasattr(main_window, 'currency_symbol'):
             current_currency = main_window.currency_symbol
-            # Set currency combo based on symbol
-            currency_map = {"$": 0, "€": 1, "£": 2, "C$": 3, "A$": 4}
+            # Set currency combo based on symbol - updated mapping for all currencies
+            currency_map = {
+                "$": 0, "€": 1, "£": 2, "¥": 3, "C$": 4, "A$": 5, 
+                "CHF": 6, "₹": 8, "Rs": 9, "ر.س": 10, "د.إ": 11, 
+                "د.ك": 12, "ر.ق": 13
+            }
             index = currency_map.get(current_currency, 0)
             self.currency_combo.setCurrentIndex(index)
         
@@ -272,18 +280,20 @@ class SettingsPage(QWidget):
         try:
             # Get selected values
             currency_text = self.currency_combo.currentText()
-            currency_symbol = currency_text.split("(")[1].split(")")[0]  # Extract symbol
+            # Extract symbol from text like "PKR (Rs)" -> "Rs"
+            if "(" in currency_text and ")" in currency_text:
+                currency_symbol = currency_text.split("(")[1].split(")")[0]
+            else:
+                currency_symbol = "$"  # fallback
+                
             date_format = self.date_combo.currentText()
             theme = self.theme_combo.currentText()
             fiscal_month = self.fiscal_combo.currentText()
             
             # Update main window currency if available
             main_window = self.window()
-            if hasattr(main_window, 'currency_symbol'):
-                main_window.currency_symbol = currency_symbol
-                # Refresh dashboard to show new currency
-                if hasattr(main_window, 'refresh_all_pages'):
-                    main_window.refresh_all_pages()
+            if hasattr(main_window, 'set_currency_symbol'):
+                main_window.set_currency_symbol(currency_symbol)
             
             # Show success message
             from PyQt6.QtWidgets import QMessageBox

@@ -416,13 +416,21 @@ class BaseFinancialStatementView(QWidget):
             <h1>{self.statement_title.upper()}</h1>
             <h2>{self.statement_subtitle}</h2>
             <div class="date">{self.date_label.text()}</div>
-            <p>Content to be implemented by subclasses</p>
-            <div style="text-align: center; margin-top: 50px; color: #999; font-size: 11px;">
+            <p>Content to be implemented by subclasses</p>            <div style="text-align: center; margin-top: 50px; color: #999; font-size: 11px;">
                 {self.date_generated.text()}
             </div>
         </body>
         </html>
         """
+
+    def refresh_currency_display(self):
+        """Refresh currency display when currency symbol changes."""
+        # For report views, we need to regenerate the content with the new currency
+        # This is typically handled by re-calling the show_* method with the same parameters
+        if hasattr(self, 'system') and self.system:
+            # This is a placeholder - each subclass should override this method
+            # to call its specific show method
+            pass
 
 
 class IncomeStatementView(BaseFinancialStatementView):

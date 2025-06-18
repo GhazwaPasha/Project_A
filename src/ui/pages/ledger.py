@@ -122,7 +122,7 @@ class AccountCard(QFrame):
         balance_layout = QHBoxLayout()
         balance_layout.setSpacing(8)
         
-        self.balance_label = QLabel("$0.00")
+        self.balance_label = QLabel(format_currency(0))
         self.balance_label.setStyleSheet("""
             color: white;
             font-weight: 700;
@@ -328,25 +328,25 @@ class LedgerDocumentView(QWidget):
         summary_layout = QHBoxLayout(summary_frame)
         summary_layout.setContentsMargins(20, 15, 20, 15)
         
-        self.opening_balance_label = QLabel("Opening Balance: $0.00")
+        self.opening_balance_label = QLabel(f"Opening Balance: {format_currency(0)}")
         self.opening_balance_label.setStyleSheet("color: #333; font-weight: 600; font-size: 14px; background: transparent; border: none;")
         summary_layout.addWidget(self.opening_balance_label)
         
         summary_layout.addStretch()
         
-        self.total_debits_label = QLabel("Total Debits: $0.00")
+        self.total_debits_label = QLabel(f"Total Debits: {format_currency(0)}")
         self.total_debits_label.setStyleSheet("color: #333; font-weight: 600; font-size: 14px; background: transparent; border: none;")
         summary_layout.addWidget(self.total_debits_label)
         
         summary_layout.addStretch()
         
-        self.total_credits_label = QLabel("Total Credits: $0.00")
+        self.total_credits_label = QLabel(f"Total Credits: {format_currency(0)}")
         self.total_credits_label.setStyleSheet("color: #333; font-weight: 600; font-size: 14px; background: transparent; border: none;")
         summary_layout.addWidget(self.total_credits_label)
         
         summary_layout.addStretch()
         
-        self.closing_balance_label = QLabel("Closing Balance: $0.00")
+        self.closing_balance_label = QLabel(f"Closing Balance: {format_currency(0)}")
         self.closing_balance_label.setStyleSheet("color: #333; font-weight: 700; font-size: 14px; background: transparent; border: none;")
         summary_layout.addWidget(self.closing_balance_label)
         
@@ -559,7 +559,7 @@ class LedgerDocumentView(QWidget):
                     self.transactions_layout.addWidget(row_frame)
             
             # Update summary
-            self.opening_balance_label.setText("Opening Balance: $0.00")  # Would need historical data
+            self.opening_balance_label.setText(f"Opening Balance: {format_currency(0)}")  # Would need historical data
             self.total_debits_label.setText(f"Total Debits: {format_currency(total_debits)}")
             self.total_credits_label.setText(f"Total Credits: {format_currency(total_credits)}")
             self.closing_balance_label.setText(f"Closing Balance: {format_currency(abs(running_balance))}")
@@ -1222,3 +1222,18 @@ class LedgerPage(QWidget):
                 
         except Exception as e:
             print(f"Error refreshing balances: {e}")
+
+    def refresh_currency_display(self):
+        """Refresh all currency displays when currency symbol changes."""
+        try:
+            # Refresh account overview balances
+            self._refresh_balances()
+            
+            # Refresh ledger document view if currently displayed
+            if hasattr(self, 'document_view') and self.document_view:
+                # If we have a current account selected, refresh its display
+                if hasattr(self.document_view, 'current_account') and self.document_view.current_account:
+                    self.document_view.load_account_ledger(self.document_view.current_account)
+                    
+        except Exception as e:
+            print(f"Error refreshing currency display: {e}")

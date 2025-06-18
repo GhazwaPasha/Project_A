@@ -17,7 +17,7 @@ from ..common import (
 from PyQt6.QtCore import QPropertyAnimation, QEasingCurve, QTimer
 from PyQt6.QtWidgets import QGraphicsDropShadowEffect
 from PyQt6.QtGui import QFont, QColor
-
+from ...core.utils import format_currency
 from ..components.scrollbar_styles import ModernScrollbarStyles
 from ..components.widgets import PageHeader, DateRangeSelector
 from ..components.report_views import (
@@ -42,7 +42,7 @@ class ReportCard(QFrame):
         
     def _setup_ui(self):
         """Setup the card UI using Windows 11 ledger card design."""
-        self.setFixedHeight(120)  # Match ledger card height
+        self.setFixedHeight(140)  # Increased height to prevent text clipping
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.setStyleSheet("""
             QFrame {
@@ -55,12 +55,11 @@ class ReportCard(QFrame):
             QFrame:hover {
                 background: rgba(255, 255, 255, 0.12);
                 border-color: rgba(255, 255, 255, 0.25);
-            }
-        """)
+            }        """)
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)  # Match ledger card margins
-        layout.setSpacing(8)  # Match ledger card spacing
+        layout.setContentsMargins(16, 10, 16, 10)  # Reduced top/bottom margins for more text space
+        layout.setSpacing(6)  # Reduced spacing for better text fit
         
         # Header row with colored indicator tag (like ledger level tags)
         header_layout = QHBoxLayout()
@@ -104,10 +103,14 @@ class ReportCard(QFrame):
             font-weight: 600;
             font-size: 14px;
             background: transparent;
-            border: none;        """)
+            border: none;
+        """)
         title_label.setWordWrap(True)
         title_label.setAlignment(Qt.AlignmentFlag.AlignTop)
         layout.addWidget(title_label)
+        
+        # Add a small stretch to push value to bottom
+        layout.addStretch()
         
         # Value row
         if self.value:
@@ -154,7 +157,7 @@ class KPICard(QFrame):
         
     def _setup_ui(self):
         """Setup the KPI card UI with Windows 11 styling."""
-        self.setFixedHeight(120)  # Reduced height since no colored indicator row
+        self.setFixedHeight(140)  # Increased height to match ReportCard and prevent clipping
         self.setStyleSheet("""
             QFrame {
                 background: rgba(255, 255, 255, 0.08);
@@ -162,16 +165,15 @@ class KPICard(QFrame):
                 border-radius: 8px;
                 border-color: rgba(0, 0, 0, 0.3);
                 margin: 4px;
-            }
-            QFrame:hover {
+            }            QFrame:hover {
                 background: rgba(255, 255, 255, 0.12);
                 border-color: rgba(255, 255, 255, 0.25);
             }
         """)
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(16, 10, 16, 10)  # Reduced top/bottom margins for more text space
+        layout.setSpacing(6)  # Reduced spacing for better text fit
         
         # Title
         title_label = QLabel(self.title)
@@ -183,6 +185,9 @@ class KPICard(QFrame):
             border: none;
         """)
         layout.addWidget(title_label)
+        
+        # Add stretch to space elements better
+        layout.addStretch()
         
         # Value
         value_label = QLabel(self.value)
@@ -465,14 +470,11 @@ class ReportsPage(QWidget):
         # Page header
         header = PageHeader("Reports", "Comprehensive financial reporting and analysis")
         page_layout.addWidget(header)
-        
-        # Date range selector
+          # Date range selector
         self.date_selector = DateRangeSelector(callback=self._on_date_range_changed)
         page_layout.addWidget(self.date_selector)
         
-        # Top KPI section (non-expandable, always visible)
-        self._create_kpi_section(page_layout)
-          # Scrollable sections area - only for expandable sections with modern scrollbar
+        # Scrollable content area - starts right after date selector
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -487,12 +489,15 @@ class ReportsPage(QWidget):
         """ + ModernScrollbarStyles.get_vertical_scrollbar_style()
         scroll_area.setStyleSheet(scroll_area_style)
         
-        # Scroll content widget - only for expandable sections
+        # Scroll content widget - includes KPI section and all other sections
         scroll_widget = QWidget()
         scroll_layout = QVBoxLayout(scroll_widget)
         # No left/right margins since page already has them
         scroll_layout.setContentsMargins(0, 0, 0, 0)
         scroll_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
+        
+        # KPI section (now inside scroll area)
+        self._create_kpi_section(scroll_layout)
         
         # Financial Statements section (expandable)
         self.statements_section = ExpandableSection("Financial Statements", "Core financial documents and statements", "📋")
@@ -508,10 +513,10 @@ class ReportsPage(QWidget):
         
         # Add stretch to push content to top
         scroll_layout.addStretch()
-        
-        # Set scroll widget
+          # Set scroll widget
         scroll_area.setWidget(scroll_widget)
-          # Add scroll area to main page layout
+        
+        # Add scroll area to main page layout
         page_layout.addWidget(scroll_area, 1)  # Give it stretch factor 1 to fill remaining space
         
         return page
@@ -525,12 +530,11 @@ class ReportsPage(QWidget):
         # KPI cards grid (max 2 rows) - no heading needed
         kpi_grid = QGridLayout()
         kpi_grid.setSpacing(ResponsiveHelper.scale_size(12, 10, 16))
-        
-        # Sample KPI data (8 cards = 2 rows of 4)
+          # Sample KPI data (8 cards = 2 rows of 4) - using dynamic currency formatting
         kpi_data = [
-            ("Total Revenue", "$128,900", "Monthly: +8.2%", "#2196F3"),
-            ("Net Income", "$45,230", "vs Last Month: +12.5%", "#4CAF50"),
-            ("Cash Flow", "$32,150", "Operating Activities", "#FF9800"),
+            ("Total Revenue", format_currency(128900), "Monthly: +8.2%", "#2196F3"),
+            ("Net Income", format_currency(45230), "vs Last Month: +12.5%", "#4CAF50"),
+            ("Cash Flow", format_currency(32150), "Operating Activities", "#FF9800"),
             ("ROE", "15.8%", "vs Last Quarter: +2.1%", "#00BCD4"),            ("A/R Days", "28 days", "Industry Avg: 31", "#9C27B0"),
             ("Debt Ratio", "0.45", "Healthy Range: <0.5", "#4CAF50"),
             ("Quick Ratio", "1.8", "Liquid Assets", "#4CAF50"),
@@ -602,6 +606,15 @@ class ReportsPage(QWidget):
         """Handle date range changes."""
         # Update all data based on new date range
         pass
+    
+    def refresh_currency_display(self):
+        """Refresh all currency displays when currency symbol changes."""
+        try:
+            # Refresh the KPI section which contains currency values
+            # Re-create the main layout to update currency formatting
+            self._setup_ui()
+        except Exception as e:
+            print(f"Error refreshing currency display in reports: {e}")
     
     def _handle_statement_click(self, statement_name):
         """Handle financial statement card clicks."""

@@ -613,8 +613,7 @@ class MainWindow(QMainWindow):
         
         mica_style = MicaEffect.get_mica_stylesheet(self.dark_mode)
         self.setStyleSheet(mica_style)
-        
-        # Reapply Mica effect with new mode
+          # Reapply Mica effect with new mode
         QTimer.singleShot(50, self._apply_mica_effect)
         
     def get_currency_symbol(self):
@@ -640,7 +639,12 @@ class MainWindow(QMainWindow):
         try:
             with open('currency.cfg', 'r', encoding='utf-8') as f:
                 symbol = f.read().strip()
-                if symbol in ('$', 'Rs.'):
+                # Support all currencies from our expanded list
+                supported_currencies = [
+                    "$", "€", "£", "¥", "C$", "A$", "CHF", "₹", "Rs", 
+                    "ر.س", "د.إ", "د.ك", "ر.ق"
+                ]
+                if symbol in supported_currencies:
                     return symbol
         except Exception:
             pass

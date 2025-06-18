@@ -12,6 +12,7 @@ from ..common import (
 )
 from PyQt6.QtWidgets import QScrollArea, QSizePolicy, QGraphicsDropShadowEffect
 from PyQt6.QtGui import QFont, QColor
+from ...core.utils import format_currency
 from ..components.scrollbar_styles import ModernScrollbarStyles
 from ..components.widgets import PageHeader, ActionCard, DateRangeSelector
 from ..components.styles import ModernStyles, GlassmorphismHelper
@@ -452,13 +453,12 @@ class TrialBalancePage(QWidget):
             self.card_balance_status.set_value("BALANCED", "")
         else:
             self.card_balance_status.set_value("UNBALANCED", "")
+          # Amounts - use proper currency formatting
+        self.card_total_debits.set_value(format_currency(trial_data['total_debits']))
+        self.card_total_credits.set_value(format_currency(trial_data['total_credits']))
         
-        # Amounts - include currency symbol in the main value, no subtitle
-        self.card_total_debits.set_value(f"{symbol}{trial_data['total_debits']:,.2f}", "")
-        self.card_total_credits.set_value(f"{symbol}{trial_data['total_credits']:,.2f}", "")
-        
-        # Difference card - include currency symbol in the main value
-        self.card_difference.set_value(f"{symbol}{trial_data['difference']:,.2f}", "")
+        # Difference card - use proper currency formatting
+        self.card_difference.set_value(format_currency(trial_data['difference']))
         
         # Update date info near the table (not in a card)
         account_count = len(trial_data['accounts'])
@@ -569,3 +569,12 @@ class TrialBalancePage(QWidget):
             }
         except:
             return None
+        
+    def refresh_currency_display(self):
+        """Refresh all currency displays when currency symbol changes."""
+        try:
+            # Refresh the trial balance with current date range
+            from_date, to_date = self.date_selector.get_date_range()
+            self._refresh_trial_balance(from_date, to_date)
+        except Exception as e:
+            print(f"Error refreshing currency display in trial balance: {e}")

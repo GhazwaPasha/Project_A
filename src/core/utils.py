@@ -13,11 +13,34 @@ logging.basicConfig(
     format='%(asctime)s %(levelname)s %(message)s'
 )
 
-def format_currency(amount):
+def get_current_currency_symbol():
+    """Get the current currency symbol from the main window."""
+    try:
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app:
+            for widget in app.topLevelWidgets():
+                if hasattr(widget, 'get_currency_symbol'):
+                    return widget.get_currency_symbol()
+    except Exception:
+        pass
+    return '$'  # fallback
+
+def format_currency(amount, symbol=None):
     """Format currency amount with proper formatting."""
+    if symbol is None:
+        symbol = get_current_currency_symbol()
+        
     if amount == 0:
-        return "$0.00"
-    return f"${amount:,.2f}"
+        return f"{symbol}0.00" if symbol not in ["Rs", "₹", "ر.س", "د.إ", "د.ك", "ر.ق"] else f"{symbol} 0.00"
+    
+    # Handle different currency symbol positions
+    if symbol in ["Rs", "₹", "ر.س", "د.إ", "د.ك", "ر.ق"]:
+        # These currencies typically go before the amount with a space
+        return f"{symbol} {amount:,.2f}"
+    else:
+        # Standard currencies like $, €, £, ¥, etc.
+        return f"{symbol}{amount:,.2f}"
 
 def get_mistral_api_key():
     key = os.environ.get('MISTRAL_API_KEY')

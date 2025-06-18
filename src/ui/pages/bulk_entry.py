@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QDate, pyqtSignal, QTimer
 import pandas as pd
+from ...core.utils import format_currency
 from ..components.scrollbar_styles import ModernScrollbarStyles
 from ..components.widgets import PageHeader, EditableAccountComboBox
 from ..components.card_based_entry import CardBasedTransactionEntry
@@ -109,7 +110,7 @@ class BulkEntryPage(QWidget):
         """)
         
         # Summary
-        self.summary_label = QLabel("0 entries, $0.00 total")
+        self.summary_label = QLabel(f"0 entries, {format_currency(0)} total")
         self.summary_label.setStyleSheet("""
             color: rgba(255, 255, 255, 0.7);
             font-size: 14px;

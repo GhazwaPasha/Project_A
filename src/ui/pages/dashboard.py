@@ -7,6 +7,7 @@ from ..common import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     ResponsiveHelper, Qt
 )
+from ...core.utils import format_currency
 from ..components.widgets import MetricCard, ActionCard, PageHeader, DateRangeSelector
 from ..components.styles import ModernStyles, GlassmorphismHelper
 from ..components.mica_effect import MicaEffect
@@ -131,12 +132,11 @@ class DashboardPage(QWidget):
         
         # Get currency symbol
         symbol = self._get_currency_symbol()
-        
-        # Update card values
-        self.card_cash.set_value(f"{cash:,.2f}", symbol)
-        self.card_revenue.set_value(f"{revenue:,.2f}", symbol)
-        self.card_expenses.set_value(f"{expenses:,.2f}", symbol)
-        self.card_liabilities.set_value(f"{liabilities:,.2f}", symbol)
+          # Update card values using proper currency formatting
+        self.card_cash.set_value(format_currency(cash))
+        self.card_revenue.set_value(format_currency(revenue))
+        self.card_expenses.set_value(format_currency(expenses))
+        self.card_liabilities.set_value(format_currency(liabilities))
         
         # Update trend indicators
         self._update_trend_indicators(cash, revenue, expenses, liabilities)
@@ -244,8 +244,12 @@ class DashboardPage(QWidget):
             main_window.stack.setCurrentIndex(5)  # Accounts tab index
             
     def refresh_currency_display(self):
-        """Refresh all currency displays when currency changes."""
-        self._update_metrics()
+        """Refresh all currency displays when currency symbol changes."""
+        try:
+            # Refresh the dashboard metrics
+            self._update_metrics()
+        except Exception as e:
+            print(f"Error refreshing currency display in dashboard: {e}")
         
     def _apply_styling(self):
         """Apply beautiful glassmorphism styling to the dashboard."""        # Apply glassmorphism styling (removed Mica effect as it's handled by MainWindow)
