@@ -306,37 +306,100 @@ class TrialBalancePage(QWidget):
         # Professional styling
         self.table.setStyleSheet(f"""
             QTableWidget {{
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.1);
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
                 border-radius: 8px;
                 color: white;
-                font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
+                font-size: {ResponsiveHelper.scale_size(12, 11, 14)}px;
                 gridline-color: rgba(255, 255, 255, 0.1);
-                selection-background-color: rgba(255, 152, 0, 0.3);
-            }}            QTableWidget::item {{
-                padding: {ResponsiveHelper.scale_size(8, 6, 12)}px 8px;
+                selection-background-color: rgba(100, 181, 246, 0.15);
+            }}
+            
+            QTableWidget::item {{
+                padding: 8px 16px;
                 border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-                border-right: 1px solid rgba(255, 255, 255, 0.05);
-                min-height: {ResponsiveHelper.scale_size(35, 30, 40)}px;
+                min-height: 32px;
+                color: rgba(255, 255, 255, 0.9);
             }}
-            QTableWidget::item:selected {{
-                background: rgba(255, 152, 0, 0.3);
-                color: white;
-            }}
-            QHeaderView::section {{
-                background: rgba(255, 255, 255, 0.1);
-                color: white;
-                padding: {ResponsiveHelper.scale_size(12, 10, 16)}px 8px;
-                border: none;
-                border-right: 1px solid rgba(255, 255, 255, 0.1);
-                border-bottom: 2px solid rgba(255, 255, 255, 0.2);
-                font-weight: 600;
-                font-size: {ResponsiveHelper.scale_size(12, 10, 14)}px;
-            }}
+            
             QTableWidget::item:hover {{
-                background: rgba(255, 255, 255, 0.1);
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
             }}
-        """)        # Disable editing
+            
+            QTableWidget::item:selected {{
+                background: rgba(100, 181, 246, 0.15);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+                color: #90CAF9;
+            }}
+            
+            QHeaderView::section {{
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                color: white;
+                padding: 8px 16px;
+                font-weight: 500;
+                font-size: 12px;
+                min-height: 32px;
+            }}
+            
+            QHeaderView::section:hover {{
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
+            }}
+            
+            QScrollBar:vertical {{
+                background: rgba(255, 255, 255, 0.08);
+                width: 12px;
+                border-radius: 6px;
+                margin: 0px;
+            }}
+            
+            QScrollBar::handle:vertical {{
+                background: rgba(255, 255, 255, 0.3);
+                border-radius: 6px;
+                min-height: 24px;
+            }}
+            
+            QScrollBar::handle:vertical:hover {{
+                background: rgba(255, 255, 255, 0.4);
+            }}
+            
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+            
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                background: none;
+            }}
+            
+            QScrollBar:horizontal {{
+                background: rgba(255, 255, 255, 0.08);
+                height: 12px;
+                border-radius: 6px;
+                margin: 0px;
+            }}
+            
+            QScrollBar::handle:horizontal {{
+                background: rgba(255, 255, 255, 0.3);
+                border-radius: 6px;
+                min-width: 24px;
+            }}
+            
+            QScrollBar::handle:horizontal:hover {{
+                background: rgba(255, 255, 255, 0.4);
+            }}
+            
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+                width: 0px;
+            }}
+            
+            QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
+                background: none;
+            }}
+        """)
+        
+        # Disable editing
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSortingEnabled(True)        # Set minimum height to show at least 11 rows plus header and totals
         # Calculation: Header(40) + 11 rows(45×11=495) + totals(50) + padding(30) = ~615px

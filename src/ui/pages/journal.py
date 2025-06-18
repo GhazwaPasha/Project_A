@@ -27,16 +27,16 @@ class TransactionCard(QFrame):
         
     def _setup_ui(self):
         """Setup the transaction card UI."""
-        self.setStyleSheet("""
-            QFrame {
-                background: rgba(255, 255, 255, 0.05);                border: 1px solid rgba(0, 0, 0, 0.3);
+        self.setStyleSheet("""            QFrame {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
                 border-radius: 8px;
-                margin: 2px 0px;
-                min-height: 45px;
+                margin: 4px 0px;
+                min-height: 48px;
             }
             QFrame:hover {
-                background: rgba(255, 255, 255, 0.08);
-                border-color: rgba(255, 255, 255, 0.2);
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
             }
         """)
         
@@ -317,12 +317,12 @@ class SingleEntryTab(QWidget):
             }
             QWidget { background: transparent; }
         """)
-        
-        # Transactions container widget (scrollable content)
+          # Transactions container widget (scrollable content)
         self.transactions_widget = QWidget()
+        self.transactions_widget.setObjectName("scrollAreaWidgetContents")
         self.transactions_layout = QVBoxLayout(self.transactions_widget)
-        self.transactions_layout.setContentsMargins(0, 0, 0, ResponsiveHelper.scale_size(24, 16, 32))
-        self.transactions_layout.setSpacing(8)        
+        self.transactions_layout.setContentsMargins(8, 8, 8, ResponsiveHelper.scale_size(24, 16, 32))
+        self.transactions_layout.setSpacing(4)  # Reduced spacing between cards for a more modern look
         self.transactions_scroll.setWidget(self.transactions_widget)
         tab_layout.addWidget(self.transactions_scroll, 1)  # This takes remaining space
 
