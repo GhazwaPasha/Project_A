@@ -328,22 +328,23 @@ class DateRangeSelector(QWidget):
             btn.setCheckable(True)
             btn.setStyleSheet("""
                 QPushButton {
-                    background: rgba(255, 255, 255, 0.1);
-                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    background: rgba(255, 255, 255, 0.08);
+                    border: 1px solid rgba(0, 0, 0, 0.3);
                     color: white;
-                    border-radius: 6px;
-                    padding: 6px 12px;
+                    border-radius: 8px;
+                    padding: 8px 16px;
                     font-weight: 500;
                     font-size: 12px;
+                    min-height: 32px;
                 }
                 QPushButton:hover {
-                    background: rgba(255, 255, 255, 0.2);
-                    border-color: rgba(255, 255, 255, 0.3);
+                    background: rgba(255, 255, 255, 0.12);
+                    border: 1px solid rgba(100, 181, 246, 0.3);
                 }
                 QPushButton:checked {
-                    background: rgba(100, 181, 246, 0.3);
-                    border-color: #64B5F6;
-                    color: #64B5F6;
+                    background: rgba(100, 181, 246, 0.15);
+                    border: 1px solid rgba(100, 181, 246, 0.5);
+                    color: #90CAF9;
                 }
             """)
             btn.clicked.connect(self._quick_filter_selected)
@@ -352,38 +353,92 @@ class DateRangeSelector(QWidget):
         
         layout.addStretch()  # This pushes the date pickers to the right
         
-        # Custom date range on the right
+        # Custom date range on the right with Windows 11 styling
         self.from_date = QDateEdit()
         self.from_date.setDate(QDate.currentDate().addDays(-30))
         self.from_date.setCalendarPopup(True)
-        self.from_date.setStyleSheet("""
+        date_picker_style = """
             QDateEdit {
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 6px;
-                padding: 6px 8px;
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                padding: 6px 12px;
                 color: white;
                 font-size: 12px;
+                min-height: 32px;
+                min-width: 130px;
+            }
+            QDateEdit:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
             }
             QDateEdit:focus {
-                border-color: #64B5F6;
-                background: rgba(255, 255, 255, 0.15);
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.5);
             }
-        """)
+            QDateEdit::drop-down {
+                border: none;
+                width: 20px;
+            }
+            QDateEdit::down-arrow {
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 4px solid rgba(255, 255, 255, 0.7);
+                margin-right: 6px;
+            }
+            QCalendarWidget {
+                background-color: rgb(32, 32, 32);
+                color: white;
+            }
+            QCalendarWidget QToolButton {
+                color: white;
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+                padding: 4px;
+            }
+            QCalendarWidget QToolButton:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
+            QCalendarWidget QMenu {
+                background-color: rgb(32, 32, 32);
+                color: white;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+            }
+            QCalendarWidget QSpinBox {
+                color: white;
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 4px;
+                padding: 2px;
+            }
+            QCalendarWidget QAbstractItemView:enabled {
+                color: white;
+                background: rgb(32, 32, 32);
+                selection-background-color: rgba(100, 181, 246, 0.3);
+                selection-color: white;
+            }
+            QCalendarWidget QWidget#qt_calendar_navigationbar {
+                background: rgb(32, 32, 32);
+            }
+        """
+        self.from_date.setStyleSheet(date_picker_style)
         self.from_date.dateChanged.connect(self._on_date_changed)
         layout.addWidget(self.from_date)
         
         to_label = QLabel("to")
-        to_label.setStyleSheet("color: rgba(255, 255, 255, 0.5); background: transparent; border: none;")
+        to_label.setStyleSheet("color: rgba(255, 255, 255, 0.7); background: transparent; border: none; font-size: 12px; font-weight: 500;")
         layout.addWidget(to_label)
         
         self.to_date = QDateEdit()
         self.to_date.setDate(QDate.currentDate())
         self.to_date.setCalendarPopup(True)
-        self.to_date.setStyleSheet(self.from_date.styleSheet())
+        self.to_date.setStyleSheet(date_picker_style)
         self.to_date.dateChanged.connect(self._on_date_changed)
         layout.addWidget(self.to_date)
-          # Set default selection
+        
+        # Set default selection
         self.quick_buttons.button(0).setChecked(True)  # This Month
         
     def _on_date_changed(self):

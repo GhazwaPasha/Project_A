@@ -36,8 +36,8 @@ class CardBasedTransactionEntry(QFrame):
         self.setStyleSheet("""
             QFrame {
                 background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                border-radius: 10px;
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
                 padding: 12px 16px;
                 margin: 2px 0px;
                 min-height: 76px;
@@ -168,9 +168,8 @@ class CardBasedTransactionEntry(QFrame):
     def _get_single_row_field_style(self):
         """Get styling for single row input fields."""
         return """
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);            border: 1px solid rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
             padding: 4px 6px;
             color: rgba(255, 255, 255, 0.95);
             font-size: 12px;
@@ -319,8 +318,7 @@ class CardBasedTransactionEntry(QFrame):
         """Apply yellow border to indicate missing required field."""
         if hasattr(widget, 'setStyleSheet'):
             base_style = self._get_base_style_for_widget(widget)
-            yellow_style = base_style + """
-                border: 2px solid rgba(255, 193, 7, 0.9) !important;
+            yellow_style = base_style + """                border: 1px solid rgba(255, 193, 7, 0.9) !important;
                 background: rgba(255, 193, 7, 0.1) !important;
             """
             widget.setStyleSheet(yellow_style)
@@ -373,8 +371,7 @@ class CardBasedTransactionEntry(QFrame):
         # Style the context menu to match the app theme
         context_menu.setStyleSheet("""
             QMenu {
-                background: rgba(40, 40, 40, 0.95);
-                border: 1px solid rgba(255, 255, 255, 0.2);
+                background: rgba(40, 40, 40, 0.95);                border: 1px solid rgba(0, 0, 0, 0.3);
                 border-radius: 8px;
                 padding: 4px;
                 color: rgba(255, 255, 255, 0.9);

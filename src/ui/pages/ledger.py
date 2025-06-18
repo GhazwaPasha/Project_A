@@ -835,13 +835,13 @@ class TransactionRowCard(QFrame):
         self.setStyleSheet("""
             QFrame {
                 background: rgba(255, 255, 255, 0.03);
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                border-radius: 6px;
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
                 margin: 1px 0px;
             }
             QFrame:hover {
                 background: rgba(255, 255, 255, 0.06);
-                border-color: rgba(255, 255, 255, 0.15);
+                border-color: rgba(100, 181, 246, 0.3);
             }
         """)
         

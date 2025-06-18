@@ -29,8 +29,7 @@ class TransactionCard(QFrame):
         """Setup the transaction card UI."""
         self.setStyleSheet("""
             QFrame {
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.1);
+                background: rgba(255, 255, 255, 0.05);                border: 1px solid rgba(0, 0, 0, 0.3);
                 border-radius: 8px;
                 margin: 2px 0px;
                 min-height: 45px;
@@ -249,12 +248,13 @@ class SingleEntryTab(QWidget):
             border: none;
         """)
         main_layout.addWidget(header_label)
-          # Create headers frame with proper height and styling
+        
+        # Create headers frame with proper height and styling
         self.headers_frame = QFrame()
         self.headers_frame.setStyleSheet("""
             QFrame {
                 background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(255, 255, 255, 0.15);
+                border: 1px solid rgba(0, 0, 0, 0.3);
                 border-radius: 8px;
                 margin-bottom: 8px;
                 min-height: 45px;
@@ -336,8 +336,8 @@ class SingleEntryTab(QWidget):
         container.setStyleSheet("""
             QFrame {
                 background: rgba(255, 255, 255, 0.08);
-                border-radius: 10px;
-                border: none;
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
             }
         """)
         container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
@@ -347,7 +347,14 @@ class SingleEntryTab(QWidget):
 
         # Header with toggle
         header = QFrame()
-        header.setStyleSheet("background: rgba(255,255,255,0.1); border-radius: 10px;")
+        header.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 0.12);
+                border: none;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+            }
+        """)
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(18, 12, 18, 12)
         header_layout.setSpacing(8)
@@ -361,7 +368,7 @@ class SingleEntryTab(QWidget):
                 border: none;
                 background: transparent;
                 font-size: 18px;
-                color: white;
+                color: rgba(255, 255, 255, 0.9);
             }
         """)
         toggle_btn.setText("▶")
@@ -380,69 +387,302 @@ class SingleEntryTab(QWidget):
         # Form fields grid
         grid = QGridLayout()
         grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(8)
-        grid.setVerticalSpacing(2)        # Labels
+        grid.setHorizontalSpacing(12)
+        grid.setVerticalSpacing(4)
+        
+        # Labels
         labels = ["DATE", "DESCRIPTION", "DEBIT ACCOUNT", "CREDIT ACCOUNT", "AMOUNT"]
         for i, text in enumerate(labels):
             label = QLabel(text)
-            label.setStyleSheet(get_label_style())
+            label.setStyleSheet("""
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 11px;
+                font-weight: 600;
+                background: transparent;
+                border: none;
+                padding: 0px;
+                margin: 0px;
+                letter-spacing: 0.5px;
+            """)
             label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-            grid.addWidget(label, 0, i)        # Input fields
+            grid.addWidget(label, 0, i)
+        
+        # Input fields
         self.date_edit = QDateEdit()
         self.date_edit.setDate(QDate.currentDate())
-        self.date_edit.setFixedHeight(28)
-        self.date_edit.setFixedWidth(120)
-        self.date_edit.setStyleSheet(get_field_style("date"))
-        
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setFixedHeight(32)
+        self.date_edit.setFixedWidth(130)
+        self.date_edit.setStyleSheet("""
+            QDateEdit {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                padding: 4px 12px;
+                color: white;
+                font-size: 12px;
+                min-height: 32px;
+            }
+            QDateEdit:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
+            }
+            QDateEdit:focus {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+            }
+            QDateEdit::drop-down {
+                border: none;
+                width: 20px;
+            }
+            QDateEdit::down-arrow {
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 4px solid rgba(255, 255, 255, 0.7);
+                margin-right: 6px;
+            }
+            QCalendarWidget {
+                background-color: rgb(32, 32, 32);
+                color: white;
+            }
+            QCalendarWidget QToolButton {
+                color: white;
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+                padding: 4px;
+            }
+            QCalendarWidget QToolButton:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
+            QCalendarWidget QMenu {
+                background-color: rgb(32, 32, 32);
+                color: white;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+            }
+            QCalendarWidget QSpinBox {
+                color: white;
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 4px;
+                padding: 2px;
+            }
+            QCalendarWidget QAbstractItemView:enabled {
+                color: white;
+                background: rgb(32, 32, 32);
+                selection-background-color: rgba(100, 181, 246, 0.3);
+                selection-color: white;
+            }
+            QCalendarWidget QWidget#qt_calendar_navigationbar {
+                background: rgb(32, 32, 32);
+            }
+        """)
+
         self.desc_edit = QLineEdit()
         self.desc_edit.setPlaceholderText("Enter description...")
         self.desc_edit.setMinimumWidth(180)
-        self.desc_edit.setMaximumWidth(200)
-        self.desc_edit.setStyleSheet(get_field_style("description"))
+        self.desc_edit.setStyleSheet("""
+            QLineEdit {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                padding: 4px 12px;
+                color: white;
+                font-size: 12px;
+                min-height: 32px;
+            }
+            QLineEdit:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
+            }
+            QLineEdit:focus {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+            }
+            QLineEdit::placeholder {
+                color: rgba(255, 255, 255, 0.5);
+            }
+        """)
         
+        account_combo_style = """
+            QComboBox {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                padding: 4px 12px;
+                color: white;
+                font-size: 12px;
+                min-height: 32px;
+                min-width: 160px;
+            }
+            QComboBox:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
+            }
+            QComboBox:focus {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 20px;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 4px solid rgba(255, 255, 255, 0.7);
+                margin-right: 6px;
+            }
+            QComboBox::placeholder {
+                color: rgba(255, 255, 255, 0.5);
+            }
+            QComboBox QAbstractItemView {
+                background: rgba(40, 40, 40, 0.95);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                color: white;
+                selection-background-color: rgba(100, 181, 246, 0.2);
+                selection-color: white;
+                padding: 4px;
+            }
+            QComboBox QAbstractItemView::item {
+                padding: 8px 12px;
+                border: none;
+                border-radius: 4px;
+                margin: 2px;
+            }
+            QComboBox QAbstractItemView::item:hover {
+                background: rgba(100, 181, 246, 0.1);
+            }
+            QComboBox QAbstractItemView::item:selected {
+                background: rgba(100, 181, 246, 0.2);
+            }
+        """
+
         self.debit_combo = EditableAccountComboBox()
         self.debit_combo.setMinimumWidth(160)
-        self.debit_combo.setMaximumWidth(200)
-        self.debit_combo.setStyleSheet(get_field_style("debit"))
+        self.debit_combo.setMaximumWidth(240)
+        self.debit_combo.setStyleSheet(account_combo_style)
         self._populate_account_combo(self.debit_combo)
         
         self.credit_combo = EditableAccountComboBox()
         self.credit_combo.setMinimumWidth(160)
-        self.credit_combo.setMaximumWidth(200)
-        self.credit_combo.setStyleSheet(get_field_style("credit"))
+        self.credit_combo.setMaximumWidth(240)
+        self.credit_combo.setStyleSheet(account_combo_style)
         self._populate_account_combo(self.credit_combo)
         
         self.amount_edit = QLineEdit()
         self.amount_edit.setPlaceholderText("0.00")
         self.amount_edit.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self.amount_edit.setFixedWidth(120)
-        self.amount_edit.setStyleSheet(get_field_style("amount"))
+        self.amount_edit.setFixedWidth(130)
+        self.amount_edit.setStyleSheet("""
+            QLineEdit {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                padding: 4px 12px;
+                color: white;
+                font-size: 12px;
+                min-height: 32px;
+            }
+            QLineEdit:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
+            }
+            QLineEdit:focus {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+            }
+            QLineEdit::placeholder {
+                color: rgba(255, 255, 255, 0.5);
+            }
+        """)
         
         fields = [self.date_edit, self.desc_edit, self.debit_combo, self.credit_combo, self.amount_edit]
         for i, field in enumerate(fields):
-            grid.addWidget(field, 1, i)        # Add AI entry row directly to the main grid for perfect alignment
-        # AI input field spans from Date column (0) to Description column (1) - exactly matching their combined width
+            grid.addWidget(field, 1, i)
+        
+        # AI input field and buttons
         self.nl_input = QLineEdit()
         self.nl_input.setPlaceholderText("Describe your transaction in plain English...")
-        # Remove any width constraints to let it fill the full span of Date + Description columns
-        self.nl_input.setStyleSheet(get_field_style("description").replace("max-width: 200px;", "").replace("min-width: 180px;", ""))
-        grid.addWidget(self.nl_input, 2, 0, 1, 2)  # row 2, span columns 0-1 (Date + Description)        # Parse button in Debit column (2)
+        self.nl_input.setStyleSheet("""
+            QLineEdit {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                padding: 4px 12px;
+                color: white;
+                font-size: 12px;
+                min-height: 32px;
+            }
+            QLineEdit:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
+            }
+            QLineEdit:focus {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+            }
+            QLineEdit::placeholder {
+                color: rgba(255, 255, 255, 0.5);
+            }
+        """)
+        grid.addWidget(self.nl_input, 2, 0, 1, 2)  # row 2, span columns 0-1 (Date + Description)
+
+        button_base_style = """
+            QPushButton {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                color: white;
+                padding: 4px 16px;
+                font-size: 12px;
+                font-weight: 500;
+                min-height: 32px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
+            }
+            QPushButton:pressed {
+                background: rgba(255, 255, 255, 0.15);
+            }
+        """
+
+        primary_button_style = button_base_style + """
+            QPushButton {
+                background: rgba(100, 181, 246, 0.2);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+                color: #90CAF9;
+            }
+            QPushButton:hover {
+                background: rgba(100, 181, 246, 0.3);
+                border: 1px solid rgba(100, 181, 246, 0.7);
+            }
+            QPushButton:pressed {
+                background: rgba(100, 181, 246, 0.4);
+            }
+        """
+
+        # Interpret button
         parse_btn = QPushButton("Interpret")
-        parse_btn.setStyleSheet(get_button_style(compact=True))
+        parse_btn.setStyleSheet(button_base_style)
         parse_btn.clicked.connect(self._parse_transaction)
-        grid.addWidget(parse_btn, 2, 2)  # row 2, column 2
+        grid.addWidget(parse_btn, 2, 2)  # row 2, column 2 (Debit)
         
-        # Save button in Credit column (3)
+        # Save button (primary)
         save_btn = QPushButton("Save")
-        save_btn.setStyleSheet(get_button_style(primary=True, compact=True))
+        save_btn.setStyleSheet(primary_button_style)
         save_btn.clicked.connect(self._save_entry)
-        grid.addWidget(save_btn, 2, 3)  # row 2, column 3
+        grid.addWidget(save_btn, 2, 3)  # row 2, column 3 (Credit)
         
-        # Clear button in Amount column (4)
+        # Clear button
         clear_btn = QPushButton("Clear")
-        clear_btn.setStyleSheet(get_button_style(secondary=True, compact=True))
+        clear_btn.setStyleSheet(button_base_style)
         clear_btn.clicked.connect(self._clear_form)
-        grid.addWidget(clear_btn, 2, 4)  # row 2, column 4
+        grid.addWidget(clear_btn, 2, 4)  # row 2, column 4 (Amount)
 
         content_layout.addLayout(grid)
 

@@ -86,10 +86,11 @@ class BulkEntryPage(QWidget):
     def _create_toolbar(self):
         """Create the toolbar section."""
         toolbar_frame = QFrame()
-        toolbar_frame.setStyleSheet("""            QFrame {
-                background: rgba(255, 255, 255, 0.06);
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                border-radius: 12px;
+        toolbar_frame.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
                 margin-bottom: 8px;
             }
         """)
