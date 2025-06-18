@@ -15,23 +15,24 @@ class ModernSidebarButton(QPushButton):
         self.icon = QIcon(icon_path)
         self.text_label = text
         self.expanded = expanded
-        
-        # Set icon with responsive sizing
+          # Set icon with responsive sizing
         self.setIcon(self.icon)
         icon_size = ResponsiveHelper.scale_size(24, 20, 28)
         self.setIconSize(QSize(icon_size, icon_size))
         
-        # Configure button properties
+        # Ensure icon is always positioned to the left
+        from PyQt6.QtCore import Qt
+        self.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+          # Configure button properties
         self.setCheckable(True)
         self.setAutoExclusive(True)
         self.update_text()
         self.setObjectName("ModernSidebarButton")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-          # Responsive height
+        # Responsive height
         button_height = ResponsiveHelper.scale_size(48, 44, 56)
         self.setMinimumHeight(button_height)
-        
-        # Apply modern styling
+          # Apply modern styling
         self._apply_modern_styling()
         
     def set_expanded(self, expanded):
@@ -54,11 +55,17 @@ class ModernSidebarButton(QPushButton):
         border_radius = ResponsiveHelper.scale_size(10, 8, 12)
         padding_v = ResponsiveHelper.scale_size(12, 10, 16)
         
-        # CRITICAL: Icon should stay at the same position relative to the button's left edge
-        # regardless of whether text is present or not
-        icon_padding_left = ResponsiveHelper.scale_size(16, 12, 20)
+        # CRITICAL: Different padding for expanded vs collapsed to center icon properly
+        if self.expanded:
+            # When expanded, use standard left padding for text+icon layout
+            icon_padding_left = ResponsiveHelper.scale_size(16, 12, 20)
+        else:
+            # When collapsed, center the icon by using equal left/right padding
+            button_width = ResponsiveHelper.scale_size(80, 70, 90)  # Collapsed sidebar width
+            icon_size = ResponsiveHelper.scale_size(24, 20, 28)
+            # Calculate padding to center icon horizontally
+            icon_padding_left = max(4, (button_width - icon_size - 32) // 2)  # -32 for total margins
         
-        # Both states use the same left padding to keep icon position stable
         self.setStyleSheet(f"""
             QPushButton#ModernSidebarButton {{
                 background: transparent;
@@ -71,6 +78,7 @@ class ModernSidebarButton(QPushButton):
                 text-align: left;
                 margin: 2px 0px;
                 outline: none;
+                qproperty-iconSize: {ResponsiveHelper.scale_size(24, 20, 28)}px {ResponsiveHelper.scale_size(24, 20, 28)}px;
             }}
             QPushButton#ModernSidebarButton:hover {{
                 background: rgba(255, 255, 255, 0.05);
@@ -401,25 +409,22 @@ class MainWindow(QMainWindow):
         shadow.setYOffset(0)
         shadow.setColor(QColor(0, 0, 0, 40))
         sidebar.setGraphicsEffect(shadow)
-        
-        # Main layout with responsive margins
+          # Main layout with responsive margins
         layout = QVBoxLayout(sidebar)
         margin_h = ResponsiveHelper.scale_size(16, 12, 20)
         margin_v = ResponsiveHelper.scale_size(20, 16, 24)
-        spacing = ResponsiveHelper.scale_size(12, 8, 16)
+        # Use consistent spacing between all buttons (toggle + navigation)
+        spacing = ResponsiveHelper.scale_size(8, 6, 10)
         layout.setContentsMargins(margin_h, margin_v, margin_h, margin_v)
-        layout.setSpacing(spacing)
-        
-        # Sidebar header with improved layout
-        header_layout = QHBoxLayout()
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(ResponsiveHelper.scale_size(8, 6, 10))  # Match nav container spacing
-        
-        # Toggle button with modern styling (matched to other icons)
+        layout.setSpacing(spacing)        # Toggle button with modern styling (matched to other icons)
         self.toggle_btn = QPushButton()
         self.toggle_btn.setIcon(QIcon(os.path.join("assets", "icons", "menu_modern.svg")))
         toggle_icon_size = ResponsiveHelper.scale_size(24, 20, 28)  # Increased to match other icons
         self.toggle_btn.setIconSize(QSize(toggle_icon_size, toggle_icon_size))
+        
+        # Ensure icon is always positioned to the left
+        from PyQt6.QtCore import Qt
+        self.toggle_btn.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         # Don't use fixed size - use the same sizing approach as ModernSidebarButton
         button_height = ResponsiveHelper.scale_size(48, 44, 56)
         self.toggle_btn.setMinimumHeight(button_height)
@@ -428,10 +433,9 @@ class MainWindow(QMainWindow):
         self.toggle_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.toggle_btn.clicked.connect(self.toggle_sidebar)
         self._style_toggle_button()
-        header_layout.addWidget(self.toggle_btn)
-        # Header space (removed navigation label)
-        header_layout.addStretch()
-        layout.addLayout(header_layout)
+        
+        # Add toggle button directly to main layout to maintain alignment
+        layout.addWidget(self.toggle_btn)
         
         # Navigation buttons with modern icons
         nav_items = [
@@ -443,22 +447,15 @@ class MainWindow(QMainWindow):
             ("Accounts", os.path.join("assets", "icons", "accounts_modern.svg")),
             ("Settings", os.path.join("assets", "icons", "settings_modern.svg")),
         ]
-        
-        # Create navigation section
-        nav_container = QVBoxLayout()
-        nav_container.setContentsMargins(0, 0, 0, 0)  # No extra margins
-        nav_container.setSpacing(ResponsiveHelper.scale_size(8, 6, 10))  # Consistent spacing
-        
+          # Add navigation buttons directly to main layout for proper alignment
         self.sidebar_buttons = []
         for idx, (label, icon_path) in enumerate(nav_items):
             btn = ModernSidebarButton(icon_path, label, expanded=self.sidebar_expanded)
             btn.clicked.connect(lambda checked, i=idx: self.stack.setCurrentIndex(i))
-            nav_container.addWidget(btn)
+            layout.addWidget(btn)
             self.sidebar_buttons.append(btn)
-            
-        layout.addLayout(nav_container)
-        layout.addStretch()
-          # Apply translucent sidebar styling
+        
+        layout.addStretch()        # Apply translucent sidebar styling
         self._apply_sidebar_styling(sidebar)
         return sidebar
         
@@ -469,29 +466,47 @@ class MainWindow(QMainWindow):
         border_radius = ResponsiveHelper.scale_size(10, 8, 12)
         padding_v = ResponsiveHelper.scale_size(12, 10, 16)
         
-        # CRITICAL: Use the same icon position as the sidebar buttons
-        # Keep toggle button icon in the same position as other icons
-        icon_position_from_left = ResponsiveHelper.scale_size(16, 12, 20)
-        padding_h = icon_position_from_left  # Same padding for both states
+        # For toggle button, always center the icon since it never has text
+        if self.sidebar_expanded:
+            # When sidebar is expanded, align with other buttons that have text
+            icon_padding_left = ResponsiveHelper.scale_size(16, 12, 20)
+        else:
+            # When sidebar is collapsed, center the icon like other collapsed buttons
+            button_width = ResponsiveHelper.scale_size(80, 70, 90)  # Collapsed sidebar width
+            icon_size = ResponsiveHelper.scale_size(24, 20, 28)
+            # Calculate padding to center icon horizontally
+            icon_padding_left = max(4, (button_width - icon_size - 32) // 2)  # -32 for total margins
+        
+        # Get the same icon size as used for the toggle button
+        toggle_icon_size = ResponsiveHelper.scale_size(24, 20, 28)
         
         self.toggle_btn.setStyleSheet(f"""
             QPushButton#SidebarToggle {{
                 background: transparent;
                 border: none;
                 border-radius: {border_radius}px;
-                padding: {padding_v}px {padding_h}px;
+                padding: {padding_v}px {icon_padding_left}px;
                 color: rgba(255, 255, 255, 0.7);
                 font-size: {font_size}px;
                 font-weight: 500;
+                text-align: left;
                 margin: 2px 0px;
+                outline: none;
+                qproperty-iconSize: {toggle_icon_size}px {toggle_icon_size}px;
             }}
             QPushButton#SidebarToggle:hover {{
                 background: rgba(255, 255, 255, 0.05);
                 color: rgba(255, 255, 255, 0.9);
+                outline: none;
             }}
             QPushButton#SidebarToggle:pressed {{
                 background: rgba(255, 255, 255, 0.03);
                 color: rgba(255, 255, 255, 0.8);
+                outline: none;
+            }}
+            QPushButton#SidebarToggle:focus {{
+                outline: none;
+                border: none;
             }}
             /* We don't use the checked state for the toggle button */
         """)
