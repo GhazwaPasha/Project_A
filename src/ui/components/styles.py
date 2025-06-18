@@ -68,10 +68,11 @@ class ModernStyles:
                            stop:0 rgba(255, 255, 255, 0.1), 
                            stop:1 rgba(255, 255, 255, 0.05));
                 border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: {ResponsiveHelper.scale_size(16, 12, 20)}px;
+                border-radius: {ResponsiveHelper.scale_size(8, 6, 10)}px;
                 padding: {ResponsiveHelper.scale_size(24, 18, 32)}px;
                 min-height: {ResponsiveHelper.scale_size(160, 140, 180)}px;
                 max-height: {ResponsiveHelper.scale_size(200, 180, 220)}px;
+                border-color: rgba(0, 0, 0, 0.3);
             }}
             
             QFrame[class="metric-card"]:hover {{
@@ -300,8 +301,8 @@ class GlassmorphismHelper:
         widget.setProperty("class", "glass-card")
         widget.setStyleSheet(f"""            QFrame[class="glass-card"] {{
                 background: rgba(255, 255, 255, {opacity});
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                border-radius: {ResponsiveHelper.scale_size(12, 8, 16)}px;
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: {ResponsiveHelper.scale_size(8, 6, 10)}px;
             }}
         """)
     

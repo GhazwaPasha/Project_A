@@ -42,8 +42,8 @@ class ReportCard(QFrame):
         self.setStyleSheet("""
             QFrame {
                 background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                border-radius: 12px;
+                border: 1px solid rgba(255, 255, 255, 0.12);                border-radius: 8px;
+                border-color: rgba(0, 0, 0, 0.3);
                 margin: 4px;
             }
             QFrame:hover {

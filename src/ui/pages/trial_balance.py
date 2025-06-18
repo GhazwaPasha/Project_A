@@ -120,10 +120,9 @@ class TrialBalancePage(QWidget):
         
         # Card styling - improved to remove border boxes
         card.setStyleSheet(f"""
-            QFrame {{
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 12px;
+            QFrame {{                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
                 margin: 4px;
             }}
             QFrame:hover {{

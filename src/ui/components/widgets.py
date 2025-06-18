@@ -207,10 +207,10 @@ class ActionCard(QFrame):
         desc_label.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         layout.addWidget(desc_label)
         layout.addStretch()
-        
+
     def _apply_styling(self):
         """Apply action card styling with modern glassmorphism and single accent color."""
-        border_radius = ResponsiveHelper.scale_size(12, 10, 16)
+        border_radius = ResponsiveHelper.scale_size(8, 6, 10)
         
         # Use accent color for consistent single-color theming
         accent_rgb = self._hex_to_rgb(self.accent_color)
@@ -218,7 +218,7 @@ class ActionCard(QFrame):
         self.setStyleSheet(f"""
             QFrame {{
                 background: rgba({accent_rgb[0]}, {accent_rgb[1]}, {accent_rgb[2]}, 0.1);
-                border: 1px solid rgba({accent_rgb[0]}, {accent_rgb[1]}, {accent_rgb[2]}, 0.2);
+                border: 1px solid rgba(0, 0, 0, 0.3);
                 border-radius: {border_radius}px;
                 margin: 4px;
             }}
