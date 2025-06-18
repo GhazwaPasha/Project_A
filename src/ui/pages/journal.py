@@ -120,10 +120,12 @@ class JournalPage(QWidget):
         main_layout.setContentsMargins(responsive_margin, responsive_margin, 
                                      responsive_margin, responsive_margin)
         main_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
-        
-        # Page header
+          # Page header
         header = PageHeader("Journal Entry", "Record and manage your financial transactions")
         main_layout.addWidget(header)
+        
+        # Add spacing to align tab buttons with date selector height on other pages
+        main_layout.addSpacing(ResponsiveHelper.scale_size(16, 12, 20))
         
         # Tab widget
         self.tab_widget = QTabWidget()

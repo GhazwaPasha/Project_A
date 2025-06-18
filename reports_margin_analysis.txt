@@ -1,0 +1,42 @@
+=== REPORTS PAGE MARGIN ANALYSIS ===
+
+Widget: ReportsPage
+Path: ReportsPage
+Position: (0, 0) Size: 1103x752
+Visible: True
+Layout: QVBoxLayout
+Layout Margins: left=0, top=0, right=0, bottom=0
+Layout Spacing: 0
+Size Policy: h=Preferred, v=Preferred
+
+  Widget: QStackedWidget
+  Path: ReportsPage/QStackedWidget
+  Position: (0, 0) Size: 1103x752
+  Visible: True
+  Layout: QStackedLayout
+  Layout Margins: left=9, top=9, right=9, bottom=9
+  Layout Spacing: 6
+  Size Policy: h=Preferred, v=Preferred
+
+    Widget: QWidget
+    Path: ReportsPage/QStackedWidget/OverviewPage
+    Position: (0, 0) Size: 1103x752
+    Visible: True
+    Layout: QVBoxLayout
+    Layout Margins: left=0, top=0, right=0, bottom=0
+    Layout Spacing: 6
+    Size Policy: h=Preferred, v=Preferred
+
+      Widget: QScrollArea
+      Path: ReportsPage/QStackedWidget/OverviewPage/QScrollArea
+      Position: (0, 0) Size: 1103x752
+      Visible: True
+
+        Widget: QWidget
+        Path: ReportsPage/QStackedWidget/OverviewPage/QScrollArea/ScrollWidget
+        Position: (0, 0) Size: 1095x835
+        Visible: True
+        Layout: QVBoxLayout
+        Layout Margins: left=32, top=32, right=32, bottom=32
+        Layout Spacing: 32
+        Size Policy: h=Preferred, v=Preferred

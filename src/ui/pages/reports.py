@@ -406,19 +406,37 @@ class ReportsPage(QWidget):
         
         self.cash_flow_view = CashFlowStatementView()
         self.cash_flow_view.backToReports.connect(self._show_overview)
-        self.stacked_widget.addWidget(self.cash_flow_view)
-        
+        self.stacked_widget.addWidget(self.cash_flow_view)        
         self.equity_statement_view = StatementOfEquityView()
         self.equity_statement_view.backToReports.connect(self._show_overview)
         self.stacked_widget.addWidget(self.equity_statement_view)
         
         layout.addWidget(self.stacked_widget)
-        
+    
     def _create_overview_page(self):
         """Create the reports overview page."""
         page = QWidget()
         
-        # Main scroll area
+        # Main page layout - no scroll area at page level
+        page_layout = QVBoxLayout(page)
+        responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
+        page_layout.setContentsMargins(responsive_margin, responsive_margin, 
+                                     responsive_margin, responsive_margin)
+        page_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
+        
+        # Fixed top section (header, date selector, KPIs)
+        # Page header
+        header = PageHeader("Reports", "Comprehensive financial reporting and analysis")
+        page_layout.addWidget(header)
+        
+        # Date range selector
+        self.date_selector = DateRangeSelector(callback=self._on_date_range_changed)
+        page_layout.addWidget(self.date_selector)
+        
+        # Top KPI section (non-expandable, always visible)
+        self._create_kpi_section(page_layout)
+        
+        # Scrollable sections area - only for expandable sections
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -443,45 +461,34 @@ class ReportsPage(QWidget):
                 background: rgba(255, 255, 255, 0.5);
             }
         """)
-          # Scroll content widget
+        
+        # Scroll content widget - only for expandable sections
         scroll_widget = QWidget()
-        main_layout = QVBoxLayout(scroll_widget)
-        main_layout.setContentsMargins(ResponsiveHelper.scale_size(32, 24, 48), 
-                                     ResponsiveHelper.scale_size(32, 24, 48),
-                                     ResponsiveHelper.scale_size(32, 24, 48), 
-                                     ResponsiveHelper.scale_size(32, 24, 48))
-        main_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
-        
-        # Page header
-        header = PageHeader("Reports", "Comprehensive financial reporting and analysis")
-        main_layout.addWidget(header)
-        
-        # Date range selector
-        self.date_selector = DateRangeSelector(callback=self._on_date_range_changed)
-        main_layout.addWidget(self.date_selector)
-        
-        # Top KPI section (non-expandable)
-        self._create_kpi_section(main_layout)
+        scroll_layout = QVBoxLayout(scroll_widget)
+        # No left/right margins since page already has them
+        scroll_layout.setContentsMargins(0, 0, 0, 0)
+        scroll_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
         
         # Financial Statements section (expandable)
         self.statements_section = ExpandableSection("Financial Statements", "Core financial documents and statements", "📋")
-        main_layout.addWidget(self.statements_section)
+        scroll_layout.addWidget(self.statements_section)
         
         # Ratios section (expandable)
         self.ratios_section = ExpandableSection("Financial Ratios", "Calculate and analyze key financial ratios", "📊")
-        main_layout.addWidget(self.ratios_section)
+        scroll_layout.addWidget(self.ratios_section)
         
         # Analysis Reports section (expandable)
         self.analysis_section = ExpandableSection("Analysis Reports", "Advanced financial analysis and insights", "📈")
-        main_layout.addWidget(self.analysis_section)
+        scroll_layout.addWidget(self.analysis_section)
+        
+        # Add stretch to push content to top
+        scroll_layout.addStretch()
         
         # Set scroll widget
         scroll_area.setWidget(scroll_widget)
         
-        # Page layout
-        page_layout = QVBoxLayout(page)
-        page_layout.setContentsMargins(0, 0, 0, 0)
-        page_layout.addWidget(scroll_area)
+        # Add scroll area to main page layout
+        page_layout.addWidget(scroll_area, 1)  # Give it stretch factor 1 to fill remaining space
         
         return page
         
