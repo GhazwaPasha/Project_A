@@ -5,9 +5,37 @@ import random
 
 class AccountingSystem:
     def __init__(self, db_path='accounting.db'):
-        self.conn = sqlite3.connect(db_path)
+        """Initialize the accounting system with SQLite optimizations."""
+        self.db_path = db_path
+        self._setup_connection()
         self.create_tables()
-
+        
+    def _setup_connection(self):
+        """Setup a new SQLite connection with optimized settings."""
+        self.conn = sqlite3.connect(self.db_path)
+        self.conn.execute("PRAGMA synchronous = NORMAL")  # Faster writes
+        self.conn.execute("PRAGMA journal_mode = WAL")    # Write-Ahead Logging
+        self.conn.execute("PRAGMA cache_size = -2000")    # 2MB cache
+        self.conn.execute("PRAGMA temp_store = MEMORY")   # Store temp tables in memory
+        
+    def refresh_connection(self):
+        """Refresh the database connection to ensure fresh data."""
+        if hasattr(self, 'conn') and self.conn:
+            try:
+                self.conn.close()
+            except Exception:
+                pass  # Ignore errors when closing
+        self._setup_connection()
+        
+    def _ensure_connection(self):
+        """Ensure we have a valid database connection."""
+        try:
+            # Test if connection is working
+            self.conn.cursor()
+        except (sqlite3.Error, AttributeError):
+            # Reconnect if there's any issue
+            self._setup_connection()
+            
     def create_tables(self):
         cursor = self.conn.cursor()
         cursor.execute('''
@@ -172,6 +200,7 @@ class AccountingSystem:
 
     def get_trial_balance(self, from_date=None, to_date=None):
         """Get trial balance with proper account name matching."""
+        self._ensure_connection()
         cursor = self.conn.cursor()
         
         # Get all accounts first
@@ -195,42 +224,14 @@ class AccountingSystem:
         
         entries = cursor.fetchall()
         
-        # Helper function to match accounts (handles "code - name" format)
-        def find_matching_account(stored_account_name, account_balances):
-            """Find the account in account_balances that matches the stored account name."""
-            # First try exact match
-            if stored_account_name in account_balances:
-                return stored_account_name
-            
-            # If stored account is in "code - name" format, try to match
-            if ' - ' in stored_account_name:
-                # Extract the name part after " - "
-                parts = stored_account_name.split(' - ', 1)
-                if len(parts) == 2:
-                    account_name = parts[1]
-                    if account_name in account_balances:
-                        return account_name
-            
-            # Try partial matching
-            for account_name in account_balances:
-                if account_name in stored_account_name or stored_account_name in account_name:
-                    return account_name
-            
-            return None
-        
         # Process entries
         for debit_account, credit_account, amount in entries:
             amount = float(amount)
-            
-            # Find matching accounts
-            debit_match = find_matching_account(debit_account, account_balances)
-            credit_match = find_matching_account(credit_account, account_balances)
-            
-            if debit_match:
-                account_balances[debit_match] += amount
-            if credit_match:
-                account_balances[credit_match] -= amount
-        
+            if debit_account in account_balances:
+                account_balances[debit_account] += amount
+            if credit_account in account_balances:
+                account_balances[credit_account] -= amount
+                
         return account_balances
 
     # Placeholder for report generation methods
@@ -447,6 +448,7 @@ class AccountingSystem:
 
     def get_all_accounts(self):
         """Get all accounts ordered by code for proper hierarchy display."""
+        self._ensure_connection()
         cursor = self.conn.cursor()
         cursor.execute('SELECT name, type, code, parent_code, level, is_postable, description FROM accounts ORDER BY code')
         return cursor.fetchall()
@@ -480,15 +482,52 @@ class AccountingSystem:
 
     def add_account(self, name, acc_type, code=None, parent_code=None, level=1, is_postable=True, description=""):
         """Add a new account with hierarchy support."""
+        self._ensure_connection()
         cursor = self.conn.cursor()
         
-        if not code:
-            code = self.generate_account_code(acc_type)
+        # Rest of the method remains the same
+        try:
+            # Verify account doesn't already exist
+            cursor.execute('SELECT COUNT(*) FROM accounts WHERE name = ?', (name,))
+            if cursor.fetchone()[0] > 0:
+                raise ValueError(f"Account '{name}' already exists")
+                
+            # Generate code if not provided
+            if not code:
+                code = self.generate_account_code(acc_type)
+                
+            # Verify parent exists if provided
+            if parent_code:
+                cursor.execute('SELECT COUNT(*) FROM accounts WHERE code = ?', (parent_code,))
+                if cursor.fetchone()[0] == 0:
+                    raise ValueError(f"Parent account with code '{parent_code}' does not exist")
+                    
+                # Verify parent is of the same type
+                cursor.execute('SELECT type FROM accounts WHERE code = ?', (parent_code,))
+                parent_type = cursor.fetchone()[0]
+                if parent_type != acc_type:
+                    raise ValueError(f"Parent account must be of the same type (expected {acc_type}, got {parent_type})")
+                    
+                # Verify parent level is appropriate
+                cursor.execute('SELECT level FROM accounts WHERE code = ?', (parent_code,))
+                parent_level = cursor.fetchone()[0]
+                if parent_level >= level:
+                    raise ValueError("Parent account must be of a higher level")
             
-        cursor.execute('INSERT INTO accounts (name, type, code, parent_code, level, is_postable, description) VALUES (?, ?, ?, ?, ?, ?, ?)', 
-                      (name, acc_type, code, parent_code, level, is_postable, description))
-        self.conn.commit()
-        return code
+            # Add the account
+            cursor.execute(
+                'INSERT INTO accounts (name, type, code, parent_code, level, is_postable, description) VALUES (?, ?, ?, ?, ?, ?, ?)', 
+                (name, acc_type, code, parent_code, level, is_postable, description)
+            )
+            
+            # Commit immediately
+            self.conn.commit()
+            return code
+            
+        except Exception as e:
+            # Rollback on any error
+            self.conn.rollback()
+            raise e
 
     def edit_account(self, old_name, new_name, new_type, new_code=None, new_parent_code=None, new_level=None, new_is_postable=None, new_description=None):
         """Update an existing account with enhanced hierarchy support."""

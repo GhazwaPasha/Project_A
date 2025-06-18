@@ -320,6 +320,7 @@ class AccountFormCard(QFrame):
             
         self.name_edit.setText(account_data['name'])
         self.code_edit.setText(account_data['code'] or "")
+        self.account_data = account_data  # Store for edit mode
         
         # Set account type
         type_index = self.type_combo.findText(account_data['type'])
@@ -341,8 +342,38 @@ class AccountFormCard(QFrame):
                     self.parent_combo.setCurrentIndex(i)
                     break
                     
+    def reset_form(self):
+        """Reset the form to its initial state."""
+        self.name_edit.clear()
+        self.code_edit.clear()
+        self.type_combo.setCurrentIndex(0)
+        self.level_combo.setCurrentIndex(0)
+        self.parent_combo.clear()
+        self.postable_check.setChecked(True)
+        self.account_data = None
+        self._update_parent_options()
+        
     def _on_submit(self):
         """Handle form submission."""
+        # Validate required fields
+        if not self.name_edit.text().strip():
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setText("Account name is required")
+            msg.setWindowTitle("Validation Error")
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.exec()
+            return
+            
+        if self.level_combo.currentIndex() > 0 and not self.parent_combo.currentData():
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setText("Parent account is required for this level")
+            msg.setWindowTitle("Validation Error")
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.exec()
+            return
+            
         data = {
             'name': self.name_edit.text().strip(),
             'type': self.type_combo.currentText(),
@@ -515,6 +546,48 @@ class HierarchicalAccountsPage(QWidget):
         
     def _create_action_buttons(self, layout):
         """Create action buttons."""
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(8)
+        
+        # Refresh button
+        refresh_btn = QPushButton()
+        refresh_btn.setText("  Refresh")
+        refresh_btn.setToolTip("Refresh the Chart of Accounts")
+        
+        try:
+            # Try to use a modern refresh icon
+            refresh_icon = QIcon("assets/icons/magic.svg")  # Using magic icon as a refresh symbol
+            if not refresh_icon.isNull():
+                refresh_btn.setIcon(refresh_icon)
+            else:
+                refresh_btn.setText("🔄 Refresh")
+        except:
+            refresh_btn.setText("🔄 Refresh")
+            
+        refresh_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 4px;
+                padding: 8px 20px;
+                color: white;
+                font-size: 13px;
+                font-weight: 500;
+                text-align: left;
+                icon-size: 16px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+            }
+            QPushButton:pressed {
+                background: rgba(255, 255, 255, 0.15);
+                border: 1px solid rgba(255, 255, 255, 0.3);
+            }
+        """)
+        refresh_btn.clicked.connect(self._refresh_data)
+        button_layout.addWidget(refresh_btn)
+        
         # Add Account button
         add_btn = QPushButton()
         add_btn.setText("  Add Account")
@@ -530,7 +603,7 @@ class HierarchicalAccountsPage(QWidget):
             
         add_btn.setStyleSheet(self._get_add_button_style())
         add_btn.clicked.connect(self._add_account)
-        layout.addWidget(add_btn)
+        button_layout.addWidget(add_btn)
         
         # Edit Account button
         self.edit_btn = QPushButton()
@@ -548,7 +621,7 @@ class HierarchicalAccountsPage(QWidget):
             
         self.edit_btn.setStyleSheet(self._get_edit_button_style())
         self.edit_btn.clicked.connect(self._edit_selected_account)
-        layout.addWidget(self.edit_btn)
+        button_layout.addWidget(self.edit_btn)
         
         # Delete Account button
         self.delete_btn = QPushButton()
@@ -566,8 +639,72 @@ class HierarchicalAccountsPage(QWidget):
             
         self.delete_btn.setStyleSheet(self._get_delete_button_style())
         self.delete_btn.clicked.connect(self._delete_selected_account)
-        layout.addWidget(self.delete_btn)
+        button_layout.addWidget(self.delete_btn)
         
+        layout.addLayout(button_layout)
+        
+    def _refresh_data(self):
+        """Refresh the chart of accounts data."""
+        # Force a database refresh
+        if hasattr(self.system, 'refresh_connection'):
+            self.system.refresh_connection()
+            
+        # Save current selection and expanded state
+        selected_items = self.tree.selectedItems()
+        selected_code = None
+        if selected_items:
+            selected_code = selected_items[0].data(0, Qt.ItemDataRole.UserRole)['code']
+            
+        # Reload data
+        self._load_data()
+        
+        # If there was a selection, try to restore it
+        if selected_code:
+            root = self.tree.invisibleRootItem()
+            for i in range(root.childCount()):
+                self._find_and_select_item(root.child(i), selected_code)
+                
+        # Show a brief success message
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.setText("Chart of Accounts refreshed successfully")
+        msg.setWindowTitle("Refresh Complete")
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        # Add custom styling to the message box
+        msg.setStyleSheet("""
+            QMessageBox {
+                background-color: rgb(32, 32, 32);
+                color: white;
+            }
+            QMessageBox QLabel {
+                color: white;
+            }
+            QPushButton {
+                background: rgba(0, 120, 215, 0.9);
+                border: 1px solid rgba(0, 0, 0, 0.6);
+                border-radius: 4px;
+                padding: 6px 16px;
+                color: white;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background: rgba(0, 120, 215, 1.0);
+                border: 1px solid rgba(0, 0, 0, 0.7);
+            }
+        """)
+        msg.exec()
+                
+    def _find_and_select_item(self, item, code):
+        """Recursively find and select an item by its code."""
+        if item.data(0, Qt.ItemDataRole.UserRole)['code'] == code:
+            self.tree.setCurrentItem(item)
+            return True
+            
+        for i in range(item.childCount()):
+            if self._find_and_select_item(item.child(i), code):
+                return True
+        return False
+    
     def _add_account(self):
         """Show form to add a new account."""
         self.details_panel.show_form(edit_mode=False)
@@ -694,71 +831,113 @@ class HierarchicalAccountsPage(QWidget):
         
     def _populate_tree(self):
         """Populate the tree with hierarchical account data."""
+        # Store current selection
+        selected_items = self.tree.selectedItems()
+        selected_code = None
+        if selected_items:
+            selected_code = selected_items[0].data(0, Qt.ItemDataRole.UserRole)['code']
+            
+        # Store expanded state
+        expanded_items = []
+        def store_expanded_state(item):
+            if item.isExpanded():
+                expanded_items.append(item.data(0, Qt.ItemDataRole.UserRole)['code'])
+            for i in range(item.childCount()):
+                store_expanded_state(item.child(i))
+                
+        for i in range(self.tree.topLevelItemCount()):
+            store_expanded_state(self.tree.topLevelItem(i))
+            
+        # Clear and repopulate
         self.tree.clear()
         
-        # Get all accounts
-        accounts = self.system.get_all_accounts()
-        
-        # Create items dictionary for quick lookup
-        items = {}
-        
-        # First pass: Create all items
-        for name, acc_type, code, parent_code, level, is_postable, description in accounts:
-            item = QTreeWidgetItem()
-            item.setText(0, code or "")
-            item.setText(1, name)
-            item.setText(2, acc_type)
-            item.setText(3, f"Level {level}")
-            item.setText(4, "✓" if is_postable else "✗")
+        try:
+            # Get all accounts with fresh data
+            accounts = self.system.get_all_accounts()
             
-            # Store account data in item
-            item.setData(0, Qt.ItemDataRole.UserRole, {
-                'name': name,
-                'type': acc_type,
-                'code': code,
-                'parent_code': parent_code,
-                'level': level,
-                'is_postable': is_postable,
-                'description': description
-            })
+            # Create items dictionary for quick lookup
+            items = {}
             
-            # Color coding by level
-            level_colors = {
-                1: QColor(100, 150, 255),    # Blue for level 1
-                2: QColor(150, 200, 100),    # Green for level 2  
-                3: QColor(255, 200, 100)     # Orange for level 3
-            }
-            
-            if level in level_colors:
-                for col in range(5):
-                    item.setForeground(col, level_colors[level])
-                    
-            # Bold font for non-postable accounts (usually headers)
-            if not is_postable:
-                font = QFont()
-                font.setBold(True)
-                for col in range(5):
-                    item.setFont(col, font)
-            
-            items[code] = item
-            
-        # Second pass: Build hierarchy
-        root_items = []
-        for code, item in items.items():
-            account_data = item.data(0, Qt.ItemDataRole.UserRole)
-            parent_code = account_data['parent_code']
-            
-            if parent_code and parent_code in items:
-                items[parent_code].addChild(item)
-            else:
-                root_items.append(item)
+            # First pass: Create all items
+            for name, acc_type, code, parent_code, level, is_postable, description in accounts:
+                item = QTreeWidgetItem()
+                item.setText(0, code or "")
+                item.setText(1, name)
+                item.setText(2, acc_type)
+                item.setText(3, f"Level {level}")
+                item.setText(4, "✓" if is_postable else "✗")
                 
-        # Add root items to tree
-        self.tree.addTopLevelItems(root_items)
-        
-        # Expand all by default for better visibility
-        self.tree.expandAll()
-        
+                # Store account data in item
+                item.setData(0, Qt.ItemDataRole.UserRole, {
+                    'name': name,
+                    'type': acc_type,
+                    'code': code,
+                    'parent_code': parent_code,
+                    'level': level,
+                    'is_postable': is_postable,
+                    'description': description
+                })
+                
+                # Color coding by level
+                level_colors = {
+                    1: QColor(100, 150, 255),    # Blue for level 1
+                    2: QColor(150, 200, 100),    # Green for level 2  
+                    3: QColor(255, 200, 100)     # Orange for level 3
+                }
+                
+                if level in level_colors:
+                    for col in range(5):
+                        item.setForeground(col, level_colors[level])
+                        
+                # Bold font for non-postable accounts (usually headers)
+                if not is_postable:
+                    font = QFont()
+                    font.setBold(True)
+                    for col in range(5):
+                        item.setFont(col, font)
+                
+                items[code] = item
+                
+            # Second pass: Build hierarchy
+            root_items = []
+            for code, item in items.items():
+                account_data = item.data(0, Qt.ItemDataRole.UserRole)
+                parent_code = account_data['parent_code']
+                
+                if parent_code and parent_code in items:
+                    items[parent_code].addChild(item)
+                else:
+                    root_items.append(item)
+                    
+            # Add root items to tree
+            self.tree.addTopLevelItems(root_items)
+            
+            # Restore expanded state
+            def restore_expanded_state(item):
+                code = item.data(0, Qt.ItemDataRole.UserRole)['code']
+                if code in expanded_items:
+                    item.setExpanded(True)
+                if code == selected_code:
+                    self.tree.setCurrentItem(item)
+                for i in range(item.childCount()):
+                    restore_expanded_state(item.child(i))
+                    
+            for i in range(self.tree.topLevelItemCount()):
+                restore_expanded_state(self.tree.topLevelItem(i))
+                
+            # Expand all if no previous state
+            if not expanded_items:
+                self.tree.expandAll()
+                
+        except Exception as e:
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Icon.Critical)
+            msg.setText("Error loading accounts")
+            msg.setInformativeText(str(e))
+            msg.setWindowTitle("Error")
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.exec()
+            
     def _style_tree(self):
         """Apply modern styling to the tree widget."""
         self.tree.setStyleSheet(f"""
@@ -963,6 +1142,7 @@ class AccountDetailsPanel(QStackedWidget):
     def __init__(self, system=None, parent=None):
         super().__init__(parent)
         self.system = system
+        self.is_form_active = False
         self._setup_ui()
         
     def _setup_ui(self):
@@ -979,6 +1159,8 @@ class AccountDetailsPanel(QStackedWidget):
         
     def show_form(self, edit_mode=False, account_data=None):
         """Show the account form."""
+        self.is_form_active = True
+        
         # Create new form if needed
         if not self.form_card:
             self.form_card = AccountFormCard(
@@ -989,19 +1171,105 @@ class AccountDetailsPanel(QStackedWidget):
             self.form_card.formSubmitted.connect(self._on_form_submitted)
             self.form_card.formCancelled.connect(self._on_form_cancelled)
             self.addWidget(self.form_card)
-        
-        # Update form data if editing
-        if edit_mode and account_data:
-            self.form_card.set_account_data(account_data)
+        else:
+            # Reset form for new entry or update for editing
+            self.form_card.reset_form()
+            if edit_mode and account_data:
+                self.form_card.set_account_data(account_data)
+                self.form_card.edit_mode = True
+            else:
+                self.form_card.edit_mode = False
             
         # Show the form
         self.setCurrentWidget(self.form_card)
         
     def show_info(self, account_data=None):
         """Show the account info card."""
-        if account_data:
-            self._update_info(account_data)
-        self.setCurrentWidget(self.info_card)
+        if not self.is_form_active:  # Only update info if form isn't active
+            if account_data:
+                self._update_info(account_data)
+            self.setCurrentWidget(self.info_card)
+            
+    def _on_form_submitted(self, data):
+        """Handle form submission."""
+        try:
+            # Start by verifying account doesn't already exist
+            existing_accounts = [acc[0] for acc in self.system.get_all_accounts()]
+            if not self.form_card.edit_mode and data['name'] in existing_accounts:
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Icon.Warning)
+                msg.setText("Account already exists")
+                msg.setInformativeText("An account with this name already exists. Please use a different name.")
+                msg.setWindowTitle("Duplicate Account")
+                msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+                msg.exec()
+                return
+
+            # Get the parent
+            if data['parent_code']:
+                parent = self.parent()
+                if hasattr(parent, 'tree'):
+                    parent_item = None
+                    for i in range(parent.tree.topLevelItemCount()):
+                        item = parent.tree.topLevelItem(i)
+                        if item.data(0, Qt.ItemDataRole.UserRole)['code'] == data['parent_code']:
+                            parent_item = item
+                            break
+                            
+                    if parent_item is None:
+                        msg = QMessageBox()
+                        msg.setIcon(QMessageBox.Icon.Warning)
+                        msg.setText("Parent account not found")
+                        msg.setInformativeText("The selected parent account could not be found. Please select a different parent.")
+                        msg.setWindowTitle("Invalid Parent")
+                        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+                        msg.exec()
+                        return
+
+            if self.form_card.edit_mode:
+                self.system.edit_account(
+                    data['old_name'],
+                    data['name'],
+                    data['type'],
+                    data['code'] or None,
+                    data['parent_code'],
+                    data['level'],
+                    data['is_postable'],
+                    ""  # No description in new design
+                )
+            else:
+                self.system.add_account(
+                    data['name'],
+                    data['type'],
+                    data['code'] or None,
+                    data['parent_code'],
+                    data['level'],
+                    data['is_postable'],
+                    ""  # No description in new design
+                )
+            
+            # Switch back to info view
+            self.is_form_active = False
+            self.show_info()
+
+            # Refresh parent page
+            parent = self.parent()
+            if hasattr(parent, '_load_data'):
+                parent._load_data()
+
+        except Exception as e:
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Icon.Critical)
+            msg.setText("Error saving account")
+            msg.setInformativeText(str(e))
+            msg.setWindowTitle("Error")
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.exec()
+            
+    def _on_form_cancelled(self):
+        """Handle form cancellation."""
+        self.is_form_active = False
+        self.show_info()
         
     def _create_info_widget(self):
         """Create widget to display selected account information."""
@@ -1037,6 +1305,28 @@ class AccountDetailsPanel(QStackedWidget):
         self._clear_info()
         
         return info_frame
+        
+    def _clear_info(self):
+        """Clear the info panel with a modern empty state."""
+        empty_html = """
+        <div style="color: rgba(255,255,255,0.5); font-family: Segoe UI, Arial, sans-serif; text-align: center;">
+            <div style="margin-bottom: 16px; opacity: 0.7;">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+            <div style="font-size: 15px; font-weight: 500; margin-bottom: 8px;">
+                No Account Selected
+            </div>
+            <div style="font-size: 13px; color: rgba(255,255,255,0.4);">
+                Select an account from the list to view its details
+            </div>
+        </div>
+        """
+        self.info_label.setText(empty_html)
+        self.info_label.setTextFormat(Qt.TextFormat.RichText)
         
     def _update_info(self, account_data):
         """Update the info panel with selected account info."""
@@ -1082,66 +1372,3 @@ class AccountDetailsPanel(QStackedWidget):
         
         self.info_label.setText(info_html)
         self.info_label.setTextFormat(Qt.TextFormat.RichText)
-        
-    def _clear_info(self):
-        """Clear the info panel with a modern empty state."""
-        empty_html = """
-        <div style="color: rgba(255,255,255,0.5); font-family: Segoe UI, Arial, sans-serif; text-align: center;">
-            <div style="margin-bottom: 16px; opacity: 0.7;">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-            </div>
-            <div style="font-size: 15px; font-weight: 500; margin-bottom: 8px;">
-                No Account Selected
-            </div>
-            <div style="font-size: 13px; color: rgba(255,255,255,0.4);">
-                Select an account from the list to view its details
-            </div>
-        </div>
-        """
-        self.info_label.setText(empty_html)
-        self.info_label.setTextFormat(Qt.TextFormat.RichText)
-        
-    def _on_form_submitted(self, data):
-        """Handle form submission."""
-        try:
-            if self.form_card.edit_mode:
-                self.system.edit_account(
-                    data['old_name'],
-                    data['name'],
-                    data['type'],
-                    data['code'] or None,
-                    data['parent_code'],
-                    data['level'],
-                    data['is_postable'],
-                    ""  # No description in new design
-                )
-            else:
-                self.system.add_account(
-                    data['name'],
-                    data['type'],
-                    data['code'] or None,
-                    data['parent_code'],
-                    data['level'],
-                    data['is_postable'],
-                    ""  # No description in new design
-                )
-            
-            # Switch back to info view and refresh parent page
-            self.show_info()
-            if isinstance(self.parent(), HierarchicalAccountsPage):
-                self.parent()._load_data()
-        except Exception as e:
-            msg = QMessageBox()
-            msg.setIcon(QMessageBox.Icon.Critical)
-            msg.setText("Error saving account")
-            msg.setInformativeText(str(e))
-            msg.setWindowTitle("Error")
-            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
-            msg.exec()
-        
-    def _on_form_cancelled(self):
-        """Handle form cancellation."""
