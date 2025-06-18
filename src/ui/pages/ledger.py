@@ -950,46 +950,60 @@ class LedgerPage(QWidget):
         self.type_filter.addItems(["All Types", "Asset", "Liability", "Equity", "Income", "Expense"])
         self.type_filter.setStyleSheet("""
             QComboBox {
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 6px;
-                padding: 6px 8px;
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                padding: 8px 16px;
                 color: white;
                 font-size: 12px;
-                min-width: 120px;
+                font-weight: 500;
+                min-height: 32px;
+                min-width: 150px;
+            }
+            QComboBox:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
             }
             QComboBox:focus {
-                border-color: #64B5F6;
+                background: rgba(100, 181, 246, 0.15);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+                color: #90CAF9;
             }
             QComboBox::drop-down {
                 border: none;
+                width: 32px;
             }
             QComboBox::down-arrow {
                 image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 4px solid rgba(255, 255, 255, 0.7);
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid rgba(255, 255, 255, 0.7);
                 margin-right: 8px;
             }
             QComboBox QAbstractItemView {
                 background: rgba(40, 40, 40, 0.95);
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                border-radius: 6px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 8px;
                 color: white;
-                selection-background-color: rgba(100, 181, 246, 0.3);
-                selection-color: white;
+                selection-background-color: rgba(100, 181, 246, 0.15);
+                selection-color: #90CAF9;
                 padding: 4px;
             }
             QComboBox QAbstractItemView::item {
-                padding: 8px 12px;
+                padding: 8px 16px;
                 border: none;
-                border-radius: 4px;
+                border-radius: 6px;
                 margin: 2px;
+                min-height: 24px;
             }
-            QComboBox QAbstractItemView::item:hover {                background: rgba(100, 181, 246, 0.2);
+            QComboBox QAbstractItemView::item:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
             }
             QComboBox QAbstractItemView::item:selected {
-                background: rgba(100, 181, 246, 0.3);
+                background: rgba(100, 181, 246, 0.15);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+                color: #90CAF9;
             }
         """)
         self.type_filter.currentTextChanged.connect(self._filter_accounts)
@@ -1003,19 +1017,26 @@ class LedgerPage(QWidget):
         self.search_box.setFixedWidth(250)
         self.search_box.setStyleSheet("""
             QLineEdit {
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 6px;
-                padding: 6px 8px;
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                padding: 8px 16px;
                 color: white;
                 font-size: 12px;
+                font-weight: 500;
+                min-height: 32px;
+            }
+            QLineEdit:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
             }
             QLineEdit:focus {
-                border-color: #64B5F6;
-                background: rgba(255, 255, 255, 0.15);
+                background: rgba(100, 181, 246, 0.15);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+                color: #90CAF9;
             }
             QLineEdit::placeholder {
-                color: rgba(255, 255, 255, 0.5);
+                color: rgba(255, 255, 255, 0.6);
             }
         """)
         self.search_box.textChanged.connect(self._filter_accounts)
@@ -1027,19 +1048,23 @@ class LedgerPage(QWidget):
         refresh_btn = QPushButton("Refresh Balances")
         refresh_btn.setStyleSheet("""
             QPushButton {
-                background: rgba(100, 181, 246, 0.2);
-                border: 1px solid #64B5F6;
-                color: #64B5F6;
-                border-radius: 6px;
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
                 padding: 8px 16px;
-                font-weight: 600;
+                color: white;
                 font-size: 12px;
+                font-weight: 500;
+                min-height: 32px;
             }
             QPushButton:hover {
-                background: rgba(100, 181, 246, 0.3);
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
             }
             QPushButton:pressed {
-                background: rgba(100, 181, 246, 0.4);
+                background: rgba(100, 181, 246, 0.15);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+                color: #90CAF9;
             }
         """)
         refresh_btn.clicked.connect(self._refresh_balances)

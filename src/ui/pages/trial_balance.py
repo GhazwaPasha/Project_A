@@ -221,19 +221,26 @@ class TrialBalancePage(QWidget):
         self.search_input.setFixedWidth(250)
         self.search_input.setStyleSheet("""
             QLineEdit {
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 6px;
-                padding: 6px 8px;
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                padding: 8px 16px;
                 color: white;
                 font-size: 12px;
+                font-weight: 500;
+                min-height: 32px;
+            }
+            QLineEdit:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
             }
             QLineEdit:focus {
-                border-color: #64B5F6;
-                background: rgba(255, 255, 255, 0.15);
+                background: rgba(100, 181, 246, 0.15);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+                color: #90CAF9;
             }
             QLineEdit::placeholder {
-                color: rgba(255, 255, 255, 0.5);
+                color: rgba(255, 255, 255, 0.6);
             }
         """)
         self.search_input.textChanged.connect(self._filter_accounts)

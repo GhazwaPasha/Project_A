@@ -166,26 +166,27 @@ class JournalPage(QWidget):
             }
             
             QTabBar::tab {
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
                 color: white;
-                border-radius: 6px;
-                padding: 6px 12px;
+                border-radius: 8px;
+                padding: 8px 16px;
                 font-weight: 500;
                 font-size: 12px;
                 margin-right: 8px;
-                min-width: 80px;
+                min-width: 100px;
+                min-height: 32px;
             }
             
             QTabBar::tab:hover {
-                background: rgba(255, 255, 255, 0.2);
-                border-color: rgba(255, 255, 255, 0.3);
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
             }
             
             QTabBar::tab:selected {
-                background: rgba(100, 181, 246, 0.3);
-                border-color: #64B5F6;
-                color: #64B5F6;
+                background: rgba(100, 181, 246, 0.15);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+                color: #90CAF9;
             }
             
             QTabBar::tab:first {
