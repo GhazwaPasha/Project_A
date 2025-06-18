@@ -417,7 +417,7 @@ class TrialBalancePage(QWidget):
         """Load initial data."""
         self._refresh_data()
         
-    def _on_date_range_changed(self):
+    def _on_date_range_changed(self, start_date, end_date):
         """Handle date range changes."""
         self._refresh_data()
         

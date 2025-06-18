@@ -208,12 +208,13 @@ class ExpandableSection(QWidget):
         self.header_frame.setStyleSheet("""
             QFrame {
                 background: rgba(255, 255, 255, 0.08);
-                border: none;
-                border-radius: 12px;
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
                 padding: 0px;
             }
             QFrame:hover {
                 background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
             }
         """)
         self.header_frame.setFixedHeight(60)
@@ -259,14 +260,23 @@ class ExpandableSection(QWidget):
             title_container.addWidget(subtitle_label)
         else:
             title_container.addWidget(title_label)
-        
-        # Toggle indicator (subtle arrow)
+          # Toggle indicator (subtle arrow)
         self.toggle_indicator = QLabel("▶")
         self.toggle_indicator.setStyleSheet("""
-            font-size: 12px;
-            color: rgba(255, 255, 255, 0.6);
-            background: transparent;
-            border: none;
+            QLabel {
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 4px;
+                padding: 4px;
+                min-width: 24px;
+                min-height: 24px;
+                font-size: 12px;
+                color: rgba(255, 255, 255, 0.9);
+            }
+            QLabel:hover {
+                background: rgba(255, 255, 255, 0.15);
+                border: 1px solid rgba(100, 181, 246, 0.3);
+            }
         """)
         self.toggle_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
         

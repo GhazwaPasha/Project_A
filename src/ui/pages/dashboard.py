@@ -208,7 +208,7 @@ class DashboardPage(QWidget):
         mw = self.window()
         return getattr(mw, 'currency_symbol', '$')
         
-    def _on_date_range_changed(self):
+    def _on_date_range_changed(self, start_date, end_date):
         """Handle date range selection changes."""
         self._update_metrics()
         

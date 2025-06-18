@@ -325,12 +325,15 @@ class SingleEntryTab(QWidget):
         self.transactions_layout.setSpacing(4)  # Reduced spacing between cards for a more modern look
         self.transactions_scroll.setWidget(self.transactions_widget)
         tab_layout.addWidget(self.transactions_scroll, 1)  # This takes remaining space
-
+        
     def _create_entry_form(self):
         """Create expandable entry form."""
-        from PyQt6.QtCore import QPropertyAnimation, QEasingCurve
-        from PyQt6.QtWidgets import QGridLayout
+        from PyQt6.QtCore import QPropertyAnimation, QEasingCurve, QDate
+        from PyQt6.QtWidgets import QGridLayout, QDateEdit, QLineEdit
         from ..components.shared_styles import get_field_style, get_button_style, get_label_style
+        
+        # Initialize form fields first
+        self.date_edit = None  # Will be created later
         
         # Main container
         container = QFrame()
@@ -350,30 +353,42 @@ class SingleEntryTab(QWidget):
         header = QFrame()
         header.setStyleSheet("""
             QFrame {
-                background: rgba(255, 255, 255, 0.12);
-                border: none;
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
                 border-top-left-radius: 8px;
                 border-top-right-radius: 8px;
+            }
+            QFrame:hover {
+                background: rgba(255, 255, 255, 0.12);
             }
         """)
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(18, 12, 18, 12)
         header_layout.setSpacing(8)
-        
         title = QLabel("New Transaction")
-        title.setStyleSheet("color: white; font-size: 15px; font-weight: 600; background: transparent;")
+        title.setStyleSheet("""
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 14px;
+            font-weight: 500;
+            background: transparent;
+            border: none;
+        """)
         
         toggle_btn = QLabel()
-        toggle_btn.setStyleSheet("""
-            QLabel {
-                border: none;
-                background: transparent;
-                font-size: 18px;
+        toggle_btn.setStyleSheet("""            QLabel {
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 4px;
+                padding: 4px;
+                min-width: 24px;
+                min-height: 24px;
+                font-size: 12px;
                 color: rgba(255, 255, 255, 0.9);
             }
         """)
-        toggle_btn.setText("▶")
-        
+        toggle_btn.setText("▼")
+        toggle_btn.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
         header_layout.addWidget(title)
         header_layout.addStretch()
         header_layout.addWidget(toggle_btn)
@@ -406,23 +421,19 @@ class SingleEntryTab(QWidget):
                 letter-spacing: 0.5px;
             """)
             label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-            grid.addWidget(label, 0, i)
-        
-        # Input fields
-        self.date_edit = QDateEdit()
+            grid.addWidget(label, 0, i)        # Input fields
+        self.date_edit = QDateEdit()  # Now properly creating the date field
         self.date_edit.setDate(QDate.currentDate())
         self.date_edit.setCalendarPopup(True)
-        self.date_edit.setFixedHeight(32)
         self.date_edit.setFixedWidth(130)
         self.date_edit.setStyleSheet("""
             QDateEdit {
                 background: rgba(255, 255, 255, 0.08);
                 border: 1px solid rgba(0, 0, 0, 0.3);
                 border-radius: 8px;
-                padding: 4px 12px;
+                padding: 8px 12px;
                 color: white;
                 font-size: 12px;
-                min-height: 32px;
             }
             QDateEdit:hover {
                 background: rgba(255, 255, 255, 0.12);
