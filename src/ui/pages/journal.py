@@ -33,7 +33,7 @@ class TransactionCard(QFrame):
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 8px;
                 margin: 2px 0px;
-                min-height: 50px;
+                min-height: 45px;
             }
             QFrame:hover {
                 background: rgba(255, 255, 255, 0.08);
@@ -42,43 +42,53 @@ class TransactionCard(QFrame):
         """)
         
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(12)        # Common style for consistent alignment
-        base_style = "color: rgba(255, 255, 255, 0.9); font-weight: 500; font-size: 14px; background: transparent; border: none;"
-        date_style = "color: rgba(255, 255, 255, 0.7); font-weight: 500; font-size: 14px; background: transparent; border: none;"
-        amount_style = "color: rgba(255, 255, 255, 0.9); font-weight: bold; font-size: 14px; background: transparent; border: none;"
+        layout.setContentsMargins(16, 0, 16, 0)  # Match header padding
+        layout.setSpacing(12)  # Match header spacing
+        
+        # Common styles
+        base_style = """
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 500;
+            font-size: 14px;
+            background: transparent;
+            border: none;
+            padding: 0px;
+            margin: 0px;
+        """
         
         # Date column
         date_value = self.entry_data.get('date', 'N/A')
         date_label = QLabel(str(date_value))
         date_label.setFixedWidth(80)
-        date_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-        date_label.setStyleSheet(date_style)
+        date_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        date_label.setStyleSheet(base_style)
         
         # Description column
         desc_value = self.entry_data.get('description', 'No description')
         desc_label = QLabel(str(desc_value))
-        desc_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        desc_label.setFixedWidth(200)
+        desc_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         desc_label.setStyleSheet(base_style)
         desc_label.setWordWrap(True)
         
         # Debit account column
         debit_account = self.entry_data.get('debit_account', 'N/A')
         debit_label = QLabel(str(debit_account))
-        debit_label.setFixedWidth(140)
-        debit_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        debit_label.setFixedWidth(200)
+        debit_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         debit_label.setStyleSheet(base_style)
+        debit_label.setWordWrap(True)
         
         # Credit account column
         credit_account = self.entry_data.get('credit_account', 'N/A')
         credit_label = QLabel(str(credit_account))
-        credit_label.setFixedWidth(140)
-        credit_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        credit_label.setFixedWidth(200)
+        credit_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         credit_label.setStyleSheet(base_style)
+        credit_label.setWordWrap(True)
         
         # Amount column
         amount = self.entry_data.get('amount', 0)
-        # Format amount properly - handle both string and float
         if isinstance(amount, (int, float)):
             amount_str = f"${amount:,.2f}"
         else:
@@ -89,14 +99,18 @@ class TransactionCard(QFrame):
         
         amount_label = QLabel(amount_str)
         amount_label.setFixedWidth(100)
-        amount_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
-        amount_label.setStyleSheet(amount_style)
+        amount_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        amount_label.setStyleSheet(base_style)
         
+        # Add all columns to layout
         layout.addWidget(date_label)
-        layout.addWidget(desc_label, 1)  # This will stretch
+        layout.addWidget(desc_label)
         layout.addWidget(debit_label)
         layout.addWidget(credit_label)
         layout.addWidget(amount_label)
+        
+        # Set fixed height for consistent row height
+        self.setFixedHeight(45)
 
 
 class JournalPage(QWidget):
@@ -119,15 +133,16 @@ class JournalPage(QWidget):
         responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
         main_layout.setContentsMargins(responsive_margin, responsive_margin, 
                                      responsive_margin, responsive_margin)
-        main_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
-          # Page header
+        main_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))  # Match other pages
+        
+        # Page header with small margin
         header = PageHeader("Journal Entry", "Record and manage your financial transactions")
         main_layout.addWidget(header)
         
-        # Add spacing to align tab buttons with date selector height on other pages
-        main_layout.addSpacing(ResponsiveHelper.scale_size(16, 12, 20))
+        # Small spacer to align with other pages
+        main_layout.addSpacing(ResponsiveHelper.scale_size(20, 16, 24))
         
-        # Tab widget
+        # Tab widget - aligned with other pages' quick filters
         self.tab_widget = QTabWidget()
         self.tab_widget.setStyleSheet(self._get_tab_style())
         
@@ -138,12 +153,9 @@ class JournalPage(QWidget):
         # Bulk entry tab
         self.bulk_entry_tab = BulkEntryPage(self.system)
         self.tab_widget.addTab(self.bulk_entry_tab, "Bulk Entry")
-        
-        # Set default tab
+          # Set default tab
         self.tab_widget.setCurrentIndex(0)
-        
-        main_layout.addWidget(self.tab_widget, 1)
-        main_layout.addStretch()
+        main_layout.addWidget(self.tab_widget, 1)  # Use default stretch factor for natural spacing
     
     def _get_tab_style(self):
         """Get the styling for the tab widget."""
@@ -221,7 +233,8 @@ class SingleEntryTab(QWidget):
         main_layout.setContentsMargins(0, ResponsiveHelper.scale_size(24, 16, 32),
                                      0, ResponsiveHelper.scale_size(24, 16, 32))
         main_layout.setSpacing(ResponsiveHelper.scale_size(24, 16, 32))
-          # Entry form (fixed at top)
+        
+        # Entry form (fixed at top)
         self.entry_form = self._create_entry_form()
         main_layout.addWidget(self.entry_form)
         
@@ -236,40 +249,53 @@ class SingleEntryTab(QWidget):
             border: none;
         """)
         main_layout.addWidget(header_label)
-        
-        # Column headers (fixed)
-        headers_frame = QFrame()
-        headers_frame.setStyleSheet("""
+          # Create headers frame with proper height and styling
+        self.headers_frame = QFrame()
+        self.headers_frame.setStyleSheet("""
             QFrame {
                 background: rgba(255, 255, 255, 0.08);
                 border: 1px solid rgba(255, 255, 255, 0.15);
                 border-radius: 8px;
                 margin-bottom: 8px;
+                min-height: 45px;
+            }
+            QLabel {
+                font-weight: bold;
             }
         """)
         
-        headers_layout = QHBoxLayout(headers_frame)
-        headers_layout.setContentsMargins(16, 8, 16, 8)
+        # Setup headers layout with proper spacing
+        headers_layout = QHBoxLayout(self.headers_frame)
+        headers_layout.setContentsMargins(16, 0, 16, 0)  # Remove vertical padding from layout
         headers_layout.setSpacing(12)
         
+        # Define and create headers with proper widths
         headers = [
             ("DATE", 80, "rgba(255, 255, 255, 0.8)"),
-            ("DESCRIPTION", None, "rgba(255, 255, 255, 0.8)"),
-            ("DEBIT ACCOUNT", 140, "rgba(255, 255, 255, 0.8)"),
-            ("CREDIT ACCOUNT", 140, "rgba(255, 255, 255, 0.8)"),
+            ("DESCRIPTION", 200, "rgba(255, 255, 255, 0.8)"),
+            ("DEBIT ACCOUNT", 200, "rgba(255, 255, 255, 0.8)"),
+            ("CREDIT ACCOUNT", 200, "rgba(255, 255, 255, 0.8)"),
             ("AMOUNT", 100, "rgba(255, 255, 255, 0.8)")
         ]
         
         for text, width, color in headers:
             header = QLabel(text)
-            if width:
-                header.setFixedWidth(width)
-                if text == "AMOUNT":
-                    header.setAlignment(Qt.AlignmentFlag.AlignRight)
-            header.setStyleSheet(f"color: {color}; font-weight: 600; font-size: 12px; background: transparent; border: none;")
-            headers_layout.addWidget(header, 0 if width else 1)
+            header.setFixedWidth(width)
+            header.setFixedHeight(45)
+            header.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            header.setStyleSheet(f"""
+                color: {color};
+                font-weight: 700;
+                font-size: 12px;
+                background: transparent;
+                border: none;
+                padding: 0px;
+                margin: 0px;
+                letter-spacing: 0.5px;
+            """)
+            headers_layout.addWidget(header)
         
-        main_layout.addWidget(headers_frame)
+        main_layout.addWidget(self.headers_frame)
         
         # Add the fixed content to main layout
         tab_layout.addWidget(main_container)        # Scrollable transactions area

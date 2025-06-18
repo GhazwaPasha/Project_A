@@ -383,13 +383,15 @@ class DateRangeSelector(QWidget):
         self.to_date.setStyleSheet(self.from_date.styleSheet())
         self.to_date.dateChanged.connect(self._on_date_changed)
         layout.addWidget(self.to_date)
-        
-        # Set default selection
+          # Set default selection
         self.quick_buttons.button(0).setChecked(True)  # This Month
         
     def _on_date_changed(self):
         """Handle date changes - supports both callback and signal patterns."""
-        self.callback()
+        if self.callback:
+            # Get current date range and pass to callback
+            start_date, end_date = self.get_date_range()
+            self.callback(start_date, end_date)
         self.dateRangeChanged.emit()
         
     def _quick_filter_selected(self):
