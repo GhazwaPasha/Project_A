@@ -23,7 +23,7 @@ from PyQt6.QtGui import QFont, QCursor
 
 
 class ReportCard(QFrame):
-    """Small report card based on ledger card design."""
+    """Small report card using Windows 11 ledger card design."""
     
     cardClicked = pyqtSignal(str)  # Report name
     
@@ -36,13 +36,14 @@ class ReportCard(QFrame):
         self._setup_ui()
         
     def _setup_ui(self):
-        """Setup the card UI based on ledger card design."""
-        self.setFixedHeight(110)  # Increased height to prevent text clipping
+        """Setup the card UI using Windows 11 ledger card design."""
+        self.setFixedHeight(120)  # Match ledger card height
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.setStyleSheet("""
             QFrame {
                 background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(255, 255, 255, 0.12);                border-radius: 8px;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 8px;
                 border-color: rgba(0, 0, 0, 0.3);
                 margin: 4px;
             }
@@ -53,23 +54,25 @@ class ReportCard(QFrame):
         """)
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 10, 14, 10)  # Reduced margins for more space
-        layout.setSpacing(4)  # Reduced spacing for better fit
+        layout.setContentsMargins(16, 12, 16, 12)  # Match ledger card margins
+        layout.setSpacing(8)  # Match ledger card spacing
         
-        # Header row with colored indicator
+        # Header row with colored indicator tag (like ledger level tags)
         header_layout = QHBoxLayout()
-        header_layout.setSpacing(6)
+        header_layout.setSpacing(8)
         
-        # Colored indicator
+        # Colored indicator tag (styled like ledger level tags)
         indicator = QLabel("●")
         indicator.setStyleSheet(f"""
             color: {self.color};
             font-weight: 600;
-            font-size: 10px;
-            background: transparent;
+            font-size: 11px;
+            background: rgba({self._hex_to_rgba(self.color)}, 0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
             border: none;
         """)
-        indicator.setFixedSize(12, 12)  # Fixed size to prevent layout issues
+        indicator.setFixedWidth(20)
         header_layout.addWidget(indicator)
         
         header_layout.addStretch()
@@ -79,7 +82,7 @@ class ReportCard(QFrame):
             subtitle_label = QLabel(self.subtitle)
             subtitle_label.setStyleSheet("""
                 color: rgba(255, 255, 255, 0.6);
-                font-size: 9px;
+                font-size: 11px;
                 font-weight: 500;
                 background: transparent;
                 border: none;
@@ -94,11 +97,9 @@ class ReportCard(QFrame):
         title_label.setStyleSheet("""
             color: white;
             font-weight: 600;
-            font-size: 12px;
+            font-size: 14px;
             background: transparent;
-            border: none;
-            line-height: 1.2;
-        """)
+            border: none;        """)
         title_label.setWordWrap(True)
         title_label.setAlignment(Qt.AlignmentFlag.AlignTop)
         layout.addWidget(title_label)
@@ -107,9 +108,9 @@ class ReportCard(QFrame):
         if self.value:
             value_label = QLabel(self.value)
             value_label.setStyleSheet(f"""
-                color: {self.color};
+                color: white;
                 font-weight: 700;
-                font-size: 13px;
+                font-size: 16px;
                 background: transparent;
                 border: none;
             """)
@@ -117,6 +118,16 @@ class ReportCard(QFrame):
             layout.addWidget(value_label)
         else:
             layout.addStretch()
+    
+    def _hex_to_rgba(self, hex_color):
+        """Convert hex color to RGB values for rgba."""
+        hex_color = hex_color.lstrip('#')
+        if len(hex_color) == 6:
+            r = int(hex_color[0:2], 16)
+            g = int(hex_color[2:4], 16)
+            b = int(hex_color[4:6], 16)
+            return f"{r}, {g}, {b}"
+        return "100, 181, 246"  # Default blue
         
     def mousePressEvent(self, event):
         """Handle card click."""
@@ -126,7 +137,7 @@ class ReportCard(QFrame):
 
 
 class KPICard(QFrame):
-    """KPI card for the top section - larger than report cards."""
+    """KPI card for the top section using Windows 11 styling."""
     
     def __init__(self, title, value, subtitle="", color="#4CAF50", parent=None):
         super().__init__(parent)
@@ -137,20 +148,25 @@ class KPICard(QFrame):
         self._setup_ui()
         
     def _setup_ui(self):
-        """Setup the KPI card UI."""
-        self.setFixedHeight(120)  # Back to original height
+        """Setup the KPI card UI with Windows 11 styling."""
+        self.setFixedHeight(120)  # Reduced height since no colored indicator row
         self.setStyleSheet("""
             QFrame {
                 background: rgba(255, 255, 255, 0.08);
                 border: 1px solid rgba(255, 255, 255, 0.12);
-                border-radius: 12px;
+                border-radius: 8px;
+                border-color: rgba(0, 0, 0, 0.3);
                 margin: 4px;
+            }
+            QFrame:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border-color: rgba(255, 255, 255, 0.25);
             }
         """)
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 14)  # Back to original margins
-        layout.setSpacing(8)  # Back to original spacing
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(8)
         
         # Title
         title_label = QLabel(self.title)
@@ -162,9 +178,10 @@ class KPICard(QFrame):
             border: none;
         """)
         layout.addWidget(title_label)
-          # Value
+        
+        # Value
         value_label = QLabel(self.value)
-        value_label.setStyleSheet(f"""
+        value_label.setStyleSheet("""
             color: white;
             font-weight: 700;
             font-size: 18px;
@@ -198,23 +215,24 @@ class ExpandableSection(QWidget):
         self._setup_ui()
         
     def _setup_ui(self):
-        """Setup the expandable section with journal-style header."""
+        """Setup the expandable section with Windows 11 styling."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        # Clickable header frame (journal style)
+        # Clickable header frame (Windows 11 style)
         self.header_frame = QFrame()
         self.header_frame.setStyleSheet("""
             QFrame {
                 background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(0, 0, 0, 0.3);
+                border: 1px solid rgba(255, 255, 255, 0.12);
                 border-radius: 8px;
+                border-color: rgba(0, 0, 0, 0.3);
                 padding: 0px;
             }
             QFrame:hover {
                 background: rgba(255, 255, 255, 0.12);
-                border: 1px solid rgba(100, 181, 246, 0.3);
+                border-color: rgba(255, 255, 255, 0.25);
             }
         """)
         self.header_frame.setFixedHeight(60)
@@ -222,17 +240,21 @@ class ExpandableSection(QWidget):
         self.header_frame.mousePressEvent = self._on_header_click
         
         header_layout = QHBoxLayout(self.header_frame)
-        header_layout.setContentsMargins(20, 16, 20, 16)
+        header_layout.setContentsMargins(16, 12, 16, 12)  # Match card margins
         header_layout.setSpacing(12)
         
-        # Icon
+        # Icon with background (like ledger tags)
         icon_label = QLabel(self.icon)
         icon_label.setStyleSheet("""
-            font-size: 18px;
+            font-size: 16px;
             color: #64B5F6;
-            background: transparent;
+            background: rgba(100, 181, 246, 0.2);
+            padding: 4px 6px;
+            border-radius: 4px;
             border: none;
         """)
+        icon_label.setFixedWidth(32)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header_layout.addWidget(icon_label)
         
         # Title and subtitle container
@@ -241,7 +263,7 @@ class ExpandableSection(QWidget):
         
         title_label = QLabel(self.title)
         title_label.setStyleSheet("""
-            font-size: 16px;
+            font-size: 14px;
             font-weight: 600;
             color: white;
             background: transparent;
@@ -260,28 +282,29 @@ class ExpandableSection(QWidget):
             title_container.addWidget(subtitle_label)
         else:
             title_container.addWidget(title_label)
-          # Toggle indicator (subtle arrow)
+        
+        header_layout.addLayout(title_container)
+        header_layout.addStretch()
+        
+        # Toggle indicator (Windows 11 style)
         self.toggle_indicator = QLabel("▶")
         self.toggle_indicator.setStyleSheet("""
             QLabel {
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(255, 255, 255, 0.12);
                 border-radius: 4px;
                 padding: 4px;
                 min-width: 24px;
                 min-height: 24px;
-                font-size: 12px;
+                font-size: 10px;
                 color: rgba(255, 255, 255, 0.9);
             }
             QLabel:hover {
-                background: rgba(255, 255, 255, 0.15);
-                border: 1px solid rgba(100, 181, 246, 0.3);
+                background: rgba(255, 255, 255, 0.12);
+                border-color: rgba(255, 255, 255, 0.25);
             }
         """)
         self.toggle_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        header_layout.addLayout(title_container)
-        header_layout.addStretch()
         header_layout.addWidget(self.toggle_indicator, 0, Qt.AlignmentFlag.AlignCenter)
         
         layout.addWidget(self.header_frame)
