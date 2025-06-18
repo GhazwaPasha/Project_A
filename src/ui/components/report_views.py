@@ -26,9 +26,10 @@ class BaseFinancialStatementView(QWidget):
         self.from_date = None
         self.to_date = None
         self._setup_ui()
-        
+    
     def _setup_ui(self):
         """Setup the professional document-style UI."""
+        # Base styling for the entire view
         self.setStyleSheet("""
             QWidget {
                 background: white;
@@ -37,15 +38,29 @@ class BaseFinancialStatementView(QWidget):
             }
         """)
         
+        # Main layout
         layout = QVBoxLayout(self)
         layout.setContentsMargins(40, 30, 40, 30)
         layout.setSpacing(20)
         
         # Header section
+        self._setup_header(layout)
+        
+        # Navigation bar
+        self._setup_navigation_bar(layout)
+        
+        # Content scroll area with fixed width table
+        self._setup_content_area(layout)
+        
+        # Footer with generation timestamp
+        self._setup_footer(layout)
+    
+    def _setup_header(self, parent_layout):
+        """Setup the header section with title and date."""
         header_layout = QVBoxLayout()
         header_layout.setSpacing(8)
         
-        # Company/Title
+        # Title
         title = QLabel(self.statement_title.upper())
         title.setStyleSheet("""
             color: #1976D2;
@@ -58,7 +73,7 @@ class BaseFinancialStatementView(QWidget):
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header_layout.addWidget(title)
         
-        # Subtitle
+        # Subtitle if provided
         if self.statement_subtitle:
             subtitle = QLabel(self.statement_subtitle)
             subtitle.setStyleSheet("""
@@ -73,7 +88,7 @@ class BaseFinancialStatementView(QWidget):
             subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
             header_layout.addWidget(subtitle)
         
-        # Date range
+        # Date range label
         self.date_label = QLabel("Period: All Time")
         self.date_label.setStyleSheet("""
             color: #666;
@@ -85,11 +100,13 @@ class BaseFinancialStatementView(QWidget):
         self.date_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header_layout.addWidget(self.date_label)
         
-        layout.addLayout(header_layout)
+        parent_layout.addLayout(header_layout)
         
-        # Navigation bar
+    def _setup_navigation_bar(self, parent_layout):
+        """Setup the navigation bar with back and print buttons."""
         nav_layout = QHBoxLayout()
         
+        # Back button
         back_btn = QPushButton("← Back to Reports")
         back_btn.setStyleSheet("""
             QPushButton {
@@ -135,9 +152,10 @@ class BaseFinancialStatementView(QWidget):
         print_btn.clicked.connect(self._print_statement)
         nav_layout.addWidget(print_btn)
         
-        layout.addLayout(nav_layout)
-        
-        # Content scroll area
+        parent_layout.addLayout(nav_layout)
+    
+    def _setup_content_area(self, parent_layout):
+        """Setup the content area with a scrollable table."""
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setStyleSheet("""
@@ -171,9 +189,10 @@ class BaseFinancialStatementView(QWidget):
         self.content_layout.addItem(top_spacer)
         
         scroll_area.setWidget(self.content_widget)
-        layout.addWidget(scroll_area)
-        
-        # Footer
+        parent_layout.addWidget(scroll_area)
+    
+    def _setup_footer(self, parent_layout):
+        """Setup the footer section with generation timestamp."""
         footer_layout = QHBoxLayout()
         footer_layout.addStretch()
         
@@ -186,31 +205,83 @@ class BaseFinancialStatementView(QWidget):
             border: none;
         """)
         footer_layout.addWidget(self.date_generated)
-        layout.addLayout(footer_layout)
-        
+        parent_layout.addLayout(footer_layout)
+    
     def _create_statement_table(self, headers):
-        """Create a professional statement table."""
-        table_widget = QWidget()
-        table_layout = QVBoxLayout(table_widget)
-        table_layout.setContentsMargins(0, 0, 0, 0)
-        table_layout.setSpacing(0)
+        """Create a professional statement table with fixed header."""
+        # Container widget
+        container = QWidget()
+        container.setContentsMargins(0, 0, 0, 0)
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(0)
         
-        # Table header
-        header_frame = QFrame()
-        header_frame.setStyleSheet("""
+        # Fixed header
+        header_widget = self._create_table_header(headers)
+        container_layout.addWidget(header_widget)
+        
+        # Scrollable content area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setStyleSheet("""
+            QScrollArea {
+                border: 1px solid #E0E0E0;
+                border-top: none;
+                background: white;
+            }
+            QScrollBar:vertical {
+                background: #F5F5F5;
+                width: 12px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: #BDBDBD;
+                min-height: 20px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #9E9E9E;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                border: none;
+                background: none;
+                height: 0px;
+            }
+        """)
+        
+        # Content widget
+        content = QWidget()
+        content.setObjectName("tableContent")
+        self.table_content_layout = QVBoxLayout(content)
+        self.table_content_layout.setContentsMargins(0, 0, 0, 0)
+        self.table_content_layout.setSpacing(0)
+        self.table_content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        scroll.setWidget(content)
+        container_layout.addWidget(scroll)
+        
+        return container
+    
+    def _create_table_header(self, headers):
+        """Create the fixed table header."""
+        header = QFrame()
+        header.setStyleSheet("""
             QFrame {
                 background: #1976D2;
                 border: none;
                 border-radius: 4px 4px 0px 0px;
             }
         """)
-        header_layout = QHBoxLayout(header_frame)
+        header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(15, 12, 15, 12)
         header_layout.setSpacing(0)
         
-        for header_text, width in headers:
-            header_label = QLabel(header_text.upper())
-            header_label.setStyleSheet("""
+        # Create header labels
+        for text, width in headers:
+            label = QLabel(text.upper())
+            label.setStyleSheet("""
                 color: white;
                 font-weight: 700;
                 font-size: 13px;
@@ -218,60 +289,53 @@ class BaseFinancialStatementView(QWidget):
                 border: none;
                 letter-spacing: 0.5px;
             """)
-            if header_text == "Amount" or "$" in header_text or "Description" in header_text:
-                header_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            if text in ["Amount", "Balance", "Total"] or "$" in text:
+                label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             else:
-                header_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-            header_label.setFixedWidth(int(width))
-            header_layout.addWidget(header_label)
-            
-        table_layout.addWidget(header_frame)
+                label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            label.setFixedWidth(width)
+            header_layout.addWidget(label)
         
-        # Content area for rows
-        self.table_content = QWidget()
-        self.table_content_layout = QVBoxLayout(self.table_content)
-        self.table_content_layout.setContentsMargins(0, 0, 0, 0)
-        self.table_content_layout.setSpacing(0)
-        
-        # Add border frame
-        content_frame = QFrame()
-        content_frame.setStyleSheet("""
-            QFrame {
-                border: 1px solid #E0E0E0;
-                border-top: none;
-                background: white;
-            }
-        """)
-        content_layout = QVBoxLayout(content_frame)
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.addWidget(self.table_content)
-        
-        table_layout.addWidget(content_frame)
-        
-        return table_widget
-        
+        return header
+    
     def _add_table_row(self, items, is_total=False, is_subtotal=False, indent_level=0):
-        """Add a row to the statement table."""
-        row_frame = QFrame()
+        """Add a row to the statement table with proper alignment and styling."""
+        # Create row frame
+        row = QFrame()
         
+        # Apply appropriate styling based on row type
         if is_total:
-            row_frame.setStyleSheet("""
+            row.setStyleSheet("""
                 QFrame {
                     background: #F8F9FA;
                     border-top: 2px solid #1976D2;
                     border-bottom: 1px solid #E0E0E0;
                 }
+                QLabel {
+                    color: #1976D2;
+                    font-weight: 700;
+                    font-size: 14px;
+                    background: transparent;
+                    border: none;
+                }
             """)
         elif is_subtotal:
-            row_frame.setStyleSheet("""
+            row.setStyleSheet("""
                 QFrame {
                     background: #FAFAFA;
                     border-top: 1px solid #BDBDBD;
                     border-bottom: 1px solid #E0E0E0;
                 }
+                QLabel {
+                    color: #333;
+                    font-weight: 600;
+                    font-size: 13px;
+                    background: transparent;
+                    border: none;
+                }
             """)
         else:
-            row_frame.setStyleSheet("""
+            row.setStyleSheet("""
                 QFrame {
                     background: white;
                     border-bottom: 1px solid #F0F0F0;
@@ -279,56 +343,44 @@ class BaseFinancialStatementView(QWidget):
                 QFrame:hover {
                     background: #F8F9FA;
                 }
-            """)
-        
-        row_layout = QHBoxLayout(row_frame)
-        row_layout.setContentsMargins(15, 8, 15, 8)
-        row_layout.setSpacing(0)
-        
-        # Add indentation for first column
-        if indent_level > 0:
-            spacer = QSpacerItem(indent_level * 20, 0, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
-            row_layout.addItem(spacer)
-        
-        for i, (text, width) in enumerate(items):
-            label = QLabel(str(text))
-            
-            if is_total:
-                label.setStyleSheet("""
-                    color: #1976D2;
-                    font-weight: 700;
-                    font-size: 14px;
-                    background: transparent;
-                    border: none;
-                """)
-            elif is_subtotal:
-                label.setStyleSheet("""
-                    color: #333;
-                    font-weight: 600;
-                    font-size: 13px;
-                    background: transparent;
-                    border: none;
-                """)
-            else:
-                label.setStyleSheet("""
+                QLabel {
                     color: #444;
                     font-weight: 400;
                     font-size: 13px;
                     background: transparent;
                     border: none;
-                """)
+                }
+            """)
+        
+        # Create row layout
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(15, 8, 15, 8)
+        layout.setSpacing(0)
+        
+        # Add indentation for hierarchy
+        if indent_level > 0:
+            indent = QSpacerItem(indent_level * 20, 1, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
+            layout.addItem(indent)
+        
+        # Add items
+        for i, (text, width) in enumerate(items):
+            label = QLabel(str(text))
             
-            # Right-align amounts
+            # Set alignment based on content type
             if i > 0 or "Amount" in str(text) or "$" in str(text):
                 label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             else:
                 label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             
-            label.setFixedWidth(int(width))
-            row_layout.addWidget(label)
+            # Set fixed width for column
+            label.setFixedWidth(width - (indent_level * 20 if i == 0 else 0))
             
-        self.table_content_layout.addWidget(row_frame)
-        return row_frame
+            # Add cell to row
+            layout.addWidget(label)
+        
+        # Add row to table
+        self.table_content_layout.addWidget(row)
+        return row
         
     def clear_content(self):
         """Clear the content layout."""
@@ -508,7 +560,7 @@ class IncomeStatementView(BaseFinancialStatementView):
                 th {{ background: #1976D2; color: white; padding: 12px; }}
                 .section-header {{ background: #f5f5f5; font-weight: bold; padding: 10px; }}
                 .account {{ padding: 8px 20px; border-bottom: 1px solid #eee; }}
-                .total {{ font-weight: bold; background: #f0f8ff; padding: 10px; border-top: 2px solid #1976D2; }}
+                .total {{ font-weight: bold; background: #f0f8ff; }}
                 .amount {{ text-align: right; }}
             </style>
         </head>
@@ -637,7 +689,7 @@ class BalanceSheetView(BaseFinancialStatementView):
                 th {{ background: #1976D2; color: white; padding: 12px; }}
                 .section-header {{ background: #f5f5f5; font-weight: bold; padding: 10px; }}
                 .account {{ padding: 8px 20px; border-bottom: 1px solid #eee; }}
-                .total {{ font-weight: bold; background: #f0f8ff; padding: 10px; border-top: 2px solid #1976D2; }}
+                .total {{ font-weight: bold; background: #f0f8ff; }}
                 .amount {{ text-align: right; }}
             </style>
         </head>
@@ -763,7 +815,7 @@ class CashFlowStatementView(BaseFinancialStatementView):
                 th {{ background: #1976D2; color: white; padding: 12px; }}
                 .section-header {{ background: #f5f5f5; font-weight: bold; padding: 10px; }}
                 .account {{ padding: 8px 20px; border-bottom: 1px solid #eee; }}
-                .total {{ font-weight: bold; background: #f0f8ff; padding: 10px; border-top: 2px solid #1976D2; }}
+                .total {{ font-weight: bold; background: #f0f8ff; }}
                 .amount {{ text-align: right; }}
             </style>
         </head>
@@ -888,7 +940,7 @@ class StatementOfEquityView(BaseFinancialStatementView):
                 th {{ background: #1976D2; color: white; padding: 12px; }}
                 .section-header {{ background: #f5f5f5; font-weight: bold; padding: 10px; }}
                 .account {{ padding: 8px 20px; border-bottom: 1px solid #eee; }}
-                .total {{ font-weight: bold; background: #f0f8ff; padding: 10px; border-top: 2px solid #1976D2; }}
+                .total {{ font-weight: bold; background: #f0f8ff; }}
                 .amount {{ text-align: right; }}
             </style>
         </head>

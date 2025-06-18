@@ -223,16 +223,16 @@ class ExpandableSection(QWidget):
         self.icon = icon
         self.is_expanded = False
         self._setup_ui()
-        
+    
     def _setup_ui(self):
         """Setup the expandable section with Windows 11 styling."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        # Clickable header frame (Windows 11 style)
+        # Clickable header frame
         self.header_frame = QFrame()
-        self.header_frame.setStyleSheet("""
+        header_style = """
             QFrame {
                 background: rgba(255, 255, 255, 0.08);
                 border: 1px solid rgba(255, 255, 255, 0.12);
@@ -244,7 +244,8 @@ class ExpandableSection(QWidget):
                 background: rgba(255, 255, 255, 0.12);
                 border-color: rgba(255, 255, 255, 0.25);
             }
-        """)
+        """
+        self.header_frame.setStyleSheet(header_style)
         self.header_frame.setFixedHeight(60)
         self.header_frame.setCursor(Qt.CursorShape.PointingHandCursor)
         self.header_frame.mousePressEvent = self._on_header_click
