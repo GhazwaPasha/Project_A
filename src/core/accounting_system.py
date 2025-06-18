@@ -199,18 +199,24 @@ class AccountingSystem:
         return results
 
     def get_trial_balance(self, from_date=None, to_date=None):
-        """Get trial balance with proper account name matching."""
+        """Get trial balance with proper account type handling."""
         self._ensure_connection()
         cursor = self.conn.cursor()
         
         # Get all accounts first
         all_accounts = self.get_all_accounts()
         account_balances = {}
+        account_types = {}  # Store account types for balance calculation
+        code_to_name = {}  # Map account codes to names
         
-        # Initialize account balances
+        # Initialize account balances and store types
         for account in all_accounts:
             name, account_type, code, parent_code, level, is_postable, description = account
+            full_code = f"{code} - {name}" if code else name
             account_balances[name] = 0.0
+            account_types[name] = account_type
+            if code:
+                code_to_name[full_code] = name
         
         # Get journal entries
         if from_date and to_date:
@@ -224,13 +230,33 @@ class AccountingSystem:
         
         entries = cursor.fetchall()
         
-        # Process entries
+        # Process entries considering account types
         for debit_account, credit_account, amount in entries:
             amount = float(amount)
-            if debit_account in account_balances:
-                account_balances[debit_account] += amount
-            if credit_account in account_balances:
-                account_balances[credit_account] -= amount
+            
+            # Convert account codes to names if needed
+            debit_name = code_to_name.get(debit_account, debit_account)
+            credit_name = code_to_name.get(credit_account, credit_account)
+            
+            # Handle debit entry
+            if debit_name in account_balances:
+                debit_type = account_types.get(debit_name, '')
+                # For Asset and Expense accounts, debits increase the balance
+                if debit_type in ('Asset', 'Expense'):
+                    account_balances[debit_name] += amount
+                # For Liability, Equity, and Revenue accounts, debits decrease the balance
+                elif debit_type in ('Liability', 'Equity', 'Revenue', 'Income'):
+                    account_balances[debit_name] -= amount
+            
+            # Handle credit entry
+            if credit_name in account_balances:
+                credit_type = account_types.get(credit_name, '')
+                # For Asset and Expense accounts, credits decrease the balance
+                if credit_type in ('Asset', 'Expense'):
+                    account_balances[credit_name] -= amount
+                # For Liability, Equity, and Revenue accounts, credits increase the balance
+                elif credit_type in ('Liability', 'Equity', 'Revenue', 'Income'):
+                    account_balances[credit_name] += amount
                 
         return account_balances
 
