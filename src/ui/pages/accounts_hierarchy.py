@@ -1317,7 +1317,7 @@ class AccountDetailsPanel(QStackedWidget):
     def _clear_info(self):
         """Clear the info panel with a modern empty state."""
         empty_html = """
-        <div style="color: rgba(255,255,255,0.5); font-family: Segoe UI, Arial, sans-serif; text-align: center;">
+        <div style="color: rgba(255,255,255,0.5); font-family: {ModernStyles.get_font_family()}; text-align: center;">
             <div style="margin-bottom: 16px; opacity: 0.7;">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1352,7 +1352,7 @@ class AccountDetailsPanel(QStackedWidget):
         
         # Create detailed info display with modern Windows 11 styling
         info_html = f"""
-        <div style="color: white; font-family: Segoe UI, Arial, sans-serif;">
+        <div style="color: white; font-family: {ModernStyles.get_font_family()};">
             <div style="margin-bottom: 16px;">
                 <h3 style="color: {level_color}; margin: 0 0 4px 0; font-size: 20px; font-weight: 600;">
                     {account_data['name']}

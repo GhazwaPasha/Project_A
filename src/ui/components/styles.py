@@ -31,6 +31,34 @@ class ModernStyles:
         'glass_border': 'rgba(255, 255, 255, 0.15)'
     }
     
+    # Font family for the application
+    _font_family = "'Segoe UI', Arial, sans-serif"
+    
+    @classmethod
+    def set_font_family(cls, font_family):
+        """
+        Set the font family for all stylesheets.
+        
+        Args:
+            font_family (str): Font family name or CSS font-family string
+        """
+        if "font-family:" in font_family:
+            # Extract the font family from a CSS string
+            cls._font_family = font_family.replace("font-family:", "").strip()
+        else:
+            # Set the font family directly
+            cls._font_family = f"'{font_family}', Arial, sans-serif"
+    
+    @classmethod
+    def get_font_family(cls):
+        """
+        Get the current font family CSS string.
+        
+        Returns:
+            str: Font family CSS string
+        """
+        return cls._font_family
+    
     @staticmethod
     def get_page_style():
         """Get the main page styling with glassmorphism effect."""
@@ -38,7 +66,7 @@ class ModernStyles:
             QWidget {{
                 background: transparent;
                 color: {ModernStyles.COLORS['text_primary']};
-                font-family: 'Segoe UI', Arial, sans-serif;
+                font-family: {ModernStyles.get_font_family()};
             }}
             
             /* Main container with glass effect */
@@ -97,6 +125,7 @@ class ModernStyles:
                 padding: {ResponsiveHelper.scale_size(12, 8, 16)}px {ResponsiveHelper.scale_size(24, 18, 32)}px;
                 font-size: {ResponsiveHelper.scale_size(14, 12, 16)}px;
                 font-weight: 500;
+                font-family: {ModernStyles.get_font_family()};
             }}
             
             QPushButton:hover {{
@@ -142,6 +171,7 @@ class ModernStyles:
                 gridline-color: rgba(255, 255, 255, 0.1);
                 color: {ModernStyles.COLORS['text_primary']};
                 font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
+                font-family: {ModernStyles.get_font_family()};
             }}
             
             QTableWidget::item {{
@@ -194,6 +224,7 @@ class ModernStyles:
                 padding: {ResponsiveHelper.scale_size(8, 6, 10)}px {ResponsiveHelper.scale_size(12, 8, 16)}px;
                 color: {ModernStyles.COLORS['text_primary']};
                 font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
+                font-family: {ModernStyles.get_font_family()};
             }}
             
             QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDateEdit:focus {{
@@ -277,6 +308,7 @@ class ModernStyles:
                 margin-right: 2px;
                 border-radius: {ResponsiveHelper.scale_size(8, 6, 10)}px;
                 color: {ModernStyles.COLORS['text_secondary']};
+                font-family: {ModernStyles.get_font_family()};
             }}
             
             QTabBar::tab:selected {{

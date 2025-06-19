@@ -204,28 +204,32 @@ class LedgerDocumentView(QWidget):
         
         self._load_ledger_data()
         
-    def _setup_ui(self):
-        """Setup the document-style ledger view."""
-        # Set base styling
-        self.setStyleSheet("""
-            QWidget {
+    def _get_base_style(self):
+        """Get the base style for the document view."""
+        return f"""
+            QWidget {{
                 background: white;
                 color: black;
-                font-family: 'Segoe UI', Arial, sans-serif;
-            }
-            QScrollArea {
+                font-family: {ModernStyles.get_font_family()};
+            }}
+            QScrollArea {{
                 border: 1px solid #E0E0E0;
                 background: white;
                 padding: 0px;
                 margin: 0px;
-            }
-            QWidget#transactionsContainer {
+            }}
+            QWidget#transactionsContainer {{
                 background: white;
                 border: none;
                 margin: 0px;
                 padding: 0px;
-            }
-        """)
+            }}
+        """
+    
+    def _setup_ui(self):
+        """Setup the document-style ledger view."""
+        # Set base styling
+        self.setStyleSheet(self._get_base_style())
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(40, 30, 40, 30)
@@ -238,12 +242,14 @@ class LedgerDocumentView(QWidget):
         # Company/Title
         title = QLabel("GENERAL LEDGER")
         title.setStyleSheet("""
-            color: #1976D2;
-            font-size: 24px;
-            font-weight: 700;
-            text-align: center;
-            background: transparent;
-            border: none;
+            QLabel {
+                color: #1976D2;
+                font-size: 24px;
+                font-weight: 700;
+                text-align: center;
+                background: transparent;
+                border: none;
+            }
         """)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header_layout.addWidget(title)
@@ -757,7 +763,7 @@ class LedgerDocumentView(QWidget):
             <title>General Ledger - {account_name}</title>
             <style>
                 body {{
-                    font-family: 'Segoe UI', Arial, sans-serif;
+                    font-family: {self.font_family};
                     margin: 40px;
                     color: #333;
                 }}
@@ -941,11 +947,12 @@ class TransactionRowCard(QFrame):
 
 class LedgerPage(QWidget):
     """Modern General Ledger with card-based interface and smart filtering."""
-    
     def __init__(self, system, parent=None):
         super().__init__(parent)
         self.system = system
         self.account_cards = []
+        # Get font family from ModernStyles
+        self.font_family = ModernStyles.get_font_family()
         self._setup_ui()
         self._apply_styling()
         self._load_accounts()

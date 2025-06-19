@@ -4,6 +4,7 @@ from PyQt6.QtGui import QIcon, QPalette, QColor
 from ..core.accounting_system import AccountingSystem
 from .components.mica_effect import MicaEffect
 from .components.styles import ModernStyles, GlassmorphismHelper
+from .components.font_manager import font_manager
 import os
 
 # Import ResponsiveHelper for consistent responsive design
@@ -118,6 +119,10 @@ class MainWindow(QMainWindow):
         self.dark_mode = True  # Default to dark mode for better Mica effect
         self.currency_symbol = self._load_currency()
         self.mica_applied = False  # Track if Mica has been applied
+          # Initialize font manager
+        self.font_manager = font_manager
+        # Initialize custom fonts
+        self._load_custom_fonts()
         
         # Setup window first
         self._setup_mica_window()
@@ -126,6 +131,9 @@ class MainWindow(QMainWindow):
         
         # Apply global styling first
         self._apply_global_consistent_styling()
+        
+        # Apply font settings to the application
+        self._apply_font_settings()
         
         # Show the window first, then apply Mica effect
         self.show()
@@ -779,3 +787,47 @@ class MainWindow(QMainWindow):
                 self.update()
             else:
                 self._apply_mica_effect_delayed()
+                
+    def _load_custom_fonts(self):
+        """Load custom fonts from the assets/fonts directory."""
+        # Load custom fonts using the font manager
+        loaded_families = self.font_manager.load_custom_fonts()
+        
+        # Also ensure developer fonts are installed
+        dev_fonts = self.font_manager.install_developer_fonts()
+        if dev_fonts:
+            loaded_families = list(set(loaded_families + dev_fonts))
+            
+        if loaded_families:
+            print(f"Loaded {len(loaded_families)} custom font families:")
+            for family in loaded_families:
+                print(f" - {family}")
+    def _apply_font_settings(self):
+        """Apply font settings to the application."""
+        # Apply font settings to the application using the font manager
+        app = QApplication.instance()
+        if app:
+            self.font_manager.apply_font_to_application(app)
+        
+        # Update ModernStyles to use the current font family
+        self._update_global_stylesheets()
+        
+    def _update_global_stylesheets(self):
+        """Update global stylesheets to use the current font family from the font manager."""
+        # Get the current font family from the font manager
+        font_family = self.font_manager.get_font_family()
+        
+        # Update the ModernStyles font family
+        ModernStyles.set_font_family(font_family)
+        
+        # Force a complete update of all UI elements
+        self._apply_global_consistent_styling()
+          # Update child widgets
+        if hasattr(self, 'stack'):
+            for i in range(self.stack.count()):
+                page = self.stack.widget(i)
+                if hasattr(page, '_apply_styling') and callable(page._apply_styling):
+                    page._apply_styling()
+                # Force a style refresh
+        self.style().unpolish(self)
+        self.style().polish(self)
