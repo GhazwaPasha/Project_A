@@ -241,8 +241,7 @@ class FontManager:
             if font_name not in available_fonts and (self.is_font_available(font_name) or key == 'default'):
                 # Always include the default font even if not detected
                 available_fonts.append(font_name)
-        
-        # If no fonts are available, ensure at least the default system font is included
+          # If no fonts are available, ensure at least the default system font is included
         if not available_fonts:
             available_fonts = ["Segoe UI", "Arial", "sans-serif"]
             
@@ -263,33 +262,53 @@ class FontManager:
         app_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
         assets_fonts_dir = os.path.join(app_path, 'assets', 'fonts')
         
-        # List of font files to check
-        dev_fonts = {
-            'Cascadia Code': ['CascadiaCode.ttf', 'CascadiaCodePL.ttf'],
-            'JetBrains Mono': [] # We'll add JetBrains Mono later if needed
-        }
+        # Ensure the fonts directory exists
+        if not os.path.exists(assets_fonts_dir):
+            os.makedirs(assets_fonts_dir)
         
         # Track installed fonts
         installed_families = []
         
-        # Install fonts from assets directory
-        for family_name, font_files in dev_fonts.items():
-            for font_file in font_files:
-                font_path = os.path.join(assets_fonts_dir, font_file)
-                if os.path.exists(font_path):
-                    print(f"Installing font: {font_path}")
-                    font_id = QFontDatabase.addApplicationFont(font_path)
-                    if font_id != -1:
-                        families = QFontDatabase.applicationFontFamilies(font_id)
-                        if families:
-                            print(f"Successfully installed font families: {', '.join(families)}")
-                            installed_families.extend(families)
-                    else:
-                        print(f"Failed to install font: {font_path}")
+        # First install Cascadia Code
+        cascadia_fonts = ['CascadiaCode.ttf', 'CascadiaCodePL.ttf']
+        for font_file in cascadia_fonts:
+            font_path = os.path.join(assets_fonts_dir, font_file)
+            if os.path.exists(font_path):
+                print(f"Installing font: {font_path}")
+                font_id = QFontDatabase.addApplicationFont(font_path)
+                if font_id != -1:
+                    families = QFontDatabase.applicationFontFamilies(font_id)
+                    if families:
+                        print(f"Successfully installed font families: {', '.join(families)}")
+                        installed_families.extend(families)
+                else:
+                    print(f"Failed to install font: {font_path}")
         
-        # Verify the fonts were installed successfully based on font IDs
+        # Now handle JetBrains Mono - download if not present
+        jetbrains_files = [f for f in os.listdir(assets_fonts_dir) if f.lower().startswith('jetbrainsmono')]
+        if not jetbrains_files:
+            print("JetBrains Mono not found locally. Attempting to download...")
+            downloaded_files = self._download_jetbrains_mono(assets_fonts_dir)
+            jetbrains_files = [os.path.basename(f) for f in downloaded_files]
+        
+        # Install JetBrains Mono fonts
+        for font_file in jetbrains_files:
+            font_path = os.path.join(assets_fonts_dir, font_file)
+            if os.path.exists(font_path):
+                print(f"Installing font: {font_path}")
+                font_id = QFontDatabase.addApplicationFont(font_path)
+                if font_id != -1:
+                    families = QFontDatabase.applicationFontFamilies(font_id)
+                    if families:
+                        print(f"Successfully installed font families: {', '.join(families)}")
+                        installed_families.extend(families)
+                else:
+                    print(f"Failed to install font: {font_path}")
+        
+        # Verify the fonts were installed successfully
         print(f"Developer fonts check:")
-        for font_name, _ in dev_fonts.items():
+        dev_font_names = ['Cascadia Code', 'JetBrains Mono']
+        for font_name in dev_font_names:
             found = False
             for family in installed_families:
                 if font_name.lower() in family.lower():
@@ -341,12 +360,11 @@ class FontManager:
             # Download the font
             urllib.request.urlretrieve(url, zip_path)
             print(f"Downloaded JetBrains Mono to {zip_path}")
-            
-            # Extract the needed fonts
+              # Extract the needed fonts
             downloaded_files = []
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 font_files = [f for f in zip_ref.namelist() if f.endswith('.ttf') and 'fonts/ttf' in f]
-                for font_file in font_files[:2]:  # Just extract the first two fonts (regular and bold)
+                for font_file in font_files[:4]:  # Extract first 4 fonts (regular, bold, etc.)
                     source = zip_ref.open(font_file)
                     font_name = os.path.basename(font_file)
                     target_path = os.path.join(fonts_dir, font_name)
@@ -357,8 +375,16 @@ class FontManager:
                     downloaded_files.append(target_path)
                     print(f"Extracted {font_name} to {target_path}")
             
-            # Clean up
-            shutil.rmtree(temp_dir)
+            # Clean up - with better error handling
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception as cleanup_error:
+                print(f"Warning: Could not clean up temporary directory: {cleanup_error}")
+                # Try to at least remove the zip file
+                try:
+                    os.remove(zip_path)
+                except:
+                    pass
             
             return downloaded_files
             
