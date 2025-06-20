@@ -17,6 +17,12 @@ class DatabaseConfig:
     POSTGRES_DB = os.getenv('POSTGRES_DB')
     POSTGRES_USER = os.getenv('POSTGRES_USER')
     POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD')
+      # Local PostgreSQL database configuration
+    LOCAL_POSTGRES_HOST = os.getenv('LOCAL_POSTGRES_HOST', 'localhost')
+    LOCAL_POSTGRES_PORT = int(os.getenv('LOCAL_POSTGRES_PORT', 5432))
+    LOCAL_POSTGRES_DB = os.getenv('LOCAL_POSTGRES_DB', 'accounting_local')
+    LOCAL_POSTGRES_USER = os.getenv('LOCAL_POSTGRES_USER', 'postgres')
+    LOCAL_POSTGRES_PASSWORD = os.getenv('LOCAL_POSTGRES_PASSWORD', 'postgres')
     
     # Application Settings
     APP_ENV = os.getenv('APP_ENV', 'development')

@@ -3,7 +3,7 @@ from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QIcon, QPalette, QColor
 
 # Import PostgreSQL accounting system
-from ..core.accounting_system_postgresql import AccountingSystem
+from ..core.accounting_system_postgresql import AccountingSystemPostgreSQL as AccountingSystem
 
 from .components.mica_effect import MicaEffect
 from .components.styles import ModernStyles, GlassmorphismHelper
@@ -112,19 +112,26 @@ class ModernSidebarButton(QPushButton):
             }}
         """)
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, db_mode='postgresql', prefer_local=False, auto_sync=False):
         super().__init__()
         self.setWindowTitle("AI Accountant")
         self.setMinimumSize(1200, 800)
+        
+        # Store sync settings
+        self.db_mode = db_mode
+        self.prefer_local = prefer_local
+        self.auto_sync = auto_sync
         
         # Initialize logging
         self.logger = logging.getLogger(__name__)
         
         # Use single database file in project root
         db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'accounting.db')
+          # Initialize accounting system with PostgreSQL or SQLite fallback
+        self.accounting_system = self._initialize_accounting_system(db_path)
         
-        # Initialize accounting system with PostgreSQL or SQLite fallback
-        self.system = self._initialize_accounting_system(db_path)
+        # Keep backward compatibility for existing pages
+        self.system = self.accounting_system
         
         self.sidebar_expanded = False  # Start collapsed for a cleaner look
         self.dark_mode = True  # Default to dark mode for better Mica effect
@@ -145,6 +152,10 @@ class MainWindow(QMainWindow):
         
         # Apply font settings to the application
         self._apply_font_settings()
+        
+        # Setup sync status updates if in hybrid mode
+        if self.db_mode == 'hybrid':
+            self._setup_sync_updates()
         
         # Show the window first, then apply Mica effect
         self.show()
@@ -383,6 +394,12 @@ class MainWindow(QMainWindow):
         layout.addWidget(title_label)
         
         layout.addStretch()
+        
+        # Add sync indicator (always show, but functionality depends on mode)
+        from .components.sync_indicator import SyncIndicator
+        self.sync_indicator = SyncIndicator()
+        self.sync_indicator.sync_requested.connect(self._manual_sync)
+        layout.addWidget(self.sync_indicator)
         
         # Window controls with icons
         minimize_btn = QPushButton()
@@ -829,19 +846,83 @@ class MainWindow(QMainWindow):
             for i in range(self.stack.count()):
                 page = self.stack.widget(i)
                 if hasattr(page, '_apply_styling') and callable(page._apply_styling):
-                    page._apply_styling()
-        # Force a style refresh
+                    page._apply_styling()        # Force a style refresh
         self.style().unpolish(self)
         self.style().polish(self)
-        
+    
     def _initialize_accounting_system(self, db_path):
-        """Initialize PostgreSQL accounting system."""
+        """Initialize PostgreSQL accounting system with sync support."""
         try:
-            self.logger.info("Initializing PostgreSQL accounting system...")
-            system = AccountingSystem()
-            self.logger.info("✅ PostgreSQL accounting system initialized successfully")
+            self.logger.info(f"Initializing accounting system in {self.db_mode} mode...")
+            
+            if self.db_mode == 'hybrid':
+                # Use enhanced database manager with local/remote sync
+                from ..core.database_manager import DatabaseManager
+                db_manager = DatabaseManager(
+                    prefer_local=self.prefer_local,
+                    auto_sync=self.auto_sync
+                )
+                system = AccountingSystem()
+                system.db_manager = db_manager
+                self.logger.info("✅ Hybrid accounting system initialized successfully")
+            else:
+                # Use standard PostgreSQL system
+                system = AccountingSystem()
+                self.logger.info("✅ PostgreSQL accounting system initialized successfully")
+            
             return system
                 
         except Exception as e:
-            self.logger.error(f"PostgreSQL initialization failed: {e}")
-            raise Exception(f"Failed to initialize PostgreSQL database: {e}")
+            self.logger.error(f"Accounting system initialization failed: {e}")
+            raise Exception(f"Failed to initialize accounting database: {e}")
+    
+    def _setup_sync_updates(self):
+        """Setup periodic sync status updates."""
+        self.sync_timer = QTimer()
+        self.sync_timer.timeout.connect(self._update_sync_status)
+        self.sync_timer.start(5000)  # Update every 5 seconds
+        
+        # Initial status update
+        self._update_sync_status()
+    
+    def _update_sync_status(self):
+        """Update sync status from database manager."""
+        if hasattr(self, 'sync_indicator') and hasattr(self.accounting_system, 'db_manager'):
+            try:
+                status = self.accounting_system.db_manager.get_connection_status()
+                self.sync_indicator.update_connection_status(status)
+            except Exception as e:
+                self.logger.error(f"Failed to update sync status: {e}")
+    
+    def _manual_sync(self):
+        """Trigger manual synchronization."""
+        if hasattr(self.accounting_system, 'db_manager'):
+            try:
+                self.logger.info("Manual sync requested...")
+                if hasattr(self, 'sync_indicator'):
+                    self.sync_indicator.show_sync_animation()
+                
+                # Trigger sync (this will be implemented in the sync manager)
+                self.accounting_system.db_manager._perform_sync()
+                
+            except Exception as e:
+                self.logger.error(f"Manual sync failed: {e}")
+    
+    def get_connection_status(self):
+        """Get connection status for external access."""
+        if hasattr(self.accounting_system, 'db_manager'):
+            return self.accounting_system.db_manager.get_connection_status()
+        else:
+            return {
+                'local_available': False,
+                'remote_available': True,  # Assume remote is available for non-hybrid mode
+                'prefer_local': False,
+                'auto_sync_enabled': False,
+                'sync_status': {
+                    'last_sync': None,
+                    'pending_operations': 0,
+                    'failed_operations': 0,
+                    'conflicts': 0,
+                    'is_syncing': False
+                }
+            }

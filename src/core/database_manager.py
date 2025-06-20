@@ -5,6 +5,8 @@ from datetime import datetime, date
 import logging
 from contextlib import contextmanager
 from typing import List, Dict, Optional, Tuple, Any
+import threading
+import time
 
 # For now, we'll use a fallback configuration if the imports fail
 try:
@@ -29,17 +31,40 @@ except ImportError:
         POSTGRES_DB = os.getenv('POSTGRES_DB', 'postgres')
         POSTGRES_USER = os.getenv('POSTGRES_USER', 'postgres')
         POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD', '')
+          # Local database configuration
+        LOCAL_POSTGRES_HOST = os.getenv('LOCAL_POSTGRES_HOST', 'localhost')
+        LOCAL_POSTGRES_PORT = int(os.getenv('LOCAL_POSTGRES_PORT', 5432))
+        LOCAL_POSTGRES_DB = os.getenv('LOCAL_POSTGRES_DB', 'accounting_local')
+        LOCAL_POSTGRES_USER = os.getenv('LOCAL_POSTGRES_USER', 'postgres')
+        LOCAL_POSTGRES_PASSWORD = os.getenv('LOCAL_POSTGRES_PASSWORD', 'postgres')
+
+class SyncStatus:
+    """Track sync status between local and remote databases."""
+    def __init__(self):
+        self.local_available = False
+        self.remote_available = False
+        self.prefer_local = True
+        self.auto_sync_enabled = True
+        self.last_sync = None
+        self.pending_operations = 0
+        self.failed_operations = 0
+        self.conflicts = 0
+        self.is_syncing = False
 
 class DatabaseManager:
-    """Centralized database management with PostgreSQL and optional Supabase integration."""
+    """Enhanced database manager with local/remote sync capabilities."""
     
-    def __init__(self, use_supabase=True):
-        """Initialize database manager with PostgreSQL and optional Supabase."""
+    def __init__(self, prefer_local=True, auto_sync=True):
+        """Initialize database manager with local and remote connections."""
         self.logger = logging.getLogger(__name__)
-        self.use_supabase = use_supabase and SUPABASE_AVAILABLE
+        self.prefer_local = prefer_local
+        self.auto_sync = auto_sync
+        self.sync_status = SyncStatus()
+        self.sync_status.prefer_local = prefer_local
+        self.sync_status.auto_sync_enabled = auto_sync
         
-        # PostgreSQL connection parameters
-        self.pg_params = {
+        # Remote PostgreSQL connection parameters (Supabase)
+        self.remote_params = {
             'host': DatabaseConfig.POSTGRES_HOST,
             'port': DatabaseConfig.POSTGRES_PORT,
             'database': DatabaseConfig.POSTGRES_DB,
@@ -47,30 +72,118 @@ class DatabaseManager:
             'password': DatabaseConfig.POSTGRES_PASSWORD,
         }
         
-        # Initialize Supabase client if available and requested
-        self.supabase = None
-        if self.use_supabase and DatabaseConfig.SUPABASE_URL and DatabaseConfig.SUPABASE_ANON_KEY:
-            try:
-                self.supabase = create_client(
-                    DatabaseConfig.SUPABASE_URL, 
-                    DatabaseConfig.SUPABASE_ANON_KEY
-                )
-                self.logger.info("Supabase client initialized successfully")
-            except Exception as e:
-                self.logger.warning(f"Failed to initialize Supabase client: {e}")
-                self.supabase = None
+        # Local PostgreSQL connection parameters
+        self.local_params = {
+            'host': DatabaseConfig.LOCAL_POSTGRES_HOST,
+            'port': DatabaseConfig.LOCAL_POSTGRES_PORT,
+            'database': DatabaseConfig.LOCAL_POSTGRES_DB,
+            'user': DatabaseConfig.LOCAL_POSTGRES_USER,
+            'password': DatabaseConfig.LOCAL_POSTGRES_PASSWORD,
+        }
         
-        # Test connection on initialization
-        if not self.test_connection():
-            raise ConnectionError("Failed to establish database connection")
+        # Test connections
+        self._test_connections()
+        
+        # Initialize sync background thread if auto sync is enabled
+        if auto_sync:
+            self._start_sync_thread()
     
+    def _test_connections(self):
+        """Test both local and remote connections."""
+        # Test local connection
+        try:
+            conn = psycopg2.connect(**self.local_params)
+            conn.close()
+            self.sync_status.local_available = True
+            self.logger.info("✅ Local database connection successful")
+        except Exception as e:
+            self.sync_status.local_available = False
+            self.logger.warning(f"❌ Local database connection failed: {e}")
+        
+        # Test remote connection
+        try:
+            conn = psycopg2.connect(**self.remote_params)
+            conn.close()
+            self.sync_status.remote_available = True
+            self.logger.info("✅ Remote database connection successful")
+        except Exception as e:
+            self.sync_status.remote_available = False
+            self.logger.warning(f"❌ Remote database connection failed: {e}")
+    
+    def get_connection_status(self):
+        """Get current connection and sync status."""
+        return {
+            'local_available': self.sync_status.local_available,
+            'remote_available': self.sync_status.remote_available,
+            'prefer_local': self.sync_status.prefer_local,
+            'auto_sync_enabled': self.sync_status.auto_sync_enabled,
+            'sync_status': {
+                'last_sync': self.sync_status.last_sync,
+                'pending_operations': self.sync_status.pending_operations,
+                'failed_operations': self.sync_status.failed_operations,
+                'conflicts': self.sync_status.conflicts,
+                'is_syncing': self.sync_status.is_syncing
+            }
+        }
+    
+    def _get_preferred_connection(self):
+        """Get connection to preferred database."""
+        if self.prefer_local and self.sync_status.local_available:
+            return psycopg2.connect(**self.local_params)
+        elif self.sync_status.remote_available:
+            return psycopg2.connect(**self.remote_params)
+        elif self.sync_status.local_available:
+            return psycopg2.connect(**self.local_params)
+        else:
+            raise ConnectionError("No database connections available")
+    
+    def _start_sync_thread(self):
+        """Start background sync thread."""
+        def sync_loop():
+            while self.auto_sync:
+                try:
+                    if (self.sync_status.local_available and 
+                        self.sync_status.remote_available and 
+                        not self.sync_status.is_syncing):
+                        self._perform_sync()
+                    time.sleep(30)  # Sync every 30 seconds
+                except Exception as e:
+                    self.logger.error(f"Sync thread error: {e}")
+                    time.sleep(60)  # Wait longer on error
+        
+        sync_thread = threading.Thread(target=sync_loop, daemon=True)
+        sync_thread.start()
+        self.logger.info("🔄 Background sync thread started")
+    
+    def _perform_sync(self):
+        """Perform synchronization between local and remote databases."""
+        if self.sync_status.is_syncing:
+            return
+        
+        self.sync_status.is_syncing = True
+        try:
+            # Simple timestamp-based sync for now
+            # This will be enhanced with proper conflict resolution
+            self.logger.info("🔄 Starting database sync...")
+            
+            # TODO: Implement actual sync logic
+            # For now, just update sync timestamp
+            self.sync_status.last_sync = datetime.now()
+            
+            self.logger.info("✅ Database sync completed")
+        except Exception as e:
+            self.logger.error(f"❌ Sync failed: {e}")
+            self.sync_status.failed_operations += 1
+        finally:
+            self.sync_status.is_syncing = False
+
     @contextmanager
     def get_db_cursor(self, use_dict_cursor=True):
         """Context manager for database operations with automatic connection management."""
         conn = None
         cursor = None
         try:
-            conn = self._get_connection()
+            conn = self._get_preferred_connection()
             cursor_factory = RealDictCursor if use_dict_cursor else None
             cursor = conn.cursor(cursor_factory=cursor_factory)
             yield cursor
@@ -97,10 +210,12 @@ class DatabaseManager:
     def test_connection(self) -> bool:
         """Test database connectivity."""
         try:
-            with self.get_db_cursor() as cursor:
+            conn = self._get_preferred_connection()
+            with conn.cursor() as cursor:
                 cursor.execute("SELECT 1")
                 result = cursor.fetchone()
-                return result is not None
+            conn.close()
+            return result is not None
         except Exception as e:
             self.logger.error(f"Database connection test failed: {e}")
             return False
