@@ -62,13 +62,22 @@ class DatabaseManager:
         self.sync_status = SyncStatus()
         self.sync_status.prefer_local = prefer_local
         self.sync_status.auto_sync_enabled = auto_sync
-        
-        # Remote PostgreSQL connection parameters (Supabase)
+          # Remote PostgreSQL connection parameters (Supabase) - Primary (IPv6)
         self.remote_params = {
             'host': DatabaseConfig.POSTGRES_HOST,
             'port': DatabaseConfig.POSTGRES_PORT,
             'database': DatabaseConfig.POSTGRES_DB,
             'user': DatabaseConfig.POSTGRES_USER,
+            'password': DatabaseConfig.POSTGRES_PASSWORD,
+        }
+          # Remote PostgreSQL fallback parameters (Supabase Pooler) - IPv4 fallback
+        # Extract project ID from hostname (e.g., db.udfrgwtqbfcxtrvheqet.supabase.co -> udfrgwtqbfcxtrvheqet)
+        project_id = DatabaseConfig.POSTGRES_HOST.split('.')[1] if '.' in DatabaseConfig.POSTGRES_HOST else 'unknown'
+        self.remote_fallback_params = {
+            'host': 'aws-0-ap-southeast-1.pooler.supabase.com',
+            'port': 5432,
+            'database': DatabaseConfig.POSTGRES_DB,
+            'user': f'postgres.{project_id}',  # postgres.udfrgwtqbfcxtrvheqet
             'password': DatabaseConfig.POSTGRES_PASSWORD,
         }
         
@@ -80,16 +89,17 @@ class DatabaseManager:
             'user': DatabaseConfig.LOCAL_POSTGRES_USER,
             'password': DatabaseConfig.LOCAL_POSTGRES_PASSWORD,
         }
-        
-        # Test connections
+          # Test connections
         self._test_connections()
         
-        # Initialize sync background thread if auto sync is enabled
+        # Track which remote connection is working
+        self.using_fallback_remote = False
+          # Initialize sync background thread if auto sync is enabled
         if auto_sync:
             self._start_sync_thread()
     
     def _test_connections(self):
-        """Test both local and remote connections."""
+        """Test both local and remote connections with IPv4 fallback."""
         # Test local connection
         try:
             conn = psycopg2.connect(**self.local_params)
@@ -100,15 +110,27 @@ class DatabaseManager:
             self.sync_status.local_available = False
             self.logger.warning(f"❌ Local database connection failed: {e}")
         
-        # Test remote connection
+        # Test remote connection (IPv6 direct)
         try:
             conn = psycopg2.connect(**self.remote_params)
             conn.close()
             self.sync_status.remote_available = True
-            self.logger.info("✅ Remote database connection successful")
+            self.using_fallback_remote = False
+            self.logger.info("✅ Remote database connection successful (direct IPv6)")
         except Exception as e:
-            self.sync_status.remote_available = False
-            self.logger.warning(f"❌ Remote database connection failed: {e}")
+            self.logger.warning(f"❌ Direct remote connection failed: {e}")
+            
+            # Try fallback connection (IPv4 pooler)
+            try:
+                conn = psycopg2.connect(**self.remote_fallback_params)
+                conn.close()
+                self.sync_status.remote_available = True
+                self.using_fallback_remote = True
+                self.logger.info("✅ Remote database connection successful (IPv4 pooler fallback)")
+            except Exception as fallback_e:
+                self.sync_status.remote_available = False
+                self.using_fallback_remote = False
+                self.logger.error(f"❌ Both remote connections failed. Direct: {e}, Fallback: {fallback_e}")
     
     def get_connection_status(self):
         """Get current connection and sync status."""
@@ -123,15 +145,26 @@ class DatabaseManager:
                 'failed_operations': self.sync_status.failed_operations,
                 'conflicts': self.sync_status.conflicts,
                 'is_syncing': self.sync_status.is_syncing
-            }
-        }
+            },
+            'using_fallback_remote': getattr(self, 'using_fallback_remote', False)        }
     
     def _get_preferred_connection(self):
-        """Get connection to preferred database."""
+        """Get connection to preferred database with real-time fallback."""
         if self.prefer_local and self.sync_status.local_available:
             return psycopg2.connect(**self.local_params)
         elif self.sync_status.remote_available:
-            return psycopg2.connect(**self.remote_params)
+            # Try direct connection first, then fallback
+            if not self.using_fallback_remote:
+                try:
+                    return psycopg2.connect(**self.remote_params)
+                except Exception as e:
+                    self.logger.warning(f"Direct remote connection failed during operation, trying fallback: {e}")
+                    # Mark as using fallback and try fallback connection
+                    self.using_fallback_remote = True
+                    return psycopg2.connect(**self.remote_fallback_params)
+            else:
+                # Already using fallback
+                return psycopg2.connect(**self.remote_fallback_params)
         elif self.sync_status.local_available:
             return psycopg2.connect(**self.local_params)
         else:
