@@ -1,11 +1,15 @@
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget, QFrame, QPushButton, QLabel, QSizePolicy, QApplication, QGraphicsDropShadowEffect
 from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QIcon, QPalette, QColor
-from ..core.accounting_system import AccountingSystem
+
+# Import PostgreSQL accounting system
+from ..core.accounting_system_postgresql import AccountingSystem
+
 from .components.mica_effect import MicaEffect
 from .components.styles import ModernStyles, GlassmorphismHelper
 from .components.font_manager import font_manager
 import os
+import logging
 
 # Import ResponsiveHelper for consistent responsive design
 from .pages.dashboard import ResponsiveHelper
@@ -112,9 +116,16 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("AI Accountant")
         self.setMinimumSize(1200, 800)
+        
+        # Initialize logging
+        self.logger = logging.getLogger(__name__)
+        
         # Use single database file in project root
         db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'accounting.db')
-        self.system = AccountingSystem(db_path)
+        
+        # Initialize accounting system with PostgreSQL or SQLite fallback
+        self.system = self._initialize_accounting_system(db_path)
+        
         self.sidebar_expanded = False  # Start collapsed for a cleaner look
         self.dark_mode = True  # Default to dark mode for better Mica effect
         self.currency_symbol = self._load_currency()
@@ -821,13 +832,24 @@ class MainWindow(QMainWindow):
         ModernStyles.set_font_family(font_family)
         
         # Force a complete update of all UI elements
-        self._apply_global_consistent_styling()
-          # Update child widgets
+        self._apply_global_consistent_styling()        # Update child widgets
         if hasattr(self, 'stack'):
             for i in range(self.stack.count()):
                 page = self.stack.widget(i)
                 if hasattr(page, '_apply_styling') and callable(page._apply_styling):
                     page._apply_styling()
-                # Force a style refresh
+        # Force a style refresh
         self.style().unpolish(self)
         self.style().polish(self)
+        
+    def _initialize_accounting_system(self, db_path):
+        """Initialize PostgreSQL accounting system."""
+        try:
+            self.logger.info("Initializing PostgreSQL accounting system...")
+            system = AccountingSystem()
+            self.logger.info("✅ PostgreSQL accounting system initialized successfully")
+            return system
+                
+        except Exception as e:
+            self.logger.error(f"PostgreSQL initialization failed: {e}")
+            raise Exception(f"Failed to initialize PostgreSQL database: {e}")

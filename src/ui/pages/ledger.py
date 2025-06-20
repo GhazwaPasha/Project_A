@@ -58,9 +58,8 @@ class AccountCard(QFrame):
           # Header row
         header_layout = QHBoxLayout()
         header_layout.setSpacing(8)
-        
-        # Account code
-        code_label = QLabel(self.account_data[2] or "")
+          # Account code
+        code_label = QLabel(self.account_data['code'] or "")
         code_label.setStyleSheet("""
             color: #64B5F6;
             font-weight: 600;
@@ -95,9 +94,8 @@ class AccountCard(QFrame):
         header_layout.addWidget(level_label)
         
         header_layout.addStretch()
-        
-        # Account type
-        type_label = QLabel(self.account_data[1].title())
+          # Account type
+        type_label = QLabel(self.account_data['type'].title())
         type_label.setStyleSheet("""
             color: rgba(255, 255, 255, 0.6);
             font-size: 11px;
@@ -108,9 +106,8 @@ class AccountCard(QFrame):
         header_layout.addWidget(type_label)
         
         layout.addLayout(header_layout)
-        
-        # Account name
-        name_label = QLabel(self.account_data[0])
+          # Account name
+        name_label = QLabel(self.account_data['name'])
         name_label.setStyleSheet("""
             color: white;
             font-weight: 600;
@@ -170,7 +167,7 @@ class AccountCard(QFrame):
     def mousePressEvent(self, event):
         """Handle card click."""
         if event.button() == Qt.MouseButton.LeftButton:
-            self.accountSelected.emit(self.account_data[0])
+            self.accountSelected.emit(self.account_data['name'])
         super().mousePressEvent(event)
 
 
@@ -903,31 +900,28 @@ class TransactionRowCard(QFrame):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(12)
-        
-        # Date
-        date_label = QLabel(str(self.entry_data[1]))
+          # Date
+        date_label = QLabel(str(self.entry_data['entry_date']))
         date_label.setStyleSheet("color: #90CAF9; font-weight: 500; font-size: 12px; background: transparent; border: none;")
         date_label.setFixedWidth(80)
         layout.addWidget(date_label)
         
         # Description
-        desc_label = QLabel(str(self.entry_data[2]))
+        desc_label = QLabel(str(self.entry_data['description']))
         desc_label.setStyleSheet("color: white; font-weight: 500; font-size: 12px; background: transparent; border: none;")
         desc_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         layout.addWidget(desc_label)
-        
-        # Other account
-        debit_account = self.entry_data[3]
-        credit_account = self.entry_data[4]
+          # Other account
+        debit_account = self.entry_data['debit_account_name']
+        credit_account = self.entry_data['credit_account_name']
         other_account = credit_account if self.account_name == debit_account else debit_account
         
         other_label = QLabel(other_account)
         other_label.setStyleSheet("color: #FFAB91; font-size: 11px; background: transparent; border: none;")
         other_label.setFixedWidth(120)
         layout.addWidget(other_label)
-        
-        # Amount (debit/credit indication)
-        amount = float(self.entry_data[5])
+          # Amount (debit/credit indication)
+        amount = float(self.entry_data['amount'])
         is_debit = self.account_name == debit_account
         
         amount_text = f"${amount:,.2f}"
@@ -1179,14 +1173,16 @@ class LedgerPage(QWidget):
         # Clear existing cards
         for card in self.account_cards:
             card.setParent(None)
-        self.account_cards.clear()          # Create new cards
+        self.account_cards.clear()
+        
+        # Create new cards
         row, col = 0, 0
         max_cols = 3
         
         for account in accounts:
-            # account is (name, type, code, parent_code, level, is_postable, description)
-            account_data = account[:4]  # (name, type, code, parent_code)
-            account_level = account[4]  # level
+            # account is a dict with all account fields
+            account_data = account  # Full account dict
+            account_level = account['level']  # level
             
             card = AccountCard(account_data, account_level)
             card.accountSelected.connect(self._show_account_details)
@@ -1209,8 +1205,8 @@ class LedgerPage(QWidget):
         
         filtered_accounts = []
         for account in self.all_accounts:
-            # account is (name, type, code, parent_code, level, is_postable, description)
-            name, acc_type, code, parent_code = account[:4]
+            # account is a dict with all account fields
+            name, acc_type, code, parent_code = account['name'], account['type'], account['code'], account['parent_code']
             
             # Apply search filter
             if search_text and search_text not in name.lower() and search_text not in (code or "").lower():
@@ -1253,13 +1249,13 @@ class LedgerPage(QWidget):
             
             for entry in entries:
                 if len(entry) >= 6:
-                    debit_account = entry[3]
-                    credit_account = entry[4]
-                    amount = float(entry[5])
+                    debit_account = entry['debit_account_name']
+                    credit_account = entry['credit_account_name']
+                    amount = float(entry['amount'])
                     
                     # Process each account in our cards
                     for card in self.account_cards:
-                        account_name = card.account_data[0]
+                        account_name = card.account_data['name']
                         
                         # Check if this entry affects this account
                         is_debit_match = find_matching_account_name(debit_account, account_name)
@@ -1280,7 +1276,7 @@ class LedgerPage(QWidget):
             
             # Update card balances
             for card in self.account_cards:
-                account_name = card.account_data[0]
+                account_name = card.account_data['name']
                 balance = account_balances.get(account_name, 0.0)
                 count = account_counts.get(account_name, 0)
                 card.update_balance(balance, count)

@@ -206,23 +206,37 @@ class SingleEntryTab(QWidget):
         self.accounts = []
         self._load_accounts()
         
-        # Connect to account changes for real-time updates
-        accounting_events.accounts_changed.connect(self._on_accounts_changed)
+        # Connect to account changes for real-time updates        accounting_events.accounts_changed.connect(self._on_accounts_changed)
         self._setup_ui()
         self._load_transactions()
         
     def _load_accounts(self):
         """Load accounts from the system."""
         try:
+            print(f"🔍 Loading accounts... System type: {type(self.system)}")
             if hasattr(self.system, 'get_all_accounts'):
+                print("✓ System has get_all_accounts method")
                 accounts_data = self.system.get_all_accounts()
-                self.accounts = [f"{acc[2]} - {acc[0]}" for acc in accounts_data if acc[5]]
+                print(f"✓ Retrieved {len(accounts_data)} accounts from database")
+                
+                postable_accounts = [acc for acc in accounts_data if acc['is_postable']]
+                print(f"✓ Found {len(postable_accounts)} postable accounts")
+                
+                self.accounts = [f"{acc['code']} - {acc['name']}" for acc in postable_accounts]
+                print(f"✓ Formatted {len(self.accounts)} accounts for UI")
+                
+                if self.accounts:
+                    print(f"✓ First few accounts: {self.accounts[:3]}")
+                else:
+                    print("⚠️ No postable accounts found!")
             else:
                 # No fallback accounts - system must have proper chart of accounts
                 self.accounts = []
-                print("Warning: System does not have get_all_accounts method")
+                print("❌ Warning: System does not have get_all_accounts method")
         except Exception as e:
-            print(f"Error loading accounts: {e}")
+            print(f"❌ Error loading accounts: {e}")
+            import traceback
+            traceback.print_exc()
             # No fallback accounts - system must have proper chart of accounts
             self.accounts = []
         
@@ -719,8 +733,7 @@ class SingleEntryTab(QWidget):
             except TypeError:
                 pass
             
-            if not expanded:  # Currently collapsed, so expand
-                content.setVisible(True)
+            if not expanded:  # Currently collapsed, so expand                content.setVisible(True)
                 content.setMaximumHeight(16777215)
                 content_height = content.sizeHint().height()
                 animation.setStartValue(0)
@@ -732,21 +745,23 @@ class SingleEntryTab(QWidget):
                 animation.setEndValue(0)
                 animation.finished.connect(lambda: content.setVisible(False))
                 animation.start()
-
+                
         def header_toggle():
             toggle()
-        
+            
         # Only connect header click to toggle function (not the triangle icon)
         header.mousePressEvent = lambda event: header_toggle()
-
+        
         layout.insertWidget(0, header)
         return container
-    
+        
     def _populate_account_combo(self, combo):
         """Populate account combo box."""
+        print(f"🔧 Populating combo box with {len(self.accounts)} accounts")
         combo.setAccountList(self.accounts)
         combo.setPlaceholderText("Select or type account...")
         combo.clear_selection()
+        print(f"✓ Combo box populated")
     
     def _parse_transaction(self):
         """Parse natural language transaction."""

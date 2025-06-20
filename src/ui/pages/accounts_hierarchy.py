@@ -881,9 +881,16 @@ class HierarchicalAccountsPage(QWidget):
             
             # Create items dictionary for quick lookup
             items = {}
-            
-            # First pass: Create all items
-            for name, acc_type, code, parent_code, level, is_postable, description in accounts:
+              # First pass: Create all items
+            for account in accounts:
+                name = account['name']
+                acc_type = account['type']
+                code = account['code']
+                parent_code = account['parent_code']
+                level = account['level']
+                is_postable = account['is_postable']
+                description = account['description']
+                
                 item = QTreeWidgetItem()
                 item.setText(0, code or "")
                 item.setText(1, name)
@@ -1200,9 +1207,8 @@ class AccountDetailsPanel(QStackedWidget):
             
     def _on_form_submitted(self, data):
         """Handle form submission."""
-        try:
-            # Start by verifying account doesn't already exist
-            existing_accounts = [acc[0] for acc in self.system.get_all_accounts()]
+        try:            # Start by verifying account doesn't already exist
+            existing_accounts = [acc['name'] for acc in self.system.get_all_accounts()]
             if not self.form_card.edit_mode and data['name'] in existing_accounts:
                 msg = QMessageBox()
                 msg.setIcon(QMessageBox.Icon.Warning)

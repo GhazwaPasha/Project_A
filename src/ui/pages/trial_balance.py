@@ -383,15 +383,13 @@ class TrialBalancePage(QWidget):
                 account_balances = self.system.get_trial_balance(from_str, to_str)
             else:
                 account_balances = self.system.get_trial_balance()
-            
-            # Get account metadata for codes and types
+              # Get account metadata for codes and types
             accounts = self.system.get_all_accounts()
             account_info = {}
             for account in accounts:
-                name, account_type, code, parent_code, level, is_postable, description = account
-                account_info[name] = {
-                    'type': account_type,
-                    'code': code or ''
+                account_info[account['name']] = {
+                    'type': account['type'],
+                    'code': account['code'] or ''
                 }
             
             # Build trial balance data in the format expected by the UI
@@ -399,18 +397,24 @@ class TrialBalancePage(QWidget):
             total_debits = 0.0
             total_credits = 0.0
             
-            for account_name, balance in account_balances.items():
-                if abs(balance) >= 0.01:  # Only non-zero balances
+            # Convert trial balance list to account balances
+            for balance_record in account_balances:
+                account_name = balance_record['name']
+                debit_total = float(balance_record['debit_total'])
+                credit_total = float(balance_record['credit_total'])
+                net_balance = debit_total - credit_total
+                
+                if abs(net_balance) >= 0.01:  # Only non-zero balances
                     info = account_info.get(account_name, {'type': 'Unknown', 'code': ''})
                     
-                    if balance > 0:
-                        debit_amount = balance
+                    if net_balance > 0:
+                        debit_amount = net_balance
                         credit_amount = 0.0
-                        total_debits += balance
+                        total_debits += net_balance
                     else:
                         debit_amount = 0.0
-                        credit_amount = abs(balance)
-                        total_credits += abs(balance)
+                        credit_amount = abs(net_balance)
+                        total_credits += abs(net_balance)
                     
                     trial_accounts.append({
                         'name': account_name,

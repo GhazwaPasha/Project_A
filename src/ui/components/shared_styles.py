@@ -139,7 +139,7 @@ def load_accounts_from_system(system):
     try:
         if hasattr(system, 'get_all_accounts'):
             accounts_data = system.get_all_accounts()
-            return [f"{acc[2]} - {acc[0]}" for acc in accounts_data if acc[5]]
+            return [f"{acc['code']} - {acc['name']}" for acc in accounts_data if acc['is_postable']]
         else:
             return ["1001 - Cash", "2001 - Accounts Payable"]
     except Exception as e:

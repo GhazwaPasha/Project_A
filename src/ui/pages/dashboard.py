@@ -163,22 +163,38 @@ class DashboardPage(QWidget):
                 
         if liabilities > 0:
             self.card_liabilities.set_ticker("📋 Outstanding", "#2196F3")
-        else:
-            self.card_liabilities.set_ticker("✅ Clear", "#4CAF50")
+        else:            self.card_liabilities.set_ticker("✅ Clear", "#4CAF50")
             
     def _get_balance(self, account_name, from_date=None, to_date=None):
         """Get balance for a specific account in date range."""
-        balance = self.system.get_trial_balance(from_date, to_date)
-        return balance.get(account_name, 0.0)
+        trial_balance = self.system.get_trial_balance(from_date, to_date)
+        
+        # Convert list of records to account name -> balance mapping
+        for account in trial_balance:
+            if account['name'] == account_name:
+                # Calculate net balance (debit - credit for assets, credit - debit for liabilities/equity)
+                debit_total = float(account['debit_total'])
+                credit_total = float(account['credit_total'])
+                return debit_total - credit_total
+        
+        return 0.0
         
     def _get_total_liabilities(self, from_date=None, to_date=None):
         """Calculate total liabilities."""
         accounts = self.system.get_all_accounts()
-        balance = self.system.get_trial_balance(from_date, to_date)
+        trial_balance = self.system.get_trial_balance(from_date, to_date)
         total = 0.0
-        for name, acc_type, code, parent_code, level, is_postable, description in accounts:
-            if acc_type == 'Liability':
-                total += balance.get(name, 0.0)
+        
+        for account in accounts:
+            if account['type'] == 'Liability':
+                # Find balance for this account in trial balance
+                for tb_account in trial_balance:
+                    if tb_account['name'] == account['name']:
+                        debit_total = float(tb_account['debit_total'])
+                        credit_total = float(tb_account['credit_total'])
+                        # For liabilities, credit increases balance
+                        total += credit_total - debit_total
+                        break
         return total
         
     def _get_total_revenue(self, from_date=None, to_date=None, abs_value=True):

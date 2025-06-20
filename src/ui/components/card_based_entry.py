@@ -439,7 +439,7 @@ class CardBasedTransactionEntry(QFrame):
         try:
             # Check if account exists in the system
             all_accounts = self.system.get_postable_accounts()
-            formatted_accounts = [f"{acc[2]} - {acc[0]}" for acc in all_accounts]
+            formatted_accounts = [f"{acc['code']} - {acc['name']}" for acc in all_accounts]
             
             return account_text.strip() in formatted_accounts
         except:

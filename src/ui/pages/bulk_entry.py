@@ -37,10 +37,9 @@ class BulkEntryPage(QWidget):
         self._bulk_import_mode = False
         self._skip_validation_updates = False
         self._memory_conservation_mode = False
-        self._validation_cache = {}
-          # Load accounts once for all cards
+        self._validation_cache = {}        # Load accounts once for all cards
         accounts_data = self.system.get_postable_accounts()
-        self.formatted_accounts = [f"{acc[2]} - {acc[0]}" for acc in accounts_data]        
+        self.formatted_accounts = [f"{acc['code']} - {acc['name']}" for acc in accounts_data]
         self._setup_ui()
         self._add_new_card()  # Start with one empty card
         
@@ -1009,7 +1008,7 @@ class BulkEntryPage(QWidget):
         try:
             # Reload accounts from the system
             accounts_data = self.system.get_postable_accounts()
-            self.formatted_accounts = [f"{acc[2]} - {acc[0]}" for acc in accounts_data]
+            self.formatted_accounts = [f"{acc['code']} - {acc['name']}" for acc in accounts_data]
             
             # Update all existing cards with the new account list
             for card in self.entry_cards:
@@ -1017,7 +1016,6 @@ class BulkEntryPage(QWidget):
                 card.credit_combo.setAccountList(self.formatted_accounts)
                 
             print("✅ Account list refreshed in bulk entry page")
-            
         except Exception as e:
             print(f"❌ Error refreshing accounts in bulk entry: {e}")
     
@@ -1025,7 +1023,7 @@ class BulkEntryPage(QWidget):
         """Internal method to refresh accounts when events are triggered."""
         # Update the local accounts cache
         accounts_data = self.system.get_postable_accounts()
-        self.formatted_accounts = [f"{acc[2]} - {acc[0]}" for acc in accounts_data]
+        self.formatted_accounts = [f"{acc['code']} - {acc['name']}" for acc in accounts_data]
         
         # Refresh all cards
         self.refresh_accounts_from_system()

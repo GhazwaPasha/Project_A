@@ -150,7 +150,7 @@ class ModernAccountDialog(QDialog):
         if self.system:
             accounts = self.system.get_all_accounts()
             for account in accounts:
-                account_name = account[0]
+                account_name = account['name']
                 if not self.edit_mode or account_name != self.original_name:
                     self.parent_combo.addItem(account_name)
         
@@ -416,7 +416,7 @@ class JournalEntryDialog(QDialog):
         if self.system:
             accounts = self.system.get_all_accounts()
             for account in accounts:
-                combo.addItem(account[0])
+                combo.addItem(account['name'])
                 
     def _create_buttons(self, layout):
         """Create dialog buttons."""
@@ -802,7 +802,7 @@ class CustomReportBuilderDialog(QDialog):
         content += "<tr style='font-weight: bold;'><td>Date</td><td>Description</td><td>Debit</td><td>Credit</td><td>Amount</td></tr>"
         
         for entry in entries:
-            content += f"<tr><td>{entry[1]}</td><td>{entry[2]}</td><td>{entry[3]}</td><td>{entry[4]}</td><td style='text-align: right;'>${entry[5]:,.2f}</td></tr>"
+            content += f"<tr><td>{entry['entry_date']}</td><td>{entry['description']}</td><td>{entry['debit_account_name']}</td><td>{entry['credit_account_name']}</td><td style='text-align: right;'>${entry['amount']:,.2f}</td></tr>"
         
         content += "</table>"
         return content
