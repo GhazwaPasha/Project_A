@@ -6,18 +6,29 @@ import os
 import sys
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from dotenv import load_dotenv
 
 def run_migration():
     """Run the multi-tenant migration"""
     try:
-        # Database connection parameters (update these with your Supabase details)
+        # Load environment variables
+        load_dotenv()
+        
+        # Database connection parameters from environment
         conn_params = {
-            'host': 'db.udfrgwtqbfcxtrvheqet.supabase.co',  # Your Supabase host
-            'port': 5432,
-            'database': 'postgres',
-            'user': 'postgres',
-            'password': 'your-postgres-password'  # Update this
+            'host': os.getenv('POSTGRES_HOST'),
+            'port': int(os.getenv('POSTGRES_PORT', 5432)),
+            'database': os.getenv('POSTGRES_DB'),
+            'user': os.getenv('POSTGRES_USER'),
+            'password': os.getenv('POSTGRES_PASSWORD')
         }
+        
+        # Validate required parameters
+        if not all([conn_params['host'], conn_params['database'], 
+                   conn_params['user'], conn_params['password']]):
+            print("❌ Missing required database connection parameters in .env file")
+            print("Required: POSTGRES_HOST, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD")
+            return False
         
         print("Connecting to Supabase database...")
         conn = psycopg2.connect(**conn_params)

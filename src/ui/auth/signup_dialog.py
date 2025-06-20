@@ -233,7 +233,7 @@ class SignupDialog(QDialog):
         """Apply glassmorphism styling"""
         self.setStyleSheet(f"""
             QDialog {{
-                background: {GlassmorphismHelper.get_background_color()};
+                background: rgba(30, 30, 30, 0.85);
                 border-radius: 15px;
                 border: 1px solid rgba(255, 255, 255, 0.2);
             }}

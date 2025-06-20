@@ -1,7 +1,5 @@
-"""
-Database schema migration for multi-tenant support
-Run this to create the new tables and modify existing ones
-"""
+-- Database schema migration for multi-tenant support
+-- Run this to create the new tables and modify existing ones
 
 -- Enable UUID extension if not already enabled
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

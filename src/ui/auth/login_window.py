@@ -178,11 +178,11 @@ class LoginWindow(QDialog):
         if not email or not password:
             self._show_error("Please enter both email and password")
             return
-        
-        # Disable button and show loading
+          # Disable button and show loading
         self.signin_btn.setText("Signing in...")
         self.signin_btn.setEnabled(False)
-          # Perform authentication
+        
+        # Perform authentication
         QTimer.singleShot(100, lambda: self._perform_signin(email, password))
     
     def _perform_signin(self, email: str, password: str):
@@ -190,7 +190,27 @@ class LoginWindow(QDialog):
         result = self.auth_manager.sign_in(email, password)
         
         if result["success"]:
-            self.login_successful.emit(result.get("user", {}), result.get("organizations", []))
+            user_obj = result.get("user", {})
+            organizations = result.get("organizations", [])
+            
+            # Convert User object to dictionary if needed
+            if hasattr(user_obj, '__dict__'):
+                # If it's a User object, convert to dict
+                user_dict = {
+                    'id': str(user_obj.id) if hasattr(user_obj, 'id') else '',
+                    'email': user_obj.email if hasattr(user_obj, 'email') else '',
+                    'created_at': str(user_obj.created_at) if hasattr(user_obj, 'created_at') else '',
+                    'updated_at': str(user_obj.updated_at) if hasattr(user_obj, 'updated_at') else '',
+                    'email_confirmed_at': str(user_obj.email_confirmed_at) if hasattr(user_obj, 'email_confirmed_at') else None,
+                    'phone': user_obj.phone if hasattr(user_obj, 'phone') else None,
+                    'user_metadata': user_obj.user_metadata if hasattr(user_obj, 'user_metadata') else {},
+                    'app_metadata': user_obj.app_metadata if hasattr(user_obj, 'app_metadata') else {}
+                }
+            else:
+                # It's already a dict
+                user_dict = user_obj if isinstance(user_obj, dict) else {}
+            
+            self.login_successful.emit(user_dict, organizations)
             self.accept()
         else:
             self._show_error(result.get("error", "Sign in failed"))

@@ -119,8 +119,7 @@ class AuthManager:
             self.user_organizations = []
             self.session_token = None
             self.logger.info("User signed out successfully")
-            return True
-        except Exception as e:
+            return True        except Exception as e:
             self.logger.error(f"Sign out failed: {e}")
             return False
     
@@ -155,13 +154,16 @@ class AuthManager:
             
             # Generate slug from name
             slug = name.lower().replace(' ', '-').replace('_', '-')
-            
-            # Create organization
-            org_result = self.supabase.table('organizations').insert({
+            # Remove special characters and ensure uniqueness
+            import re
+            slug = re.sub(r'[^a-z0-9-]', '', slug)
+              # Create organization (using only available columns)
+            org_data = {
                 "name": name,
-                "slug": slug,
-                "description": description
-            }).execute()
+                "slug": slug
+            }
+            
+            org_result = self.supabase.table('organizations').insert(org_data).execute()
             
             if org_result.data:
                 org = org_result.data[0]
