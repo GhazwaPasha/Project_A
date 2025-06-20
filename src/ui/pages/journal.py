@@ -6,9 +6,9 @@ Refactored to eliminate code duplication and vestigial components
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QLineEdit, QFrame, QDateEdit, QMessageBox, 
-    QScrollArea, QSizePolicy, QTabWidget
+    QScrollArea, QSizePolicy, QTabWidget, QApplication
 )
-from PyQt6.QtCore import Qt, QDate
+from PyQt6.QtCore import Qt, QDate, QPropertyAnimation, QEasingCurve
 from datetime import datetime
 from ...core.accounting_system import AccountingSystem
 from ...core.events import accounting_events
@@ -205,38 +205,23 @@ class SingleEntryTab(QWidget):
         self.system = system
         self.accounts = []
         self._load_accounts()
-        
-        # Connect to account changes for real-time updates        accounting_events.accounts_changed.connect(self._on_accounts_changed)
+        # Connect to account changes for real-time updates
+        accounting_events.accounts_changed.connect(self._on_accounts_changed)
         self._setup_ui()
         self._load_transactions()
         
     def _load_accounts(self):
         """Load accounts from the system."""
         try:
-            print(f"🔍 Loading accounts... System type: {type(self.system)}")
             if hasattr(self.system, 'get_all_accounts'):
-                print("✓ System has get_all_accounts method")
                 accounts_data = self.system.get_all_accounts()
-                print(f"✓ Retrieved {len(accounts_data)} accounts from database")
-                
                 postable_accounts = [acc for acc in accounts_data if acc['is_postable']]
-                print(f"✓ Found {len(postable_accounts)} postable accounts")
-                
                 self.accounts = [f"{acc['code']} - {acc['name']}" for acc in postable_accounts]
-                print(f"✓ Formatted {len(self.accounts)} accounts for UI")
-                
-                if self.accounts:
-                    print(f"✓ First few accounts: {self.accounts[:3]}")
-                else:
-                    print("⚠️ No postable accounts found!")
             else:
                 # No fallback accounts - system must have proper chart of accounts
                 self.accounts = []
-                print("❌ Warning: System does not have get_all_accounts method")
         except Exception as e:
             print(f"❌ Error loading accounts: {e}")
-            import traceback
-            traceback.print_exc()
             # No fallback accounts - system must have proper chart of accounts
             self.accounts = []
         
@@ -246,14 +231,30 @@ class SingleEntryTab(QWidget):
         tab_layout.setContentsMargins(0, 0, 0, 0)
         tab_layout.setSpacing(0)
         
-        # Main container (no scroll area - fixed content)
+        # Create a scroll area for the entire content to allow form expansion
+        main_scroll = QScrollArea()
+        main_scroll.setWidgetResizable(True)
+        main_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        main_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        main_scroll.setStyleSheet("""
+            QScrollArea {
+                background: transparent;
+                border: none;
+            }
+            QWidget#scrollAreaWidgetContents {
+                background: transparent;
+            }
+        """ + ModernScrollbarStyles.get_vertical_scrollbar_style())
+        
+        # Main container (now scrollable to accommodate form expansion)
         main_container = QWidget()
+        main_container.setObjectName("scrollAreaWidgetContents")
         main_layout = QVBoxLayout(main_container)
         main_layout.setContentsMargins(0, ResponsiveHelper.scale_size(24, 16, 32),
                                      0, ResponsiveHelper.scale_size(24, 16, 32))
         main_layout.setSpacing(ResponsiveHelper.scale_size(24, 16, 32))
         
-        # Entry form (fixed at top)
+        # Entry form (now has unlimited vertical space to expand)
         self.entry_form = self._create_entry_form()
         main_layout.addWidget(self.entry_form)
         
@@ -315,10 +316,12 @@ class SingleEntryTab(QWidget):
             """)
             headers_layout.addWidget(header)
         
-        main_layout.addWidget(self.headers_frame)
+        main_layout.addWidget(self.headers_frame)        
+        # Add the main scroll area to tab layout
+        main_scroll.setWidget(main_container)
+        tab_layout.addWidget(main_scroll)
         
-        # Add the fixed content to main layout
-        tab_layout.addWidget(main_container)        # Scrollable transactions area with modern scrollbar
+        # Transactions scroll area is now part of the main container
         self.transactions_scroll = QScrollArea()
         self.transactions_scroll.setWidgetResizable(True)
         self.transactions_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -340,7 +343,7 @@ class SingleEntryTab(QWidget):
         self.transactions_layout.setContentsMargins(8, 8, 8, ResponsiveHelper.scale_size(24, 16, 32))
         self.transactions_layout.setSpacing(4)  # Reduced spacing between cards for a more modern look
         self.transactions_scroll.setWidget(self.transactions_widget)
-        tab_layout.addWidget(self.transactions_scroll, 1)  # This takes remaining space
+        main_layout.addWidget(self.transactions_scroll, 1)  # This takes remaining space in main container
         
     def _create_entry_form(self):
         """Create expandable entry form."""
@@ -385,13 +388,13 @@ class SingleEntryTab(QWidget):
         title.setStyleSheet("""
             color: rgba(255, 255, 255, 0.9);
             font-size: 14px;
-            font-weight: 500;
-            background: transparent;
+            font-weight: 500;            background: transparent;
             border: none;
         """)
         
         toggle_btn = QLabel()
-        toggle_btn.setStyleSheet("""            QLabel {
+        toggle_btn.setStyleSheet("""
+            QLabel {
                 background: rgba(255, 255, 255, 0.1);
                 border: 1px solid rgba(255, 255, 255, 0.2);
                 border-radius: 4px;
@@ -402,7 +405,7 @@ class SingleEntryTab(QWidget):
                 color: rgba(255, 255, 255, 0.9);
             }
         """)
-        toggle_btn.setText("▼")
+        toggle_btn.setText("▼")  # Start with expanded state
         toggle_btn.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         header_layout.addWidget(title)
@@ -711,17 +714,17 @@ class SingleEntryTab(QWidget):
         clear_btn.setStyleSheet(button_base_style)
         clear_btn.clicked.connect(self._clear_form)
         grid.addWidget(clear_btn, 2, 4)  # row 2, column 4 (Amount)
-
-        content_layout.addLayout(grid)
-
-        # Setup animation
-        content.setVisible(False)
+        
+        content_layout.addLayout(grid)        # Setup animation - start EXPANDED for debugging to see actual form
+        content.setVisible(True)  # Start expanded to see what we're working with
+        content.setMaximumHeight(16777215)  # Remove height constraints
         layout.addWidget(content)
-
+        
+        # No pre-measurement needed since we're starting expanded
         animation = QPropertyAnimation(content, b"maximumHeight")
         animation.setDuration(250)
         animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
-
+        
         def toggle():
             # Check current visibility to determine state
             expanded = content.isVisible()
@@ -733,11 +736,33 @@ class SingleEntryTab(QWidget):
             except TypeError:
                 pass
             
-            if not expanded:  # Currently collapsed, so expand                content.setVisible(True)
+            if not expanded:  # Currently collapsed, so expand
+                content.setVisible(True)
                 content.setMaximumHeight(16777215)
-                content_height = content.sizeHint().height()
+                
+                # Force multiple layout passes to ensure proper sizing
+                for _ in range(3):  # Multiple passes for complex layouts                    content.style().polish(content)
+                    QApplication.processEvents()
+                    content.adjustSize()
+                    content.updateGeometry()
+                
+                # Calculate height based on content requirements with generous spacing
+                # Account for: 3 rows of inputs + margins + padding + buffer
+                label_row_height = 24  # Labels row
+                input_row_height = 40  # Main input fields row  
+                button_row_height = 40  # AI input + buttons row
+                vertical_spacing = 12 * 2  # Spacing between rows
+                content_margins = 18 + 8 + 18  # Top + middle + bottom margins
+                extra_buffer = 60  # Extra buffer for safety                
+                calculated_height = (label_row_height + input_row_height + button_row_height + 
+                                   vertical_spacing + content_margins + extra_buffer)
+                  # Use a very generous minimum height to ensure full visibility
+                actual_height = max(content.height(), calculated_height, 300)  # Increased to 300px minimum
+                
+                print(f"🔧 Expanding form - Content height: {content.height()}, Calculated: {calculated_height}, Using: {actual_height}")
+                
                 animation.setStartValue(0)
-                animation.setEndValue(content_height)
+                animation.setEndValue(actual_height)
                 animation.start()
             else:  # Currently expanded, so collapse
                 current_height = content.height()
@@ -745,7 +770,7 @@ class SingleEntryTab(QWidget):
                 animation.setEndValue(0)
                 animation.finished.connect(lambda: content.setVisible(False))
                 animation.start()
-                
+        
         def header_toggle():
             toggle()
             
@@ -757,11 +782,9 @@ class SingleEntryTab(QWidget):
         
     def _populate_account_combo(self, combo):
         """Populate account combo box."""
-        print(f"🔧 Populating combo box with {len(self.accounts)} accounts")
         combo.setAccountList(self.accounts)
         combo.setPlaceholderText("Select or type account...")
         combo.clear_selection()
-        print(f"✓ Combo box populated")
     
     def _parse_transaction(self):
         """Parse natural language transaction."""
@@ -894,8 +917,7 @@ class SingleEntryTab(QWidget):
                 color: rgba(255, 100, 100, 0.8);
                 font-size: 14px;
                 text-align: center;
-                padding: 40px;
-            """)
+                padding: 40px;            """)
             error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.transactions_layout.addWidget(error_label)
     
@@ -907,4 +929,3 @@ class SingleEntryTab(QWidget):
             self.debit_combo.setAccountList(self.accounts)
         if hasattr(self, 'credit_combo'):
             self.credit_combo.setAccountList(self.accounts)
-        print("✅ Account list refreshed in single entry tab")

@@ -71,20 +71,24 @@ class FontManager:
             except Exception as e:
                 print(f"Error creating font directory: {e}")
                 return []
-        
-        # Load fonts from the directory
+          # Load fonts from the directory
         loaded_families = []
         if os.path.exists(font_directory):
             for filename in os.listdir(font_directory):
                 if filename.lower().endswith(('.ttf', '.otf')):
                     font_path = os.path.join(font_directory, filename)
+                    
+                    # Check if this font is already loaded
+                    already_loaded = any(font_path in str(loaded_path) for loaded_path, _ in self.loaded_fonts)
+                    if already_loaded:
+                        continue
+                        
                     font_id = QFontDatabase.addApplicationFont(font_path)
                     if font_id != -1:
                         font_families = QFontDatabase.applicationFontFamilies(font_id)
                         for family in font_families:
                             loaded_families.append(family)
-                            self.loaded_fonts.append((family, font_id))
-                            print(f"Loaded font family: {family}")
+                            self.loaded_fonts.append((font_path, font_id))
         
         return loaded_families
     
@@ -241,7 +245,8 @@ class FontManager:
             if font_name not in available_fonts and (self.is_font_available(font_name) or key == 'default'):
                 # Always include the default font even if not detected
                 available_fonts.append(font_name)
-          # If no fonts are available, ensure at least the default system font is included
+        
+        # If no fonts are available, ensure at least the default system font is included
         if not available_fonts:
             available_fonts = ["Segoe UI", "Arial", "sans-serif"]
             
@@ -258,6 +263,24 @@ class FontManager:
         import os
         from PyQt6.QtGui import QFontDatabase
         
+        # Check if developer fonts are already available
+        available_families = QFontDatabase.families()
+        dev_fonts_needed = []
+        
+        # Check if Cascadia Code is already available
+        cascadia_available = any('cascadia' in family.lower() for family in available_families)
+        if not cascadia_available:
+            dev_fonts_needed.extend(['CascadiaCode.ttf', 'CascadiaCodePL.ttf'])
+            
+        # Check if JetBrains Mono is already available  
+        jetbrains_available = any('jetbrains' in family.lower() for family in available_families)
+        if not jetbrains_available:
+            dev_fonts_needed.append('jetbrains')  # Will handle downloading
+        
+        # If all fonts are already available, return early
+        if not dev_fonts_needed:
+            return [f for f in available_families if 'cascadia' in f.lower() or 'jetbrains' in f.lower()]
+        
         # Get the application directory path
         app_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
         assets_fonts_dir = os.path.join(app_path, 'assets', 'fonts')
@@ -268,55 +291,36 @@ class FontManager:
         
         # Track installed fonts
         installed_families = []
-        
-        # First install Cascadia Code
+          # First install Cascadia Code
         cascadia_fonts = ['CascadiaCode.ttf', 'CascadiaCodePL.ttf']
         for font_file in cascadia_fonts:
             font_path = os.path.join(assets_fonts_dir, font_file)
             if os.path.exists(font_path):
-                print(f"Installing font: {font_path}")
                 font_id = QFontDatabase.addApplicationFont(font_path)
                 if font_id != -1:
                     families = QFontDatabase.applicationFontFamilies(font_id)
                     if families:
-                        print(f"Successfully installed font families: {', '.join(families)}")
                         installed_families.extend(families)
-                else:
-                    print(f"Failed to install font: {font_path}")
-        
-        # Now handle JetBrains Mono - download if not present
+          # Now handle JetBrains Mono - download if not present
         jetbrains_files = [f for f in os.listdir(assets_fonts_dir) if f.lower().startswith('jetbrainsmono')]
         if not jetbrains_files:
-            print("JetBrains Mono not found locally. Attempting to download...")
             downloaded_files = self._download_jetbrains_mono(assets_fonts_dir)
             jetbrains_files = [os.path.basename(f) for f in downloaded_files]
-        
-        # Install JetBrains Mono fonts
+          # Install JetBrains Mono fonts
         for font_file in jetbrains_files:
             font_path = os.path.join(assets_fonts_dir, font_file)
             if os.path.exists(font_path):
-                print(f"Installing font: {font_path}")
                 font_id = QFontDatabase.addApplicationFont(font_path)
                 if font_id != -1:
                     families = QFontDatabase.applicationFontFamilies(font_id)
                     if families:
-                        print(f"Successfully installed font families: {', '.join(families)}")
                         installed_families.extend(families)
-                else:
-                    print(f"Failed to install font: {font_path}")
-        
-        # Verify the fonts were installed successfully
-        print(f"Developer fonts check:")
+          # Verify the fonts were installed successfully (quietly)
         dev_font_names = ['Cascadia Code', 'JetBrains Mono']
         for font_name in dev_font_names:
-            found = False
             for family in installed_families:
                 if font_name.lower() in family.lower():
-                    found = True
-                    print(f"  ✓ {font_name} is available as {family}")
                     break
-            if not found:
-                print(f"  ✗ {font_name} is not available in the system")
         
         # Update the loaded fonts list with installed families
         if installed_families:

@@ -789,8 +789,7 @@ class MainWindow(QMainWindow):
     def keyPressEvent(self, event):
         """Handle keyboard shortcuts."""
         super().keyPressEvent(event)
-        
-        # F5: Force refresh Mica effect (for testing/debugging)
+          # F5: Force refresh Mica effect (for testing/debugging)
         if event.key() == Qt.Key.Key_F5:
             print("🔄 Manual Mica refresh triggered (F5)")
             if self.mica_applied:
@@ -801,18 +800,11 @@ class MainWindow(QMainWindow):
                 
     def _load_custom_fonts(self):
         """Load custom fonts from the assets/fonts directory."""
-        # Load custom fonts using the font manager
+        # Load custom fonts using the font manager (only from local files)
         loaded_families = self.font_manager.load_custom_fonts()
         
-        # Also ensure developer fonts are installed
-        dev_fonts = self.font_manager.install_developer_fonts()
-        if dev_fonts:
-            loaded_families = list(set(loaded_families + dev_fonts))
-            
-        if loaded_families:
-            print(f"Loaded {len(loaded_families)} custom font families:")
-            for family in loaded_families:
-                print(f" - {family}")
+        # Skip developer font installation to speed up startup
+        # Dev fonts are already loaded if they exist in assets/fonts/
     def _apply_font_settings(self):
         """Apply font settings to the application."""
         # Apply font settings to the application using the font manager
