@@ -52,17 +52,23 @@ class SyncStatus:
         self.is_syncing = False
 
 class DatabaseManager:
-    """Enhanced database manager with local/remote sync capabilities."""
+    """Enhanced database manager with local/remote sync capabilities and multi-tenant support."""
     
-    def __init__(self, prefer_local=True, auto_sync=True):
+    def __init__(self, prefer_local=True, auto_sync=True, organization_id=None, user_id=None):
         """Initialize database manager with local and remote connections."""
         self.logger = logging.getLogger(__name__)
         self.prefer_local = prefer_local
         self.auto_sync = auto_sync
+        
+        # Multi-tenant context
+        self.organization_id = organization_id
+        self.user_id = user_id
+        
         self.sync_status = SyncStatus()
         self.sync_status.prefer_local = prefer_local
         self.sync_status.auto_sync_enabled = auto_sync
-          # Remote PostgreSQL connection parameters (Supabase) - Primary (IPv6)
+        
+        # Remote PostgreSQL connection parameters (Supabase) - Primary (IPv6)
         self.remote_params = {
             'host': DatabaseConfig.POSTGRES_HOST,
             'port': DatabaseConfig.POSTGRES_PORT,

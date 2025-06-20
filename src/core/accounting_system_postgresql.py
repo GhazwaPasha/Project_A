@@ -13,13 +13,20 @@ from .database_manager import DatabaseManager
 
 class AccountingSystemPostgreSQL:
     """
-    PostgreSQL-only Accounting System.
+    PostgreSQL-only Accounting System with multi-tenant support.
     """
     
-    def __init__(self):
-        """Initialize with PostgreSQL."""
+    def __init__(self, organization_id=None, user_id=None):
+        """Initialize with PostgreSQL and multi-tenant context."""
         self.logger = logging.getLogger(__name__)
-        self.db_manager = DatabaseManager()
+        self.organization_id = organization_id
+        self.user_id = user_id
+        
+        # Initialize database manager with organization context
+        self.db_manager = DatabaseManager(
+            organization_id=organization_id,
+            user_id=user_id
+        )
         
         # Ensure database is properly set up
         if not self.db_manager.test_connection():
@@ -27,16 +34,23 @@ class AccountingSystemPostgreSQL:
         
         # Ensure tables exist
         self.db_manager.create_tables()
-        self.logger.info("PostgreSQL Accounting System initialized")
+        self.logger.info(f"PostgreSQL Accounting System initialized for org: {organization_id}")
     
     def test_connection(self) -> bool:
         """Test database connection."""
         return self.db_manager.test_connection()
     
+    def _ensure_organization_context(self):
+        """Ensure organization context is set for operations."""
+        if not self.organization_id:
+            raise ValueError("Organization context required for multi-tenant operations")
+    
     # Account Management
     def create_account(self, name, account_type, code=None, parent_code=None, is_postable=True, description=None):
-        """Create a new account."""
-        with self.db_manager.get_db_cursor() as cursor:            # Generate code if not provided
+        """Create a new account with organization context."""
+        self._ensure_organization_context()
+        
+        with self.db_manager.get_db_cursor() as cursor:# Generate code if not provided
             if not code:
                 cursor.execute("SELECT COALESCE(MAX(CAST(code AS INTEGER)), 0) + 1 as next_code FROM accounts WHERE code ~ '^[0-9]+$'")
                 code = str(cursor.fetchone()['next_code'])

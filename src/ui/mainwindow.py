@@ -109,18 +109,23 @@ class ModernSidebarButton(QPushButton):
             QPushButton#ModernSidebarButton:focus {{
                 outline: none;
                 border: none;
-            }}
-        """)
+            }}        """)
+
 class MainWindow(QMainWindow):
-    def __init__(self, db_mode='postgresql', prefer_local=False, auto_sync=False):
+    def __init__(self, db_mode='postgresql', prefer_local=False, auto_sync=False, 
+                 auth_manager=None, session_manager=None):
         super().__init__()
-        self.setWindowTitle("AI Accountant")
+        self.setWindowTitle("AI Accountant - Multi-Tenant SaaS")
         self.setMinimumSize(1200, 800)
         
         # Store sync settings
         self.db_mode = db_mode
         self.prefer_local = prefer_local
         self.auto_sync = auto_sync
+        
+        # Store authentication context
+        self.auth_manager = auth_manager
+        self.session_manager = session_manager
         
         # Initialize logging
         self.logger = logging.getLogger(__name__)
@@ -851,24 +856,40 @@ class MainWindow(QMainWindow):
         self.style().polish(self)
     
     def _initialize_accounting_system(self, db_path):
-        """Initialize PostgreSQL accounting system with sync support."""
+        """Initialize PostgreSQL accounting system with sync support and multi-tenant context."""
         try:
             self.logger.info(f"Initializing accounting system in {self.db_mode} mode...")
             
+            # Get organization context from session manager
+            organization_id = None
+            user_id = None
+            
+            if self.session_manager:
+                organization_id = self.session_manager.get_active_organization_id()
+                user_id = self.session_manager.get_current_user_id()
+            
             if self.db_mode == 'hybrid':
-                # Use enhanced database manager with local/remote sync
+                # Use enhanced database manager with local/remote sync and multi-tenant context
                 from ..core.database_manager import DatabaseManager
                 db_manager = DatabaseManager(
                     prefer_local=self.prefer_local,
-                    auto_sync=self.auto_sync
+                    auto_sync=self.auto_sync,
+                    organization_id=organization_id,
+                    user_id=user_id
                 )
-                system = AccountingSystem()
+                system = AccountingSystem(
+                    organization_id=organization_id,
+                    user_id=user_id
+                )
                 system.db_manager = db_manager
-                self.logger.info("✅ Hybrid accounting system initialized successfully")
+                self.logger.info(f"✅ Hybrid multi-tenant accounting system initialized for org: {organization_id}")
             else:
-                # Use standard PostgreSQL system
-                system = AccountingSystem()
-                self.logger.info("✅ PostgreSQL accounting system initialized successfully")
+                # Use standard PostgreSQL system with multi-tenant context
+                system = AccountingSystem(
+                    organization_id=organization_id,
+                    user_id=user_id
+                )
+                self.logger.info(f"✅ PostgreSQL multi-tenant accounting system initialized for org: {organization_id}")
             
             return system
                 
