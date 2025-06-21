@@ -366,8 +366,7 @@ class MainWindow(QMainWindow):
         
         # Sidebar
         self.sidebar = self._create_sidebar()
-        content_layout.addWidget(self.sidebar)
-        
+        content_layout.addWidget(self.sidebar)        
         # Main content stack
         self.stack = QStackedWidget()
         self.stack.setObjectName("MainContentStack")
@@ -375,9 +374,6 @@ class MainWindow(QMainWindow):
         
         main_layout.addWidget(self.content_widget, 1)
         self.setCentralWidget(self.main_container)
-        
-        # Create notification drawer (overlay)
-        self._create_notification_drawer()
         
     def _create_title_bar(self):
         """Create a custom title bar for the frameless window."""
@@ -404,8 +400,7 @@ class MainWindow(QMainWindow):
         self.sync_button = CompactSyncButton()
         self.sync_button.sync_requested.connect(self._manual_sync)
         layout.addWidget(self.sync_button)
-        
-        # Add notification button next to sync button
+          # Add notification button next to sync button
         from .components.notification_button import NotificationButton
         self.notification_button = NotificationButton()
         self.notification_button.notification_clicked.connect(self._show_notifications)
@@ -1113,8 +1108,7 @@ class MainWindow(QMainWindow):
     def keyPressEvent(self, event):
         """Handle keyboard shortcuts."""
         super().keyPressEvent(event)
-        
-        # F5: Force refresh Mica effect (for testing/debugging)
+          # F5: Force refresh Mica effect (for testing/debugging)
         if event.key() == Qt.Key.Key_F5:
             print("🔄 Manual Mica refresh triggered (F5)")
             if self.mica_applied:
@@ -1122,21 +1116,6 @@ class MainWindow(QMainWindow):
                 self.update()
             else:
                 self._apply_mica_effect_delayed()
-                
-        # F6: Test notifications (for development/demo)
-        elif event.key() == Qt.Key.Key_F6:
-            print("🔔 Testing notifications (F6)")
-            self.test_notifications()
-            
-        # F7: Demo notification scenarios (for development/demo)
-        elif event.key() == Qt.Key.Key_F7:
-            print("🔔 Demo notification scenarios (F7)")
-            self.demo_notification_scenarios()
-            
-        # Escape: Close notification drawer if open
-        elif event.key() == Qt.Key.Key_Escape:
-            if hasattr(self, 'notification_drawer') and self.notification_drawer and self.notification_drawer.is_open:
-                self.notification_drawer.close_drawer()
                 
     def _load_custom_fonts(self):
         """Load custom fonts from the assets/fonts directory."""
@@ -1237,53 +1216,28 @@ class MainWindow(QMainWindow):
         """Trigger manual synchronization."""
         if hasattr(self.accounting_system, 'db_manager'):
             try:
-                self.logger.info("Manual sync requested...")
-                
+                self.logger.info("Manual sync requested...")                
                 # Trigger sync (this will be implemented in the sync manager)
                 self.accounting_system.db_manager._perform_sync()
                 
                 if hasattr(self, 'sync_button'):
                     self.sync_button.show_success("Sync completed")
-                    
-                # Add success notification
-                self.add_notification("Sync Complete", "Data synchronized successfully", "sync")
                 
             except Exception as e:
                 self.logger.error(f"Manual sync failed: {e}")
                 if hasattr(self, 'sync_button'):
                     self.sync_button.show_error(f"Sync failed")
-                      # Add error notification
-                self.add_notification("Sync Failed", f"Synchronization failed: {str(e)}", "sync")
-    
+
     def _show_notifications(self):
-        """Show or hide the notification drawer"""
-        if hasattr(self, 'notification_drawer') and self.notification_drawer is not None:
-            if self.notification_drawer.is_open:
-                self.notification_drawer.close_drawer()
-            else:
-                self.notification_drawer.open_drawer()
-        else:
-            print("⚠️ Notification drawer not available - trying to recreate...")
-            self._create_notification_drawer()
-            if hasattr(self, 'notification_drawer') and self.notification_drawer is not None:
-                self.notification_drawer.open_drawer()
-                
-    def _on_notification_drawer_closed(self):
-        """Handle notification drawer being closed"""
-        # Update notification button to reflect current state
-        if hasattr(self, 'notification_button'):
-            self.notification_button.update()
-            
+        """Notification button clicked - drawer functionality removed"""
+        print("📊 Notification button clicked (drawer functionality removed)")
+        pass
+        
     def add_notification(self, title, message, notification_type="info"):
-        """Add a notification to both the button and drawer"""
-        # Add to drawer
-        if hasattr(self, 'notification_drawer'):
-            self.notification_drawer.add_notification(title, message, notification_type)
-            
-        # Update button count
-        if hasattr(self, 'notification_button'):
-            count = self.notification_drawer.get_notification_count() if hasattr(self, 'notification_drawer') else 1
-            self.notification_button.set_notification_count(count)
+        """Add a notification (drawer functionality removed)"""
+        # Just print to console since drawer is removed
+        print(f"📊 Notification: {title} - {message} ({notification_type})")
+        pass
             
     # ...existing code...
     
@@ -1393,59 +1347,4 @@ class MainWindow(QMainWindow):
                 self.org_switcher.set_expanded(self.sidebar_expanded)
             else:
                 self.org_switcher.hide()
-    
-    def _create_notification_drawer(self):
-        """Create the notification drawer overlay"""
-        try:
-            from .components.notification_drawer import NotificationDrawer
-              # Parent the drawer to the main window (QMainWindow) for proper overlay
-            # This makes it an absolute positioned overlay, like Windows 11 Action Center
-            self.notification_drawer = NotificationDrawer(self)
-            
-            # CRITICAL: Ensure the drawer is absolutely positioned, not managed by layouts
-            # Set parent explicitly to the main window (not central widget)
-            self.notification_drawer.setParent(self)
-            
-            # Make sure it's NOT added to any layout - it should be absolutely positioned
-            # This prevents layout managers from interfering with manual positioning
-            self.notification_drawer.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, False)
-            self.notification_drawer.setWindowFlag(Qt.WindowType.Widget, True)
-            
-            # Connect signals
-            self.notification_drawer.drawer_closed.connect(self._on_notification_drawer_closed)
-              # Ensure it's on top and positioned correctly            self.notification_drawer.raise_()  # Ensure it's on top
-            
-            print("✅ Notification drawer created successfully")
-            
-            # Test notifications temporarily disabled to debug positioning
-            # if hasattr(self, 'notification_drawer') and self.notification_drawer:
-            #     self.notification_drawer.add_notification("Welcome", "Application started successfully", "info")
-            #     self.notification_drawer.add_notification("System", "Notification drawer is working!", "info")
-            #     self.notification_drawer.add_notification("Test", "Click the bell to open drawer", "info")
-            
-        except Exception as e:
-            print(f"❌ Failed to create notification drawer: {e}")
-            import traceback
-            traceback.print_exc()
-            self.notification_drawer = None
-    
-    # Demo/Testing methods for notifications
-    def test_notifications(self):
-        """Test method to demonstrate notification functionality"""
-        # Add some test notifications
-        self.add_notification("Welcome", "Application started successfully")
-        QTimer.singleShot(2000, lambda: self.add_notification("Sync", "Background sync completed"))
-        QTimer.singleShot(4000, lambda: self.add_notification("AI Assistant", "New features available"))
-        QTimer.singleShot(6000, lambda: self.add_notification("System", "Monthly report ready"))
-        
-    def demo_notification_scenarios(self):
-        """Demo different notification scenarios"""
-        # Sync notifications
-        self.add_notification("Sync Started", "Synchronizing with remote database...", "sync")
-        QTimer.singleShot(3000, lambda: self.add_notification("Sync Complete", "All data synchronized successfully", "sync"))
-        
-        # AI notifications
-        QTimer.singleShot(5000, lambda: self.add_notification("AI Insight", "Unusual expense pattern detected", "ai"))
-        
-        # System notifications
-        QTimer.singleShot(7000, lambda: self.add_notification("System Update", "New features are available", "system"))
+  
