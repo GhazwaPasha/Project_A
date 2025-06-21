@@ -3,9 +3,10 @@ Notification Button - Window control style notification indicator with bell icon
 Shows notification count badge and acts as notification center trigger
 """
 from PyQt6.QtWidgets import QPushButton, QToolTip
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRect
-from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QFontMetrics
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRect, QSize
+from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QFontMetrics, QIcon
 import logging
+import os
 
 class NotificationButton(QPushButton):
     """Compact notification button that shows notification count and triggers notification center"""
@@ -18,6 +19,9 @@ class NotificationButton(QPushButton):
         self.setFixedSize(40, 32)  # Same size as window control buttons
         self.setToolTip("Notifications")
         
+        # Load the new notification icon
+        self._load_notification_icon()
+        
         # Notification state
         self.notification_count = 0
         self.has_unread = False
@@ -27,11 +31,24 @@ class NotificationButton(QPushButton):
         self._apply_styling()
         self.clicked.connect(self._on_notification_clicked)
         
-        self.logger = logging.getLogger(__name__)
-        
+        self.logger = logging.getLogger(__name__)        
         # Connect to notification manager
         if self.notification_manager:
             self.notification_manager.badge_count_changed.connect(self._update_badge_count)
+    
+    def _load_notification_icon(self):
+        """Load the new notification SVG icon"""
+        try:
+            icon_path = os.path.join("assets", "icons", "notification_modern.svg")
+            if os.path.exists(icon_path):
+                self.setIcon(QIcon(icon_path))
+                self.setIconSize(QSize(16, 16))  # Match window control button size
+            else:
+                # Fallback to text if icon not found
+                self.setText("🔔")
+        except Exception as e:
+            print(f"Failed to load notification icon: {e}")
+            self.setText("🔔")
         
     def _apply_styling(self):
         """Apply window control button styling"""
@@ -48,113 +65,69 @@ class NotificationButton(QPushButton):
             }            QPushButton#NotificationButton:hover {
                 background: rgba(255, 255, 255, 0.1);
                 color: white;
-            }
-            QPushButton#NotificationButton:pressed {
+            }            QPushButton#NotificationButton:pressed {
                 background: rgba(255, 255, 255, 0.05);
             }
         """)
         
     def paintEvent(self, event):
-        """Custom paint to draw enhanced bell icon and notification badge"""
+        """Custom paint to draw SVG icon and notification badge"""
+        # First draw the base button (this will include the SVG icon)
         super().paintEvent(event)
         
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
-        # Calculate center and icon size
+        # Calculate center position for badge
         center_x = self.width() // 2
-        center_y = self.height() // 2
-        
-        # Enhanced bell icon with better proportions
-        bell_color = QColor(255, 255, 255, 210) if not self.has_unread else QColor(255, 255, 255, 255)
-        painter.setPen(QPen(bell_color, 1.5))
-        painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
-        
-        # Bell dimensions
-        bell_width = 14
-        bell_height = 12
-        bell_top_y = center_y - 6
-        bell_bottom_y = center_y + 4
-        
-        # Draw bell body (more realistic bell shape)
-        # Main bell body outline
-        bell_path = QPainter(self)
-        bell_path.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        # Bell dome (top arc)
-        painter.drawArc(center_x - bell_width//2, bell_top_y - 1, bell_width, 10, 0, 180 * 16)
-        
-        # Bell sides (curved outward)
-        painter.drawLine(center_x - bell_width//2, bell_top_y + 3, center_x - 3, bell_bottom_y)
-        painter.drawLine(center_x + bell_width//2, bell_top_y + 3, center_x + 3, bell_bottom_y)
-        
-        # Bell bottom rim
-        painter.setPen(QPen(bell_color, 2))
-        painter.drawLine(center_x - 3, bell_bottom_y, center_x + 3, bell_bottom_y)
-        
-        # Bell handle (attachment point)
-        painter.setPen(QPen(bell_color, 1.5))
-        painter.setBrush(QBrush(bell_color))
-        painter.drawEllipse(center_x - 1, bell_top_y - 4, 2, 3)
-        painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
-        
-        # Bell clapper (more subtle)
-        clapper_color = QColor(255, 255, 255, 130)
-        painter.setPen(QPen(clapper_color, 1))
-        painter.drawEllipse(center_x - 1, bell_bottom_y - 2, 2, 2)
-        
-        # Sound lines (if has unread notifications)
-        if self.has_unread:
-            sound_color = QColor(255, 255, 255, 100)
-            painter.setPen(QPen(sound_color, 1))
-            # Right side sound lines
-            painter.drawArc(center_x + 8, center_y - 4, 6, 8, 180 * 16, 90 * 16)
-            painter.drawArc(center_x + 10, center_y - 6, 8, 12, 180 * 16, 90 * 16)
-            # Left side sound lines
-            painter.drawArc(center_x - 14, center_y - 4, 6, 8, 270 * 16, 90 * 16)
-            painter.drawArc(center_x - 18, center_y - 6, 8, 12, 270 * 16, 90 * 16)
-        
-        # Draw notification count badge if there are notifications
+        center_y = self.height() // 2        # Draw notification count badge if there are notifications
         if self.notification_count > 0:
-            # Enhanced badge with gradient
-            badge_color = QColor(220, 53, 69)  # Windows 11 red
-            badge_border = QColor(255, 255, 255, 40)
-            
-            # Badge position (top-right of bell)
-            badge_x = center_x + 7
-            badge_y = center_y - 7
-            badge_radius = 8
-            
-            # Adjust badge size based on count
-            if self.notification_count > 99:
-                badge_radius = 11
-                badge_x = center_x + 8
-            elif self.notification_count > 9:
-                badge_radius = 9
-                badge_x = center_x + 7
-                
-            # Draw badge background with subtle border
-            painter.setPen(QPen(badge_border, 0.5))
-            painter.setBrush(QBrush(badge_color))
-            painter.drawEllipse(badge_x - badge_radius//2, badge_y - badge_radius//2, 
-                              badge_radius, badge_radius)
-            
-            # Badge text with better typography
-            painter.setPen(QPen(QColor(255, 255, 255), 1))
-            font = QFont("Segoe UI", 7, QFont.Weight.Bold)
-            painter.setFont(font)
+            # Badge text setup first to calculate proper size
+            font = QFont("Segoe UI", 6, QFont.Weight.Bold)  # Smaller font size
             
             # Format count text
             if self.notification_count > 99:
                 count_text = "99+"
             else:
                 count_text = str(self.notification_count)
-                
-            # Center text in badge with better positioning
+              # Calculate text dimensions
             fm = QFontMetrics(font)
             text_rect = fm.boundingRect(count_text)
-            text_x = badge_x - text_rect.width() // 2
-            text_y = badge_y + text_rect.height() // 2 - 1
+            text_width = text_rect.width()
+            text_height = text_rect.height()
+            
+            # Dynamic badge sizing based on content
+            if self.notification_count <= 9:
+                # Single digit - circular badge
+                badge_radius = 7
+                badge_x = center_x + 7
+                badge_y = center_y - 7
+            elif self.notification_count <= 99:
+                # Double digit - slightly larger circular badge
+                badge_radius = 9
+                badge_x = center_x + 8
+                badge_y = center_y - 8
+            else:
+                # 99+ - largest badge for text
+                badge_radius = 10
+                badge_x = center_x + 9
+                badge_y = center_y - 9
+            
+            # FIRST: Draw badge background circle
+            badge_color = QColor(220, 53, 69)  # Windows 11 red
+            badge_border = QColor(255, 255, 255, 40)
+            painter.setPen(QPen(badge_border, 0.5))
+            painter.setBrush(QBrush(badge_color))
+            painter.drawEllipse(badge_x - badge_radius, badge_y - badge_radius, 
+                              badge_radius * 2, badge_radius * 2)
+            
+            # SECOND: Draw text ON TOP of the badge circle
+            painter.setPen(QPen(QColor(255, 255, 255), 1))
+            painter.setFont(font)
+            
+            # Perfect text centering within the badge circle
+            text_x = badge_x - text_width // 2
+            text_y = badge_y + fm.ascent() // 2 - 1  # Better vertical centering
             
             painter.drawText(text_x, text_y, count_text)
             

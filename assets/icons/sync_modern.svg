@@ -1,0 +1,8 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Modern circular sync icon with two arrows -->
+  <path d="M4.5 12C4.5 7.85786 7.85786 4.5 12 4.5C14.7003 4.5 17.0398 5.95608 18.3776 8.10557" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M19.5 12C19.5 16.1421 16.1421 19.5 12 19.5C9.29968 19.5 7.00618 18.0439 5.66842 15.8944" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+  <!-- Arrow heads -->
+  <path d="M16.5 8.5L18.5 8L18 6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M7.5 15.5L5.5 16L6 18" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

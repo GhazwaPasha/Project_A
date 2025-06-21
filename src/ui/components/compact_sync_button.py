@@ -1,11 +1,12 @@
 """
 Compact Sync Button - Window control style sync indicator and manual sync button
-Shows connection status with split circle icon and acts as manual sync trigger
+Shows connection status with icon and acts as manual sync trigger
 """
 from PyQt6.QtWidgets import QPushButton, QToolTip
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QPainter, QColor, QPen, QBrush
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
+from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QIcon
 import logging
+import os
 
 class CompactSyncButton(QPushButton):
     """Compact sync button that shows connection status and triggers manual sync"""
@@ -19,6 +20,9 @@ class CompactSyncButton(QPushButton):
         self.setFixedSize(40, 32)  # Same size as window control buttons
         self.setToolTip("Connection Status - Click to sync")
         
+        # Load the new sync icon
+        self._load_sync_icon()
+        
         # Connection status
         self.local_connected = False
         self.remote_connected = False
@@ -27,13 +31,26 @@ class CompactSyncButton(QPushButton):
         # Setup
         self._apply_styling()
         self.clicked.connect(self._on_sync_clicked)
-        
-        # Animation timer for syncing state
+          # Animation timer for syncing state
         self.sync_animation_timer = QTimer()
         self.sync_animation_timer.timeout.connect(self._animate_sync)
         self.sync_animation_phase = 0
         
         self.logger = logging.getLogger(__name__)
+    
+    def _load_sync_icon(self):
+        """Load the new sync SVG icon"""
+        try:
+            icon_path = os.path.join("assets", "icons", "sync_modern.svg")
+            if os.path.exists(icon_path):
+                self.setIcon(QIcon(icon_path))
+                self.setIconSize(QSize(16, 16))  # Match window control button size
+            else:
+                # Fallback to text if icon not found
+                self.setText("↻")
+        except Exception as e:
+            print(f"Failed to load sync icon: {e}")
+            self.setText("↻")
         
     def _apply_styling(self):
         """Apply window control button styling"""
@@ -61,58 +78,13 @@ class CompactSyncButton(QPushButton):
         """Custom paint to draw split circle connection indicator"""
         super().paintEvent(event)
         
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        # Calculate center and size
-        center_x = self.width() // 2
-        center_y = self.height() // 2
-        radius = 6
-        
+        # No custom painting needed, icon will be shown
+        # If syncing, we could potentially animate the icon here (e.g., rotation)
         if self.is_syncing:
-            # Animated sync state - pulsing full circle
-            alpha = int(128 + 127 * abs(1 - (self.sync_animation_phase % 2)))
-            color = QColor(0, 122, 204, alpha)  # Blue pulse
-            painter.setBrush(QBrush(color))
-            painter.setPen(QPen(color, 1))
-            painter.drawEllipse(center_x - radius, center_y - radius, radius * 2, radius * 2)
+            self.setIconSize(QSize(16, 16))  # Reset to original size
+            # Potentially apply rotation or other animation to the icon
         else:
-            # Split circle showing connection status
-            # Left half - Local DB
-            if self.local_connected:
-                color = QColor(46, 204, 113)  # Green for connected
-            else:
-                color = QColor(231, 76, 60)   # Red for disconnected
-                
-            painter.setBrush(QBrush(color))
-            painter.setPen(QPen(color, 1))
-            
-            # Draw left semicircle
-            painter.drawChord(
-                center_x - radius, center_y - radius, 
-                radius * 2, radius * 2, 
-                90 * 16, 180 * 16  # 90 to 270 degrees (left half)
-            )
-            
-            # Right half - Remote DB
-            if self.remote_connected:
-                color = QColor(52, 152, 219)  # Blue for connected
-            else:
-                color = QColor(149, 165, 166) # Gray for disconnected
-                
-            painter.setBrush(QBrush(color))
-            painter.setPen(QPen(color, 1))
-            
-            # Draw right semicircle
-            painter.drawChord(
-                center_x - radius, center_y - radius,
-                radius * 2, radius * 2,
-                270 * 16, 180 * 16  # 270 to 90 degrees (right half)
-            )
-            
-            # Draw center divider line
-            painter.setPen(QPen(QColor(255, 255, 255, 100), 1))
-            painter.drawLine(center_x, center_y - radius, center_x, center_y + radius)
+            self.setIconSize(QSize(16, 16))  # Reset to original size
         
     def update_connection_status(self, status):
         """Update connection status from database manager"""
