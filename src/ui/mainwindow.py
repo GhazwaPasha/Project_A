@@ -1240,35 +1240,64 @@ class MainWindow(QMainWindow):
         """Setup periodic sync status updates."""
         self.sync_timer = QTimer()
         self.sync_timer.timeout.connect(self._update_sync_status)
-        self.sync_timer.start(5000)  # Update every 5 seconds
-          # Initial status update
+        self.sync_timer.start(5000)  # Update every 5 seconds        # Initial status update
         self._update_sync_status()
+    
     def _update_sync_status(self):
         """Update sync status from database manager."""
         if hasattr(self, 'sync_button') and hasattr(self.accounting_system, 'db_manager'):
             try:
                 status = self.accounting_system.db_manager.get_connection_status()
                 self.sync_button.update_connection_status(status)
+                  # Check for sync status changes and notify
+                sync_status = status.get('sync_status', {})
+                if sync_status.get('failed_operations', 0) > 0:
+                    self.add_sync_notification(
+                        "Sync Issues",
+                        f"{sync_status['failed_operations']} operations failed to sync. Check your connection.",
+                        "warning"
+                    )
+                elif sync_status.get('conflicts', 0) > 0:
+                    self.notify_sync_conflict(sync_status['conflicts'])
                     
             except Exception as e:
                 self.logger.error(f"Failed to update sync status: {e}")
                 self.sync_button.show_error(f"Status update failed")
+                  # Add notification for status update failure
+                self.add_sync_notification(
+                    "Sync Status Error",
+                    "Failed to check synchronization status. Please check your connection.",
+                    "error"
+                )
                 
     def _manual_sync(self):
         """Trigger manual synchronization."""
         if hasattr(self.accounting_system, 'db_manager'):
             try:
-                self.logger.info("Manual sync requested...")                
+                self.logger.info("Manual sync requested...")
+                
+                # Notify that sync is starting
+                self.notify_sync_started()
+                
                 # Trigger sync (this will be implemented in the sync manager)
                 self.accounting_system.db_manager._perform_sync()
                 
+                # Show success in sync button
                 if hasattr(self, 'sync_button'):
                     self.sync_button.show_success("Sync completed")
                 
+                # Notify sync completion
+                self.notify_sync_completed()
+                
             except Exception as e:
                 self.logger.error(f"Manual sync failed: {e}")
+                
+                # Show error in sync button
                 if hasattr(self, 'sync_button'):
                     self.sync_button.show_error(f"Sync failed")
+                
+                # Notify sync failure
+                self.notify_sync_failed(str(e))
 
     def _show_notifications(self):
         """Notification button clicked - show/hide notification drawer"""
@@ -1413,3 +1442,58 @@ class MainWindow(QMainWindow):
                 self.org_switcher.set_expanded(self.sidebar_expanded)
             else:
                 self.org_switcher.hide()
+    
+    def add_sync_notification(self, title, message, notification_type="sync"):
+        """Add a sync-related notification with sync icon."""
+        self.add_notification(title, message, notification_type)
+    
+    def notify_sync_started(self):
+        """Notify that sync has started."""
+        self.add_sync_notification(
+            "Sync Started",
+            "Synchronizing your data with the server...",
+            "sync"
+        )
+    
+    def notify_sync_completed(self, details=None):
+        """Notify that sync has completed successfully."""
+        message = "Your data has been successfully synchronized with the server."
+        if details:
+            message += f" {details}"
+        self.add_sync_notification(
+            "Sync Completed",
+            message,
+            "success"
+        )
+    
+    def notify_sync_failed(self, error_msg):
+        """Notify that sync has failed."""
+        self.add_sync_notification(
+            "Sync Failed",
+            f"Failed to synchronize data: {error_msg}",
+            "error"
+        )
+    
+    def notify_sync_conflict(self, conflict_count):
+        """Notify about sync conflicts."""
+        message = f"{conflict_count} conflicts detected during sync. Manual resolution may be required."
+        self.add_sync_notification(
+            "Sync Conflicts",
+            message,
+            "warning"
+        )
+    
+    def notify_connection_lost(self):
+        """Notify that connection to server was lost."""
+        self.add_sync_notification(
+            "Connection Lost",
+            "Lost connection to the server. Working in offline mode.",
+            "warning"
+        )
+    
+    def notify_connection_restored(self):
+        """Notify that connection to server was restored."""
+        self.add_sync_notification(
+            "Connection Restored",            "Connection to the server has been restored. Sync will resume automatically.",
+            "success"
+        )

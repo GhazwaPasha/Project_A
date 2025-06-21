@@ -109,29 +109,29 @@ class NotificationDrawer(QFrame):
         """)
         layout.addWidget(title)
         
-        layout.addStretch()
-        
-        # Clear all button
-        self.clear_all_btn = QPushButton("×")
-        self.clear_all_btn.setFixedSize(24, 24)
+        layout.addStretch()        # Clear all button
+        self.clear_all_btn = QPushButton("Clear")
+        self.clear_all_btn.setFixedHeight(26)
+        self.clear_all_btn.setMinimumWidth(50)
         self.clear_all_btn.setToolTip("Clear all notifications")
-        self.clear_all_btn.setStyleSheet("""
-            QPushButton {
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 12px;
-                color: rgba(255, 255, 255, 0.7);
-                font-size: 14px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background: rgba(255, 80, 80, 0.3);
-                border-color: rgba(255, 80, 80, 0.5);
+        self.clear_all_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 6px;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: {ResponsiveHelper.scale_size(11, 10, 12)}px;
+                font-weight: 500;
+                padding: 4px 8px;
+            }}
+            QPushButton:hover {{
+                background: rgba(255, 255, 255, 0.15);
+                border-color: rgba(255, 255, 255, 0.25);
                 color: white;
-            }
-            QPushButton:pressed {
-                background: rgba(255, 80, 80, 0.5);
-            }
+            }}
+            QPushButton:pressed {{
+                background: rgba(255, 255, 255, 0.1);
+            }}
         """)
         self.clear_all_btn.clicked.connect(self._clear_all_notifications)
         layout.addWidget(self.clear_all_btn)
