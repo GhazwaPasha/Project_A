@@ -8,7 +8,7 @@ from ..core.accounting_system_postgresql import AccountingSystemPostgreSQL as Ac
 from .components.mica_effect import MicaEffect
 from .components.styles import ModernStyles, GlassmorphismHelper
 from .components.font_manager import font_manager
-from .components.ai_status_bar import AIStatusBar
+from .components.simple_ai_status_bar import SimpleAIStatusBar
 import os
 import logging
 from datetime import datetime
@@ -344,25 +344,23 @@ class MainWindow(QMainWindow):
                     background-color: #f0f0f0;
                     color: black;                }                QFrame {
                     background-color: #ffffff;
-                    border: 1px solid #d0d0d0;
-                }
+                    border: 1px solid #d0d0d0;                }
             """
     
     def _setup_ui(self):
         """Setup the main UI components."""
         # Main container with custom title bar
-        main_container = QWidget()
-        main_layout = QVBoxLayout(main_container)
+        self.main_container = QWidget()  # Store reference for notification drawer
+        main_layout = QVBoxLayout(self.main_container)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
         # Custom title bar (now includes AI status bar)
         title_bar = self._create_title_bar()
         main_layout.addWidget(title_bar)
-        
-        # Content area
-        content_widget = QWidget()
-        content_layout = QHBoxLayout(content_widget)
+          # Content area
+        self.content_widget = QWidget()  # Store reference for notification drawer
+        content_layout = QHBoxLayout(self.content_widget)
         content_layout.setContentsMargins(8, 0, 8, 8)
         content_layout.setSpacing(8)
         
@@ -375,8 +373,11 @@ class MainWindow(QMainWindow):
         self.stack.setObjectName("MainContentStack")
         content_layout.addWidget(self.stack, 1)
         
-        main_layout.addWidget(content_widget, 1)
-        self.setCentralWidget(main_container)
+        main_layout.addWidget(self.content_widget, 1)
+        self.setCentralWidget(self.main_container)
+        
+        # Create notification drawer (overlay)
+        self._create_notification_drawer()
         
     def _create_title_bar(self):
         """Create a custom title bar for the frameless window."""
@@ -398,14 +399,17 @@ class MainWindow(QMainWindow):
         layout.addWidget(title_label)        # AI Status Bar - simple expandable version in title bar center
         self.ai_status_bar = self._create_simple_ai_status_bar()
         layout.addWidget(self.ai_status_bar, 1)  # Takes remaining space in center
+          # Add compact sync button right before window controls
+        from .components.compact_sync_button import CompactSyncButton
+        self.sync_button = CompactSyncButton()
+        self.sync_button.sync_requested.connect(self._manual_sync)
+        layout.addWidget(self.sync_button)
         
-        # Add modern sync indicator right before window controls - positioned next to minimize button
-        from .components.modern_sync_indicator import ModernSyncStatusIndicator
-        self.sync_indicator = ModernSyncStatusIndicator()
-        self.sync_indicator.sync_requested.connect(self._manual_sync)
-        # Set height to match header area
-        self.sync_indicator.setFixedHeight(40)
-        layout.addWidget(self.sync_indicator)
+        # Add notification button next to sync button
+        from .components.notification_button import NotificationButton
+        self.notification_button = NotificationButton()
+        self.notification_button.notification_clicked.connect(self._show_notifications)
+        layout.addWidget(self.notification_button)
         
         # Window controls with icons
         minimize_btn = QPushButton()
@@ -457,41 +461,10 @@ class MainWindow(QMainWindow):
             return container
             
         except Exception as e:
-            print(f"Error creating simple AI status bar: {e}")
-            # Return placeholder
+            print(f"Error creating simple AI status bar: {e}")            # Return placeholder
             placeholder = QLabel("AI Assistant")
             placeholder.setStyleSheet("color: #cccccc; font-size: 12px; padding: 4px;")
             return placeholder
-
-    def _init_compact_ai_components(self):
-        """Initialize AI components for compact mode"""
-        try:
-            from .components.ai_status_bar.personality_engine import PersonalityEngine
-            from .components.ai_status_bar.reminder_manager import ReminderManager
-            from .components.ai_status_bar.compact_enhancer import CompactAIEnhancer
-            
-            self.ai_personality = PersonalityEngine()
-            self.ai_reminders = ReminderManager()
-            
-            # Initialize animation enhancer
-            if hasattr(self, 'ai_status_bar') and hasattr(self, 'ai_status_text') and hasattr(self, 'ai_avatar'):
-                self.ai_enhancer = CompactAIEnhancer(
-                    self.ai_status_bar, 
-                    self.ai_status_text, 
-                    self.ai_avatar
-                )
-                # Start avatar pulse animation
-                self.ai_enhancer.pulse_avatar("happy")
-            
-            # Set up timers for status updates
-            self.ai_status_timer = QTimer()
-            self.ai_status_timer.timeout.connect(self._update_ai_status)
-            self.ai_status_timer.start(30000)  # Update every 30 seconds
-            
-            # Connect reminder signals
-            self.ai_reminders.reminder_due.connect(self._handle_reminder_due)
-            
-        except Exception as e:            print(f"Warning: AI components initialization failed: {e}")
 
     def _update_ai_status(self):
         """Update AI status message periodically"""
@@ -571,39 +544,6 @@ class MainWindow(QMainWindow):
             self.ai_enhancer.pulse_avatar(mood)
             message = f"Mood changed to {mood}! 😊" if mood == "happy" else f"Feeling {mood} today! 🤖"
             self.ai_enhancer.animate_text_change(message)
-    
-    def _show_ai_chat_dialog(self):
-        """Show expanded AI chat dialog"""
-        try:
-            from .components.ai_status_bar.ai_status_bar import AIStatusBar
-            
-            # Create dialog with full AI status bar
-            from PyQt6.QtWidgets import QDialog, QVBoxLayout
-            
-            dialog = QDialog(self)
-            dialog.setWindowTitle("AI Assistant Chat")
-            dialog.setModal(False)
-            dialog.resize(600, 400)
-            
-            layout = QVBoxLayout(dialog)
-            
-            # Full AI status bar in dialog
-            full_ai_bar = AIStatusBar(
-                accounting_system=self.accounting_system,
-                session_manager=self.session_manager,
-                parent=dialog
-            )
-            full_ai_bar.command_executed.connect(self._handle_ai_command)
-            
-            layout.addWidget(full_ai_bar)
-            
-            # Show expanded by default            full_ai_bar._expand()
-            
-            dialog.show()
-            
-        except Exception as e:
-            print(f"Error showing AI chat dialog: {e}")
-
     def _handle_reminder_due(self, reminder):
         """Handle due reminders from compact AI"""
         try:
@@ -942,8 +882,7 @@ class MainWindow(QMainWindow):
         self._style_toggle_button()        # Update button states
         for btn in self.sidebar_buttons:
             btn.set_expanded(self.sidebar_expanded)
-            
-        # Update organization switcher if present
+              # Update organization switcher if present
         if hasattr(self, 'org_switcher'):
             self.org_switcher.set_expanded(self.sidebar_expanded)
             
@@ -1160,10 +1099,11 @@ class MainWindow(QMainWindow):
             print(f"Failed to load window control icons: {e}")
             # Fallback to Unicode symbols
             minimize_btn.setText("─")
-            maximize_btn.setText("□")  
+            maximize_btn.setText("□")
             close_btn.setText("×")
             if sync_btn:
-                sync_btn.setText("↻")        # Apply the styling
+                sync_btn.setText("↻")
+                  # Apply the styling
         minimize_btn.setStyleSheet(window_control_style)
         maximize_btn.setStyleSheet(window_control_style)
         close_btn.setStyleSheet(window_control_style)
@@ -1173,7 +1113,8 @@ class MainWindow(QMainWindow):
     def keyPressEvent(self, event):
         """Handle keyboard shortcuts."""
         super().keyPressEvent(event)
-          # F5: Force refresh Mica effect (for testing/debugging)
+        
+        # F5: Force refresh Mica effect (for testing/debugging)
         if event.key() == Qt.Key.Key_F5:
             print("🔄 Manual Mica refresh triggered (F5)")
             if self.mica_applied:
@@ -1181,6 +1122,21 @@ class MainWindow(QMainWindow):
                 self.update()
             else:
                 self._apply_mica_effect_delayed()
+                
+        # F6: Test notifications (for development/demo)
+        elif event.key() == Qt.Key.Key_F6:
+            print("🔔 Testing notifications (F6)")
+            self.test_notifications()
+            
+        # F7: Demo notification scenarios (for development/demo)
+        elif event.key() == Qt.Key.Key_F7:
+            print("🔔 Demo notification scenarios (F7)")
+            self.demo_notification_scenarios()
+            
+        # Escape: Close notification drawer if open
+        elif event.key() == Qt.Key.Key_Escape:
+            if hasattr(self, 'notification_drawer') and self.notification_drawer and self.notification_drawer.is_open:
+                self.notification_drawer.close_drawer()
                 
     def _load_custom_fonts(self):
         """Load custom fonts from the assets/fonts directory."""
@@ -1266,55 +1222,85 @@ class MainWindow(QMainWindow):
         self.sync_timer.start(5000)  # Update every 5 seconds
           # Initial status update
         self._update_sync_status()
-    
     def _update_sync_status(self):
         """Update sync status from database manager."""
-        if hasattr(self, 'sync_indicator') and hasattr(self.accounting_system, 'db_manager'):
+        if hasattr(self, 'sync_button') and hasattr(self.accounting_system, 'db_manager'):
             try:
                 status = self.accounting_system.db_manager.get_connection_status()
-                self.sync_indicator.update_connection_status(status)
-                
-                # Add periodic activity updates
-                if status.get('sync_status', {}).get('is_syncing', False):
-                    self.sync_indicator.add_log_entry("Background sync in progress...")
+                self.sync_button.update_connection_status(status)
                     
             except Exception as e:
                 self.logger.error(f"Failed to update sync status: {e}")
-                self.sync_indicator.show_error(f"Status update failed: {str(e)}")
-    
+                self.sync_button.show_error(f"Status update failed")
+                
     def _manual_sync(self):
         """Trigger manual synchronization."""
         if hasattr(self.accounting_system, 'db_manager'):
             try:
                 self.logger.info("Manual sync requested...")
-                if hasattr(self, 'sync_indicator'):
-                    self.sync_indicator.add_log_entry("Manual sync initiated...")
                 
                 # Trigger sync (this will be implemented in the sync manager)
                 self.accounting_system.db_manager._perform_sync()
                 
-                if hasattr(self, 'sync_indicator'):
-                    self.sync_indicator.show_success("Manual sync completed successfully")
+                if hasattr(self, 'sync_button'):
+                    self.sync_button.show_success("Sync completed")
+                    
+                # Add success notification
+                self.add_notification("Sync Complete", "Data synchronized successfully", "sync")
                 
             except Exception as e:
                 self.logger.error(f"Manual sync failed: {e}")
-                if hasattr(self, 'sync_indicator'):
-                    self.sync_indicator.show_error(f"Manual sync failed: {str(e)}")
+                if hasattr(self, 'sync_button'):
+                    self.sync_button.show_error(f"Sync failed")
+                      # Add error notification
+                self.add_notification("Sync Failed", f"Synchronization failed: {str(e)}", "sync")
+    
+    def _show_notifications(self):
+        """Show or hide the notification drawer"""
+        if hasattr(self, 'notification_drawer') and self.notification_drawer is not None:
+            if self.notification_drawer.is_open:
+                self.notification_drawer.close_drawer()
+            else:
+                self.notification_drawer.open_drawer()
+        else:
+            print("⚠️ Notification drawer not available - trying to recreate...")
+            self._create_notification_drawer()
+            if hasattr(self, 'notification_drawer') and self.notification_drawer is not None:
+                self.notification_drawer.open_drawer()
+                
+    def _on_notification_drawer_closed(self):
+        """Handle notification drawer being closed"""
+        # Update notification button to reflect current state
+        if hasattr(self, 'notification_button'):
+            self.notification_button.update()
+            
+    def add_notification(self, title, message, notification_type="info"):
+        """Add a notification to both the button and drawer"""
+        # Add to drawer
+        if hasattr(self, 'notification_drawer'):
+            self.notification_drawer.add_notification(title, message, notification_type)
+            
+        # Update button count
+        if hasattr(self, 'notification_button'):
+            count = self.notification_drawer.get_notification_count() if hasattr(self, 'notification_drawer') else 1
+            self.notification_button.set_notification_count(count)
+            
+    # ...existing code...
     
     def log_activity(self, message):
-        """Log an activity to the sync indicator."""
-        if hasattr(self, 'sync_indicator'):
-            self.sync_indicator.add_log_entry(message)
+        """Log an activity to the sync button."""
+        # Compact sync button doesn't log activities - it only shows status
+        pass
             
     def show_sync_success(self, message):
-        """Show a success message in the sync indicator."""
-        if hasattr(self, 'sync_indicator'):
-            self.sync_indicator.show_success(message)
+        """Show a success message in the sync button."""
+        if hasattr(self, 'sync_button'):
+            self.sync_button.show_success(message)
             
     def show_sync_error(self, message):
-        """Show an error message in the sync indicator.""" 
-        if hasattr(self, 'sync_indicator'):
-            self.sync_indicator.show_error(message)
+        """Show an error message in the sync button.""" 
+        if hasattr(self, 'sync_button'):
+            self.sync_button.show_error(message)
     
     def get_connection_status(self):
         """Get connection status for external access."""
@@ -1407,4 +1393,59 @@ class MainWindow(QMainWindow):
                 self.org_switcher.set_expanded(self.sidebar_expanded)
             else:
                 self.org_switcher.hide()
-      # Floating AI methods removed - AI is now integrated in title bar
+    
+    def _create_notification_drawer(self):
+        """Create the notification drawer overlay"""
+        try:
+            from .components.notification_drawer import NotificationDrawer
+              # Parent the drawer to the main window (QMainWindow) for proper overlay
+            # This makes it an absolute positioned overlay, like Windows 11 Action Center
+            self.notification_drawer = NotificationDrawer(self)
+            
+            # CRITICAL: Ensure the drawer is absolutely positioned, not managed by layouts
+            # Set parent explicitly to the main window (not central widget)
+            self.notification_drawer.setParent(self)
+            
+            # Make sure it's NOT added to any layout - it should be absolutely positioned
+            # This prevents layout managers from interfering with manual positioning
+            self.notification_drawer.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, False)
+            self.notification_drawer.setWindowFlag(Qt.WindowType.Widget, True)
+            
+            # Connect signals
+            self.notification_drawer.drawer_closed.connect(self._on_notification_drawer_closed)
+              # Ensure it's on top and positioned correctly            self.notification_drawer.raise_()  # Ensure it's on top
+            
+            print("✅ Notification drawer created successfully")
+            
+            # Test notifications temporarily disabled to debug positioning
+            # if hasattr(self, 'notification_drawer') and self.notification_drawer:
+            #     self.notification_drawer.add_notification("Welcome", "Application started successfully", "info")
+            #     self.notification_drawer.add_notification("System", "Notification drawer is working!", "info")
+            #     self.notification_drawer.add_notification("Test", "Click the bell to open drawer", "info")
+            
+        except Exception as e:
+            print(f"❌ Failed to create notification drawer: {e}")
+            import traceback
+            traceback.print_exc()
+            self.notification_drawer = None
+    
+    # Demo/Testing methods for notifications
+    def test_notifications(self):
+        """Test method to demonstrate notification functionality"""
+        # Add some test notifications
+        self.add_notification("Welcome", "Application started successfully")
+        QTimer.singleShot(2000, lambda: self.add_notification("Sync", "Background sync completed"))
+        QTimer.singleShot(4000, lambda: self.add_notification("AI Assistant", "New features available"))
+        QTimer.singleShot(6000, lambda: self.add_notification("System", "Monthly report ready"))
+        
+    def demo_notification_scenarios(self):
+        """Demo different notification scenarios"""
+        # Sync notifications
+        self.add_notification("Sync Started", "Synchronizing with remote database...", "sync")
+        QTimer.singleShot(3000, lambda: self.add_notification("Sync Complete", "All data synchronized successfully", "sync"))
+        
+        # AI notifications
+        QTimer.singleShot(5000, lambda: self.add_notification("AI Insight", "Unusual expense pattern detected", "ai"))
+        
+        # System notifications
+        QTimer.singleShot(7000, lambda: self.add_notification("System Update", "New features are available", "system"))

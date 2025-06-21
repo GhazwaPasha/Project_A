@@ -15,6 +15,7 @@ if __name__ == "__main__":
         window.show()
     except Exception as e:
         QMessageBox.critical(None, "Startup Error", 
+                  
                            f"Failed to start application: {str(e)}\n\n"
                            f"Try running: python tools/setup_local_postgres.py")
         sys.exit(1)
