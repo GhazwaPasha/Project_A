@@ -135,12 +135,15 @@ class MainWindow(QMainWindow):
         self.start_time = datetime.now()
         
         # Use single database file in project root
-        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'accounting.db')
-          # Initialize accounting system with PostgreSQL or SQLite fallback
+        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'accounting.db')        # Initialize accounting system with PostgreSQL or SQLite fallback
         self.accounting_system = self._initialize_accounting_system(db_path)
         
         # Keep backward compatibility for existing pages
         self.system = self.accounting_system
+        
+        # Initialize notification system
+        from .components.notifications.notification_manager import NotificationManager
+        self.notification_manager = NotificationManager()
         
         self.sidebar_expanded = False  # Start collapsed for a cleaner look
         self.dark_mode = True  # Default to dark mode for better Mica effect
@@ -166,9 +169,14 @@ class MainWindow(QMainWindow):
         if self.db_mode == 'hybrid':
             self._setup_sync_updates()
         
-        # Show the window first, then apply Mica effect
+        # Install event filter for handling clicks outside notification drawer
+        self.installEventFilter(self)
+          # Show the window first, then apply Mica effect
         self.show()        # Use QTimer to apply Mica effect after window is fully shown
         QTimer.singleShot(100, self._apply_mica_effect_delayed)
+        
+        # Add a welcome notification after startup
+        QTimer.singleShot(2000, self._add_welcome_notification)
         
     def _apply_mica_effect_delayed(self):
         """Apply Mica effect after window is fully initialized and shown."""
@@ -209,17 +217,20 @@ class MainWindow(QMainWindow):
     def showEvent(self, event):
         """Handle window show event to ensure Mica effect is applied."""
         super().showEvent(event)
-        
-        # Apply Mica effect if not already applied and window is visible
+          # Apply Mica effect if not already applied and window is visible
         if not self.mica_applied and self.isVisible():
             QTimer.singleShot(50, self._apply_mica_effect_delayed)
     
     def resizeEvent(self, event):
-        """Handle window resize to maintain Mica effect."""
+        """Handle window resize to maintain Mica effect and reposition notification drawer."""
         super().resizeEvent(event)
         if self.mica_applied:
             # Reapply Mica effect after resize to ensure it's maintained
             QTimer.singleShot(10, self._reapply_mica_effect)
+        
+        # Reposition notification drawer if it's visible
+        if hasattr(self, 'notification_drawer') and self.notification_drawer.isVisible():
+            self._position_notification_drawer()
     
     def _reapply_mica_effect(self):
         """Reapply Mica effect (for resize/move events)."""
@@ -354,11 +365,9 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout(self.main_container)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
-        
-        # Custom title bar (now includes AI status bar)
-        title_bar = self._create_title_bar()
-        main_layout.addWidget(title_bar)
-          # Content area
+          # Custom title bar (now includes AI status bar)
+        self.title_bar = self._create_title_bar()
+        main_layout.addWidget(self.title_bar)# Content area
         self.content_widget = QWidget()  # Store reference for notification drawer
         content_layout = QHBoxLayout(self.content_widget)
         content_layout.setContentsMargins(8, 0, 8, 8)
@@ -371,8 +380,14 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.stack.setObjectName("MainContentStack")
         content_layout.addWidget(self.stack, 1)
-        
+
         main_layout.addWidget(self.content_widget, 1)
+        
+        # Create notification drawer as overlay (initially hidden)
+        from .components.notifications.notification_drawer import NotificationDrawer
+        self.notification_drawer = NotificationDrawer(self.main_container, self.notification_manager)
+        self.notification_drawer.hide()
+        
         self.setCentralWidget(self.main_container)
         
     def _create_title_bar(self):
@@ -399,10 +414,9 @@ class MainWindow(QMainWindow):
         from .components.compact_sync_button import CompactSyncButton
         self.sync_button = CompactSyncButton()
         self.sync_button.sync_requested.connect(self._manual_sync)
-        layout.addWidget(self.sync_button)
-          # Add notification button next to sync button
+        layout.addWidget(self.sync_button)        # Add notification button next to sync button
         from .components.notification_button import NotificationButton
-        self.notification_button = NotificationButton()
+        self.notification_button = NotificationButton(notification_manager=self.notification_manager)
         self.notification_button.notification_clicked.connect(self._show_notifications)
         layout.addWidget(self.notification_button)
         
@@ -1117,6 +1131,34 @@ class MainWindow(QMainWindow):
             else:
                 self._apply_mica_effect_delayed()
                 
+    def eventFilter(self, obj, event):
+        """Filter events to handle click-outside-to-close for notification drawer."""
+        from PyQt6.QtCore import QEvent
+        from PyQt6.QtGui import QMouseEvent
+        
+        # Only handle mouse press events
+        if event.type() == QEvent.Type.MouseButtonPress:
+            if isinstance(event, QMouseEvent):
+                # Check if notification drawer is open
+                if hasattr(self, 'notification_drawer') and self.notification_drawer.isVisible():
+                    # Get the global position of the click
+                    global_pos = event.globalPosition().toPoint()
+                    
+                    # Convert to notification drawer's coordinate system
+                    drawer_pos = self.notification_drawer.mapFromGlobal(global_pos)
+                    
+                    # Check if click is outside the drawer
+                    if not self.notification_drawer.rect().contains(drawer_pos):
+                        # Also check if click is not on the notification button                        if hasattr(self, 'notification_button'):
+                            btn_pos = self.notification_button.mapFromGlobal(global_pos)
+                            if not self.notification_button.rect().contains(btn_pos):
+                                # Click is outside both drawer and button, close drawer
+                                self.notification_drawer.hide()
+                                return True  # Event handled
+        
+        # Continue with normal event processing
+        return super().eventFilter(obj, event)
+                
     def _load_custom_fonts(self):
         """Load custom fonts from the assets/fonts directory."""
         # Load custom fonts using the font manager (only from local files)
@@ -1229,17 +1271,41 @@ class MainWindow(QMainWindow):
                     self.sync_button.show_error(f"Sync failed")
 
     def _show_notifications(self):
-        """Notification button clicked - drawer functionality removed"""
-        print("📊 Notification button clicked (drawer functionality removed)")
+        """Notification button clicked - show/hide notification drawer"""
+        if hasattr(self, 'notification_drawer'):
+            if self.notification_drawer.is_visible:
+                self.notification_drawer.hide_drawer()
+            else:
+                self._position_notification_drawer()
+                self.notification_drawer.show_drawer()
+        
+    def _position_notification_drawer(self):
+        """Position the notification drawer on the right side"""
+        if not hasattr(self, 'notification_drawer'):
+            return
+        
+        # Simple positioning - let the drawer handle its own positioning logic
+        # The drawer will position itself relative to its parent (main_container)
         pass
         
     def add_notification(self, title, message, notification_type="info"):
-        """Add a notification (drawer functionality removed)"""
-        # Just print to console since drawer is removed
-        print(f"📊 Notification: {title} - {message} ({notification_type})")
-        pass
+        """Add a notification using the notification manager"""
+        if hasattr(self, 'notification_manager'):
+            self.notification_manager.add_notification(title, message, notification_type)
+        else:
+            # Fallback to console logging
+            print(f"📊 Notification: {title} - {message} ({notification_type})")
             
-    # ...existing code...
+    def _add_welcome_notification(self):
+        """Add a welcome notification to test the notification system."""
+        try:
+            self.add_notification(
+                "Welcome to AI Accountant!",
+                "Your intelligent accounting companion is ready to help you manage your finances.",
+                "info"
+            )
+        except Exception as e:
+            print(f"Error adding welcome notification: {e}")
     
     def log_activity(self, message):
         """Log an activity to the sync button."""
@@ -1347,4 +1413,3 @@ class MainWindow(QMainWindow):
                 self.org_switcher.set_expanded(self.sidebar_expanded)
             else:
                 self.org_switcher.hide()
-  

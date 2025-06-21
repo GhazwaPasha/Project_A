@@ -9,11 +9,10 @@ import logging
 
 class NotificationButton(QPushButton):
     """Compact notification button that shows notification count and triggers notification center"""
-    
-    # Signals
+      # Signals
     notification_clicked = pyqtSignal()
     
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, notification_manager=None):
         super().__init__(parent)
         self.setObjectName("NotificationButton")
         self.setFixedSize(40, 32)  # Same size as window control buttons
@@ -22,12 +21,17 @@ class NotificationButton(QPushButton):
         # Notification state
         self.notification_count = 0
         self.has_unread = False
+        self.notification_manager = notification_manager
         
         # Setup
         self._apply_styling()
         self.clicked.connect(self._on_notification_clicked)
         
         self.logger = logging.getLogger(__name__)
+        
+        # Connect to notification manager
+        if self.notification_manager:
+            self.notification_manager.badge_count_changed.connect(self._update_badge_count)
         
     def _apply_styling(self):
         """Apply window control button styling"""
@@ -153,36 +157,6 @@ class NotificationButton(QPushButton):
             text_y = badge_y + text_rect.height() // 2 - 1
             
             painter.drawText(text_x, text_y, count_text)
-            badge_y = center_y - 6
-            badge_radius = 8
-            
-            # Adjust badge size based on count
-            if self.notification_count > 99:
-                badge_radius = 10
-            elif self.notification_count > 9:
-                badge_radius = 9
-                
-            painter.drawEllipse(badge_x - badge_radius//2, badge_y - badge_radius//2, 
-                              badge_radius, badge_radius)
-            
-            # Badge text
-            painter.setPen(QPen(QColor(255, 255, 255), 1))
-            font = QFont("Segoe UI", 7, QFont.Weight.Bold)
-            painter.setFont(font)
-            
-            # Format count text
-            if self.notification_count > 99:
-                count_text = "99+"
-            else:
-                count_text = str(self.notification_count)
-                
-            # Center text in badge
-            fm = QFontMetrics(font)
-            text_rect = fm.boundingRect(count_text)
-            text_x = badge_x - text_rect.width() // 2
-            text_y = badge_y + text_rect.height() // 2 - 1
-            
-            painter.drawText(text_x, text_y, count_text)
             
     def set_notification_count(self, count):
         """Update notification count and badge visibility"""
@@ -232,6 +206,10 @@ class NotificationButton(QPushButton):
         # Restore original tooltip after duration
         QTimer.singleShot(duration, lambda: self.setToolTip(original_tooltip))
         
+    def _update_badge_count(self, count):
+        """Update badge count from notification manager."""
+        self.set_notification_count(count)
+    
     # Convenience methods for common notification scenarios
     def add_system_notification(self, message):
         """Add a system notification"""
