@@ -78,7 +78,7 @@ class ModernSyncStatusIndicator(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(32)
+        # Remove fixed height - allow it to be set by parent container
         self.setMinimumWidth(200)
         
         # Status tracking
@@ -99,21 +99,22 @@ class ModernSyncStatusIndicator(QWidget):
     def _setup_ui(self):
         """Setup the UI components."""
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setContentsMargins(8, 6, 8, 6)  # Increased vertical margins for better spacing
         layout.setSpacing(8)
+        layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)  # Center vertically
         
         # Spinning arrow (only visible when syncing remote)
         self.arrow = SpinningArrowWidget()
         self.arrow.setVisible(False)  # Hidden by default
-        layout.addWidget(self.arrow)
+        layout.addWidget(self.arrow, 0, Qt.AlignmentFlag.AlignVCenter)
         
         # Status text field (like VS Code status bar)
         self.status_label = QLabel("Ready")
         self.status_label.setObjectName("StatusLabel")
-        layout.addWidget(self.status_label)
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Center content in label
+        layout.addWidget(self.status_label, 0, Qt.AlignmentFlag.AlignVCenter)
         
-        # Stretch to push everything to the right
-        layout.addStretch()
+        # No stretch - keep content to the right to stay next to window controls
         
     def _apply_styling(self):
         """Apply modern styling to the component."""
@@ -128,11 +129,12 @@ class ModernSyncStatusIndicator(QWidget):
                 font-size: 11px;
                 font-weight: 500;
                 font-family: 'Segoe UI', Arial, sans-serif;
-                padding: 2px 6px;
+                padding: 4px 8px;
                 background: rgba(255, 255, 255, 0.05);
                 border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 4px;
+                border-radius: 6px;
                 min-width: 120px;
+                qproperty-alignment: AlignCenter;
             }
             
             QLabel#StatusLabel:hover {

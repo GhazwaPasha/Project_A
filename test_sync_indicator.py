@@ -55,6 +55,15 @@ class TestWindow(QMainWindow):
         self.sync_indicator = ModernSyncStatusIndicator()
         layout.addWidget(self.sync_indicator)
         
+        # Sync indicator with header height (40px) - as used in main window
+        header_height_label = QLabel("Header Height Version (40px):")
+        header_height_label.setStyleSheet("font-size: 14px; margin-top: 20px; color: #aaa;")
+        layout.addWidget(header_height_label)
+        
+        self.sync_indicator_header = ModernSyncStatusIndicator()
+        self.sync_indicator_header.setFixedHeight(40)  # Same as header area
+        layout.addWidget(self.sync_indicator_header)
+        
         # Test buttons
         btn_start_sync = QPushButton("Start Remote Sync (with spinner)")
         btn_start_sync.clicked.connect(self.start_sync_test)
@@ -81,8 +90,7 @@ class TestWindow(QMainWindow):
         layout.addWidget(btn_both_connected)
         
         layout.addStretch()
-        
-        # Initialize with both databases connected
+          # Initialize with both databases connected
         self.set_both_connected()
         
     def start_sync_test(self):
@@ -98,6 +106,7 @@ class TestWindow(QMainWindow):
             }
         }
         self.sync_indicator.update_connection_status(status)
+        self.sync_indicator_header.update_connection_status(status)
         
     def stop_sync_test(self):
         """Test stopping sync."""
@@ -112,14 +121,17 @@ class TestWindow(QMainWindow):
             }
         }
         self.sync_indicator.update_connection_status(status)
+        self.sync_indicator_header.update_connection_status(status)
         
     def show_error_test(self):
         """Test error display."""
         self.sync_indicator.show_error("Failed to connect to remote database")
+        self.sync_indicator_header.show_error("Failed to connect to remote database")
         
     def show_success_test(self):
         """Test success display."""
         self.sync_indicator.show_success("All changes synced successfully")
+        self.sync_indicator_header.show_success("All changes synced successfully")
         
     def set_local_only(self):
         """Test local only mode."""
@@ -134,6 +146,7 @@ class TestWindow(QMainWindow):
             }
         }
         self.sync_indicator.update_connection_status(status)
+        self.sync_indicator_header.update_connection_status(status)
         
     def set_both_connected(self):
         """Test both databases connected."""
@@ -148,6 +161,7 @@ class TestWindow(QMainWindow):
             }
         }
         self.sync_indicator.update_connection_status(status)
+        self.sync_indicator_header.update_connection_status(status)
 
 
 def main():

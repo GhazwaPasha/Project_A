@@ -399,10 +399,13 @@ class MainWindow(QMainWindow):
         layout.addWidget(title_label)
         
         layout.addStretch()
-          # Add modern sync indicator with spinner and status field
+        
+        # Add modern sync indicator right before window controls - positioned next to minimize button
         from .components.modern_sync_indicator import ModernSyncStatusIndicator
         self.sync_indicator = ModernSyncStatusIndicator()
         self.sync_indicator.sync_requested.connect(self._manual_sync)
+        # Set height to match header area
+        self.sync_indicator.setFixedHeight(40)
         layout.addWidget(self.sync_indicator)
         
         # Window controls with icons
