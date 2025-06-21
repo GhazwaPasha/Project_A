@@ -119,7 +119,8 @@ class AuthManager:
             self.user_organizations = []
             self.session_token = None
             self.logger.info("User signed out successfully")
-            return True        except Exception as e:
+            return True
+        except Exception as e:
             self.logger.error(f"Sign out failed: {e}")
             return False
     
@@ -143,9 +144,111 @@ class AuthManager:
         return self.current_user
     
     def get_user_organizations(self) -> List[Dict[str, Any]]:
-        """Get organizations user belongs to"""
+        """Get all organizations the current user belongs to"""
         return self.user_organizations
+        
+    def get_organization_members(self, organization_id: str) -> List[Dict[str, Any]]:
+        """Get all members of an organization"""
+        try:
+            if not self.current_user:
+                return []
+            
+            # Get organization members with user details
+            result = self.supabase.table('organization_members').select(
+                '*, users!inner(first_name, last_name, display_name, email, last_login_at)'
+            ).eq('organization_id', organization_id).eq('is_active', True).execute()
+            
+            return result.data if result.data else []
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get organization members: {e}")
+            return []
     
+    def get_pending_invitations(self, organization_id: str) -> List[Dict[str, Any]]:
+        """Get pending invitations for an organization"""
+        try:
+            if not self.current_user:
+                return []
+            
+            # Get pending invitations with inviter details
+            result = self.supabase.table('organization_members').select(
+                '*, invited_by_user:users!invited_by(display_name)'
+            ).eq('organization_id', organization_id).is_('joined_at', 'null').execute()
+            
+            return result.data if result.data else []
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get pending invitations: {e}")
+            return []
+    
+    def update_member_role(self, member_id: str, new_role: str) -> Dict[str, Any]:
+        """Update a member's role in the organization"""
+        try:
+            if not self.current_user:
+                return {"success": False, "error": "User not authenticated"}
+            
+            # Update the member's role
+            result = self.supabase.table('organization_members').update({
+                'role': new_role,
+                'updated_at': 'now()'
+            }).eq('id', member_id).execute()
+            
+            if result.data:
+                return {"success": True, "message": "Role updated successfully"}
+            else:
+                return {"success": False, "error": "Failed to update role"}
+                
+        except Exception as e:
+            self.logger.error(f"Failed to update member role: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def remove_organization_member(self, member_id: str) -> Dict[str, Any]:
+        """Remove a member from the organization"""
+        try:
+            if not self.current_user:
+                return {"success": False, "error": "User not authenticated"}
+            
+            # Set member as inactive instead of deleting
+            result = self.supabase.table('organization_members').update({
+                'is_active': False,
+                'updated_at': 'now()'
+            }).eq('id', member_id).execute()
+            
+            if result.data:
+                return {"success": True, "message": "Member removed successfully"}
+            else:
+                return {"success": False, "error": "Failed to remove member"}
+                
+        except Exception as e:
+            self.logger.error(f"Failed to remove member: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def cancel_invitation(self, invitation_id: str) -> Dict[str, Any]:
+        """Cancel a pending invitation"""
+        try:
+            if not self.current_user:
+                return {"success": False, "error": "User not authenticated"}
+            
+            # Delete the invitation record
+            result = self.supabase.table('organization_members').delete().eq('id', invitation_id).execute()
+            
+            return {"success": True, "message": "Invitation cancelled"}
+                
+        except Exception as e:
+            self.logger.error(f"Failed to cancel invitation: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def send_invitation_email(self, email: str, organization_name: str, inviter_name: str, invitation_token: str) -> bool:
+        """Send invitation email to user (placeholder for email service)"""
+        try:
+            # This is a placeholder for email integration
+            # In production, you would integrate with an email service like SendGrid, AWS SES, etc.
+            self.logger.info(f"Email invitation sent to {email} for organization {organization_name}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to send invitation email: {e}")
+            return False
+
     def create_organization(self, name: str, description: str = "") -> Dict[str, Any]:
         """Create new organization and make current user the owner"""
         try:

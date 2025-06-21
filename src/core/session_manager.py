@@ -135,3 +135,61 @@ class SessionManager:
         }
         
         return role_permissions.get(self.current_role, {})
+    
+    def get_user_organizations_count(self) -> int:
+        """Get the number of organizations the current user belongs to"""
+        try:
+            if not self.auth_manager.current_user:
+                return 0
+            user_orgs = self.auth_manager.get_user_organizations()
+            return len(user_orgs) if user_orgs else 0
+        except Exception as e:
+            self.logger.error(f"Failed to get user organizations count: {e}")
+            return 0
+    
+    def get_active_organization_id(self) -> Optional[str]:
+        """Get the ID of the currently active organization"""
+        return self.current_organization['id'] if self.current_organization else None
+    
+    def get_current_user_id(self) -> Optional[str]:
+        """Get the current user ID"""
+        return self.auth_manager.current_user.id if self.auth_manager.current_user else None
+    
+    def get_current_user_role(self) -> Optional[str]:
+        """Get the current user's role in the active organization"""
+        return self.current_role
+    
+    def is_super_admin(self) -> bool:
+        """Check if the current user is a super admin"""
+        return self.current_role == 'super_admin' if self.current_role else False
+    
+    def is_organization_admin(self) -> bool:
+        """Check if the current user is an admin in the current organization"""
+        return self.current_role in ['admin', 'super_admin'] if self.current_role else False
+    
+    def set_active_organization(self, org_id: str) -> bool:
+        """Set the active organization by ID"""
+        try:
+            if not self.auth_manager.current_user:
+                return False
+            
+            # Get organization data for this user
+            user_orgs = self.auth_manager.get_user_organizations()
+            if not user_orgs:
+                return False
+            
+            # Find the organization
+            target_org = None
+            for org in user_orgs:
+                if org.get('organizations', {}).get('id') == org_id:
+                    target_org = org
+                    break
+            
+            if target_org:
+                return self.set_current_organization(target_org)
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Failed to set active organization: {e}")
+            return False

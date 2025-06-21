@@ -1,14 +1,12 @@
 """
-Signup Dialog for Multi-Tenant SaaS
+Simple Windows 11 Signup Dialog
 """
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
-                            QPushButton, QLineEdit, QComboBox, QCheckBox, QFrame)
+                            QPushButton, QLineEdit, QComboBox, QCheckBox, QMessageBox)
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont, QPalette, QColor
-from .login_window import GlassmorphismHelper
 
 class SignupDialog(QDialog):
-    """Dialog for user registration"""
+    """Simple Windows 11 signup dialog"""
     
     signup_successful = pyqtSignal(dict)
     
@@ -16,349 +14,320 @@ class SignupDialog(QDialog):
         super().__init__(parent)
         self.auth_manager = auth_manager
         
-        self.setWindowTitle("Create Account")
+        self.setWindowTitle("AI Accountant - Create Account")
         self.setModal(True)
-        self.resize(450, 600)
+        self.setFixedSize(450, 550)
         
         self._setup_ui()
-        self._apply_styling()
-    
+        self._apply_style()
+        
     def _setup_ui(self):
-        """Setup the user interface"""
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(40, 30, 40, 30)
         layout.setSpacing(20)
-        layout.setContentsMargins(40, 40, 40, 40)
         
         # Title
-        title = QLabel("Create Your Account")
+        title = QLabel("Create Account")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setObjectName("title")
         layout.addWidget(title)
         
-        # Form fields
-        self._create_form_field(layout, "First Name", "firstName")
-        self._create_form_field(layout, "Last Name", "lastName")
-        self._create_form_field(layout, "Email", "email")
-        self._create_form_field(layout, "Password", "password", password=True)
-        self._create_form_field(layout, "Confirm Password", "confirmPassword", password=True)
+        # Name fields in one row
+        name_layout = QHBoxLayout()
+        name_layout.setSpacing(12)
         
-        # Organization section
-        org_frame = QFrame()
-        org_layout = QVBoxLayout(org_frame)
+        self.first_name_input = QLineEdit()
+        self.first_name_input.setPlaceholderText("First name")
+        self.first_name_input.setObjectName("input")
+        name_layout.addWidget(self.first_name_input)
         
-        org_label = QLabel("Organization")
-        org_label.setObjectName("fieldLabel")
-        org_layout.addWidget(org_label)
+        self.last_name_input = QLineEdit()
+        self.last_name_input.setPlaceholderText("Last name")
+        self.last_name_input.setObjectName("input")
+        name_layout.addWidget(self.last_name_input)
         
+        layout.addLayout(name_layout)
+        
+        # Email field
+        self.email_input = QLineEdit()
+        self.email_input.setPlaceholderText("Email address")
+        self.email_input.setObjectName("input")
+        layout.addWidget(self.email_input)
+        
+        # Password fields in one row
+        password_layout = QHBoxLayout()
+        password_layout.setSpacing(12)
+        
+        self.password_input = QLineEdit()
+        self.password_input.setPlaceholderText("Password")
+        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.password_input.setObjectName("input")
+        password_layout.addWidget(self.password_input)
+        
+        self.confirm_password_input = QLineEdit()
+        self.confirm_password_input.setPlaceholderText("Confirm password")
+        self.confirm_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.confirm_password_input.setObjectName("input")
+        password_layout.addWidget(self.confirm_password_input)
+        
+        layout.addLayout(password_layout)
+        
+        # Organization type
         self.org_combo = QComboBox()
-        self.org_combo.setObjectName("comboBox")
+        self.org_combo.setObjectName("combo")
         self.org_combo.addItem("Create New Organization", "new")
         self.org_combo.addItem("Join Existing Organization", "existing")
         self.org_combo.currentTextChanged.connect(self._on_org_type_changed)
-        org_layout.addWidget(self.org_combo)
+        layout.addWidget(self.org_combo)
         
-        # Organization name field (shown when creating new)
-        self.org_name_frame = QFrame()
-        org_name_layout = QVBoxLayout(self.org_name_frame)
-        org_name_layout.setContentsMargins(0, 10, 0, 0)
-        
-        org_name_label = QLabel("Organization Name")
-        org_name_label.setObjectName("fieldLabel")
-        org_name_layout.addWidget(org_name_label)
-        
+        # Organization name field
         self.org_name_input = QLineEdit()
-        self.org_name_input.setObjectName("inputField")
-        self.org_name_input.setPlaceholderText("Enter your organization name")
-        org_name_layout.addWidget(self.org_name_input)
+        self.org_name_input.setPlaceholderText("Organization name")
+        self.org_name_input.setObjectName("input")
+        layout.addWidget(self.org_name_input)
         
-        org_layout.addWidget(self.org_name_frame)
-        
-        # Invitation code field (shown when joining existing)
-        self.invite_frame = QFrame()
-        invite_layout = QVBoxLayout(self.invite_frame)
-        invite_layout.setContentsMargins(0, 10, 0, 0)
-        
-        invite_label = QLabel("Invitation Code")
-        invite_label.setObjectName("fieldLabel")
-        invite_layout.addWidget(invite_label)
-        
+        # Invitation code field (hidden by default)
         self.invite_input = QLineEdit()
-        self.invite_input.setObjectName("inputField")
-        self.invite_input.setPlaceholderText("Enter invitation code")
-        invite_layout.addWidget(self.invite_input)
-        
-        self.invite_frame.hide()  # Hidden by default
-        org_layout.addWidget(self.invite_frame)
-        
-        layout.addWidget(org_frame)
+        self.invite_input.setPlaceholderText("Invitation code")
+        self.invite_input.setObjectName("input")
+        self.invite_input.hide()
+        layout.addWidget(self.invite_input)
         
         # Terms checkbox
         self.terms_checkbox = QCheckBox("I agree to the Terms of Service and Privacy Policy")
-        self.terms_checkbox.setObjectName("checkbox")
         layout.addWidget(self.terms_checkbox)
         
-        # Buttons
-        button_layout = QHBoxLayout()
-        
-        self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.setObjectName("cancelButton")
-        self.cancel_btn.clicked.connect(self.reject)
-        
+        # Create account button
         self.signup_btn = QPushButton("Create Account")
-        self.signup_btn.setObjectName("signupButton")
-        self.signup_btn.clicked.connect(self._signup)
-        self.signup_btn.setDefault(True)
+        self.signup_btn.setObjectName("primary")
+        self.signup_btn.clicked.connect(self._handle_signup)
+        layout.addWidget(self.signup_btn)
         
-        button_layout.addWidget(self.cancel_btn)
-        button_layout.addWidget(self.signup_btn)
-        layout.addLayout(button_layout)
+        # Footer
+        footer = QHBoxLayout()
+        footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        # Already have account link
-        login_layout = QHBoxLayout()
-        login_layout.addStretch()
+        footer_text = QLabel("Already have an account?")
+        footer_text.setObjectName("subtitle")
+        footer.addWidget(footer_text)
         
-        login_label = QLabel("Already have an account?")
-        login_label.setObjectName("linkLabel")
-        login_layout.addWidget(login_label)
+        signin_btn = QPushButton("Sign in")
+        signin_btn.setObjectName("link")
+        signin_btn.clicked.connect(self.reject)
+        footer.addWidget(signin_btn)
         
-        login_link = QPushButton("Sign In")
-        login_link.setObjectName("linkButton")
-        login_link.clicked.connect(self.reject)
-        login_layout.addWidget(login_link)
+        layout.addLayout(footer)
         
-        login_layout.addStretch()
-        layout.addLayout(login_layout)
-    
-    def _create_form_field(self, layout, label_text, field_name, password=False):
-        """Create a form field with label and input"""
-        frame = QFrame()
-        field_layout = QVBoxLayout(frame)
-        field_layout.setContentsMargins(0, 0, 0, 0)
+        # Connect enter key
+        self.confirm_password_input.returnPressed.connect(self._handle_signup)
         
-        label = QLabel(label_text)
-        label.setObjectName("fieldLabel")
-        field_layout.addWidget(label)
-        
-        input_field = QLineEdit()
-        input_field.setObjectName("inputField")
-        if password:
-            input_field.setEchoMode(QLineEdit.EchoMode.Password)
-        
-        setattr(self, f"{field_name}_input", input_field)
-        field_layout.addWidget(input_field)
-        
-        layout.addWidget(frame)
-    
-    def _on_org_type_changed(self, text):
-        """Handle organization type change"""
-        if "Create New" in text:
-            self.org_name_frame.show()
-            self.invite_frame.hide()
-        else:
-            self.org_name_frame.hide()
-            self.invite_frame.show()
-    
-    def _signup(self):
-        """Handle signup"""
-        # Validate form
-        if not self._validate_form():
-            return
-        
-        try:
-            # Prepare signup data
-            signup_data = {
-                'first_name': self.firstName_input.text().strip(),
-                'last_name': self.lastName_input.text().strip(),
-                'email': self.email_input.text().strip(),
-                'password': self.password_input.text(),
-                'organization_type': self.org_combo.currentData(),
-                'organization_name': self.org_name_input.text().strip() if self.org_name_frame.isVisible() else None,
-                'invitation_code': self.invite_input.text().strip() if self.invite_frame.isVisible() else None
+    def _apply_style(self):
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #202020;
+                font-family: 'Segoe UI';
+                color: #ffffff;
             }
             
-            # Call auth manager signup
-            result = self.auth_manager.sign_up(**signup_data)
+            QLabel#title {
+                font-size: 28px;
+                font-weight: 300;
+                color: #ffffff;
+                margin-bottom: 20px;
+            }
             
-            if result.get('success'):
-                self.signup_successful.emit(result)
-                self.accept()
-            else:
-                self._show_error(result.get('error', 'Signup failed'))
-        
-        except Exception as e:
-            self._show_error(str(e))
-    
-    def _validate_form(self):
-        """Validate form data"""
-        if not self.firstName_input.text().strip():
-            self._show_error("First name is required")
-            return False
-        
-        if not self.lastName_input.text().strip():
-            self._show_error("Last name is required")
-            return False
-        
-        if not self.email_input.text().strip():
-            self._show_error("Email is required")
-            return False
-        
-        if not self.password_input.text():
-            self._show_error("Password is required")
-            return False
-        
-        if self.password_input.text() != self.confirmPassword_input.text():
-            self._show_error("Passwords do not match")
-            return False
-        
-        if self.org_name_frame.isVisible() and not self.org_name_input.text().strip():
-            self._show_error("Organization name is required")
-            return False
-        
-        if self.invite_frame.isVisible() and not self.invite_input.text().strip():
-            self._show_error("Invitation code is required")
-            return False
-        
-        if not self.terms_checkbox.isChecked():
-            self._show_error("You must agree to the Terms of Service")
-            return False
-        
-        return True
-    
-    def _show_error(self, message):
-        """Show error message (placeholder for now)"""
-        # TODO: Implement proper error display
-        print(f"Signup Error: {message}")
-    
-    def _apply_styling(self):
-        """Apply glassmorphism styling"""
-        self.setStyleSheet(f"""
-            QDialog {{
-                background: rgba(30, 30, 30, 0.85);
-                border-radius: 15px;
-                border: 1px solid rgba(255, 255, 255, 0.2);
-            }}
-            
-            QLabel#title {{
-                font-size: 24px;
-                font-weight: bold;
-                color: #FFFFFF;
-                margin-bottom: 10px;
-            }}
-            
-            QLabel#fieldLabel {{
+            QLabel#subtitle {
                 font-size: 14px;
-                color: #FFFFFF;
-                margin-bottom: 5px;
+                color: #cccccc;
+                margin-right: 8px;
+            }
+            
+            QLineEdit#input {
+                padding: 14px 16px;
+                border: 1px solid #404040;
+                border-radius: 6px;
+                font-size: 15px;
+                background-color: #2d2d2d;
+                color: #ffffff;
+                min-height: 22px;
+            }
+            
+            QLineEdit#input:focus {
+                border-color: #0078d4;
+                background-color: #333333;
+                outline: none;
+            }
+            
+            QLineEdit#input:hover {
+                border-color: #606060;
+                background-color: #303030;
+            }
+            
+            QLineEdit#input::placeholder {
+                color: #999999;
+                font-style: normal;
+            }
+            
+            QComboBox#combo {
+                padding: 14px 16px;
+                border: 1px solid #404040;
+                border-radius: 6px;
+                font-size: 15px;
+                background-color: #2d2d2d;
+                color: #ffffff;
+                min-height: 22px;
+            }
+            
+            QComboBox#combo:focus {
+                border-color: #0078d4;
+                background-color: #333333;
+            }
+            
+            QComboBox#combo:hover {
+                border-color: #606060;
+                background-color: #303030;
+            }
+            
+            QComboBox#combo::drop-down {
+                border: none;
+                width: 20px;
+            }
+            
+            QComboBox#combo::down-arrow {
+                width: 12px;
+                height: 12px;
+                image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iOCIgdmlld0JveD0iMCAwIDEyIDgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xIDFMNiA2TDExIDEiIHN0cm9rZT0iIzk5OTk5OSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+);
+            }
+            
+            QComboBox#combo QAbstractItemView {
+                background-color: #2d2d2d;
+                border: 1px solid #404040;
+                color: #ffffff;
+                selection-background-color: #0078d4;
+            }
+            
+            QPushButton#primary {
+                background-color: #0078d4;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 14px 28px;
+                font-size: 15px;
                 font-weight: 500;
-            }}
+                min-height: 22px;
+            }
             
-            QLabel#linkLabel {{
-                font-size: 14px;
-                color: rgba(255, 255, 255, 0.8);
-            }}
+            QPushButton#primary:hover {
+                background-color: #106ebe;
+            }
             
-            QLineEdit#inputField {{
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                border-radius: 8px;
-                padding: 12px;
-                font-size: 14px;
-                color: #FFFFFF;
-                min-height: 20px;
-            }}
+            QPushButton#primary:pressed {
+                background-color: #005a9e;
+            }
             
-            QLineEdit#inputField:focus {{
-                border: 2px solid rgba(0, 123, 255, 0.8);
-                background: rgba(255, 255, 255, 0.15);
-            }}
-            
-            QComboBox#comboBox {{
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                border-radius: 8px;
-                padding: 12px;
-                font-size: 14px;
-                color: #FFFFFF;
-                min-height: 20px;
-            }}
-            
-            QComboBox#comboBox:focus {{
-                border: 2px solid rgba(0, 123, 255, 0.8);
-            }}
-            
-            QComboBox#comboBox::drop-down {{
-                border: none;
+            QPushButton#link {
                 background: transparent;
-            }}
-            
-            QComboBox#comboBox::down-arrow {{
                 border: none;
-                background: transparent;
-            }}
-            
-            QCheckBox#checkbox {{
-                color: #FFFFFF;
+                color: #0078d4;
                 font-size: 14px;
-            }}
+                padding: 6px 12px;
+                font-weight: 500;
+            }
             
-            QCheckBox#checkbox::indicator {{
+            QPushButton#link:hover {
+                color: #40a6ff;
+                text-decoration: underline;
+            }
+            
+            QCheckBox {
+                font-size: 14px;
+                color: #ffffff;
+                spacing: 8px;
+            }
+            
+            QCheckBox::indicator {
                 width: 18px;
                 height: 18px;
-                border-radius: 3px;
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                background: rgba(255, 255, 255, 0.1);
-            }}
+                border: 2px solid #606060;
+                border-radius: 4px;
+                background-color: #2d2d2d;
+            }
             
-            QCheckBox#checkbox::indicator:checked {{
-                background: rgba(0, 123, 255, 0.6);
-                border: 1px solid rgba(0, 123, 255, 0.8);
-            }}
+            QCheckBox::indicator:checked {
+                background-color: #0078d4;
+                border-color: #0078d4;
+                image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iOSIgdmlld0JveD0iMCAwIDEyIDkiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ike0xIDQuNUw0LjUgOEwxMSAxIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgo8L3N2Zz4K);
+            }
             
-            QPushButton {{
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                border-radius: 8px;
-                padding: 12px 24px;
-                font-size: 14px;
-                font-weight: 500;
-                color: #FFFFFF;
-                min-width: 120px;
-            }}
-            
-            QPushButton:hover {{
-                background: rgba(255, 255, 255, 0.2);
-                border: 1px solid rgba(255, 255, 255, 0.4);
-            }}
-            
-            QPushButton:pressed {{
-                background: rgba(255, 255, 255, 0.3);
-            }}
-            
-            QPushButton#signupButton {{
-                background: rgba(0, 123, 255, 0.4);
-                border: 1px solid rgba(0, 123, 255, 0.6);
-            }}
-            
-            QPushButton#signupButton:hover {{
-                background: rgba(0, 123, 255, 0.5);
-                border: 1px solid rgba(0, 123, 255, 0.7);
-            }}
-            
-            QPushButton#signupButton:pressed {{
-                background: rgba(0, 123, 255, 0.6);
-            }}
-            
-            QPushButton#linkButton {{
-                background: transparent;
-                border: none;
-                color: rgba(0, 123, 255, 0.9);
-                font-weight: 600;
-                text-decoration: underline;
-                padding: 5px;
-                min-width: auto;
-            }}
-            
-            QPushButton#linkButton:hover {{
-                color: rgba(0, 123, 255, 1.0);
-            }}
+            QCheckBox::indicator:hover {
+                border-color: #808080;
+            }
         """)
+    
+    def _on_org_type_changed(self):
+        """Handle organization type change"""
+        if self.org_combo.currentData() == "existing":
+            self.org_name_input.hide()
+            self.invite_input.show()
+        else:
+            self.invite_input.hide()
+            self.org_name_input.show()
+    
+    def _handle_signup(self):
+        """Handle signup button click"""
+        # Get form data
+        first_name = self.first_name_input.text().strip()
+        last_name = self.last_name_input.text().strip()
+        email = self.email_input.text().strip()
+        password = self.password_input.text()
+        confirm_password = self.confirm_password_input.text()
+        
+        # Validate required fields
+        if not all([first_name, last_name, email, password, confirm_password]):
+            QMessageBox.warning(self, "Error", "Please fill in all required fields.")
+            return
+        
+        # Validate password match
+        if password != confirm_password:
+            QMessageBox.warning(self, "Error", "Passwords do not match.")
+            return
+        
+        # Validate terms acceptance
+        if not self.terms_checkbox.isChecked():
+            QMessageBox.warning(self, "Error", "Please accept the Terms of Service and Privacy Policy.")
+            return
+        
+        # Get organization data
+        org_type = self.org_combo.currentData()
+        if org_type == "new":
+            org_name = self.org_name_input.text().strip()
+            if not org_name:
+                QMessageBox.warning(self, "Error", "Please enter an organization name.")
+                return
+            org_data = {"type": "new", "name": org_name}
+        else:
+            invite_code = self.invite_input.text().strip()
+            if not invite_code:
+                QMessageBox.warning(self, "Error", "Please enter an invitation code.")
+                return
+            org_data = {"type": "existing", "invite_code": invite_code}
+        
+        # Prepare user data
+        user_data = {
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": email,
+            "password": password,
+            "organization": org_data
+        }
+        
+        try:
+            # Attempt to create the user
+            success = self.auth_manager.create_user(user_data)
+            if success:
+                self.signup_successful.emit(user_data)
+                self.accept()
+            else:
+                QMessageBox.warning(self, "Signup Failed", "Failed to create account. Please try again.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Signup failed: {str(e)}")

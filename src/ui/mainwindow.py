@@ -474,11 +474,18 @@ class MainWindow(QMainWindow):
         self.toggle_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.toggle_btn.clicked.connect(self.toggle_sidebar)
         self._style_toggle_button()
-        
-        # Add toggle button directly to main layout to maintain alignment
+          # Add toggle button directly to main layout to maintain alignment
         layout.addWidget(self.toggle_btn)
-        
-        # Navigation buttons with modern icons
+          # Add organization switcher (if user has multiple organizations)
+        if self.session_manager and self.session_manager.get_user_organizations_count() > 1:
+            from .components.organization_switcher import OrganizationSwitcher
+            self.org_switcher = OrganizationSwitcher(
+                self.auth_manager,  # Pass auth_manager instead of session_manager
+                parent=self
+            )
+            self.org_switcher.organization_changed.connect(self._on_organization_changed)
+            layout.addWidget(self.org_switcher)
+          # Navigation buttons with modern icons - expanded for multi-org support
         nav_items = [
             ("Dashboard", os.path.join("assets", "icons", "dashboard_modern.svg")),
             ("Journal", os.path.join("assets", "icons", "journal_modern.svg")),
@@ -486,6 +493,11 @@ class MainWindow(QMainWindow):
             ("Trial Balance", os.path.join("assets", "icons", "balance_modern.svg")),
             ("Reports", os.path.join("assets", "icons", "reports_modern.svg")),
             ("Accounts", os.path.join("assets", "icons", "accounts_modern.svg")),
+            ("Team", os.path.join("assets", "icons", "accounts_modern.svg")),  # Team management
+            ("Org Settings", os.path.join("assets", "icons", "settings_modern.svg")),  # Organization settings
+            ("User Mgmt", os.path.join("assets", "icons", "accounts_modern.svg")),  # User management (admin only)
+            ("Platform", os.path.join("assets", "icons", "dashboard_modern.svg")),  # Platform overview (super admin)
+            ("Global Orgs", os.path.join("assets", "icons", "accounts_modern.svg")),  # Global organizations (super admin)
             ("Settings", os.path.join("assets", "icons", "settings_modern.svg")),
         ]
           # Add navigation buttons directly to main layout for proper alignment
@@ -561,9 +573,8 @@ class MainWindow(QMainWindow):
                 border: 1px solid rgba(255, 255, 255, 0.05);
                 border-radius: {border_radius}px;
                 margin: 0px;
-            }}
-        """)
-        
+            }}        """)
+    
     def _load_pages(self):
         """Load and setup all application pages."""
         from .pages.dashboard import DashboardPage
@@ -572,16 +583,48 @@ class MainWindow(QMainWindow):
         from .pages.trial_balance import TrialBalancePage
         from .pages.reports import ReportsPage
         from .pages.accounts_hierarchy import HierarchicalAccountsPage
+        from .pages.team_management import TeamManagementPage
+        from .pages.organization_settings import OrganizationSettingsPage
+        from .pages.user_management import UserManagementPage
+        from .pages.platform_overview import PlatformOverviewPage
+        from .pages.global_organizations import GlobalOrganizationsPage
         from .pages.settings import SettingsPage
         
-        pages = [DashboardPage, JournalPage, LedgerPage, TrialBalancePage, ReportsPage, HierarchicalAccountsPage, SettingsPage]
-        for idx, Page in enumerate(pages):
-            page = Page(self.system, parent=self)
+        # Standard pages (always visible)
+        standard_pages = [
+            DashboardPage, JournalPage, LedgerPage, TrialBalancePage, 
+            ReportsPage, HierarchicalAccountsPage
+        ]
+        
+        # Organization management pages (visible to organization members)
+        org_pages = [TeamManagementPage, OrganizationSettingsPage]
+        
+        # Admin pages (visible to organization admins)
+        admin_pages = [UserManagementPage]
+        
+        # Super admin pages (visible to super admins only)
+        super_admin_pages = [PlatformOverviewPage, GlobalOrganizationsPage]
+        
+        # Settings page (always visible)
+        settings_pages = [SettingsPage]
+          # Add all pages to stack with proper initialization
+        all_pages = standard_pages + org_pages + admin_pages + super_admin_pages + settings_pages
+        for idx, PageClass in enumerate(all_pages):
+            if PageClass in [TeamManagementPage, OrganizationSettingsPage, UserManagementPage, 
+                           PlatformOverviewPage, GlobalOrganizationsPage]:
+                # Pass auth_manager and session_manager for organization/user management pages
+                page = PageClass(self.system, auth_manager=self.auth_manager, parent=self)
+            else:
+                # Standard accounting pages
+                page = PageClass(self.system, parent=self)
             self.stack.addWidget(page)
-            
+        
         # Set default page
         self.stack.setCurrentIndex(0)
         self.sidebar_buttons[0].setChecked(True)
+        
+        # Apply role-based visibility
+        self._update_navigation_visibility()
         
     def _title_bar_mouse_press(self, event):
         """Handle title bar mouse press for window dragging."""
@@ -620,11 +663,13 @@ class MainWindow(QMainWindow):
         self.toggle_btn.setChecked(False)
         
         # Update toggle button styling to match sidebar state
-        self._style_toggle_button()
-        
-        # Update button states
+        self._style_toggle_button()        # Update button states
         for btn in self.sidebar_buttons:
             btn.set_expanded(self.sidebar_expanded)
+            
+        # Update organization switcher if present
+        if hasattr(self, 'org_switcher'):
+            self.org_switcher.set_expanded(self.sidebar_expanded)
             
     def setCurrentIndexByName(self, name):
         """Set current page by name."""
@@ -635,7 +680,12 @@ class MainWindow(QMainWindow):
             "Trial Balance": 3,
             "Reports": 4,
             "Accounts": 5,
-            "Settings": 6,
+            "Team": 6,
+            "Org Settings": 7,
+            "User Mgmt": 8,
+            "Platform": 9,
+            "Global Orgs": 10,
+            "Settings": 11,
         }
         idx = label_to_index.get(name)
         if idx is not None:
@@ -947,3 +997,76 @@ class MainWindow(QMainWindow):
                     'is_syncing': False
                 }
             }
+    
+    def _update_navigation_visibility(self):
+        """Update sidebar navigation visibility based on user role."""
+        if not self.session_manager or not hasattr(self, 'sidebar_buttons'):
+            return
+            
+        # Define which buttons are visible for which roles
+        user_role = self.session_manager.get_current_user_role()
+        is_super_admin = self.session_manager.is_super_admin()
+        can_manage_users = self.session_manager.can_manage_users()
+        
+        # Standard pages (always visible): Dashboard, Journal, Ledger, Trial Balance, Reports, Accounts
+        always_visible = [0, 1, 2, 3, 4, 5]
+        
+        # Organization pages: Team (6), Org Settings (7) - visible to all org members
+        org_visible = [6, 7] if self.session_manager.get_active_organization_id() else []
+        
+        # Admin pages: User Mgmt (8) - visible to admins and owners
+        admin_visible = [8] if can_manage_users else []
+        
+        # Super admin pages: Platform (9), Global Orgs (10) - visible to super admins only
+        super_admin_visible = [9, 10] if is_super_admin else []
+        
+        # Settings (11) - always visible
+        settings_visible = [11]
+        
+        # Combine all visible indices
+        visible_indices = always_visible + org_visible + admin_visible + super_admin_visible + settings_visible
+        
+        # Update button visibility
+        for i, button in enumerate(self.sidebar_buttons):
+            if i in visible_indices:
+                button.show()
+            else:
+                button.hide()
+    
+    def _on_organization_changed(self, org_id):
+        """Handle organization change from the organization switcher."""
+        try:
+            if self.session_manager:
+                success = self.session_manager.set_active_organization(org_id)
+                if success:
+                    # Reinitialize accounting system with new organization context
+                    self.accounting_system = self._initialize_accounting_system(None)
+                    self.system = self.accounting_system
+                    
+                    # Update all pages with new organization context
+                    for i in range(self.stack.count()):
+                        page = self.stack.widget(i)
+                        if hasattr(page, 'refresh_organization_context'):
+                            page.refresh_organization_context(self.system)
+                    
+                    # Update navigation visibility for new organization role
+                    self._update_navigation_visibility()
+                    
+                    self.logger.info(f"Organization context changed to: {org_id}")
+                else:
+                    self.logger.error("Failed to change organization context")
+                    
+        except Exception as e:
+            self.logger.error(f"Error changing organization: {e}")
+    
+    def _update_sidebar_visibility(self):
+        """Update sidebar button visibility and organization switcher."""
+        self._update_navigation_visibility()
+        
+        # Update organization switcher visibility
+        if hasattr(self, 'org_switcher'):
+            if self.session_manager and self.session_manager.get_user_organizations_count() > 1:
+                self.org_switcher.show()
+                self.org_switcher.set_expanded(self.sidebar_expanded)
+            else:
+                self.org_switcher.hide()
