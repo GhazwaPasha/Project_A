@@ -37,9 +37,8 @@ class SimpleAIStatusBar(QLineEdit):
         self.setText(self.placeholder_text)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        
-        # Set initial size - compact for title bar
-        self.setFixedHeight(28)
+          # Set initial size - compact for title bar
+        self.setFixedHeight(32)  # Increased height to prevent text clipping
         self.setFixedWidth(250)
         
         # Connect events
@@ -65,12 +64,13 @@ class SimpleAIStatusBar(QLineEdit):
                 border: 1px solid #5a5a5a;
                 border-radius: 6px;
                 color: #cccccc;
-                font-size: 13px;
+                font-size: 12px;
                 font-family: 'Segoe UI', system-ui, sans-serif;
                 font-weight: 400;
-                padding: 6px 12px;
+                padding: 4px 12px;
                 selection-background-color: #007acc;
                 outline: none;
+                line-height: 1.2;
             }
             
             QLineEdit:hover {
@@ -92,8 +92,7 @@ class SimpleAIStatusBar(QLineEdit):
                 outline: none;
             }
             
-            QLineEdit[readOnly="true"]:hover {
-                border: 1px solid #007acc;
+            QLineEdit[readOnly="true"]:hover {                border: 1px solid #007acc;
                 outline: none;
             }
         """)
@@ -224,3 +223,21 @@ class SimpleAIStatusBar(QLineEdit):
         
         # Reset fixed width after animation
         QTimer.singleShot(300, lambda: self.setFixedWidth(250))
+
+    def set_context(self, page_name, context_data=None):
+        """Set the current page context for the AI status bar"""
+        if not self.is_expanded and not self.is_processing:
+            context_messages = {
+                "dashboard": "📊 Dashboard Overview",
+                "journal": "📝 Journal Entries", 
+                "ledger": "📖 Account Ledger",
+                "trial_balance": "⚖️ Trial Balance",
+                "reports": "📈 Financial Reports",
+                "accounts": "🏢 Chart of Accounts",
+                "team": "👥 Team Management",
+                "settings": "⚙️ Settings"
+            }
+            
+            message = context_messages.get(page_name, "🤖 AI Assistant")
+            self.setText(message)
+            self.placeholder_text = message

@@ -400,25 +400,43 @@ class MainWindow(QMainWindow):
         
         layout = QHBoxLayout(title_bar)
         layout.setContentsMargins(16, 0, 8, 0)
-          # Window icon and title
+        layout.setSpacing(8)
+        
+        # Left side container for icon and title
+        left_container = QWidget()
+        left_layout = QHBoxLayout(left_container)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(8)
+        
+        # Window icon and title
         icon_label = QLabel()
         icon_label.setPixmap(QIcon(os.path.join("assets", "icons", "dashboard_new.svg")).pixmap(20, 20))
-        layout.addWidget(icon_label)
+        left_layout.addWidget(icon_label)
         
         title_label = QLabel("AI Accountant")
         title_label.setObjectName("WindowTitle")
-        layout.addWidget(title_label)        # AI Status Bar - simple expandable version in title bar center
-        self.ai_status_bar = self._create_simple_ai_status_bar()
-        layout.addWidget(self.ai_status_bar, 1)  # Takes remaining space in center
-          # Add compact sync button right before window controls
+        left_layout.addWidget(title_label)
+        left_layout.addStretch()  # Push title to left
+          # Right side container for buttons and controls
+        right_container = QWidget()
+        right_layout = QHBoxLayout(right_container)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(2)  # Reduced spacing between buttons
+        
+        # Add stretch to push buttons to the right
+        right_layout.addStretch()
+        
+        # Add compact sync button
         from .components.compact_sync_button import CompactSyncButton
         self.sync_button = CompactSyncButton()
         self.sync_button.sync_requested.connect(self._manual_sync)
-        layout.addWidget(self.sync_button)        # Add notification button next to sync button
+        right_layout.addWidget(self.sync_button)
+        
+        # Add notification button
         from .components.notification_button import NotificationButton
         self.notification_button = NotificationButton(notification_manager=self.notification_manager)
         self.notification_button.notification_clicked.connect(self._show_notifications)
-        layout.addWidget(self.notification_button)
+        right_layout.addWidget(self.notification_button)
         
         # Window controls with icons
         minimize_btn = QPushButton()
@@ -439,24 +457,31 @@ class MainWindow(QMainWindow):
         close_btn.setToolTip("Close")
         close_btn.clicked.connect(self.close)
         
-        # Removed manual sync button (sync_btn)
         # Set icons with fallback to Unicode symbols
         self._set_window_control_icons(minimize_btn, maximize_btn, close_btn)
         
-        layout.addWidget(minimize_btn)
-        layout.addWidget(maximize_btn)
-        layout.addWidget(close_btn)        
+        right_layout.addWidget(minimize_btn)
+        right_layout.addWidget(maximize_btn)
+        right_layout.addWidget(close_btn)
+        
+        # AI Status Bar - always centered between left and right containers
+        self.ai_status_bar = self._create_simple_ai_status_bar()
+        
+        # Add all containers to main layout with equal stretch for perfect centering
+        layout.addWidget(left_container, 1)  # Left side takes 1/3
+        layout.addWidget(self.ai_status_bar, 1)  # Center AI status takes 1/3 
+        layout.addWidget(right_container, 1)  # Right side takes 1/3
         return title_bar
     
     def _create_simple_ai_status_bar(self):
         """Create simple AI status bar for title bar integration"""
         try:
             from .components.simple_ai_status_bar import SimpleAIStatusBar
-            
-            # Create a container that will hold the AI status bar
+              # Create a container that will hold the AI status bar
             container = QFrame()
             container.setObjectName("AIStatusContainer")
-            container.setMaximumHeight(28)  # Match title bar height
+            container.setMaximumHeight(36)  # Increased height to prevent text clipping
+            container.setMinimumHeight(36)  # Ensure consistent height
             
             layout = QHBoxLayout(container)
             layout.setContentsMargins(0, 0, 0, 0)
@@ -464,7 +489,8 @@ class MainWindow(QMainWindow):
             
             # Create the simple AI status bar
             self.simple_ai_bar = SimpleAIStatusBar(self)
-            self.simple_ai_bar.setMaximumHeight(28)
+            self.simple_ai_bar.setMaximumHeight(32)  # Increased height
+            self.simple_ai_bar.setMinimumHeight(32)  # Ensure consistent height
             layout.addWidget(self.simple_ai_bar)
             
             return container
@@ -478,20 +504,10 @@ class MainWindow(QMainWindow):
     def _update_ai_status(self):
         """Update AI status message periodically"""
         try:
-            if hasattr(self, 'ai_status_text'):
-                # Get context-aware message
+            # Update the simple AI status bar if available
+            if hasattr(self, 'simple_ai_bar'):
                 context = self._get_current_context()
-                mood = self.ai_personality.detect_mood_from_context(context)
-                message = self.ai_personality.get_context_greeting(context.get('page', 'dashboard'))
-                
-                # Use animated text change if enhancer is available
-                if hasattr(self, 'ai_enhancer'):
-                    self.ai_enhancer.animate_text_change(message)
-                    self.ai_enhancer.pulse_avatar(mood)
-                else:
-                    self.ai_status_text.setText(message)
-                
-                self._update_ai_mood_visual(mood)
+                self.simple_ai_bar.set_context(context.get('page', 'dashboard'), context)
                 
         except Exception as e:
             print(f"Error updating AI status: {e}")
@@ -553,6 +569,7 @@ class MainWindow(QMainWindow):
             self.ai_enhancer.pulse_avatar(mood)
             message = f"Mood changed to {mood}! 😊" if mood == "happy" else f"Feeling {mood} today! 🤖"
             self.ai_enhancer.animate_text_change(message)
+            
     def _handle_reminder_due(self, reminder):
         """Handle due reminders from compact AI"""
         try:
@@ -573,16 +590,10 @@ class MainWindow(QMainWindow):
                     }
                 """)
                 
-            # Update status text to show reminder
-            if hasattr(self, 'ai_status_text'):
+            # Show reminder in simple AI status bar
+            if hasattr(self, 'simple_ai_bar'):
                 reminder_text = f"⚠️ Reminder: {reminder.get('title', 'You have a pending task!')}"
-                if hasattr(self, 'ai_enhancer'):
-                    self.ai_enhancer.animate_text_change(reminder_text)
-                else:
-                    self.ai_status_text.setText(reminder_text)
-                
-                # Update status text
-                self.ai_status_text.setText(f"⏰ Reminder: {reminder.title}")
+                self.simple_ai_bar.setText(reminder_text)
         except:
             pass
     
@@ -610,45 +621,10 @@ class MainWindow(QMainWindow):
         print(f"AI Mood changed to: {mood}")
 
     def _update_ai_context(self):
-        """Update AI context when page changes"""
-        # Update compact AI status with new context
-        if hasattr(self, 'ai_status_text'):
+        """Update AI context when page changes"""        # Update simple AI status bar with new context
+        if hasattr(self, 'simple_ai_bar'):
             try:
                 self._update_ai_status()
-            except Exception as e:
-                print(f"Error updating compact AI context: {e}")
-            try:
-                current_index = self.stack.currentIndex()
-                context_map = {
-                    0: "dashboard",
-                    1: "journal", 
-                    2: "ledger",
-                    3: "trial_balance",
-                    4: "reports",
-                    5: "accounts"
-                }
-                
-                context = context_map.get(current_index, "unknown")
-                
-                # Get additional context data
-                context_data = {
-                    "page_index": current_index,
-                    "session_duration": (datetime.now() - self.start_time if hasattr(self, 'start_time') else datetime.now()).total_seconds() / 3600
-                }
-                  
-                # Store current context for AI use
-                self.current_context = context
-                
-                # Add accounting-specific context
-                if context == "trial_balance":
-                    try:
-                        trial_balance = self.accounting_system.get_trial_balance()
-                        context_data["trial_balance_items"] = len(trial_balance) if trial_balance else 0
-                    except:
-                        pass
-                
-                self.ai_status_bar.set_context(context, context_data)
-                
             except Exception as e:
                 print(f"Error updating AI context: {e}")
     
