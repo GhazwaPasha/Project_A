@@ -167,9 +167,7 @@ class MainWindow(QMainWindow):
             self._setup_sync_updates()
         
         # Show the window first, then apply Mica effect
-        self.show()
-        
-        # Use QTimer to apply Mica effect after window is fully shown
+        self.show()        # Use QTimer to apply Mica effect after window is fully shown
         QTimer.singleShot(100, self._apply_mica_effect_delayed)
         
     def _apply_mica_effect_delayed(self):
@@ -397,10 +395,8 @@ class MainWindow(QMainWindow):
         
         title_label = QLabel("AI Accountant")
         title_label.setObjectName("WindowTitle")
-        layout.addWidget(title_label)
-        
-        # AI Status Bar - compact version in title bar center
-        self.ai_status_bar = self._create_compact_ai_status_bar()
+        layout.addWidget(title_label)        # AI Status Bar - simple expandable version in title bar center
+        self.ai_status_bar = self._create_simple_ai_status_bar()
         layout.addWidget(self.ai_status_bar, 1)  # Takes remaining space in center
         
         # Add modern sync indicator right before window controls - positioned next to minimize button
@@ -428,145 +424,43 @@ class MainWindow(QMainWindow):
         close_btn.setObjectName("WindowControlButtonClose")
         close_btn.setFixedSize(40, 32)
         close_btn.setToolTip("Close")
-        close_btn.clicked.connect(self.close)        # Removed manual sync button (sync_btn)
+        close_btn.clicked.connect(self.close)
+        
+        # Removed manual sync button (sync_btn)
         # Set icons with fallback to Unicode symbols
         self._set_window_control_icons(minimize_btn, maximize_btn, close_btn)
         
         layout.addWidget(minimize_btn)
         layout.addWidget(maximize_btn)
-        layout.addWidget(close_btn)
-        
+        layout.addWidget(close_btn)        
         return title_bar
-
-    def _create_compact_ai_status_bar(self):
-        """Create a compact AI Status Bar for the title bar with VS Code search field styling"""
+    
+    def _create_simple_ai_status_bar(self):
+        """Create simple AI status bar for title bar integration"""
         try:
-            # Create compact container with VS Code-inspired design
-            ai_container = QFrame()
-            ai_container.setObjectName("CompactAIBar")
-            ai_container.setFixedHeight(28)  # VS Code search field height
-            ai_container.setMaximumWidth(500)  # Slightly smaller for better proportion            ai_container.setMinimumWidth(300)  # Ensure minimum usable width
+            from .components.simple_ai_status_bar import SimpleAIStatusBar
             
-            layout = QHBoxLayout(ai_container)
-            layout.setContentsMargins(8, 0, 8, 0)  # Remove vertical margins to prevent text clipping
-            layout.setSpacing(6)
-            layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)  # Center content vertically
+            # Create a container that will hold the AI status bar
+            container = QFrame()
+            container.setObjectName("AIStatusContainer")
+            container.setMaximumHeight(28)  # Match title bar height
             
-            # AI Avatar with VS Code icon styling
-            avatar = QLabel("🤖")
-            avatar.setStyleSheet("""
-                QLabel {
-                    font-size: 14px;
-                    padding: 4px;
-                    border-radius: 4px;
-                    background: rgba(97, 175, 239, 0.15);
-                    border: 1px solid rgba(97, 175, 239, 0.3);
-                    min-width: 20px;
-                    max-width: 20px;
-                    min-height: 20px;
-                    max-height: 20px;
-                }
-            """)
-            avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(avatar)
+            layout = QHBoxLayout(container)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             
-            # Status message with VS Code input field styling
-            self.ai_status_text = QLabel("Search anything or ask AI... �")
-            self.ai_status_text.setObjectName("CompactAIText")
-            self.ai_status_text.setStyleSheet("""
-                QLabel {
-                    color: #cccccc;
-                    font-size: 13px;
-                    font-family: 'Segoe UI', system-ui, sans-serif;
-                    font-weight: 400;
-                    background: transparent;
-                    border: none;
-                    padding: 0px;
-                    margin: 0px;
-                }
-            """)
-            layout.addWidget(self.ai_status_text, 1)
+            # Create the simple AI status bar
+            self.simple_ai_bar = SimpleAIStatusBar(self)
+            self.simple_ai_bar.setMaximumHeight(28)
+            layout.addWidget(self.simple_ai_bar)
             
-            # Compact action buttons with VS Code button styling
-            reminder_btn = QPushButton("📋")
-            reminder_btn.setFixedSize(22, 22)
-            reminder_btn.setToolTip("Reminders & Todos")
-            reminder_btn.setStyleSheet("""
-                QPushButton {
-                    background: rgba(255, 255, 255, 0.05);
-                    border: 1px solid rgba(255, 255, 255, 0.1);
-                    border-radius: 3px;
-                    color: #cccccc;
-                    font-size: 11px;
-                    padding: 0px;
-                    margin: 0px;
-                }
-                QPushButton:hover {
-                    background: rgba(255, 255, 255, 0.1);
-                    border: 1px solid rgba(255, 255, 255, 0.2);
-                }
-                QPushButton:pressed {
-                    background: rgba(255, 255, 255, 0.15);
-                }
-            """)
-            layout.addWidget(reminder_btn)
-            
-            # Expand button with VS Code primary button styling
-            expand_btn = QPushButton("💬")
-            expand_btn.setFixedSize(22, 22)
-            expand_btn.setToolTip("Expand AI Chat")
-            expand_btn.setStyleSheet("""
-                QPushButton {
-                    background: rgba(97, 175, 239, 0.2);
-                    border: 1px solid rgba(97, 175, 239, 0.4);
-                    border-radius: 3px;
-                    color: #ffffff;
-                    font-size: 11px;
-                    padding: 0px;
-                    margin: 0px;
-                }
-                QPushButton:hover {
-                    background: rgba(97, 175, 239, 0.3);
-                    border: 1px solid rgba(97, 175, 239, 0.6);
-                }
-                QPushButton:pressed {
-                    background: rgba(97, 175, 239, 0.4);
-                }
-            """)
-            expand_btn.clicked.connect(self._show_ai_chat_dialog)
-            layout.addWidget(expand_btn)
-            
-            # Apply VS Code search field styling
-            ai_container.setStyleSheet("""
-                QFrame#CompactAIBar {
-                    background: #3c3c3c;
-                    border: 1px solid #5a5a5a;
-                    border-radius: 4px;
-                    margin: 2px;
-                }
-                QFrame#CompactAIBar:hover {
-                    border: 1px solid #0e639c;
-                }
-                QFrame#CompactAIBar:focus-within {
-                    border: 1px solid #007acc;
-                    box-shadow: 0 0 0 1px rgba(0, 122, 204, 0.4);
-                }
-            """)
-            
-            # Store references for updates
-            self.ai_avatar = avatar
-            self.ai_reminder_btn = reminder_btn
-            
-            # Initialize AI components for compact mode
-            self._init_compact_ai_components()
-            
-            return ai_container
+            return container
             
         except Exception as e:
-            print(f"⚠️ Failed to create compact AI Status Bar: {e}")
-            # Return minimal placeholder
+            print(f"Error creating simple AI status bar: {e}")
+            # Return placeholder
             placeholder = QLabel("AI Assistant")
-            placeholder.setStyleSheet("color: white; font-size: 12px; padding: 4px;")
+            placeholder.setStyleSheet("color: #cccccc; font-size: 12px; padding: 4px;")
             return placeholder
 
     def _init_compact_ai_components(self):
@@ -1513,3 +1407,4 @@ class MainWindow(QMainWindow):
                 self.org_switcher.set_expanded(self.sidebar_expanded)
             else:
                 self.org_switcher.hide()
+      # Floating AI methods removed - AI is now integrated in title bar
