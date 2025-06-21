@@ -399,10 +399,9 @@ class MainWindow(QMainWindow):
         layout.addWidget(title_label)
         
         layout.addStretch()
-        
-        # Add sync indicator (always show, but functionality depends on mode)
-        from .components.sync_indicator import SyncIndicator
-        self.sync_indicator = SyncIndicator()
+          # Add modern sync indicator with spinner and status field
+        from .components.modern_sync_indicator import ModernSyncStatusIndicator
+        self.sync_indicator = ModernSyncStatusIndicator()
         self.sync_indicator.sync_requested.connect(self._manual_sync)
         layout.addWidget(self.sync_indicator)
         
@@ -951,8 +950,7 @@ class MainWindow(QMainWindow):
         self.sync_timer = QTimer()
         self.sync_timer.timeout.connect(self._update_sync_status)
         self.sync_timer.start(5000)  # Update every 5 seconds
-        
-        # Initial status update
+          # Initial status update
         self._update_sync_status()
     
     def _update_sync_status(self):
@@ -961,8 +959,14 @@ class MainWindow(QMainWindow):
             try:
                 status = self.accounting_system.db_manager.get_connection_status()
                 self.sync_indicator.update_connection_status(status)
+                
+                # Add periodic activity updates
+                if status.get('sync_status', {}).get('is_syncing', False):
+                    self.sync_indicator.add_log_entry("Background sync in progress...")
+                    
             except Exception as e:
                 self.logger.error(f"Failed to update sync status: {e}")
+                self.sync_indicator.show_error(f"Status update failed: {str(e)}")
     
     def _manual_sync(self):
         """Trigger manual synchronization."""
@@ -970,13 +974,33 @@ class MainWindow(QMainWindow):
             try:
                 self.logger.info("Manual sync requested...")
                 if hasattr(self, 'sync_indicator'):
-                    self.sync_indicator.show_sync_animation()
+                    self.sync_indicator.add_log_entry("Manual sync initiated...")
                 
                 # Trigger sync (this will be implemented in the sync manager)
                 self.accounting_system.db_manager._perform_sync()
                 
+                if hasattr(self, 'sync_indicator'):
+                    self.sync_indicator.show_success("Manual sync completed successfully")
+                
             except Exception as e:
                 self.logger.error(f"Manual sync failed: {e}")
+                if hasattr(self, 'sync_indicator'):
+                    self.sync_indicator.show_error(f"Manual sync failed: {str(e)}")
+    
+    def log_activity(self, message):
+        """Log an activity to the sync indicator."""
+        if hasattr(self, 'sync_indicator'):
+            self.sync_indicator.add_log_entry(message)
+            
+    def show_sync_success(self, message):
+        """Show a success message in the sync indicator."""
+        if hasattr(self, 'sync_indicator'):
+            self.sync_indicator.show_success(message)
+            
+    def show_sync_error(self, message):
+        """Show an error message in the sync indicator.""" 
+        if hasattr(self, 'sync_indicator'):
+            self.sync_indicator.show_error(message)
     
     def get_connection_status(self):
         """Get connection status for external access."""
