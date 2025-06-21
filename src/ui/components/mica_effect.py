@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QWidget
 # Windows API constants
 DWM_WINDOW_CORNER_PREFERENCE = 33
 DWM_WINDOW_CORNER_ROUND = 2
+DWM_WINDOW_CORNER_SQUARE = 1
 DWMWA_USE_IMMERSIVE_DARK_MODE = 20
 DWMWA_SYSTEMBACKDROP_TYPE = 38
 DWMSBT_MAINWINDOW = 2
@@ -59,8 +60,8 @@ class MicaEffect:
                 ctypes.sizeof(backdrop_value)
             )
             
-            # Apply rounded corners
-            corner_value = wintypes.DWORD(DWM_WINDOW_CORNER_ROUND)
+            # Apply square corners (flat corners)
+            corner_value = wintypes.DWORD(DWM_WINDOW_CORNER_SQUARE)
             windll.dwmapi.DwmSetWindowAttribute(
                 hwnd, 
                 DWM_WINDOW_CORNER_PREFERENCE, 
@@ -77,6 +78,7 @@ class MicaEffect:
             windll.dwmapi.DwmFlush()
             
             print(f"Mica effect applied with result: {result}")
+            print(f"Square corners should now be applied (DWM_WINDOW_CORNER_SQUARE)")
             return result == 0
             
         except Exception as e:
@@ -97,9 +99,9 @@ class MicaEffect:
     @staticmethod
     def get_mica_stylesheet(dark_mode=True):
         if dark_mode:
-            return 'QMainWindow { background: transparent; } QWidget { color: white; background: transparent; } QFrame { background: rgba(32, 32, 32, 0.3); border-radius: 8px; }'
+            return 'QMainWindow { background: transparent; border-radius: 0px; } QWidget { color: white; background: transparent; } QFrame { background: rgba(32, 32, 32, 0.3); border-radius: 8px; }'
         else:
-            return 'QMainWindow { background: transparent; } QWidget { color: black; background: transparent; } QFrame { background: rgba(255, 255, 255, 0.3); border-radius: 8px; }'
+            return 'QMainWindow { background: transparent; border-radius: 0px; } QWidget { color: black; background: transparent; } QFrame { background: rgba(255, 255, 255, 0.3); border-radius: 8px; }'
     
     @staticmethod
     def refresh_mica(widget, dark_mode=True):
