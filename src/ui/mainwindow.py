@@ -391,7 +391,7 @@ class MainWindow(QMainWindow):
         
         # Window icon and title
         icon_label = QLabel()
-        icon_label.setPixmap(QIcon(os.path.join("assets", "icons", "dashboard_modern.svg")).pixmap(20, 20))
+        icon_label.setPixmap(QIcon(os.path.join("assets", "icons", "dashboard_new.svg")).pixmap(20, 20))
         layout.addWidget(icon_label)
         
         title_label = QLabel("AI Accountant")
@@ -484,21 +484,20 @@ class MainWindow(QMainWindow):
                 parent=self
             )
             self.org_switcher.organization_changed.connect(self._on_organization_changed)
-            layout.addWidget(self.org_switcher)
-          # Navigation buttons with modern icons - expanded for multi-org support
+            layout.addWidget(self.org_switcher)        # Navigation buttons with modern icons - expanded for multi-org support
         nav_items = [
-            ("Dashboard", os.path.join("assets", "icons", "dashboard_modern.svg")),
-            ("Journal", os.path.join("assets", "icons", "journal_modern.svg")),
-            ("Ledger", os.path.join("assets", "icons", "ledger_modern.svg")),
-            ("Trial Balance", os.path.join("assets", "icons", "balance_modern.svg")),
-            ("Reports", os.path.join("assets", "icons", "reports_modern.svg")),
-            ("Accounts", os.path.join("assets", "icons", "accounts_modern.svg")),
-            ("Team", os.path.join("assets", "icons", "accounts_modern.svg")),  # Team management
-            ("Org Settings", os.path.join("assets", "icons", "settings_modern.svg")),  # Organization settings
-            ("User Mgmt", os.path.join("assets", "icons", "accounts_modern.svg")),  # User management (admin only)
-            ("Platform", os.path.join("assets", "icons", "dashboard_modern.svg")),  # Platform overview (super admin)
-            ("Global Orgs", os.path.join("assets", "icons", "accounts_modern.svg")),  # Global organizations (super admin)
-            ("Settings", os.path.join("assets", "icons", "settings_modern.svg")),
+            ("Dashboard", os.path.join("assets", "icons", "dashboard_new.svg")),
+            ("Journal", os.path.join("assets", "icons", "journal_new.svg")),
+            ("Ledger", os.path.join("assets", "icons", "ledger_new.svg")),
+            ("Trial Balance", os.path.join("assets", "icons", "trial_balance_new.svg")),
+            ("Reports", os.path.join("assets", "icons", "reports_new.svg")),
+            ("Accounts", os.path.join("assets", "icons", "accounts_new.svg")),
+            ("Team", os.path.join("assets", "icons", "team_new.svg")),  # Team management
+            ("Org Settings", os.path.join("assets", "icons", "org_settings_new.svg")),  # Organization settings
+            ("User Mgmt", os.path.join("assets", "icons", "user_mgmt_new.svg")),  # User management (admin only)
+            ("Platform", os.path.join("assets", "icons", "platform_new.svg")),  # Platform overview (super admin)
+            ("Global Orgs", os.path.join("assets", "icons", "global_orgs_new.svg")),  # Global organizations (super admin)
+            ("Settings", os.path.join("assets", "icons", "settings_new.svg")),
         ]
           # Add navigation buttons directly to main layout for proper alignment
         self.sidebar_buttons = []
