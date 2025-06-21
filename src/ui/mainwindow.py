@@ -426,17 +426,11 @@ class MainWindow(QMainWindow):
         close_btn.setFixedSize(40, 32)
         close_btn.setToolTip("Close")
         close_btn.clicked.connect(self.close)
-          # Manual sync button - positioned like a window control
-        sync_btn = QPushButton()
-        sync_btn.setObjectName("WindowControlButton")
-        sync_btn.setFixedSize(40, 32)
-        sync_btn.setToolTip("Manual Sync")
-        sync_btn.clicked.connect(self._manual_sync)
         
+        # Removed manual sync button (sync_btn)
         # Set icons with fallback to Unicode symbols
-        self._set_window_control_icons(minimize_btn, maximize_btn, close_btn, sync_btn)
+        self._set_window_control_icons(minimize_btn, maximize_btn, close_btn)
         
-        layout.addWidget(sync_btn)
         layout.addWidget(minimize_btn)
         layout.addWidget(maximize_btn)
         layout.addWidget(close_btn)
