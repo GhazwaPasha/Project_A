@@ -8,8 +8,10 @@ from ..core.accounting_system_postgresql import AccountingSystemPostgreSQL as Ac
 from .components.mica_effect import MicaEffect
 from .components.styles import ModernStyles, GlassmorphismHelper
 from .components.font_manager import font_manager
+from .components.ai_status_bar import AIStatusBar
 import os
 import logging
+from datetime import datetime
 
 # Import ResponsiveHelper for consistent responsive design
 from .pages.dashboard import ResponsiveHelper
@@ -122,13 +124,15 @@ class MainWindow(QMainWindow):
         self.db_mode = db_mode
         self.prefer_local = prefer_local
         self.auto_sync = auto_sync
-        
-        # Store authentication context
+          # Store authentication context
         self.auth_manager = auth_manager
         self.session_manager = session_manager
         
         # Initialize logging
         self.logger = logging.getLogger(__name__)
+        
+        # Initialize session tracking
+        self.start_time = datetime.now()
         
         # Use single database file in project root
         db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'accounting.db')
@@ -340,14 +344,12 @@ class MainWindow(QMainWindow):
             return """
                 QMainWindow {
                     background-color: #f0f0f0;
-                    color: black;
-                }
-                QFrame {
+                    color: black;                }                QFrame {
                     background-color: #ffffff;
                     border: 1px solid #d0d0d0;
                 }
             """
-            
+    
     def _setup_ui(self):
         """Setup the main UI components."""
         # Main container with custom title bar
@@ -356,7 +358,7 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
-        # Custom title bar
+        # Custom title bar (now includes AI status bar)
         title_bar = self._create_title_bar()
         main_layout.addWidget(title_bar)
         
@@ -388,8 +390,7 @@ class MainWindow(QMainWindow):
         
         layout = QHBoxLayout(title_bar)
         layout.setContentsMargins(16, 0, 8, 0)
-        
-        # Window icon and title
+          # Window icon and title
         icon_label = QLabel()
         icon_label.setPixmap(QIcon(os.path.join("assets", "icons", "dashboard_new.svg")).pixmap(20, 20))
         layout.addWidget(icon_label)
@@ -398,7 +399,9 @@ class MainWindow(QMainWindow):
         title_label.setObjectName("WindowTitle")
         layout.addWidget(title_label)
         
-        layout.addStretch()
+        # AI Status Bar - compact version in title bar center
+        self.ai_status_bar = self._create_compact_ai_status_bar()
+        layout.addWidget(self.ai_status_bar, 1)  # Takes remaining space in center
         
         # Add modern sync indicator right before window controls - positioned next to minimize button
         from .components.modern_sync_indicator import ModernSyncStatusIndicator
@@ -425,9 +428,7 @@ class MainWindow(QMainWindow):
         close_btn.setObjectName("WindowControlButtonClose")
         close_btn.setFixedSize(40, 32)
         close_btn.setToolTip("Close")
-        close_btn.clicked.connect(self.close)
-        
-        # Removed manual sync button (sync_btn)
+        close_btn.clicked.connect(self.close)        # Removed manual sync button (sync_btn)
         # Set icons with fallback to Unicode symbols
         self._set_window_control_icons(minimize_btn, maximize_btn, close_btn)
         
@@ -436,6 +437,386 @@ class MainWindow(QMainWindow):
         layout.addWidget(close_btn)
         
         return title_bar
+
+    def _create_compact_ai_status_bar(self):
+        """Create a compact AI Status Bar for the title bar with VS Code search field styling"""
+        try:
+            # Create compact container with VS Code-inspired design
+            ai_container = QFrame()
+            ai_container.setObjectName("CompactAIBar")
+            ai_container.setFixedHeight(28)  # VS Code search field height
+            ai_container.setMaximumWidth(500)  # Slightly smaller for better proportion            ai_container.setMinimumWidth(300)  # Ensure minimum usable width
+            
+            layout = QHBoxLayout(ai_container)
+            layout.setContentsMargins(8, 0, 8, 0)  # Remove vertical margins to prevent text clipping
+            layout.setSpacing(6)
+            layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)  # Center content vertically
+            
+            # AI Avatar with VS Code icon styling
+            avatar = QLabel("🤖")
+            avatar.setStyleSheet("""
+                QLabel {
+                    font-size: 14px;
+                    padding: 4px;
+                    border-radius: 4px;
+                    background: rgba(97, 175, 239, 0.15);
+                    border: 1px solid rgba(97, 175, 239, 0.3);
+                    min-width: 20px;
+                    max-width: 20px;
+                    min-height: 20px;
+                    max-height: 20px;
+                }
+            """)
+            avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(avatar)
+            
+            # Status message with VS Code input field styling
+            self.ai_status_text = QLabel("Search anything or ask AI... �")
+            self.ai_status_text.setObjectName("CompactAIText")
+            self.ai_status_text.setStyleSheet("""
+                QLabel {
+                    color: #cccccc;
+                    font-size: 13px;
+                    font-family: 'Segoe UI', system-ui, sans-serif;
+                    font-weight: 400;
+                    background: transparent;
+                    border: none;
+                    padding: 0px;
+                    margin: 0px;
+                }
+            """)
+            layout.addWidget(self.ai_status_text, 1)
+            
+            # Compact action buttons with VS Code button styling
+            reminder_btn = QPushButton("📋")
+            reminder_btn.setFixedSize(22, 22)
+            reminder_btn.setToolTip("Reminders & Todos")
+            reminder_btn.setStyleSheet("""
+                QPushButton {
+                    background: rgba(255, 255, 255, 0.05);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 3px;
+                    color: #cccccc;
+                    font-size: 11px;
+                    padding: 0px;
+                    margin: 0px;
+                }
+                QPushButton:hover {
+                    background: rgba(255, 255, 255, 0.1);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                }
+                QPushButton:pressed {
+                    background: rgba(255, 255, 255, 0.15);
+                }
+            """)
+            layout.addWidget(reminder_btn)
+            
+            # Expand button with VS Code primary button styling
+            expand_btn = QPushButton("💬")
+            expand_btn.setFixedSize(22, 22)
+            expand_btn.setToolTip("Expand AI Chat")
+            expand_btn.setStyleSheet("""
+                QPushButton {
+                    background: rgba(97, 175, 239, 0.2);
+                    border: 1px solid rgba(97, 175, 239, 0.4);
+                    border-radius: 3px;
+                    color: #ffffff;
+                    font-size: 11px;
+                    padding: 0px;
+                    margin: 0px;
+                }
+                QPushButton:hover {
+                    background: rgba(97, 175, 239, 0.3);
+                    border: 1px solid rgba(97, 175, 239, 0.6);
+                }
+                QPushButton:pressed {
+                    background: rgba(97, 175, 239, 0.4);
+                }
+            """)
+            expand_btn.clicked.connect(self._show_ai_chat_dialog)
+            layout.addWidget(expand_btn)
+            
+            # Apply VS Code search field styling
+            ai_container.setStyleSheet("""
+                QFrame#CompactAIBar {
+                    background: #3c3c3c;
+                    border: 1px solid #5a5a5a;
+                    border-radius: 4px;
+                    margin: 2px;
+                }
+                QFrame#CompactAIBar:hover {
+                    border: 1px solid #0e639c;
+                }
+                QFrame#CompactAIBar:focus-within {
+                    border: 1px solid #007acc;
+                    box-shadow: 0 0 0 1px rgba(0, 122, 204, 0.4);
+                }
+            """)
+            
+            # Store references for updates
+            self.ai_avatar = avatar
+            self.ai_reminder_btn = reminder_btn
+            
+            # Initialize AI components for compact mode
+            self._init_compact_ai_components()
+            
+            return ai_container
+            
+        except Exception as e:
+            print(f"⚠️ Failed to create compact AI Status Bar: {e}")
+            # Return minimal placeholder
+            placeholder = QLabel("AI Assistant")
+            placeholder.setStyleSheet("color: white; font-size: 12px; padding: 4px;")
+            return placeholder
+
+    def _init_compact_ai_components(self):
+        """Initialize AI components for compact mode"""
+        try:
+            from .components.ai_status_bar.personality_engine import PersonalityEngine
+            from .components.ai_status_bar.reminder_manager import ReminderManager
+            from .components.ai_status_bar.compact_enhancer import CompactAIEnhancer
+            
+            self.ai_personality = PersonalityEngine()
+            self.ai_reminders = ReminderManager()
+            
+            # Initialize animation enhancer
+            if hasattr(self, 'ai_status_bar') and hasattr(self, 'ai_status_text') and hasattr(self, 'ai_avatar'):
+                self.ai_enhancer = CompactAIEnhancer(
+                    self.ai_status_bar, 
+                    self.ai_status_text, 
+                    self.ai_avatar
+                )
+                # Start avatar pulse animation
+                self.ai_enhancer.pulse_avatar("happy")
+            
+            # Set up timers for status updates
+            self.ai_status_timer = QTimer()
+            self.ai_status_timer.timeout.connect(self._update_ai_status)
+            self.ai_status_timer.start(30000)  # Update every 30 seconds
+            
+            # Connect reminder signals
+            self.ai_reminders.reminder_due.connect(self._handle_reminder_due)
+            
+        except Exception as e:            print(f"Warning: AI components initialization failed: {e}")
+
+    def _update_ai_status(self):
+        """Update AI status message periodically"""
+        try:
+            if hasattr(self, 'ai_status_text'):
+                # Get context-aware message
+                context = self._get_current_context()
+                mood = self.ai_personality.detect_mood_from_context(context)
+                message = self.ai_personality.get_context_greeting(context.get('page', 'dashboard'))
+                
+                # Use animated text change if enhancer is available
+                if hasattr(self, 'ai_enhancer'):
+                    self.ai_enhancer.animate_text_change(message)
+                    self.ai_enhancer.pulse_avatar(mood)
+                else:
+                    self.ai_status_text.setText(message)
+                
+                self._update_ai_mood_visual(mood)
+                
+        except Exception as e:
+            print(f"Error updating AI status: {e}")
+    
+    def _update_ai_mood_visual(self, mood: str):
+        """Update AI avatar based on mood"""
+        try:
+            if hasattr(self, 'ai_avatar'):
+                mood_emojis = {
+                    "happy": "😊",
+                    "focused": "🤔", 
+                    "celebrating": "🎉",
+                    "concerned": "😐",
+                    "relaxed": "😌"
+                }
+                self.ai_avatar.setText(mood_emojis.get(mood, "🤖"))
+        except:
+            pass
+    
+    def _get_current_context(self):
+        """Get current application context for AI analysis"""
+        try:
+            current_index = self.stack.currentIndex() if hasattr(self, 'stack') else 0
+            context_map = {
+                0: "dashboard",
+                1: "journal", 
+                2: "ledger",
+                3: "trial_balance",
+                4: "reports",
+                5: "accounts"
+            }
+            
+            context = context_map.get(current_index, "dashboard")
+            
+            return {
+                "page": context,
+                "time": datetime.now().isoformat(),
+                "session_duration": (datetime.now() - self.start_time).total_seconds() / 3600,
+                "user_active": True
+            }
+        except Exception as e:
+            print(f"Error getting AI context: {e}")
+            return {"page": "dashboard", "time": datetime.now().isoformat()}
+
+    def test_ai_reminder(self):
+        """Test method to trigger a reminder notification"""
+        if hasattr(self, 'ai_reminders'):
+            test_reminder = {
+                "title": "Test Reminder",
+                "description": "This is a test reminder for the AI status bar",
+                "priority": "medium",
+                "due_time": datetime.now().isoformat()
+            }
+            self._handle_reminder_due(test_reminder)
+
+    def test_ai_mood_change(self, mood="excited"):
+        """Test method to change AI mood"""
+        if hasattr(self, 'ai_enhancer'):
+            self.ai_enhancer.pulse_avatar(mood)
+            message = f"Mood changed to {mood}! 😊" if mood == "happy" else f"Feeling {mood} today! 🤖"
+            self.ai_enhancer.animate_text_change(message)
+    
+    def _show_ai_chat_dialog(self):
+        """Show expanded AI chat dialog"""
+        try:
+            from .components.ai_status_bar.ai_status_bar import AIStatusBar
+            
+            # Create dialog with full AI status bar
+            from PyQt6.QtWidgets import QDialog, QVBoxLayout
+            
+            dialog = QDialog(self)
+            dialog.setWindowTitle("AI Assistant Chat")
+            dialog.setModal(False)
+            dialog.resize(600, 400)
+            
+            layout = QVBoxLayout(dialog)
+            
+            # Full AI status bar in dialog
+            full_ai_bar = AIStatusBar(
+                accounting_system=self.accounting_system,
+                session_manager=self.session_manager,
+                parent=dialog
+            )
+            full_ai_bar.command_executed.connect(self._handle_ai_command)
+            
+            layout.addWidget(full_ai_bar)
+            
+            # Show expanded by default            full_ai_bar._expand()
+            
+            dialog.show()
+            
+        except Exception as e:
+            print(f"Error showing AI chat dialog: {e}")
+
+    def _handle_reminder_due(self, reminder):
+        """Handle due reminders from compact AI"""
+        try:
+            # Use enhancer to highlight urgency if available
+            if hasattr(self, 'ai_enhancer'):
+                self.ai_enhancer.highlight_urgent()
+                
+            if hasattr(self, 'ai_reminder_btn'):
+                # Update reminder button with notification
+                self.ai_reminder_btn.setText("📋!")
+                self.ai_reminder_btn.setStyleSheet("""
+                    QPushButton {
+                        background: rgba(255, 152, 0, 0.3);
+                        border: 1px solid rgba(255, 152, 0, 0.6);
+                        border-radius: 12px;
+                        color: white;
+                        font-size: 12px;
+                    }
+                """)
+                
+            # Update status text to show reminder
+            if hasattr(self, 'ai_status_text'):
+                reminder_text = f"⚠️ Reminder: {reminder.get('title', 'You have a pending task!')}"
+                if hasattr(self, 'ai_enhancer'):
+                    self.ai_enhancer.animate_text_change(reminder_text)
+                else:
+                    self.ai_status_text.setText(reminder_text)
+                
+                # Update status text
+                self.ai_status_text.setText(f"⏰ Reminder: {reminder.title}")
+        except:
+            pass
+    
+    def _handle_ai_command(self, command: str, result: dict):
+        """Handle commands from AI status bar"""
+        try:
+            # Parse and execute AI commands
+            if "show" in command.lower() and "trial balance" in command.lower():
+                self.setCurrentIndexByName("Trial Balance")
+            elif "show" in command.lower() and "reports" in command.lower():
+                self.setCurrentIndexByName("Reports")
+            elif "show" in command.lower() and "dashboard" in command.lower():
+                self.setCurrentIndexByName("Dashboard")
+            elif "add" in command.lower() and "entry" in command.lower():
+                self.setCurrentIndexByName("Journal")
+            
+            print(f"AI Command executed: {command}")
+            
+        except Exception as e:
+            print(f"Error handling AI command: {e}")
+    
+    def _handle_mood_change(self, mood: str):
+        """Handle mood changes from AI assistant"""
+        # Could update UI theme or other elements based on AI mood
+        print(f"AI Mood changed to: {mood}")
+
+    def _update_ai_context(self):
+        """Update AI context when page changes"""
+        # Update compact AI status with new context
+        if hasattr(self, 'ai_status_text'):
+            try:
+                self._update_ai_status()
+            except Exception as e:
+                print(f"Error updating compact AI context: {e}")
+            try:
+                current_index = self.stack.currentIndex()
+                context_map = {
+                    0: "dashboard",
+                    1: "journal", 
+                    2: "ledger",
+                    3: "trial_balance",
+                    4: "reports",
+                    5: "accounts"
+                }
+                
+                context = context_map.get(current_index, "unknown")
+                
+                # Get additional context data
+                context_data = {
+                    "page_index": current_index,
+                    "session_duration": (datetime.now() - self.start_time if hasattr(self, 'start_time') else datetime.now()).total_seconds() / 3600
+                }
+                  
+                # Store current context for AI use
+                self.current_context = context
+                
+                # Add accounting-specific context
+                if context == "trial_balance":
+                    try:
+                        trial_balance = self.accounting_system.get_trial_balance()
+                        context_data["trial_balance_items"] = len(trial_balance) if trial_balance else 0
+                    except:
+                        pass
+                
+                self.ai_status_bar.set_context(context, context_data)
+                
+            except Exception as e:
+                print(f"Error updating AI context: {e}")
+    
+    def _on_page_changed(self, index: int):
+        """Handle page changes and update AI context"""
+        self.stack.setCurrentIndex(index)
+        self._update_ai_context()
+        
+        # Update which sidebar button is checked
+        for i, btn in enumerate(self.sidebar_buttons):
+            btn.setChecked(i == index)
         
     def _create_sidebar(self):
         """Create the modern sidebar with responsive design and translucent styling."""
@@ -501,12 +882,11 @@ class MainWindow(QMainWindow):
             ("Platform", os.path.join("assets", "icons", "platform_new.svg")),  # Platform overview (super admin)
             ("Global Orgs", os.path.join("assets", "icons", "global_orgs_new.svg")),  # Global organizations (super admin)
             ("Settings", os.path.join("assets", "icons", "settings_new.svg")),
-        ]
-          # Add navigation buttons directly to main layout for proper alignment
+        ]        # Add navigation buttons directly to main layout for proper alignment
         self.sidebar_buttons = []
         for idx, (label, icon_path) in enumerate(nav_items):
             btn = ModernSidebarButton(icon_path, label, expanded=self.sidebar_expanded)
-            btn.clicked.connect(lambda checked, i=idx: self.stack.setCurrentIndex(i))
+            btn.clicked.connect(lambda checked, i=idx: self._on_page_changed(i))
             layout.addWidget(btn)
             self.sidebar_buttons.append(btn)
         
