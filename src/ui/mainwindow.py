@@ -426,10 +426,17 @@ class MainWindow(QMainWindow):
         close_btn.setFixedSize(40, 32)
         close_btn.setToolTip("Close")
         close_btn.clicked.connect(self.close)
+          # Manual sync button - positioned like a window control
+        sync_btn = QPushButton()
+        sync_btn.setObjectName("WindowControlButton")
+        sync_btn.setFixedSize(40, 32)
+        sync_btn.setToolTip("Manual Sync")
+        sync_btn.clicked.connect(self._manual_sync)
         
         # Set icons with fallback to Unicode symbols
-        self._set_window_control_icons(minimize_btn, maximize_btn, close_btn)
+        self._set_window_control_icons(minimize_btn, maximize_btn, close_btn, sync_btn)
         
+        layout.addWidget(sync_btn)
         layout.addWidget(minimize_btn)
         layout.addWidget(maximize_btn)
         layout.addWidget(close_btn)
@@ -779,7 +786,7 @@ class MainWindow(QMainWindow):
             except:
                 print("⚠️  All styling failed")
                 
-    def _set_window_control_icons(self, minimize_btn, maximize_btn, close_btn):
+    def _set_window_control_icons(self, minimize_btn, maximize_btn, close_btn, sync_btn=None):
         """Set icons for window control buttons with modern styling."""
         # Apply modern borderless styling to all window control buttons
         window_control_style = """
@@ -819,12 +826,39 @@ class MainWindow(QMainWindow):
                 background: rgba(232, 17, 35, 0.7);
             }
         """
-        
-        # Try to load SVG icons from files first
+          # Try to load SVG icons from files first
         try:
             minimize_icon = QIcon("assets/icons/minimize.svg")
             maximize_icon = QIcon("assets/icons/maximize.svg")
             close_icon = QIcon("assets/icons/close.svg")
+            
+            # Load sync icon and create white version for dark theme
+            if sync_btn:
+                from PyQt6.QtGui import QPainter, QPixmap
+                sync_icon = QIcon("assets/icons/sync.svg")
+                
+                # Create a white version of the sync icon for dark theme
+                if not sync_icon.isNull():
+                    # Get the original pixmap
+                    original_pixmap = sync_icon.pixmap(QSize(16, 16))
+                    
+                    # Create a white version
+                    white_pixmap = QPixmap(16, 16)
+                    white_pixmap.fill(Qt.GlobalColor.transparent)
+                    
+                    painter = QPainter(white_pixmap)
+                    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+                    
+                    # Draw the original as a mask and fill with white
+                    painter.drawPixmap(0, 0, original_pixmap)
+                    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+                    painter.fillRect(white_pixmap.rect(), Qt.GlobalColor.white)
+                    painter.end()
+                    
+                    # Create new icon with white pixmap
+                    sync_icon = QIcon(white_pixmap)
+            else:
+                sync_icon = None
             
             if not minimize_icon.isNull():
                 minimize_btn.setIcon(minimize_icon)
@@ -845,7 +879,14 @@ class MainWindow(QMainWindow):
                 close_btn.setIconSize(QSize(16, 16))
                 close_btn.setText("")  # Clear text when icon is set
             else:
-                close_btn.setText("×")
+                close_btn.setText("×")            # Handle sync button icon
+            if sync_btn:
+                if sync_icon and not sync_icon.isNull():
+                    sync_btn.setIcon(sync_icon)
+                    sync_btn.setIconSize(QSize(16, 16))
+                    sync_btn.setText("")  # Clear text when icon is set
+                else:
+                    sync_btn.setText("↻")  # Sync/refresh symbol
                 
         except Exception as e:
             print(f"Failed to load window control icons: {e}")
@@ -853,11 +894,13 @@ class MainWindow(QMainWindow):
             minimize_btn.setText("─")
             maximize_btn.setText("□")  
             close_btn.setText("×")
-        
-        # Apply the styling
+            if sync_btn:
+                sync_btn.setText("↻")        # Apply the styling
         minimize_btn.setStyleSheet(window_control_style)
         maximize_btn.setStyleSheet(window_control_style)
         close_btn.setStyleSheet(window_control_style)
+        if sync_btn:
+            sync_btn.setStyleSheet(window_control_style)
         
     def keyPressEvent(self, event):
         """Handle keyboard shortcuts."""
