@@ -36,9 +36,8 @@ class SimpleAIStatusBar(QLineEdit):
         self.setReadOnly(True)
         self.setText(self.placeholder_text)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-          # Set initial size - compact for title bar
-        self.setFixedHeight(32)  # Increased height to prevent text clipping
+        self.setCursor(Qt.CursorShape.PointingHandCursor)        # Set initial size - compact for title bar
+        self.setFixedHeight(30)  # Reduced height to 30px
         self.setFixedWidth(250)
         
         # Connect events
@@ -57,43 +56,49 @@ class SimpleAIStatusBar(QLineEdit):
         self.min_width_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         
     def _apply_styling(self):
-        """Apply clean, minimal styling"""
+        """Apply styling to match date range selector custom date fields"""
         self.setStyleSheet("""
             QLineEdit {
-                background: #3c3c3c;
-                border: 1px solid #5a5a5a;
-                border-radius: 6px;
-                color: #cccccc;
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                color: white;
                 font-size: 12px;
                 font-family: 'Segoe UI', system-ui, sans-serif;
-                font-weight: 400;
+                font-weight: 500;
                 padding: 4px 12px;
-                selection-background-color: #007acc;
+                selection-background-color: rgba(100, 181, 246, 0.3);
                 outline: none;
-                line-height: 1.2;
+                text-align: center;
             }
             
             QLineEdit:hover {
-                border: 1px solid #007acc;
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
                 outline: none;
             }
             
             QLineEdit:focus {
-                background: #3c3c3c;
-                border: 1px solid #007acc;
-                color: #ffffff;
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+                color: white;
                 outline: none;
+                text-align: left;
             }
             
             QLineEdit[readOnly="true"] {
-                background: #3c3c3c;
-                border: 1px solid #5a5a5a;
-                color: #cccccc;
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                color: white;
                 outline: none;
+                text-align: center;
             }
             
-            QLineEdit[readOnly="true"]:hover {                border: 1px solid #007acc;
+            QLineEdit[readOnly="true"]:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
                 outline: none;
+                text-align: center;
             }
         """)
         

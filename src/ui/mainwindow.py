@@ -476,21 +476,20 @@ class MainWindow(QMainWindow):
     def _create_simple_ai_status_bar(self):
         """Create simple AI status bar for title bar integration"""
         try:
-            from .components.simple_ai_status_bar import SimpleAIStatusBar
-              # Create a container that will hold the AI status bar
+            from .components.simple_ai_status_bar import SimpleAIStatusBar            # Create a container that will hold the AI status bar
             container = QFrame()
             container.setObjectName("AIStatusContainer")
-            container.setMaximumHeight(36)  # Increased height to prevent text clipping
-            container.setMinimumHeight(36)  # Ensure consistent height
+            container.setMaximumHeight(40)  # Match title bar height for proper alignment
+            container.setMinimumHeight(40)  # Ensure consistent height
             
             layout = QHBoxLayout(container)
-            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setContentsMargins(20, 0, 20, 0)  # Add horizontal margins for better centering
             layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             
             # Create the simple AI status bar
             self.simple_ai_bar = SimpleAIStatusBar(self)
-            self.simple_ai_bar.setMaximumHeight(32)  # Increased height
-            self.simple_ai_bar.setMinimumHeight(32)  # Ensure consistent height
+            self.simple_ai_bar.setMaximumHeight(30)  # AI bar height
+            self.simple_ai_bar.setMinimumHeight(30)  # Ensure consistent height
             layout.addWidget(self.simple_ai_bar)
             
             return container
@@ -1104,33 +1103,43 @@ class MainWindow(QMainWindow):
             if self.mica_applied:
                 MicaEffect.refresh_mica(self, self.dark_mode)
                 self.update()
-            else:
-                self._apply_mica_effect_delayed()
+            else:                self._apply_mica_effect_delayed()
                 
     def eventFilter(self, obj, event):
-        """Filter events to handle click-outside-to-close for notification drawer."""
+        """Filter events to handle click-outside-to-close for notification drawer and AI status bar."""
         from PyQt6.QtCore import QEvent
         from PyQt6.QtGui import QMouseEvent
         
         # Only handle mouse press events
         if event.type() == QEvent.Type.MouseButtonPress:
             if isinstance(event, QMouseEvent):
+                global_pos = event.globalPosition().toPoint()
+                
                 # Check if notification drawer is open
                 if hasattr(self, 'notification_drawer') and self.notification_drawer.isVisible():
-                    # Get the global position of the click
-                    global_pos = event.globalPosition().toPoint()
-                    
                     # Convert to notification drawer's coordinate system
                     drawer_pos = self.notification_drawer.mapFromGlobal(global_pos)
                     
                     # Check if click is outside the drawer
                     if not self.notification_drawer.rect().contains(drawer_pos):
-                        # Also check if click is not on the notification button                        if hasattr(self, 'notification_button'):
+                        # Also check if click is not on the notification button
+                        if hasattr(self, 'notification_button'):
                             btn_pos = self.notification_button.mapFromGlobal(global_pos)
                             if not self.notification_button.rect().contains(btn_pos):
                                 # Click is outside both drawer and button, close drawer
                                 self.notification_drawer.hide()
                                 return True  # Event handled
+                
+                # Check if AI status bar is expanded
+                if hasattr(self, 'simple_ai_bar') and self.simple_ai_bar.is_expanded:
+                    # Convert to AI status bar's coordinate system
+                    ai_bar_pos = self.simple_ai_bar.mapFromGlobal(global_pos)
+                    
+                    # Check if click is outside the AI status bar
+                    if not self.simple_ai_bar.rect().contains(ai_bar_pos):
+                        # Click is outside AI status bar, collapse it
+                        self.simple_ai_bar._collapse_to_normal()
+                        return True  # Event handled
         
         # Continue with normal event processing
         return super().eventFilter(obj, event)
