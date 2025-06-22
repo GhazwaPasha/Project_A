@@ -16,6 +16,9 @@ from datetime import datetime
 # Import ResponsiveHelper for consistent responsive design
 from .pages.dashboard import ResponsiveHelper
 
+# Import AI components
+from .components.ai_command_processor import AICommandProcessor
+
 class ModernSidebarButton(QPushButton):
     def __init__(self, icon_path, text, expanded=True, parent=None):
         super().__init__(parent)
@@ -181,6 +184,69 @@ class MainWindow(QMainWindow):
         # Add a welcome notification after startup
         QTimer.singleShot(2000, self._add_welcome_notification)
         
+    def closeEvent(self, event):
+        """Handle window close event."""
+        # Clean up AI processor thread
+        if self.ai_processor and self.ai_processor.processing_thread:
+            self.ai_processor.stop_processing()
+        
+        # Clean up any other resources
+        self.accounting_system.close()
+        
+        super().closeEvent(event)
+
+    def _connect_ai_signals(self):
+        """Connect signals from the AI processor to the main window slots."""
+        self.ai_processor.response_ready.connect(self.simple_ai_bar.set_ai_response)
+        self.ai_processor.error_occurred.connect(self.simple_ai_bar.set_error_message)
+        self.ai_processor.processing_started.connect(self.simple_ai_bar.show_processing_indicator)
+        self.ai_processor.processing_finished.connect(self.simple_ai_bar.hide_processing_indicator)
+        
+        # Connect command execution signals
+        self.ai_processor.navigation_requested.connect(self.navigate_to_page)
+        # self.ai_processor.report_requested.connect(self.generate_report) # Placeholder
+        # self.ai_processor.reminder_created.connect(self.add_reminder) # Placeholder
+        
+        # Connect the AI bar's command submission to the processor
+        if hasattr(self, 'simple_ai_bar'):
+            self.simple_ai_bar.ai_command_submitted.connect(self.ai_processor.process_command)
+
+    def navigate_to_page(self, page_name: str, parameters: dict):
+        """Navigate to a specific page based on its identifier, requested by the AI."""
+        self.logger.info(f"AI navigation request: page='{page_name}', params={parameters}")
+
+        # Map AI page identifiers to their corresponding names and indices
+        page_map = {
+            'dashboard': ("Dashboard", 0),
+            'journal': ("Journal", 1),
+            'ledger': ("Ledger", 2),
+            'trial_balance': ("Trial Balance", 3),
+            'reports': ("Reports", 4),
+            'accounts': ("Accounts", 5),
+            'reminders': ("Reminders", 6),
+            'period_closing': ("Period Closing", 7),
+            'team': ("Team", 8),
+            'org_settings': ("Org Settings", 9),
+            'user_mgmt': ("User Mgmt", 10),
+            'platform': ("Platform", 11),
+            'global_orgs': ("Global Orgs", 12),
+            'settings': ("Settings", 13),
+        }
+
+        page_info = page_map.get(page_name.lower())
+        if page_info:
+            name, index = page_info
+            self._on_page_changed(index)
+            # Placeholder for applying parameters to the page
+            if parameters:
+                self.logger.info(f"Applying parameters to {name}: {parameters}")
+                # current_page = self.stack.widget(index)
+                # if hasattr(current_page, 'apply_filters'):
+                #     current_page.apply_filters(parameters)
+        else:
+            self.logger.warning(f"Navigation failed: Page identifier '{page_name}' not found.")
+            self.simple_ai_bar.set_error_message(f"Page '{page_name}' not found.")
+
     def _apply_mica_effect_delayed(self):
         """Apply Mica effect after window is fully initialized and shown."""
         if not self.mica_applied:
@@ -512,20 +578,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"Error updating AI status: {e}")
     
-    def _update_ai_mood_visual(self, mood: str):
-        """Update AI avatar based on mood"""
-        try:
-            if hasattr(self, 'ai_avatar'):
-                mood_emojis = {
-                    "happy": "😊",
-                    "focused": "🤔", 
-                    "celebrating": "🎉",
-                    "concerned": "😐",
-                    "relaxed": "😌"                }
-                self.ai_avatar.setText(mood_emojis.get(mood, "🤖"))
-        except:
-            pass
-            
     def _get_current_context(self):
         """Get current application context for AI analysis"""
         try:
@@ -558,74 +610,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"Error getting AI context: {e}")
             return {"page": "dashboard", "time": datetime.now().isoformat()}
-
-    def test_ai_reminder(self):
-        """Test method to trigger a reminder notification"""
-        if hasattr(self, 'ai_reminders'):
-            test_reminder = {
-                "title": "Test Reminder",
-                "description": "This is a test reminder for the AI status bar",
-                "priority": "medium",
-                "due_time": datetime.now().isoformat()
-            }
-            self._handle_reminder_due(test_reminder)
-
-    def test_ai_mood_change(self, mood="excited"):
-        """Test method to change AI mood"""
-        if hasattr(self, 'ai_enhancer'):
-            self.ai_enhancer.pulse_avatar(mood)
-            message = f"Mood changed to {mood}! 😊" if mood == "happy" else f"Feeling {mood} today! 🤖"
-            self.ai_enhancer.animate_text_change(message)
-            
-    def _handle_reminder_due(self, reminder):
-        """Handle due reminders from compact AI"""
-        try:
-            # Use enhancer to highlight urgency if available
-            if hasattr(self, 'ai_enhancer'):
-                self.ai_enhancer.highlight_urgent()
-                
-            if hasattr(self, 'ai_reminder_btn'):
-                # Update reminder button with notification
-                self.ai_reminder_btn.setText("📋!")
-                self.ai_reminder_btn.setStyleSheet("""
-                    QPushButton {
-                        background: rgba(255, 152, 0, 0.3);
-                        border: 1px solid rgba(255, 152, 0, 0.6);
-                        border-radius: 12px;
-                        color: white;
-                        font-size: 12px;
-                    }
-                """)
-                
-            # Show reminder in simple AI status bar
-            if hasattr(self, 'simple_ai_bar'):
-                reminder_text = f"⚠️ Reminder: {reminder.get('title', 'You have a pending task!')}"
-                self.simple_ai_bar.setText(reminder_text)
-        except:
-            pass
-    
-    def _handle_ai_command(self, command: str, result: dict):
-        """Handle commands from AI status bar"""
-        try:
-            # Parse and execute AI commands
-            if "show" in command.lower() and "trial balance" in command.lower():
-                self.setCurrentIndexByName("Trial Balance")
-            elif "show" in command.lower() and "reports" in command.lower():
-                self.setCurrentIndexByName("Reports")
-            elif "show" in command.lower() and "dashboard" in command.lower():
-                self.setCurrentIndexByName("Dashboard")
-            elif "add" in command.lower() and "entry" in command.lower():
-                self.setCurrentIndexByName("Journal")
-            
-            print(f"AI Command executed: {command}")
-            
-        except Exception as e:
-            print(f"Error handling AI command: {e}")
-    
-    def _handle_mood_change(self, mood: str):
-        """Handle mood changes from AI assistant"""
-        # Could update UI theme or other elements based on AI mood
-        print(f"AI Mood changed to: {mood}")
 
     def _update_ai_context(self):
         """Update AI context when page changes"""        # Update simple AI status bar with new context
@@ -1524,34 +1508,135 @@ class MainWindow(QMainWindow):
             user_input = self.simple_ai_bar.text().strip()
             if user_input and user_input != self.simple_ai_bar.placeholder_text:
                 # Get current context
-                context = self._get_current_context()
-                # Process the command
-                self.ai_processor.process_command(user_input, context)
-    def _handle_ai_command_result(self, response_text: str, action_data: dict):
-        """Handle AI command processing result"""
+                context = self._get_current_context()                # Process the command
+                self.ai_processor.process_command(user_input)
+    
+    def _handle_ai_response(self, response_text: str):
+        """Handle AI response text"""
+        # The status bar will handle displaying the response
+        pass
+    
+    def _handle_ai_navigation(self, page: str, parameters: dict):
+        """Handle AI navigation requests"""
         try:
-            intent = action_data.get('intent', 'NOTIFICATION')
-            action = action_data.get('action', '')
-            parameters = action_data.get('parameters', {})
-            ai_response = action_data.get('response', response_text)
-              # Update status bar with response
-            if hasattr(self, 'simple_ai_bar'):
-                self.simple_ai_bar.setText(ai_response)
-                self.simple_ai_bar.is_processing = False
-                self.simple_ai_bar._collapse_to_normal()
-                
-            # Handle different intents
-            if intent == 'NAVIGATION':
-                self._handle_navigation_command(parameters)
-            elif intent == 'DATA_QUERY':
-                self._handle_data_query_command(parameters)
-            elif intent == 'REMINDER':
-                self._handle_reminder_command(parameters)
-            elif intent == 'NOTIFICATION':
-                self._handle_notification_command(parameters, ai_response)
+            # Map page names to tab indices
+            page_map = {
+                'dashboard': 0,
+                'journal': 1,
+                'ledger': 2,
+                'trial_balance': 3,
+                'reports': 4,
+                'accounts': 5,
+                'reminders': 6,
+                'team': 7,
+                'settings': 8,
+                'budget': 9
+            }
+            
+            if page in page_map:
+                tab_index = page_map[page]
+                if hasattr(self, 'tab_widget'):
+                    self.tab_widget.setCurrentIndex(tab_index)
+                    # Apply any additional parameters if needed
+                    if parameters:
+                        self._apply_navigation_parameters(page, parameters)
+            else:
+                self.logger.warning(f"Unknown page for navigation: {page}")
                 
         except Exception as e:
-            self._show_ai_error(f"Error processing command: {str(e)}")
+            self.logger.error(f"Navigation error: {e}")
+    
+    def _handle_ai_report(self, report_type: str, parameters: dict):
+        """Handle AI report generation requests"""
+        try:
+            # Switch to reports tab first
+            if hasattr(self, 'tab_widget'):
+                self.tab_widget.setCurrentIndex(4)  # Reports tab
+            
+            # Generate the requested report
+            if report_type == 'trial_balance':
+                self._generate_trial_balance_report(parameters)
+            elif report_type == 'balance_sheet':
+                self._generate_balance_sheet_report(parameters)
+            elif report_type == 'income_statement':
+                self._generate_income_statement_report(parameters)
+            elif report_type == 'cash_flow':
+                self._generate_cash_flow_report(parameters)
+            else:
+                self.logger.warning(f"Unknown report type: {report_type}")
+                
+        except Exception as e:
+            self.logger.error(f"Report generation error: {e}")
+    
+    def _handle_ai_reminder(self, reminder_data: dict):
+        """Handle AI reminder creation"""
+        try:
+            # Use the existing reminder manager if available
+            if hasattr(self, 'reminder_manager'):
+                self.reminder_manager.add_reminder(reminder_data)
+            else:
+                # Fallback: save to reminders file
+                self._save_reminder_to_file(reminder_data)
+                
+        except Exception as e:
+            self.logger.error(f"Reminder creation error: {e}")
+    
+    def _apply_navigation_parameters(self, page: str, parameters: dict):
+        """Apply additional parameters for navigation"""
+        # Handle date ranges, filters, etc. based on the page
+        if page == 'journal' and 'date_from' in parameters:
+            # Apply date filter to journal view
+            pass
+        elif page == 'accounts' and 'account_type' in parameters:
+            # Filter accounts by type
+            pass
+    
+    def _generate_trial_balance_report(self, parameters: dict):
+        """Generate trial balance report with parameters"""
+        # Implement trial balance generation
+        pass
+    
+    def _generate_balance_sheet_report(self, parameters: dict):
+        """Generate balance sheet report with parameters"""
+        # Implement balance sheet generation
+        pass
+    
+    def _generate_income_statement_report(self, parameters: dict):
+        """Generate income statement report with parameters"""
+        # Implement income statement generation
+        pass
+    
+    def _generate_cash_flow_report(self, parameters: dict):
+        """Generate cash flow report with parameters"""
+        # Implement cash flow generation
+        pass
+    
+    def _save_reminder_to_file(self, reminder_data: dict):
+        """Save reminder to file as fallback"""
+        try:
+            import json
+            reminders_file = 'reminders_data.json'
+            
+            # Load existing reminders
+            try:
+                with open(reminders_file, 'r') as f:
+                    data = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                data = {'reminders': []}
+            
+            # Add new reminder
+            reminder_data['id'] = f"ai_reminder_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            reminder_data['created_at'] = datetime.now().isoformat()
+            reminder_data['acknowledged'] = False
+            
+            data['reminders'].append(reminder_data)
+            
+            # Save back to file
+            with open(reminders_file, 'w') as f:
+                json.dump(data, f, indent=2)
+                
+        except Exception as e:
+            self.logger.error(f"Error saving reminder to file: {e}")
             
     def _handle_navigation_command(self, parameters: dict):
         """Handle navigation commands"""
@@ -1649,11 +1734,19 @@ class MainWindow(QMainWindow):
         """Connect AI processor signals to handlers"""
         # Connect AI status bar signals to command processor
         if hasattr(self, 'simple_ai_bar'):
-            self.simple_ai_bar.returnPressed.connect(self._process_ai_command)
-        
-        # Connect AI processor signals
+            self.simple_ai_bar.returnPressed.connect(self._process_ai_command)        # Connect AI processor signals
         if hasattr(self, 'ai_processor'):
-            self.ai_processor.command_processed.connect(self._handle_ai_command_result)
+            self.ai_processor.response_ready.connect(self._handle_ai_response)
+            self.ai_processor.navigation_requested.connect(self._handle_ai_navigation)
+            self.ai_processor.report_requested.connect(self._handle_ai_report)
+            self.ai_processor.reminder_created.connect(self._handle_ai_reminder)
             self.ai_processor.processing_started.connect(self._on_ai_processing_started)
             self.ai_processor.processing_finished.connect(self._on_ai_processing_finished)
             self.ai_processor.error_occurred.connect(self._on_ai_error)
+            
+            # Connect AI processor to status bar
+            if hasattr(self, 'simple_ai_bar'):
+                self.ai_processor.response_ready.connect(self.simple_ai_bar.handle_ai_response)
+                self.ai_processor.processing_started.connect(self.simple_ai_bar.handle_processing_started)
+                self.ai_processor.processing_finished.connect(self.simple_ai_bar.handle_processing_finished)
+                self.ai_processor.error_occurred.connect(self.simple_ai_bar.handle_ai_error)
