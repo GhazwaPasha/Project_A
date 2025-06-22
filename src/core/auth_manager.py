@@ -31,7 +31,7 @@ class AuthManager:
         if not supabase_url or not supabase_key:
             raise ValueError("SUPABASE_URL and SUPABASE_ANON_KEY must be set in environment")
         
-        self.supabase: Client = create_client(supabase_url, supabase_key)
+        self.supabase = create_client(supabase_url, supabase_key)
         self.current_user = None
         self.user_organizations = []
         self.session_token = None
@@ -51,14 +51,20 @@ class AuthManager:
                 # Load user profile and organizations
                 self._load_user_profile()
                 self._load_user_organizations()
-                
-                # Update last login
+                  # Update last login
                 self._update_last_login()
                 
                 self.logger.info(f"User {email} signed in successfully")
                 return {
                     "success": True, 
-                    "user": result.user,
+                    "user": {
+                        "id": result.user.id,
+                        "email": result.user.email,
+                        "email_confirmed_at": str(result.user.email_confirmed_at) if result.user.email_confirmed_at else None,
+                        "created_at": str(result.user.created_at) if result.user.created_at else None,
+                        "user_metadata": result.user.user_metadata or {},
+                        "app_metadata": result.user.app_metadata or {}
+                    },
                     "organizations": self.user_organizations
                 }
             
@@ -95,14 +101,20 @@ class AuthManager:
             elif organization_type == "existing" and invitation_code:
                 # Join existing organization using invitation code
                 self._join_organization_by_invitation(user_id, invitation_code)
-            else:
-                # No organization specified - user needs to be invited later
+            else:                # No organization specified - user needs to be invited later
                 pass
             
             self.logger.info(f"User {email} signed up successfully")
             return {
                 "success": True,
-                "user": result.user,
+                "user": {
+                    "id": result.user.id,
+                    "email": result.user.email,
+                    "email_confirmed_at": str(result.user.email_confirmed_at) if result.user.email_confirmed_at else None,
+                    "created_at": str(result.user.created_at) if result.user.created_at else None,
+                    "user_metadata": result.user.user_metadata or {},
+                    "app_metadata": result.user.app_metadata or {}
+                },
                 "user_profile": user_profile,
                 "message": "Account created successfully! Please check your email for verification."
             }

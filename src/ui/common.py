@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QAbstractScrollArea, QApplication, QSizePolicy, QTabWidget,
     QCheckBox, QSpinBox, QButtonGroup, QScrollArea, QGridLayout,
     QSpacerItem, QTreeWidget, QTreeWidgetItem, QTextEdit, QSplitter,
-    QGroupBox, QStackedWidget
+    QGroupBox, QStackedWidget, QProgressBar, QDialogButtonBox
 )
 from PyQt6.QtCore import Qt, QDate, QStringListModel, QSize
 from PyQt6.QtGui import QColor, QIcon, QFont, QPainter

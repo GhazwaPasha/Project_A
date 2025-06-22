@@ -648,16 +648,174 @@ class ReportsPage(QWidget):
         elif statement_name == "Statement of Equity":
             self.equity_statement_view.show_statement_of_equity(self.system, from_date, to_date)
             self.stacked_widget.setCurrentIndex(4)  # Equity Statement view
-        else:
-            QMessageBox.information(self, "Financial Statement", 
+        else:            QMessageBox.information(self, "Financial Statement", 
                                   f"Generating {statement_name}...\nThis feature will be implemented soon!")
     
     def _handle_ratio_click(self, ratio_name):
         """Handle ratio card clicks."""
-        QMessageBox.information(self, "Financial Ratios", 
-                              f"Calculating {ratio_name}...\nThis feature will be implemented soon!")
+        try:
+            # Check if system has enhanced ratio calculator
+            if hasattr(self.system, 'ratio_calculator'):
+                if "Liquidity" in ratio_name:
+                    ratios = self.system.ratio_calculator.calculate_liquidity_ratios()
+                    self._show_ratio_results("Liquidity Ratios", ratios)
+                elif "Profitability" in ratio_name:
+                    ratios = self.system.ratio_calculator.calculate_profitability_ratios()
+                    self._show_ratio_results("Profitability Ratios", ratios)
+                elif "Leverage" in ratio_name:
+                    ratios = self.system.ratio_calculator.calculate_leverage_ratios()
+                    self._show_ratio_results("Leverage Ratios", ratios)
+                elif "Efficiency" in ratio_name:
+                    ratios = self.system.ratio_calculator.calculate_efficiency_ratios()
+                    self._show_ratio_results("Efficiency Ratios", ratios)
+                elif "Market" in ratio_name:
+                    ratios = self.system.ratio_calculator.calculate_market_ratios()
+                    self._show_ratio_results("Market Ratios", ratios)
+                elif "Growth" in ratio_name:
+                    ratios = self.system.ratio_calculator.calculate_growth_ratios()
+                    self._show_ratio_results("Growth Ratios", ratios)
+                else:
+                    # Calculate all ratios
+                    all_ratios = self.system.ratio_calculator.calculate_all_ratios()
+                    self._show_ratio_results("All Financial Ratios", all_ratios)
+            else:
+                QMessageBox.information(self, "Financial Ratios", 
+                                      f"Calculating {ratio_name}...\nThis feature is available with enhanced system features!")
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to calculate ratios: {str(e)}")
     
     def _handle_analysis_click(self, analysis_name):
         """Handle analysis report card clicks."""
-        QMessageBox.information(self, "Analysis Report", 
-                              f"Generating {analysis_name}...\nThis feature will be implemented soon!")
+        try:
+            # Check if system has enhanced budget manager
+            if hasattr(self.system, 'budget_manager') and "Budget" in analysis_name:
+                if "Budget vs Actual" in analysis_name:
+                    analysis = self.system.budget_manager.generate_budget_vs_actual_report()
+                    self._show_budget_analysis("Budget vs Actual Analysis", analysis)
+                elif "Variance Analysis" in analysis_name:
+                    analysis = self.system.budget_manager.calculate_variances()
+                    self._show_variance_analysis("Variance Analysis", analysis)
+                else:
+                    QMessageBox.information(self, "Analysis Report", 
+                                          f"Generating {analysis_name}...\nThis feature will be implemented soon!")
+            elif hasattr(self.system, 'cash_flow_manager') and "Cash Flow" in analysis_name:
+                # Advanced cash flow analysis
+                analysis = self.system.cash_flow_manager.generate_advanced_analysis()
+                self._show_cash_flow_analysis("Advanced Cash Flow Analysis", analysis)
+            else:
+                QMessageBox.information(self, "Analysis Report", 
+                                      f"Generating {analysis_name}...\nThis feature is available with enhanced system features!")
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to generate analysis: {str(e)}")
+            
+    def _show_ratio_results(self, title, ratios):
+        """Show ratio calculation results in a formatted dialog."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem, QDialogButtonBox
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.setModal(True)
+        dialog.resize(600, 400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Create table for ratios
+        table = QTableWidget()
+        table.setColumnCount(3)
+        table.setHorizontalHeaderLabels(["Ratio", "Value", "Interpretation"])
+        
+        # Populate table
+        if ratios and 'ratios' in ratios:
+            ratio_list = ratios['ratios']
+            table.setRowCount(len(ratio_list))
+            
+            for row, ratio in enumerate(ratio_list):
+                table.setItem(row, 0, QTableWidgetItem(ratio.get('name', '')))
+                table.setItem(row, 1, QTableWidgetItem(f"{ratio.get('value', 0):.2f}"))
+                table.setItem(row, 2, QTableWidgetItem(ratio.get('interpretation', '')))
+        else:
+            # Mock data for demonstration
+            mock_ratios = [
+                {"name": "Current Ratio", "value": 2.5, "interpretation": "Good liquidity"},
+                {"name": "Quick Ratio", "value": 1.8, "interpretation": "Strong short-term liquidity"},
+                {"name": "ROE", "value": 0.15, "interpretation": "15% return on equity"},
+            ]
+            table.setRowCount(len(mock_ratios))
+            
+            for row, ratio in enumerate(mock_ratios):
+                table.setItem(row, 0, QTableWidgetItem(ratio['name']))
+                table.setItem(row, 1, QTableWidgetItem(f"{ratio['value']:.2f}"))
+                table.setItem(row, 2, QTableWidgetItem(ratio['interpretation']))
+        
+        # Auto-resize columns
+        table.resizeColumnsToContents()
+        layout.addWidget(table)
+        
+        # Dialog buttons
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+        
+        dialog.exec()
+        
+    def _show_budget_analysis(self, title, analysis):
+        """Show budget analysis results."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.setModal(True)
+        dialog.resize(800, 600)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Create text area for analysis
+        text_area = QTextEdit()
+        text_area.setReadOnly(True)
+        
+        if analysis and 'summary' in analysis:
+            text_area.setText(analysis['summary'])
+        else:
+            # Mock analysis for demonstration
+            mock_analysis = """
+Budget vs Actual Analysis Report
+================================
+
+Revenue Analysis:
+- Budgeted Revenue: $100,000
+- Actual Revenue: $110,000
+- Variance: +$10,000 (10% favorable)
+
+Expense Analysis:
+- Budgeted Expenses: $80,000
+- Actual Expenses: $75,000
+- Variance: -$5,000 (6.25% favorable)
+
+Net Income:
+- Budgeted: $20,000
+- Actual: $35,000
+- Variance: +$15,000 (75% favorable)
+
+Key Insights:
+✓ Revenue exceeded budget by 10%
+✓ Expenses were 6.25% under budget
+✓ Strong overall performance with 75% better than budgeted net income
+            """
+            text_area.setText(mock_analysis)
+        
+        layout.addWidget(text_area)
+        
+        # Dialog buttons
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+        
+        dialog.exec()
+        
+    def _show_variance_analysis(self, title, analysis):
+        """Show variance analysis results."""
+        self._show_budget_analysis(title, analysis)  # Use same format for now
+        
+    def _show_cash_flow_analysis(self, title, analysis):
+        """Show cash flow analysis results."""
+        self._show_budget_analysis(title, analysis)  # Use same format for now

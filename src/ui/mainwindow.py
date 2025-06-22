@@ -538,12 +538,13 @@ class MainWindow(QMainWindow):
                 4: "reports",
                 5: "accounts",
                 6: "reminders",
-                7: "team",
-                8: "org_settings",
-                9: "user_mgmt",
-                10: "platform",
-                11: "global_orgs",
-                12: "settings"
+                7: "period_closing",
+                8: "team",
+                9: "org_settings",
+                10: "user_mgmt",
+                11: "platform",
+                12: "global_orgs",
+                13: "settings"
             }
             
             context = context_map.get(current_index, "dashboard")
@@ -693,7 +694,7 @@ class MainWindow(QMainWindow):
                 parent=self
             )
             self.org_switcher.organization_changed.connect(self._on_organization_changed)
-            layout.addWidget(self.org_switcher)        # Navigation buttons with modern icons - expanded for multi-org support
+            layout.addWidget(self.org_switcher)        # Navigation buttons with modern icons - expanded for multi-org support + period closing
         nav_items = [
             ("Dashboard", os.path.join("assets", "icons", "dashboard_new.svg")),
             ("Journal", os.path.join("assets", "icons", "journal_new.svg")),
@@ -702,6 +703,7 @@ class MainWindow(QMainWindow):
             ("Reports", os.path.join("assets", "icons", "reports_new.svg")),
             ("Accounts", os.path.join("assets", "icons", "accounts_new.svg")),
             ("Reminders", os.path.join("assets", "icons", "ledger_note.svg")),  # Reminders & Tasks
+            ("Period Closing", os.path.join("assets", "icons", "sync_modern.svg")),  # Period closing & audit
             ("Team", os.path.join("assets", "icons", "team_new.svg")),  # Team management
             ("Org Settings", os.path.join("assets", "icons", "org_settings_new.svg")),  # Organization settings
             ("User Mgmt", os.path.join("assets", "icons", "user_mgmt_new.svg")),  # User management (admin only)
@@ -792,6 +794,7 @@ class MainWindow(QMainWindow):
         from .pages.reports import ReportsPage
         from .pages.accounts_hierarchy import HierarchicalAccountsPage
         from .pages.reminders_tasks import RemindersTasksPage
+        from .pages.period_closing import PeriodClosingPage
         from .pages.team_management import TeamManagementPage
         from .pages.organization_settings import OrganizationSettingsPage
         from .pages.user_management import UserManagementPage
@@ -802,7 +805,7 @@ class MainWindow(QMainWindow):
         # Standard pages (always visible)
         standard_pages = [
             DashboardPage, JournalPage, LedgerPage, TrialBalancePage, 
-            ReportsPage, HierarchicalAccountsPage, RemindersTasksPage
+            ReportsPage, HierarchicalAccountsPage, RemindersTasksPage, PeriodClosingPage
         ]
         
         # Organization management pages (visible to organization members)
@@ -876,8 +879,7 @@ class MainWindow(QMainWindow):
         # Update toggle button styling to match sidebar state
         self._style_toggle_button()        # Update button states
         for btn in self.sidebar_buttons:
-            btn.set_expanded(self.sidebar_expanded)
-              # Update organization switcher if present
+            btn.set_expanded(self.sidebar_expanded)        # Update organization switcher if present
         if hasattr(self, 'org_switcher'):
             self.org_switcher.set_expanded(self.sidebar_expanded)
             
@@ -890,12 +892,14 @@ class MainWindow(QMainWindow):
             "Trial Balance": 3,
             "Reports": 4,
             "Accounts": 5,
-            "Team": 6,
-            "Org Settings": 7,
-            "User Mgmt": 8,
-            "Platform": 9,
-            "Global Orgs": 10,
-            "Settings": 11,
+            "Reminders": 6,
+            "Period Closing": 7,
+            "Team": 8,
+            "Org Settings": 9,
+            "User Mgmt": 10,
+            "Platform": 11,
+            "Global Orgs": 12,
+            "Settings": 13,
         }
         idx = label_to_index.get(name)
         if idx is not None:
@@ -1191,9 +1195,9 @@ class MainWindow(QMainWindow):
         self.style().polish(self)
     
     def _initialize_accounting_system(self, db_path):
-        """Initialize PostgreSQL accounting system with sync support and multi-tenant context."""
+        """Initialize PostgreSQL accounting system with enhanced features and multi-tenant context."""
         try:
-            self.logger.info(f"Initializing accounting system in {self.db_mode} mode...")
+            self.logger.info(f"Initializing enhanced accounting system in {self.db_mode} mode...")
             
             # Get organization context from session manager
             organization_id = None
@@ -1212,21 +1216,41 @@ class MainWindow(QMainWindow):
                     organization_id=organization_id,
                     user_id=user_id
                 )
-                system = AccountingSystem(
+                base_system = AccountingSystem(
                     organization_id=organization_id,
                     user_id=user_id
                 )
-                system.db_manager = db_manager
+                base_system.db_manager = db_manager
                 self.logger.info(f"✅ Hybrid multi-tenant accounting system initialized for org: {organization_id}")
             else:
                 # Use standard PostgreSQL system with multi-tenant context
-                system = AccountingSystem(
+                base_system = AccountingSystem(
                     organization_id=organization_id,
                     user_id=user_id
                 )
                 self.logger.info(f"✅ PostgreSQL multi-tenant accounting system initialized for org: {organization_id}")
             
-            return system
+            # Initialize enhanced accounting system with advanced features
+            from ..core.enhanced_accounting_system import EnhancedAccountingSystem
+            enhanced_system = EnhancedAccountingSystem(
+                db_manager=base_system.db_manager if hasattr(base_system, 'db_manager') else None,
+                base_accounting_system=base_system,
+                organization_id=organization_id,
+                user_id=user_id
+            )
+            
+            # Initialize enhanced features
+            try:
+                init_results = enhanced_system.initialize_enhanced_features()
+                self.logger.info(f"Enhanced features initialization results: {init_results}")
+                
+                # Store the enhanced system as the main system
+                enhanced_system.base_system = base_system  # Keep reference to base system
+                return enhanced_system
+                
+            except Exception as e:
+                self.logger.warning(f"Enhanced features initialization failed, using base system: {e}")
+                return base_system
                 
         except Exception as e:
             self.logger.error(f"Accounting system initialization failed: {e}")

@@ -59,6 +59,7 @@ class SmartApp:
         
         try:
             from src.ui.auth.login_window import LoginWindow
+            from src.ui.auth.signup_dialog import SignupDialog
             from src.core.auth_manager import AuthManager
             from src.core.session_manager import SessionManager
             
@@ -67,6 +68,9 @@ class SmartApp:
             
             # Show login window
             login_window = LoginWindow(auth_manager)
+            
+            # Connect signup signal to show signup dialog
+            login_window.signup_requested.connect(lambda: self._show_signup_dialog(auth_manager, login_window))
             
             if login_window.exec() == login_window.DialogCode.Accepted:
                 # TODO: Handle successful login and organization selection
@@ -80,6 +84,26 @@ class SmartApp:
             print(f"⚠️  Authentication components not available: {e}")
             print("Falling back to single-tenant mode...")
             return self.start_without_auth()
+    
+    def _show_signup_dialog(self, auth_manager, parent_window):
+        """Show signup dialog when requested from login window"""
+        try:
+            from src.ui.auth.signup_dialog import SignupDialog
+            
+            signup_dialog = SignupDialog(auth_manager, parent_window)
+            
+            # Handle successful signup
+            def handle_signup_success(user_data):
+                QMessageBox.information(parent_window, "Success", 
+                                      "Account created successfully! Please sign in with your new credentials.")
+                # Close signup dialog and return to login
+                signup_dialog.accept()
+            
+            signup_dialog.signup_successful.connect(handle_signup_success)
+            signup_dialog.exec()
+            
+        except Exception as e:
+            QMessageBox.warning(parent_window, "Error", f"Could not open signup dialog: {str(e)}")
     
     def start_without_auth(self):
         """Start without authentication (single-tenant mode)"""

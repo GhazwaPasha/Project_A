@@ -174,8 +174,7 @@ class LoginWindow(QDialog):
             
             QCheckBox::indicator:hover {
                 border-color: #808080;
-            }
-        """)
+            }        """)
         
     def _signin(self):
         email = self.email_edit.text().strip()
@@ -186,12 +185,14 @@ class LoginWindow(QDialog):
             return
             
         try:
-            result = self.auth_manager.authenticate_user(email, password)
-            if result:
-                user_data, organizations = result
+            result = self.auth_manager.sign_in(email, password)
+            if result.get("success"):
+                user_data = result.get("user")
+                organizations = result.get("organizations", [])
                 self.login_successful.emit(user_data, organizations)
                 self.accept()
             else:
-                QMessageBox.warning(self, "Login Failed", "Invalid email or password.")
+                error_msg = result.get("error", "Invalid email or password.")
+                QMessageBox.warning(self, "Login Failed", error_msg)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Login failed: {str(e)}")

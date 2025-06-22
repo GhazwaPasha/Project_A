@@ -318,16 +318,24 @@ class SignupDialog(QDialog):
             "last_name": last_name,
             "email": email,
             "password": password,
-            "organization": org_data
-        }
+            "organization": org_data        }
         
         try:
             # Attempt to create the user
-            success = self.auth_manager.create_user(user_data)
-            if success:
+            result = self.auth_manager.sign_up(
+                email=user_data["email"],
+                password=user_data["password"],
+                first_name=user_data["first_name"],
+                last_name=user_data["last_name"],
+                organization_name=user_data["organization"]["name"],
+                organization_description=user_data["organization"]["description"]
+            )
+            
+            if result.get("success"):
                 self.signup_successful.emit(user_data)
                 self.accept()
             else:
-                QMessageBox.warning(self, "Signup Failed", "Failed to create account. Please try again.")
+                error_msg = result.get("error", "Failed to create account. Please try again.")
+                QMessageBox.warning(self, "Signup Failed", error_msg)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Signup failed: {str(e)}")
