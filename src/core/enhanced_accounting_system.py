@@ -442,8 +442,7 @@ class EnhancedAccountingSystem:
         if hasattr(self.base_system, name):
             return getattr(self.base_system, name)
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
-    
-    # Explicit delegation for commonly used methods
+      # Explicit delegation for commonly used methods
     def get_trial_balance(self, *args, **kwargs):
         """Get trial balance from base system."""
         return self.base_system.get_trial_balance(*args, **kwargs)
@@ -457,53 +456,358 @@ class EnhancedAccountingSystem:
         return self.base_system.add_journal_entry(*args, **kwargs)
     
     def get_accounts(self, *args, **kwargs):
-        """Get accounts from base system."""
-        return self.base_system.get_accounts(*args, **kwargs)
+        """Get accounts (alias for get_all_accounts with enhanced formatting)."""
+        return self.get_all_accounts(*args, **kwargs)
     
-    def get_account_balance(self, *args, **kwargs):
-        """Get account balance from base system."""
-        return self.base_system.get_account_balance(*args, **kwargs)
+    def get_account_balance(self, account_name, as_of_date=None):
+        """Calculate account balance as of a specific date."""
+        if as_of_date:
+            trial_balance = self.base_system.get_trial_balance(None, as_of_date)
+        else:
+            trial_balance = self.base_system.get_trial_balance()
+        
+        # Try to find the account in trial balance
+        for acc_name, balance in trial_balance.items():
+            if acc_name.lower() == account_name.lower():
+                return balance
+        
+        return 0.0
     
-    def get_ledger_entries(self, *args, **kwargs):
-        """Get ledger entries from base system."""
-        return self.base_system.get_ledger_entries(*args, **kwargs)
-    
-    def get_income_statement(self, *args, **kwargs):
-        """Get income statement from base system."""
-        return self.base_system.get_income_statement(*args, **kwargs)
-    
-    def get_balance_sheet(self, *args, **kwargs):
-        """Get balance sheet from base system."""
-        return self.base_system.get_balance_sheet(*args, **kwargs)
-    
-    def get_cash_flow_statement(self, *args, **kwargs):
-        """Get cash flow statement from base system."""
-        return self.base_system.get_cash_flow_statement(*args, **kwargs)
-    
-    def add_account(self, *args, **kwargs):
-        """Add account to base system."""
-        return self.base_system.add_account(*args, **kwargs)
+    def get_ledger_entries(self, account_name, from_date=None, to_date=None):
+        """Get ledger entries (alias for get_ledger)."""
+        return self.base_system.get_ledger(account_name, from_date, to_date)
     
     def update_account(self, *args, **kwargs):
-        """Update account in base system."""
-        return self.base_system.update_account(*args, **kwargs)
+        """Update account (alias for edit_account)."""
+        return self.base_system.edit_account(*args, **kwargs)
     
-    def delete_account(self, *args, **kwargs):
-        """Delete account from base system."""
-        return self.base_system.delete_account(*args, **kwargs)
+    def get_chart_of_accounts(self):
+        """Get chart of accounts with hierarchy."""
+        try:
+            return self.base_system.get_account_hierarchy()
+        except AttributeError:
+            # Fallback to all accounts if hierarchy method doesn't exist
+            return self.base_system.get_all_accounts()
     
-    def get_chart_of_accounts(self, *args, **kwargs):
-        """Get chart of accounts from base system."""
-        return self.base_system.get_chart_of_accounts(*args, **kwargs)
+    # Critical missing methods from original system
+    def clear_journal_entries(self):
+        """Clear all journal entries from base system."""
+        return self.base_system.clear_journal_entries()
     
-    def close_books(self, *args, **kwargs):
-        """Close books using base system."""
-        return self.base_system.close_books(*args, **kwargs)
+    def add_journal_entries_batch(self, entries):
+        """Add journal entries in batch using base system."""
+        return self.base_system.add_journal_entries_batch(entries)
     
-    def backup_data(self, *args, **kwargs):
-        """Backup data using base system."""
-        return self.base_system.backup_data(*args, **kwargs)
+    def add_journal_entries_with_progress(self, entries, progress_callback=None):
+        """Add journal entries with progress tracking using base system."""
+        return self.base_system.add_journal_entries_with_progress(entries, progress_callback)
     
-    def restore_data(self, *args, **kwargs):
-        """Restore data using base system."""
-        return self.base_system.restore_data(*args, **kwargs)
+    def seed_hierarchical_accounts(self):
+        """Seed chart of accounts using base system."""
+        return self.base_system.seed_hierarchical_accounts()
+    
+    def force_reseed_hierarchical_accounts(self):
+        """Force reseed accounts using base system."""
+        return self.base_system.force_reseed_hierarchical_accounts()
+    
+    def refresh_connection(self):
+        """Refresh database connection using base system."""
+        return self.base_system.refresh_connection()
+    
+    def get_recent_journal_entries(self, limit=20):
+        """Get recent journal entries using base system."""
+        return self.base_system.get_recent_journal_entries(limit)
+    
+    def get_accounts_by_level(self, level=1):
+        """Get accounts by hierarchy level using base system."""
+        return self.base_system.get_accounts_by_level(level)
+    
+    def get_postable_accounts(self):
+        """Get postable accounts using base system."""
+        return self.base_system.get_postable_accounts()
+    
+    def is_account_postable(self, account_name_or_code):
+        """Check if account is postable using base system."""
+        return self.base_system.is_account_postable(account_name_or_code)
+    
+    def resolve_account(self, account_input):
+        """Resolve account using base system."""
+        return self.base_system.resolve_account(account_input)
+    
+    def begin_transaction(self):
+        """Begin transaction using base system."""
+        return self.base_system.begin_transaction()
+    
+    def commit_transaction(self):
+        """Commit transaction using base system."""
+        return self.base_system.commit_transaction()
+    
+    # Enhanced functionality that builds on base system
+    def close_books(self, period_end_date, force_close=False):
+        """Enhanced book closing using period management."""
+        return self.perform_month_end_close(period_end_date, force_close)
+    
+    def backup_data(self):
+        """Enhanced backup functionality."""
+        # Implementation would depend on database type and enhanced features
+        backup_info = {
+            'timestamp': datetime.now().isoformat(),
+            'organization_id': self.organization_id,
+            'base_system_backup': 'Not implemented in base system',
+            'enhanced_features': {
+                'period_status': self.period_manager.get_period_status_summary(),
+                'audit_trail_count': len(self.audit_manager.get_audit_trail(limit=1000)),
+                'financial_ratios': len(self.ratio_calculator.calculate_all_ratios().get('ratios', {})),
+            }
+        }
+        self.logger.warning("Enhanced backup functionality not fully implemented")
+        return backup_info
+    
+    # Enhanced fuzzy search methods (ported from original system)
+    def fuzzy_match_account(self, search_term):
+        """
+        Enhanced fuzzy match for account name or code.
+        Returns (matched_name, matched_type, matched_code) or (None, None, None) if no match
+        """
+        try:
+            return self.base_system._fuzzy_match_account(search_term)
+        except AttributeError:
+            # Fallback implementation if base system doesn't have this method
+            return self._enhanced_fuzzy_match_account(search_term)
+    
+    def find_matching_account(self, search_term):
+        """Enhanced account matching with improved scoring."""
+        try:
+            return self.base_system._find_matching_account(search_term)
+        except AttributeError:
+            # Fallback implementation if base system doesn't have this method
+            return self._enhanced_find_matching_account(search_term)
+    
+    def _enhanced_fuzzy_match_account(self, search_term):
+        """Enhanced implementation of fuzzy account matching."""
+        if not search_term:
+            return None, None, None
+            
+        search_term = search_term.strip().lower()
+        all_accounts = self.get_postable_accounts()
+        
+        # Try exact matches first
+        for name, acc_type, code, parent_code, level, is_postable, description in all_accounts:
+            if name.lower() == search_term or (code and code.lower() == search_term):
+                return name, acc_type, code
+        
+        # Try partial matches with scoring
+        matches = []
+        for name, acc_type, code, parent_code, level, is_postable, description in all_accounts:
+            score = 0
+            name_lower = name.lower()
+            
+            # Scoring algorithm
+            if name_lower.startswith(search_term):
+                score += 10
+            elif f" {search_term}" in name_lower:
+                score += 8
+            elif search_term in name_lower:
+                score += 5
+            elif name_lower.endswith(search_term):
+                score += 3
+                
+            # Bonus for shorter names (more specific match)
+            if score > 0:
+                score += max(0, 20 - len(name))
+                matches.append((score, name, acc_type, code))
+        
+        # Return best match
+        if matches:
+            matches.sort(reverse=True, key=lambda x: x[0])
+            return matches[0][1], matches[0][2], matches[0][3]
+            
+        return None, None, None
+    
+    def _enhanced_find_matching_account(self, search_term):
+        """Enhanced implementation of account finding with multiple strategies."""
+        if not search_term:
+            return None
+            
+        search_term = search_term.strip().lower()
+        all_accounts = self.get_all_accounts()
+        
+        # Strategy 1: Exact matches
+        for name, acc_type, code, parent_code, level, is_postable, description in all_accounts:
+            if name.lower() == search_term or (code and code.lower() == search_term):
+                return (name, acc_type, code)
+        
+        # Strategy 2: Code-name format (e.g., "1101 - Cash")
+        if " - " in search_term:
+            parts = search_term.split(" - ", 1)
+            if len(parts) == 2:
+                code_part = parts[0].strip()
+                name_part = parts[1].strip()
+                
+                for name, acc_type, code, parent_code, level, is_postable, description in all_accounts:
+                    if (code and code.lower() == code_part) or name.lower() == name_part:
+                        return (name, acc_type, code)
+        
+        # Strategy 3: Partial word matching with advanced scoring
+        words = search_term.split()
+        if words:
+            matches = []
+            
+            for name, acc_type, code, parent_code, level, is_postable, description in all_accounts:
+                score = 0
+                name_lower = name.lower()
+                
+                for word in words:
+                    if name_lower.startswith(word):
+                        score += 10
+                    elif f" {word} " in name_lower:
+                        score += 8
+                    elif f" {word}" in name_lower:
+                        score += 6
+                    elif word in name_lower:
+                        score += 4
+                
+                if score > 0:
+                    # Boost score for postable accounts
+                    if is_postable:
+                        score += 2
+                    # Penalty for very long names
+                    score -= max(0, len(name) - 30) * 0.1
+                    matches.append((score, name, acc_type, code))
+            
+            if matches:
+                matches.sort(reverse=True, key=lambda x: x[0])
+                return (matches[0][1], matches[0][2], matches[0][3])
+        
+        return None
+    
+    def search_accounts(self, query, limit=10, include_non_postable=False):
+        """Enhanced account search with multiple results."""
+        if not query:
+            return []
+            
+        query = query.strip().lower()
+        all_accounts = self.get_all_accounts()
+        results = []
+        
+        for name, acc_type, code, parent_code, level, is_postable, description in all_accounts:
+            if not include_non_postable and not is_postable:
+                continue
+                
+            score = 0
+            name_lower = name.lower()
+            
+            # Exact match gets highest score
+            if name_lower == query or (code and code.lower() == query):
+                score = 100
+            # Starts with query
+            elif name_lower.startswith(query):
+                score = 80
+            # Contains query as whole word
+            elif f" {query} " in name_lower:
+                score = 60
+            # Contains query
+            elif query in name_lower:
+                score = 40
+            # Description contains query
+            elif description and query in description.lower():
+                score = 20
+            
+            if score > 0:
+                results.append({
+                    'score': score,
+                    'name': name,
+                    'type': acc_type,
+                    'code': code,
+                    'level': level,
+                    'is_postable': is_postable,
+                    'description': description,
+                    'display_name': f"{code} - {name}" if code else name
+                })
+        
+        # Sort by score and return top results
+        results.sort(reverse=True, key=lambda x: (x['score'], -len(x['name'])))
+        return results[:limit]
+      # Enhanced versions of base system methods that provide better UI compatibility
+    def get_all_accounts(self):
+        """Get all accounts with enhanced formatting for UI compatibility."""
+        # Get raw accounts from base system
+        raw_accounts = self.base_system.get_all_accounts()
+        
+        # Convert tuples to dictionaries for UI compatibility
+        accounts = []
+        for account in raw_accounts:
+            try:
+                if isinstance(account, dict):
+                    # Already in dictionary format
+                    accounts.append(account)
+                elif isinstance(account, (tuple, list)) and len(account) >= 7:
+                    name, acc_type, code, parent_code, level, is_postable, description = account[:7]
+                    accounts.append({
+                        'name': name,
+                        'type': acc_type, 
+                        'code': code,
+                        'parent_code': parent_code,
+                        'level': level,
+                        'is_postable': bool(is_postable),
+                        'description': description or ""
+                    })
+                else:
+                    # Handle unexpected format
+                    self.logger.warning(f"Unexpected account format: {account}")
+            except Exception as e:
+                self.logger.error(f"Error processing account: {account}, error: {e}")
+                
+        return accounts
+    
+    def get_postable_accounts(self):
+        """Get postable accounts with enhanced formatting."""
+        raw_accounts = self.base_system.get_postable_accounts()
+        
+        accounts = []
+        for account in raw_accounts:
+            try:
+                if isinstance(account, dict):
+                    accounts.append(account)
+                elif isinstance(account, (tuple, list)) and len(account) >= 7:
+                    name, acc_type, code, parent_code, level, is_postable, description = account[:7]
+                    accounts.append({
+                        'name': name,
+                        'type': acc_type,
+                        'code': code, 
+                        'parent_code': parent_code,
+                        'level': level,
+                        'is_postable': bool(is_postable),
+                        'description': description or ""
+                    })
+                else:
+                    self.logger.warning(f"Unexpected postable account format: {account}")
+            except Exception as e:
+                self.logger.error(f"Error processing postable account: {account}, error: {e}")
+                
+        return accounts
+    
+    def get_accounts_by_level(self, level=1):
+        """Get accounts by level with enhanced formatting."""
+        raw_accounts = self.base_system.get_accounts_by_level(level)
+        
+        accounts = []
+        for account in raw_accounts:
+            if len(account) >= 7:
+                name, acc_type, code, parent_code, acc_level, is_postable, description = account
+                accounts.append({
+                    'name': name,
+                    'type': acc_type,
+                    'code': code,
+                    'parent_code': parent_code, 
+                    'level': acc_level,
+                    'is_postable': bool(is_postable),
+                    'description': description or ""
+                })
+                
+        return accounts
+    
+    def get_recent_journal_entries(self, limit=20):
+        """Get recent journal entries with enhanced formatting."""
+        # The base system already returns this in dictionary format
+        return self.base_system.get_recent_journal_entries(limit)

@@ -703,7 +703,7 @@ class MainWindow(QMainWindow):
             ("Reports", os.path.join("assets", "icons", "reports_new.svg")),
             ("Accounts", os.path.join("assets", "icons", "accounts_new.svg")),
             ("Reminders", os.path.join("assets", "icons", "ledger_note.svg")),  # Reminders & Tasks
-            ("Period Closing", os.path.join("assets", "icons", "sync_modern.svg")),  # Period closing & audit
+            ("Period Closing", os.path.join("assets", "icons", "period_closing_modern.svg")),  # Period closing & audit
             ("Team", os.path.join("assets", "icons", "team_new.svg")),  # Team management
             ("Org Settings", os.path.join("assets", "icons", "org_settings_new.svg")),  # Organization settings
             ("User Mgmt", os.path.join("assets", "icons", "user_mgmt_new.svg")),  # User management (admin only)
