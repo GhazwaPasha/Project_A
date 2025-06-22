@@ -1527,7 +1527,6 @@ class MainWindow(QMainWindow):
                 context = self._get_current_context()
                 # Process the command
                 self.ai_processor.process_command(user_input, context)
-                
     def _handle_ai_command_result(self, response_text: str, action_data: dict):
         """Handle AI command processing result"""
         try:
@@ -1535,10 +1534,11 @@ class MainWindow(QMainWindow):
             action = action_data.get('action', '')
             parameters = action_data.get('parameters', {})
             ai_response = action_data.get('response', response_text)
-            
-            # Update status bar with response
+              # Update status bar with response
             if hasattr(self, 'simple_ai_bar'):
-                self.simple_ai_bar.set_response(ai_response)
+                self.simple_ai_bar.setText(ai_response)
+                self.simple_ai_bar.is_processing = False
+                self.simple_ai_bar._collapse_to_normal()
                 
             # Handle different intents
             if intent == 'NAVIGATION':
@@ -1621,8 +1621,6 @@ class MainWindow(QMainWindow):
             
     def _show_ai_error(self, error_msg: str):
         """Show AI error message"""
-        if hasattr(self, 'simple_ai_bar'):
-            self.simple_ai_bar.set_response(f"Error: {error_msg}")
         if hasattr(self, 'notification_manager'):
             self.notification_manager.add_notification(
                 title="AI Error",
@@ -1633,12 +1631,15 @@ class MainWindow(QMainWindow):
     def _on_ai_processing_started(self):
         """Handle AI processing started"""
         if hasattr(self, 'simple_ai_bar'):
-            self.simple_ai_bar.set_response("Processing...")
-            
+            self.simple_ai_bar.is_processing = True
+            self.simple_ai_bar.setReadOnly(True)
+            self.simple_ai_bar.setText("Processing...")
+            self.simple_ai_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.simple_ai_bar.setCursor(Qt.CursorShape.ArrowCursor)
     def _on_ai_processing_finished(self):
         """Handle AI processing finished"""
-        # Status will be updated by command result handler
-        pass
+        if hasattr(self, 'simple_ai_bar'):
+            self.simple_ai_bar.is_processing = False
         
     def _on_ai_error(self, error_msg: str):
         """Handle AI processing error"""

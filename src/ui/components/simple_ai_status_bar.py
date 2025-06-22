@@ -11,24 +11,17 @@ import time
 class SimpleAIStatusBar(QLineEdit):
     """Simple, clean AI status bar that transforms into an input field when clicked"""
     
-    # Signals
-    ai_response_ready = pyqtSignal(str, str)  # input, response
-    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_window = parent
         self.is_expanded = False
         self.is_processing = False
         self.placeholder_text = "Ask AI anything..."
-        self.response_text = ""
         
         # Setup UI
         self._setup_ui()
         self._setup_animations()
         self._apply_styling()
-        
-        # Connect signals
-        self.ai_response_ready.connect(self._handle_ai_response)
         
     def _setup_ui(self):
         """Setup the UI components"""
@@ -156,54 +149,18 @@ class SimpleAIStatusBar(QLineEdit):
         
         # Process in background thread
         self._process_ai_request(user_input)
-        
     def _process_ai_request(self, user_input):
         """Process AI request in background"""
-        def process():
-            # Simulate AI processing (replace with actual AI call)
-            time.sleep(1.5)
+        if not hasattr(self.parent_window, '_process_ai_command'):
+            self.setText("AI system not initialized")
+            self.is_processing = False
+            return
             
-            # Simple response generation (replace with real AI)
-            response = self._generate_simple_response(user_input)
-            
-            # Emit signal to update UI
-            self.ai_response_ready.emit(user_input, response)
-            
-        thread = threading.Thread(target=process, daemon=True)
-        thread.start()
-        
-    def _generate_simple_response(self, user_input):
-        """Generate a simple response (replace with actual AI integration)"""
-        input_lower = user_input.lower()
-        
-        if "balance" in input_lower or "money" in input_lower:
-            return "Your current account balances are available in the ledger section."
-        elif "report" in input_lower:
-            return "You can generate reports from the Reports section in the navigation."
-        elif "help" in input_lower:
-            return "I can help you navigate the accounting system, check balances, and generate reports."
-        elif "journal" in input_lower:
-            return "The journal entry section allows you to record transactions."
-        else:
-            return f"I understand you're asking about: '{user_input}'. Let me help you find what you need."
-            
-    def _handle_ai_response(self, user_input, response):
-        """Handle AI response in main thread - show inline"""
-        self.is_processing = False
-        
-        # Show response in the status bar (truncated if too long)
-        max_length = 60  # Max characters to show
-        if len(response) > max_length:
-            display_response = response[:max_length] + "..."
-        else:
-            display_response = response
-            
-        self.setText(display_response)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        
-        # Auto-collapse after 4 seconds
-        QTimer.singleShot(4000, self._collapse_to_normal)
+        try:
+            self.parent_window._process_ai_command()
+        except Exception as e:
+            self.setText(f"Error: {str(e)}")
+            self.is_processing = False
         
     def _collapse_to_normal(self):
         """Collapse back to normal state with center contraction"""
@@ -226,42 +183,10 @@ class SimpleAIStatusBar(QLineEdit):
         self.width_animation.start()
         self.min_width_animation.start()
         
-        # Reset fixed width after animation
-        QTimer.singleShot(300, lambda: self.setFixedWidth(250))
-
+        # Reset fixed width after animation        QTimer.singleShot(300, lambda: self.setFixedWidth(250))
+        
     def set_context(self, page_name, context_data=None):
         """Set the current page context for the AI status bar"""
         if not self.is_expanded and not self.is_processing:
-            context_messages = {
-                "dashboard": "📊 Dashboard Overview",
-                "journal": "📝 Journal Entries", 
-                "ledger": "📖 Account Ledger",
-                "trial_balance": "⚖️ Trial Balance",
-                "reports": "📈 Financial Reports",
-                "accounts": "🏢 Chart of Accounts",
-                "team": "👥 Team Management",
-                "settings": "⚙️ Settings"
-            }
-            
-            message = context_messages.get(page_name, "🤖 AI Assistant")
-            self.setText(message)
-            self.placeholder_text = message
-
-    def set_response(self, response_text: str):
-        """Set the AI response text"""
-        self.response_text = response_text
-        self._show_response()
-
-    def _show_response(self):
-        """Show the AI response"""
-        if self.response_text:
-            # Switch to response display mode
-            self.setReadOnly(True)
-            self.setText(self.response_text)
-            self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.setCursor(Qt.CursorShape.PointingHandCursor)
-            
-            # Auto-collapse after 5 seconds
-            QTimer.singleShot(5000, self._collapse_to_normal)
-        else:
-            self._collapse_to_normal()
+            self.setText("🤖 AI Assistant")
+            self.placeholder_text = "🤖 AI Assistant"
