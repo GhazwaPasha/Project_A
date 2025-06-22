@@ -139,11 +139,13 @@ class MainWindow(QMainWindow):
         self.accounting_system = self._initialize_accounting_system(db_path)
         
         # Keep backward compatibility for existing pages
-        self.system = self.accounting_system
-        
-        # Initialize notification system
+        self.system = self.accounting_system        # Initialize notification system
         from .components.notifications.notification_manager import NotificationManager
         self.notification_manager = NotificationManager()
+        
+        # Initialize AI command processor
+        from .components.ai_command_processor import AICommandProcessor
+        self.ai_processor = AICommandProcessor(self)
         
         self.sidebar_expanded = False  # Start collapsed for a cleaner look
         self.dark_mode = True  # Default to dark mode for better Mica effect
@@ -153,11 +155,13 @@ class MainWindow(QMainWindow):
         self.font_manager = font_manager
         # Initialize custom fonts
         self._load_custom_fonts()
-        
-        # Setup window first
+          # Setup window first
         self._setup_mica_window()
         self._setup_ui()
         self._load_pages()
+        
+        # Connect AI processor signals after UI is created
+        self._connect_ai_signals()
         
         # Apply global styling first
         self._apply_global_consistent_styling()
@@ -168,11 +172,10 @@ class MainWindow(QMainWindow):
         # Setup sync status updates if in hybrid mode
         if self.db_mode == 'hybrid':
             self._setup_sync_updates()
-        
-        # Install event filter for handling clicks outside notification drawer
+          # Install event filter for handling clicks outside notification drawer
         self.installEventFilter(self)
-          # Show the window first, then apply Mica effect
-        self.show()        # Use QTimer to apply Mica effect after window is fully shown
+        
+        # Use QTimer to apply Mica effect after window is fully shown
         QTimer.singleShot(100, self._apply_mica_effect_delayed)
         
         # Add a welcome notification after startup
@@ -485,11 +488,9 @@ class MainWindow(QMainWindow):
             layout = QHBoxLayout(container)
             layout.setContentsMargins(20, 0, 20, 0)  # Add horizontal margins for better centering
             layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            
-            # Create the simple AI status bar
+              # Create the simple AI status bar
             self.simple_ai_bar = SimpleAIStatusBar(self)
-            self.simple_ai_bar.setMaximumHeight(30)  # AI bar height
-            self.simple_ai_bar.setMinimumHeight(30)  # Ensure consistent height
+            self.simple_ai_bar.setMaximumHeight(30)  # AI bar height            self.simple_ai_bar.setMinimumHeight(30)  # Ensure consistent height
             layout.addWidget(self.simple_ai_bar)
             
             return container
@@ -520,12 +521,11 @@ class MainWindow(QMainWindow):
                     "focused": "🤔", 
                     "celebrating": "🎉",
                     "concerned": "😐",
-                    "relaxed": "😌"
-                }
+                    "relaxed": "😌"                }
                 self.ai_avatar.setText(mood_emojis.get(mood, "🤖"))
         except:
             pass
-    
+            
     def _get_current_context(self):
         """Get current application context for AI analysis"""
         try:
@@ -536,7 +536,14 @@ class MainWindow(QMainWindow):
                 2: "ledger",
                 3: "trial_balance",
                 4: "reports",
-                5: "accounts"
+                5: "accounts",
+                6: "reminders",
+                7: "team",
+                8: "org_settings",
+                9: "user_mgmt",
+                10: "platform",
+                11: "global_orgs",
+                12: "settings"
             }
             
             context = context_map.get(current_index, "dashboard")
@@ -694,13 +701,14 @@ class MainWindow(QMainWindow):
             ("Trial Balance", os.path.join("assets", "icons", "trial_balance_new.svg")),
             ("Reports", os.path.join("assets", "icons", "reports_new.svg")),
             ("Accounts", os.path.join("assets", "icons", "accounts_new.svg")),
+            ("Reminders", os.path.join("assets", "icons", "ledger_note.svg")),  # Reminders & Tasks
             ("Team", os.path.join("assets", "icons", "team_new.svg")),  # Team management
             ("Org Settings", os.path.join("assets", "icons", "org_settings_new.svg")),  # Organization settings
             ("User Mgmt", os.path.join("assets", "icons", "user_mgmt_new.svg")),  # User management (admin only)
             ("Platform", os.path.join("assets", "icons", "platform_new.svg")),  # Platform overview (super admin)
             ("Global Orgs", os.path.join("assets", "icons", "global_orgs_new.svg")),  # Global organizations (super admin)
             ("Settings", os.path.join("assets", "icons", "settings_new.svg")),
-        ]        # Add navigation buttons directly to main layout for proper alignment
+        ]# Add navigation buttons directly to main layout for proper alignment
         self.sidebar_buttons = []
         for idx, (label, icon_path) in enumerate(nav_items):
             btn = ModernSidebarButton(icon_path, label, expanded=self.sidebar_expanded)
@@ -770,11 +778,11 @@ class MainWindow(QMainWindow):
         sidebar.setStyleSheet(f"""
             QFrame#ModernSidebar {{
                 background: rgba(20, 20, 20, 0.25);
-                border: 1px solid rgba(255, 255, 255, 0.05);
-                border-radius: {border_radius}px;
+                border: 1px solid rgba(255, 255, 255, 0.05);                border-radius: {border_radius}px;
                 margin: 0px;
-            }}        """)
-    
+            }}
+        """)
+        
     def _load_pages(self):
         """Load and setup all application pages."""
         from .pages.dashboard import DashboardPage
@@ -783,6 +791,7 @@ class MainWindow(QMainWindow):
         from .pages.trial_balance import TrialBalancePage
         from .pages.reports import ReportsPage
         from .pages.accounts_hierarchy import HierarchicalAccountsPage
+        from .pages.reminders_tasks import RemindersTasksPage
         from .pages.team_management import TeamManagementPage
         from .pages.organization_settings import OrganizationSettingsPage
         from .pages.user_management import UserManagementPage
@@ -793,7 +802,7 @@ class MainWindow(QMainWindow):
         # Standard pages (always visible)
         standard_pages = [
             DashboardPage, JournalPage, LedgerPage, TrialBalancePage, 
-            ReportsPage, HierarchicalAccountsPage
+            ReportsPage, HierarchicalAccountsPage, RemindersTasksPage
         ]
         
         # Organization management pages (visible to organization members)
@@ -806,14 +815,16 @@ class MainWindow(QMainWindow):
         super_admin_pages = [PlatformOverviewPage, GlobalOrganizationsPage]
         
         # Settings page (always visible)
-        settings_pages = [SettingsPage]
-          # Add all pages to stack with proper initialization
+        settings_pages = [SettingsPage]          # Add all pages to stack with proper initialization
         all_pages = standard_pages + org_pages + admin_pages + super_admin_pages + settings_pages
         for idx, PageClass in enumerate(all_pages):
             if PageClass in [TeamManagementPage, OrganizationSettingsPage, UserManagementPage, 
                            PlatformOverviewPage, GlobalOrganizationsPage]:
                 # Pass auth_manager and session_manager for organization/user management pages
                 page = PageClass(self.system, auth_manager=self.auth_manager, parent=self)
+            elif PageClass == RemindersTasksPage:
+                # Pass notification manager for reminders integration
+                page = PageClass(self.system, notification_manager=self.notification_manager, parent=self)
             else:
                 # Standard accounting pages
                 page = PageClass(self.system, parent=self)
@@ -1482,3 +1493,142 @@ class MainWindow(QMainWindow):
             "Connection Restored",            "Connection to the server has been restored. Sync will resume automatically.",
             "success"
         )
+    
+    def _process_ai_command(self):
+        """Process command from AI status bar"""
+        if hasattr(self, 'simple_ai_bar') and hasattr(self, 'ai_processor'):
+            user_input = self.simple_ai_bar.text().strip()
+            if user_input and user_input != self.simple_ai_bar.placeholder_text:
+                # Get current context
+                context = self._get_current_context()
+                # Process the command
+                self.ai_processor.process_command(user_input, context)
+                
+    def _handle_ai_command_result(self, response_text: str, action_data: dict):
+        """Handle AI command processing result"""
+        try:
+            intent = action_data.get('intent', 'NOTIFICATION')
+            action = action_data.get('action', '')
+            parameters = action_data.get('parameters', {})
+            ai_response = action_data.get('response', response_text)
+            
+            # Update status bar with response
+            if hasattr(self, 'simple_ai_bar'):
+                self.simple_ai_bar.set_response(ai_response)
+                
+            # Handle different intents
+            if intent == 'NAVIGATION':
+                self._handle_navigation_command(parameters)
+            elif intent == 'DATA_QUERY':
+                self._handle_data_query_command(parameters)
+            elif intent == 'REMINDER':
+                self._handle_reminder_command(parameters)
+            elif intent == 'NOTIFICATION':
+                self._handle_notification_command(parameters, ai_response)
+                
+        except Exception as e:
+            self._show_ai_error(f"Error processing command: {str(e)}")
+            
+    def _handle_navigation_command(self, parameters: dict):
+        """Handle navigation commands"""
+        page = parameters.get('page', '').lower()
+        page_map = {
+            'dashboard': 0,
+            'journal': 1,
+            'ledger': 2,
+            'trial balance': 3,
+            'trial_balance': 3,
+            'reports': 4,
+            'accounts': 5,
+            'reminders': 6,
+            'tasks': 6,
+            'team': 7,
+            'org settings': 8,
+            'settings': 11
+        }
+        
+        page_index = page_map.get(page)
+        if page_index is not None and hasattr(self, 'stack'):
+            self.stack.setCurrentIndex(page_index)
+            # Update sidebar button selection
+            if hasattr(self, 'sidebar_buttons') and page_index < len(self.sidebar_buttons):
+                for btn in self.sidebar_buttons:
+                    btn.setChecked(False)
+                self.sidebar_buttons[page_index].setChecked(True)
+                
+    def _handle_data_query_command(self, parameters: dict):
+        """Handle data query commands"""
+        query_type = parameters.get('query', '')
+        
+        # Implement basic data queries
+        if 'balance' in query_type.lower():
+            # For now, show a placeholder response
+            self._show_ai_notification("Data query feature coming soon! You asked about: " + query_type)
+        else:
+            self._show_ai_notification(f"Searching for: {query_type}")
+            
+    def _handle_reminder_command(self, parameters: dict):
+        """Handle reminder commands"""
+        reminder_text = parameters.get('reminder_text', '')
+        reminder_time = parameters.get('reminder_time', '')
+        recurring = parameters.get('recurring', 'none')
+        
+        if reminder_text:
+            # Navigate to reminders page if not already there
+            current_page = self.stack.currentIndex() if hasattr(self, 'stack') else 0
+            if current_page != 6:  # Reminders page index
+                self._handle_navigation_command({'page': 'reminders'})
+            
+            # Add reminder via notification
+            self._show_ai_notification(f"Reminder set: {reminder_text}")
+            
+    def _handle_notification_command(self, parameters: dict, message: str):
+        """Handle notification commands"""
+        self._show_ai_notification(message)
+        
+    def _show_ai_notification(self, message: str):
+        """Show AI notification"""
+        if hasattr(self, 'notification_manager'):
+            self.notification_manager.add_notification(
+                title="AI Assistant",
+                message=message,
+                notification_type="info"
+            )
+            
+    def _show_ai_error(self, error_msg: str):
+        """Show AI error message"""
+        if hasattr(self, 'simple_ai_bar'):
+            self.simple_ai_bar.set_response(f"Error: {error_msg}")
+        if hasattr(self, 'notification_manager'):
+            self.notification_manager.add_notification(
+                title="AI Error",
+                message=error_msg,
+                notification_type="error"
+            )
+            
+    def _on_ai_processing_started(self):
+        """Handle AI processing started"""
+        if hasattr(self, 'simple_ai_bar'):
+            self.simple_ai_bar.set_response("Processing...")
+            
+    def _on_ai_processing_finished(self):
+        """Handle AI processing finished"""
+        # Status will be updated by command result handler
+        pass
+        
+    def _on_ai_error(self, error_msg: str):
+        """Handle AI processing error"""
+        self._show_ai_error(error_msg)
+    
+    def _connect_ai_signals(self):
+        """Connect AI processor signals to handlers"""
+        # Connect AI status bar signals to command processor
+        if hasattr(self, 'simple_ai_bar'):
+            self.simple_ai_bar.returnPressed.connect(self._process_ai_command)
+        
+        # Connect AI processor signals
+        if hasattr(self, 'ai_processor'):
+            self.ai_processor.command_processed.connect(self._handle_ai_command_result)
+            self.ai_processor.processing_started.connect(self._on_ai_processing_started)
+            self.ai_processor.processing_finished.connect(self._on_ai_processing_finished)
+            self.ai_processor.error_occurred.connect(self._on_ai_error)

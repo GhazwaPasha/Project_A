@@ -246,3 +246,22 @@ class SimpleAIStatusBar(QLineEdit):
             message = context_messages.get(page_name, "🤖 AI Assistant")
             self.setText(message)
             self.placeholder_text = message
+
+    def set_response(self, response_text: str):
+        """Set the AI response text"""
+        self.response_text = response_text
+        self._show_response()
+
+    def _show_response(self):
+        """Show the AI response"""
+        if self.response_text:
+            # Switch to response display mode
+            self.setReadOnly(True)
+            self.setText(self.response_text)
+            self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+            
+            # Auto-collapse after 5 seconds
+            QTimer.singleShot(5000, self._collapse_to_normal)
+        else:
+            self._collapse_to_normal()
