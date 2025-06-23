@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget, QFrame, QPushButton, QLabel, QSizePolicy, QApplication, QGraphicsDropShadowEffect
-from PyQt6.QtCore import Qt, QSize, QTimer
+from PyQt6.QtCore import Qt, QSize, QTimer, QEvent
 from PyQt6.QtGui import QIcon, QPalette, QColor
 
 # Import PostgreSQL accounting system
@@ -304,8 +304,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         if self.mica_applied:
             # Reapply Mica effect after resize to ensure it's maintained
             QTimer.singleShot(10, self._reapply_mica_effect)
-        
-        # Reposition notification drawer if it's visible
+          # Reposition notification drawer if it's visible
         if hasattr(self, 'notification_drawer') and self.notification_drawer.isVisible():
             self._position_notification_drawer()
     
@@ -319,11 +318,12 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         """Handle window state changes (minimize, restore, etc.)."""
         super().changeEvent(event)
         
-        if event.type() == event.Type.WindowStateChange:
+        if event.type() == QEvent.Type.WindowStateChange:
             # When window is restored from minimized state, refresh Mica
             if not self.isMinimized() and self.mica_applied:
                 QTimer.singleShot(50, self._reapply_mica_effect)
-        elif event.type() == event.Type.ActivationChange:            # When window gains focus, refresh Mica effect
+        elif event.type() == QEvent.Type.ActivationChange:
+            # When window gains focus, refresh Mica effect
             if self.isActiveWindow() and self.mica_applied:
                 QTimer.singleShot(50, self._reapply_mica_effect)
     
@@ -857,9 +857,9 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         # Set default page
         self.stack.setCurrentIndex(0)
         self.sidebar_buttons[0].setChecked(True)
+          # Apply role-based visibility
+        self._update_navigation_visibility()
         
-        # Apply role-based visibility
-        self._update_navigation_visibility()        
     def _handle_maximize_button(self):
         """Handle maximize button click."""
         if self.isMaximized():
@@ -867,9 +867,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         else:
             self.showMaximized()
     
-    # Legacy methods kept for compatibility (now handled by frameless manager)    def _toggle_maximize(self):
-        """Legacy method - use _handle_maximize_button instead."""
-        self._handle_maximize_button()
+    def _toggle_maximize(self):
         """Legacy method - use _handle_maximize_button instead."""
         self._handle_maximize_button()
             
