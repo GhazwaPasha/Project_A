@@ -19,6 +19,12 @@ from .pages.dashboard import ResponsiveHelper
 # Import AI components
 from .components.ai_command_processor import AICommandProcessor
 
+# Import the frameless window mixin for complete window management
+from .components.frameless_window_mixin import FramelessWindowMixin
+
+# Import the border solution for Mica windows
+from .components.mica_border_solution import MicaWindowWithBorders
+
 class ModernSidebarButton(QPushButton):
     def __init__(self, icon_path, text, expanded=True, parent=None):
         super().__init__(parent)
@@ -113,10 +119,9 @@ class ModernSidebarButton(QPushButton):
             }}
             QPushButton#ModernSidebarButton:focus {{
                 outline: none;
-                border: none;
-            }}        """)
+                border: none;            }}        """)
 
-class MainWindow(QMainWindow):
+class MainWindow(QMainWindow, MicaWindowWithBorders):
     def __init__(self, db_mode='postgresql', prefer_local=False, auto_sync=False, 
                  auth_manager=None, session_manager=None):
         super().__init__()
@@ -139,10 +144,11 @@ class MainWindow(QMainWindow):
         
         # Use single database file in project root
         db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'accounting.db')        # Initialize accounting system with PostgreSQL or SQLite fallback
-        self.accounting_system = self._initialize_accounting_system(db_path)
-        
+        self.accounting_system = self._initialize_accounting_system(db_path)        
         # Keep backward compatibility for existing pages
-        self.system = self.accounting_system        # Initialize notification system
+        self.system = self.accounting_system
+        
+        # Initialize notification system
         from .components.notifications.notification_manager import NotificationManager
         self.notification_manager = NotificationManager()
         
@@ -158,10 +164,13 @@ class MainWindow(QMainWindow):
         self.font_manager = font_manager
         # Initialize custom fonts
         self._load_custom_fonts()
-          # Setup window first
+        
+        # Setup window first
         self._setup_mica_window()
         self._setup_ui()
-        self._load_pages()
+        self._load_pages()        # Setup resize borders after UI is created
+        from .components.seamless_border_layout import apply_seamless_borders
+        apply_seamless_borders(self)
         
         # Connect AI processor signals after UI is created
         self._connect_ai_signals()
@@ -175,8 +184,7 @@ class MainWindow(QMainWindow):
         # Setup sync status updates if in hybrid mode
         if self.db_mode == 'hybrid':
             self._setup_sync_updates()
-          # Install event filter for handling clicks outside notification drawer
-        self.installEventFilter(self)
+          # Install event filter for handling clicks outside notification drawer        self.installEventFilter(self)
         
         # Use QTimer to apply Mica effect after window is fully shown
         QTimer.singleShot(100, self._apply_mica_effect_delayed)
@@ -315,8 +323,7 @@ class MainWindow(QMainWindow):
             # When window is restored from minimized state, refresh Mica
             if not self.isMinimized() and self.mica_applied:
                 QTimer.singleShot(50, self._reapply_mica_effect)
-        elif event.type() == event.Type.ActivationChange:
-            # When window gains focus, refresh Mica effect
+        elif event.type() == event.Type.ActivationChange:            # When window gains focus, refresh Mica effect
             if self.isActiveWindow() and self.mica_applied:
                 QTimer.singleShot(50, self._reapply_mica_effect)
     
@@ -428,27 +435,45 @@ class MainWindow(QMainWindow):
             """
     
     def _setup_ui(self):
-        """Setup the main UI components."""
-        # Main container with custom title bar
+        """Setup the main UI components."""        # Main container with custom title bar and proper background for mouse events
         self.main_container = QWidget()  # Store reference for notification drawer
+        self.main_container.setStyleSheet("""
+            QWidget {
+                background: rgba(0, 0, 0, 0.05);
+            }
+        """)
         main_layout = QVBoxLayout(self.main_container)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
           # Custom title bar (now includes AI status bar)
         self.title_bar = self._create_title_bar()
-        main_layout.addWidget(self.title_bar)# Content area
+        main_layout.addWidget(self.title_bar)        # Content area - NO MARGINS to touch borders, proper background for mouse events
         self.content_widget = QWidget()  # Store reference for notification drawer
+        self.content_widget.setStyleSheet("""
+            QWidget {
+                background: rgba(0, 0, 0, 0.05);
+            }
+        """)
         content_layout = QHBoxLayout(self.content_widget)
-        content_layout.setContentsMargins(8, 0, 8, 8)
-        content_layout.setSpacing(8)
-          # Sidebar
+        content_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins to eliminate gaps
+        content_layout.setSpacing(0)  # Remove spacing for seamless layout# Sidebar
         self.sidebar = self._create_sidebar()
-        content_layout.addWidget(self.sidebar)
+        # Add internal padding to sidebar for visual spacing
+        sidebar_container = QWidget()
+        sidebar_layout = QVBoxLayout(sidebar_container)
+        sidebar_layout.setContentsMargins(8, 8, 4, 8)  # Left, top, right, bottom padding
+        sidebar_layout.addWidget(self.sidebar)
+        content_layout.addWidget(sidebar_container)
         
         # Main content stack
         self.stack = QStackedWidget()
         self.stack.setObjectName("MainContentStack")
-        content_layout.addWidget(self.stack, 1)
+        # Add internal padding to content for visual spacing
+        content_container = QWidget()
+        content_container_layout = QVBoxLayout(content_container)
+        content_container_layout.setContentsMargins(4, 8, 8, 8)  # Left, top, right, bottom padding
+        content_container_layout.addWidget(self.stack)
+        content_layout.addWidget(content_container, 1)
 
         main_layout.addWidget(self.content_widget, 1)
         
@@ -464,11 +489,30 @@ class MainWindow(QMainWindow):
         
     def _create_title_bar(self):
         """Create a custom title bar for the frameless window."""
-        title_bar = QFrame()
+        # Create a custom title bar class for mouse handling
+        class DraggableTitleBar(QFrame):
+            def __init__(self, parent_window):
+                super().__init__()
+                self.parent_window = parent_window
+                
+            def mousePressEvent(self, event):
+                if event.button() == Qt.MouseButton.LeftButton:
+                    self.parent_window.drag_position = event.globalPosition().toPoint() - self.parent_window.frameGeometry().topLeft()
+                    event.accept()
+                    
+            def mouseMoveEvent(self, event):
+                if event.buttons() == Qt.MouseButton.LeftButton and hasattr(self.parent_window, 'drag_position'):
+                    self.parent_window.move(event.globalPosition().toPoint() - self.parent_window.drag_position)
+                    event.accept()
+                    
+            def mouseDoubleClickEvent(self, event):
+                if event.button() == Qt.MouseButton.LeftButton:
+                    self.parent_window._handle_maximize_button()
+                    event.accept()
+        
+        title_bar = DraggableTitleBar(self)
         title_bar.setObjectName("CustomTitleBar")
         title_bar.setFixedHeight(40)
-        title_bar.mousePressEvent = self._title_bar_mouse_press
-        title_bar.mouseMoveEvent = self._title_bar_mouse_move
         
         layout = QHBoxLayout(title_bar)
         layout.setContentsMargins(16, 0, 8, 0)
@@ -521,7 +565,7 @@ class MainWindow(QMainWindow):
         maximize_btn.setObjectName("WindowControlButton")
         maximize_btn.setFixedSize(40, 32)
         maximize_btn.setToolTip("Maximize")
-        maximize_btn.clicked.connect(self._toggle_maximize)
+        maximize_btn.clicked.connect(self._handle_maximize_button)
         
         close_btn = QPushButton()
         close_btn.setObjectName("WindowControlButtonClose")
@@ -815,24 +859,19 @@ class MainWindow(QMainWindow):
         self.sidebar_buttons[0].setChecked(True)
         
         # Apply role-based visibility
-        self._update_navigation_visibility()
-        
-    def _title_bar_mouse_press(self, event):
-        """Handle title bar mouse press for window dragging."""
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-            
-    def _title_bar_mouse_move(self, event):
-        """Handle title bar mouse move for window dragging."""
-        if hasattr(self, 'drag_position') and event.buttons() == Qt.MouseButton.LeftButton:
-            self.move(event.globalPosition().toPoint() - self.drag_position)
-            
-    def _toggle_maximize(self):
-        """Toggle window maximize state."""
+        self._update_navigation_visibility()        
+    def _handle_maximize_button(self):
+        """Handle maximize button click."""
         if self.isMaximized():
             self.showNormal()
         else:
             self.showMaximized()
+    
+    # Legacy methods kept for compatibility (now handled by frameless manager)    def _toggle_maximize(self):
+        """Legacy method - use _handle_maximize_button instead."""
+        self._handle_maximize_button()
+        """Legacy method - use _handle_maximize_button instead."""
+        self._handle_maximize_button()
             
     def toggle_sidebar(self):
         """Toggle sidebar expanded/collapsed state."""
