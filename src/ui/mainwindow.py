@@ -441,16 +441,19 @@ class MainWindow(QMainWindow):
         content_layout = QHBoxLayout(self.content_widget)
         content_layout.setContentsMargins(8, 0, 8, 8)
         content_layout.setSpacing(8)
-        
-        # Sidebar
+          # Sidebar
         self.sidebar = self._create_sidebar()
-        content_layout.addWidget(self.sidebar)        
+        content_layout.addWidget(self.sidebar)
+        
         # Main content stack
         self.stack = QStackedWidget()
         self.stack.setObjectName("MainContentStack")
         content_layout.addWidget(self.stack, 1)
 
         main_layout.addWidget(self.content_widget, 1)
+        
+        # Add bottom bar
+        self._create_bottom_bar(main_layout)
         
         # Create notification drawer as overlay (initially hidden)
         from .components.notifications.notification_drawer import NotificationDrawer
@@ -667,18 +670,8 @@ class MainWindow(QMainWindow):
         self.toggle_btn.setCheckable(True)  # Make it checkable but won't be used for visual state
         self.toggle_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.toggle_btn.clicked.connect(self.toggle_sidebar)
-        self._style_toggle_button()
-          # Add toggle button directly to main layout to maintain alignment
-        layout.addWidget(self.toggle_btn)
-          # Add organization switcher (if user has multiple organizations)
-        if self.session_manager and self.session_manager.get_user_organizations_count() > 1:
-            from .components.organization_switcher import OrganizationSwitcher
-            self.org_switcher = OrganizationSwitcher(
-                self.auth_manager,  # Pass auth_manager instead of session_manager
-                parent=self
-            )
-            self.org_switcher.organization_changed.connect(self._on_organization_changed)
-            layout.addWidget(self.org_switcher)        # Navigation buttons with modern icons - expanded for multi-org support + period closing
+        self._style_toggle_button()        # Add toggle button directly to main layout to maintain alignment
+        layout.addWidget(self.toggle_btn)# Navigation buttons with modern icons - expanded for multi-org support + period closing
         nav_items = [
             ("Dashboard", os.path.join("assets", "icons", "dashboard_new.svg")),
             ("Journal", os.path.join("assets", "icons", "journal_new.svg")),
@@ -863,9 +856,7 @@ class MainWindow(QMainWindow):
         # Update toggle button styling to match sidebar state
         self._style_toggle_button()        # Update button states
         for btn in self.sidebar_buttons:
-            btn.set_expanded(self.sidebar_expanded)        # Update organization switcher if present
-        if hasattr(self, 'org_switcher'):
-            self.org_switcher.set_expanded(self.sidebar_expanded)
+            btn.set_expanded(self.sidebar_expanded)
             
     def setCurrentIndexByName(self, name):
         """Set current page by name."""
@@ -1424,8 +1415,7 @@ class MainWindow(QMainWindow):
                         page = self.stack.widget(i)
                         if hasattr(page, 'refresh_organization_context'):
                             page.refresh_organization_context(self.system)
-                    
-                    # Update navigation visibility for new organization role
+                      # Update navigation visibility for new organization role
                     self._update_navigation_visibility()
                     
                     self.logger.info(f"Organization context changed to: {org_id}")
@@ -1436,16 +1426,8 @@ class MainWindow(QMainWindow):
             self.logger.error(f"Error changing organization: {e}")
     
     def _update_sidebar_visibility(self):
-        """Update sidebar button visibility and organization switcher."""
+        """Update sidebar button visibility."""
         self._update_navigation_visibility()
-        
-        # Update organization switcher visibility
-        if hasattr(self, 'org_switcher'):
-            if self.session_manager and self.session_manager.get_user_organizations_count() > 1:
-                self.org_switcher.show()
-                self.org_switcher.set_expanded(self.sidebar_expanded)
-            else:
-                self.org_switcher.hide()
     
     def add_sync_notification(self, title, message, notification_type="sync"):
         """Add a sync-related notification with sync icon."""
@@ -1750,3 +1732,87 @@ class MainWindow(QMainWindow):
                 self.ai_processor.processing_started.connect(self.simple_ai_bar.handle_processing_started)
                 self.ai_processor.processing_finished.connect(self.simple_ai_bar.handle_processing_finished)
                 self.ai_processor.error_occurred.connect(self.simple_ai_bar.handle_ai_error)
+                  
+    def _on_workspace_changed(self, org_id: str, org_name: str):
+        """Handle workspace change"""
+        try:
+            self.logger.info(f"Switching to workspace: {org_name} (ID: {org_id})")
+            
+            # Update session manager
+            if self.session_manager:
+                success = self.session_manager.set_active_organization(org_id)
+                if success:
+                    # Refresh all pages that depend on organization context
+                    self._refresh_organization_dependent_pages()
+                    
+                    # Update window title to show current workspace
+                    self.setWindowTitle(f"AI Accountant - {org_name}")
+                    
+                    # Show notification
+                    if hasattr(self, 'notification_manager'):
+                        self.notification_manager.show_notification(
+                            f"Switched to {org_name}",
+                            f"Now working in {'personal workspace' if 'Workspace' in org_name else 'organization'}: {org_name}",
+                            "info"
+                        )
+                else:
+                    self.logger.error(f"Failed to switch to workspace {org_name}")
+            
+        except Exception as e:
+            self.logger.error(f"Error switching workspace: {e}")
+            if hasattr(self, 'notification_manager'):
+                self.notification_manager.show_notification(
+                    "Workspace Switch Failed",
+                    f"Could not switch to {org_name}. Please try again.",
+                    "error"                )
+    
+    def _refresh_organization_dependent_pages(self):
+        """Refresh pages that depend on organization context"""
+        try:
+            # Iterate through all pages in the stack
+            for i in range(self.stack.count()):
+                page = self.stack.widget(i)
+                  # Try common refresh method names
+                if hasattr(page, 'refresh_data'):
+                    page.refresh_data()
+                elif hasattr(page, 'load_data'):
+                    page.load_data()
+                elif hasattr(page, '_load_data'):
+                    page._load_data()
+                elif hasattr(page, 'refresh_organization_data'):
+                    page.refresh_organization_data()
+                elif hasattr(page, 'load_dashboard_data'):
+                    # Specifically for dashboard page
+                    page.load_dashboard_data()
+                elif hasattr(page, '_load_team_members'):
+                    # Specifically for team management page
+                    page._load_team_members()
+                elif hasattr(page, '_load_users'):
+                    # Specifically for user management page  
+                    page._load_users()
+                    
+            self.logger.info("Refreshed organization-dependent pages")
+                    
+        except Exception as e:
+            self.logger.error(f"Error refreshing organization-dependent pages: {e}")
+    
+    def refresh_workspace_switcher(self):
+        """Refresh the workspace switcher (call when user joins/leaves organizations)"""
+        if hasattr(self, 'bottom_bar'):
+            self.bottom_bar.refresh_workspace_info()
+    
+    def _create_bottom_bar(self, main_layout):
+        """Create and add bottom bar to the main window"""
+        from .components.bottom_bar import BottomBar
+        
+        self.bottom_bar = BottomBar(
+            auth_manager=self.auth_manager,
+            session_manager=self.session_manager,
+            parent=self
+        )
+        
+        # Connect workspace change signal if workspace switcher is available
+        if hasattr(self.bottom_bar, 'workspace_switcher'):
+            self.bottom_bar.workspace_switcher.workspace_changed.connect(self._on_workspace_changed)
+        
+        main_layout.addWidget(self.bottom_bar)

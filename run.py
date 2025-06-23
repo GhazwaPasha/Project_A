@@ -68,14 +68,15 @@ class SmartApp:
             
             # Show login window
             login_window = LoginWindow(auth_manager)
-            
-            # Connect signup signal to show signup dialog
+              # Connect signup signal to show signup dialog
             login_window.signup_requested.connect(lambda: self._show_signup_dialog(auth_manager, login_window))
             
             if login_window.exec() == login_window.DialogCode.Accepted:
-                # TODO: Handle successful login and organization selection
-                # For now, start main app directly
-                return self.start_main_app()
+                # Create session manager after successful login
+                session_manager = SessionManager(auth_manager)
+                
+                # Start main app with authentication context
+                return self.start_main_app(auth_manager, session_manager)
             else:
                 print("Login cancelled by user")
                 return 0

@@ -168,11 +168,8 @@ CREATE POLICY "organizations_member_access" ON organizations
 CREATE POLICY "org_members_access" ON organization_members
     FOR ALL USING (
         current_setting('app.user_role', true) = 'super_admin'
-        OR organization_id IN (
-            SELECT organization_id FROM organization_members 
-            WHERE user_id = current_setting('app.current_user_id', true)::uuid 
-            AND is_active = true
-        )
+        OR user_id = current_setting('app.current_user_id', true)::uuid
+        OR organization_id = current_setting('app.current_organization_id', true)::uuid
     );
 
 -- 10. Create triggers for updated_at

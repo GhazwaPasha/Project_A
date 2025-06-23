@@ -75,8 +75,8 @@ class AuthManager:
             return {"success": False, "error": str(e)}
     
     def sign_up(self, email: str, password: str, first_name: str = "", last_name: str = "", 
-                organization_type: str = "new", organization_name: str = None, invitation_code: str = None) -> Dict[str, Any]:
-        """Sign up new user with organization context"""
+                organization_type: str = "personal", organization_name: str = None, invitation_code: str = None) -> Dict[str, Any]:
+        """Sign up new user with automatic personal workspace creation"""
         try:
             # Basic signup with Supabase Auth
             result = self.supabase.auth.sign_up({
@@ -91,18 +91,26 @@ class AuthManager:
             
             # Create user profile
             user_profile = self._create_user_profile(user_id, first_name, last_name, email)
-            
-            # Handle organization assignment
+              # Handle organization assignment
             if organization_type == "new" and organization_name:
                 # Create new organization and make user the owner
                 org_id = self._create_organization(organization_name, user_id)
-                self._add_user_to_organization(user_id, org_id, "org_owner")
+                self._add_user_to_organization(user_id, org_id, "organization_owner")
                 
             elif organization_type == "existing" and invitation_code:
                 # Join existing organization using invitation code
                 self._join_organization_by_invitation(user_id, invitation_code)
-            else:                # No organization specified - user needs to be invited later
-                pass
+            else:
+                # Create personal workspace for the user (default behavior)
+                if first_name and last_name:
+                    personal_workspace_name = f"{first_name} {last_name}'s Workspace"
+                elif first_name:
+                    personal_workspace_name = f"{first_name}'s Workspace"
+                else:
+                    personal_workspace_name = "Personal Workspace"
+                    
+                org_id = self._create_organization(personal_workspace_name, user_id)
+                self._add_user_to_organization(user_id, org_id, "organization_owner")
             
             self.logger.info(f"User {email} signed up successfully")
             return {
@@ -396,7 +404,6 @@ class AuthManager:
                 "last_name": last_name,
                 "display_name": display_name
             }).execute()
-            
         except Exception as e:
             self.logger.error(f"Failed to create user profile: {e}")
     
@@ -446,20 +453,13 @@ class AuthManager:
     def _add_user_to_organization(self, user_id: str, org_id: str, role_name: str):
         """Add user to organization with specified role"""
         try:
-            # Get role ID
-            role_result = self.supabase.table("roles").select("id").eq("name", role_name).execute()
-            if not role_result.data:
-                raise Exception(f"Role {role_name} not found")
-            
-            role_id = role_result.data[0]["id"]
-            
-            # Add user to organization
+            # Add user to organization (using role name directly, not role_id)
             self.supabase.table("organization_members").insert({
                 "organization_id": org_id,
                 "user_id": user_id,
-                "role_id": role_id,
+                "role": role_name,
                 "is_active": True,
-                "joined_at": "NOW()"
+                "joined_at": "now()"
             }).execute()
             
             self.logger.info(f"Added user {user_id} to org {org_id} with role {role_name}")

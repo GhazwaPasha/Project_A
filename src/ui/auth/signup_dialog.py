@@ -70,20 +70,26 @@ class SignupDialog(QDialog):
         self.confirm_password_input.setObjectName("input")
         password_layout.addWidget(self.confirm_password_input)
         
-        layout.addLayout(password_layout)
-        
-        # Organization type
+        layout.addLayout(password_layout)        # Organization type
         self.org_combo = QComboBox()
         self.org_combo.setObjectName("combo")
-        self.org_combo.addItem("Create New Organization", "new")
+        self.org_combo.addItem("Personal Workspace (Just for you)", "personal")
+        self.org_combo.addItem("Create New Organization (For team/company)", "new")
         self.org_combo.addItem("Join Existing Organization", "existing")
         self.org_combo.currentTextChanged.connect(self._on_org_type_changed)
         layout.addWidget(self.org_combo)
         
-        # Organization name field
+        # Help text for workspace type
+        self.workspace_help = QLabel("✅ Perfect for individual users - creates your private workspace automatically")
+        self.workspace_help.setObjectName("help_text")
+        self.workspace_help.setWordWrap(True)
+        layout.addWidget(self.workspace_help)
+        
+        # Organization name field (optional)
         self.org_name_input = QLineEdit()
         self.org_name_input.setPlaceholderText("Organization name")
         self.org_name_input.setObjectName("input")
+        self.org_name_input.hide()  # Hidden by default for personal workspace
         layout.addWidget(self.org_name_input)
         
         # Invitation code field (hidden by default)
@@ -258,20 +264,43 @@ class SignupDialog(QDialog):
                 border-color: #0078d4;
                 image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iOSIgdmlld0JveD0iMCAwIDEyIDkiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ike0xIDQuNUw0LjUgOEwxMSAxIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgo8L3N2Zz4K);
             }
-            
-            QCheckBox::indicator:hover {
+              QCheckBox::indicator:hover {
                 border-color: #808080;
+            }
+            
+            QLabel#help_text {
+                font-size: 13px;
+                color: #a0a0a0;
+                margin: 4px 0px 12px 0px;
+                padding: 8px 12px;
+                background-color: rgba(0, 120, 212, 0.1);
+                border-radius: 6px;
+                border-left: 3px solid #0078d4;
             }
         """)
     
     def _on_org_type_changed(self):
         """Handle organization type change"""
-        if self.org_combo.currentData() == "existing":
+        org_type = self.org_combo.currentData()
+        
+        if org_type == "personal":
+            # Personal workspace - hide both fields
+            self.org_name_input.hide()
+            self.invite_input.hide()
+            self.workspace_help.setText("✅ Perfect for individual users - creates your private workspace automatically")
+            self.workspace_help.show()
+        elif org_type == "existing":
+            # Join existing - show invitation code field
             self.org_name_input.hide()
             self.invite_input.show()
+            self.workspace_help.setText("💼 Join an existing organization using an invitation code")
+            self.workspace_help.show()
         else:
+            # Create new organization - show organization name field
             self.invite_input.hide()
             self.org_name_input.show()
+            self.workspace_help.setText("🏢 Create a new organization for your team or company")
+            self.workspace_help.show()
     
     def _handle_signup(self):
         """Handle signup button click"""
@@ -296,39 +325,46 @@ class SignupDialog(QDialog):
         if not self.terms_checkbox.isChecked():
             QMessageBox.warning(self, "Error", "Please accept the Terms of Service and Privacy Policy.")
             return
-        
-        # Get organization data
+          # Get organization data
         org_type = self.org_combo.currentData()
-        if org_type == "new":
+        if org_type == "personal":
+            # Personal workspace - no additional validation needed
+            org_data = {"type": "personal"}
+        elif org_type == "new":
             org_name = self.org_name_input.text().strip()
             if not org_name:
                 QMessageBox.warning(self, "Error", "Please enter an organization name.")
                 return
             org_data = {"type": "new", "name": org_name}
-        else:
+        elif org_type == "existing":
             invite_code = self.invite_input.text().strip()
             if not invite_code:
                 QMessageBox.warning(self, "Error", "Please enter an invitation code.")
                 return
             org_data = {"type": "existing", "invite_code": invite_code}
-        
-        # Prepare user data
+          # Prepare user data
         user_data = {
             "first_name": first_name,
             "last_name": last_name,
             "email": email,
             "password": password,
-            "organization": org_data        }
+            "organization": org_data
+        }
         
         try:
             # Attempt to create the user
+            org_type = user_data["organization"]["type"]
+            org_name = user_data["organization"].get("name")
+            invite_code = user_data["organization"].get("invite_code")
+            
             result = self.auth_manager.sign_up(
                 email=user_data["email"],
                 password=user_data["password"],
                 first_name=user_data["first_name"],
                 last_name=user_data["last_name"],
-                organization_name=user_data["organization"]["name"],
-                organization_description=user_data["organization"]["description"]
+                organization_type=org_type,
+                organization_name=org_name,
+                invitation_code=invite_code
             )
             
             if result.get("success"):

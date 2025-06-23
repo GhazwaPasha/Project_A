@@ -349,3 +349,8 @@ class GlassmorphismHelper:
         """Apply glassmorphism effect to main page container."""
         widget.setProperty("class", "main-container")
         widget.setStyleSheet(ModernStyles.get_page_style())
+    
+    @staticmethod
+    def apply_glassmorphism_effect(widget, blur_radius=20, opacity=0.08):
+        """Alias for apply_glass_effect for backwards compatibility."""
+        return GlassmorphismHelper.apply_glass_effect(widget, blur_radius, opacity)
