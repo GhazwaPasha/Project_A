@@ -107,20 +107,20 @@ class SignupDialog(QDialog):
         self.signup_btn = QPushButton("Create Account")
         self.signup_btn.setObjectName("primary")
         self.signup_btn.clicked.connect(self._handle_signup)
-        layout.addWidget(self.signup_btn)
-        
-        # Footer
+        layout.addWidget(self.signup_btn)        # Footer
         footer = QHBoxLayout()
         footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        footer.setSpacing(8)  # Consistent spacing with login dialog
         
         footer_text = QLabel("Already have an account?")
         footer_text.setObjectName("subtitle")
-        footer.addWidget(footer_text)
+        footer_text.setAlignment(Qt.AlignmentFlag.AlignVCenter)  # Vertical center alignment
+        footer.addWidget(footer_text, 0, Qt.AlignmentFlag.AlignVCenter)
         
         signin_btn = QPushButton("Sign in")
         signin_btn.setObjectName("link")
         signin_btn.clicked.connect(self.reject)
-        footer.addWidget(signin_btn)
+        footer.addWidget(signin_btn, 0, Qt.AlignmentFlag.AlignVCenter)
         
         layout.addLayout(footer)
         
@@ -141,11 +141,12 @@ class SignupDialog(QDialog):
                 color: #ffffff;
                 margin-bottom: 20px;
             }
-            
-            QLabel#subtitle {
+              QLabel#subtitle {
                 font-size: 14px;
                 color: #cccccc;
-                margin-right: 8px;
+                margin: 0px;
+                padding: 0px;
+                line-height: 20px;
             }
             
             QLineEdit#input {
@@ -229,15 +230,15 @@ class SignupDialog(QDialog):
             
             QPushButton#primary:pressed {
                 background-color: #005a9e;
-            }
-            
-            QPushButton#link {
+            }            QPushButton#link {
                 background: transparent;
                 border: none;
                 color: #0078d4;
                 font-size: 14px;
-                padding: 6px 12px;
+                padding: 0px 4px;
                 font-weight: 500;
+                margin: 0px;
+                text-align: left;
             }
             
             QPushButton#link:hover {

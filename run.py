@@ -65,10 +65,16 @@ class SmartApp:
             
             # Initialize auth manager
             auth_manager = AuthManager()
-            
-            # Show login window
+              # Show login window
             login_window = LoginWindow(auth_manager)
-              # Connect signup signal to show signup dialog
+            
+            # Try auto-login first if credentials are saved
+            if login_window.try_auto_login():
+                # Auto-login successful, create session manager
+                session_manager = SessionManager(auth_manager)
+                return self.start_main_app(auth_manager, session_manager)
+            
+            # Connect signup signal to show signup dialog
             login_window.signup_requested.connect(lambda: self._show_signup_dialog(auth_manager, login_window))
             
             if login_window.exec() == login_window.DialogCode.Accepted:
