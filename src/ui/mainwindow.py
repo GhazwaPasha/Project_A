@@ -435,11 +435,11 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             """
     
     def _setup_ui(self):
-        """Setup the main UI components."""        # Main container with custom title bar and proper background for mouse events
+        """Setup the main UI components."""        # Main container with custom title bar and minimal background for mouse events
         self.main_container = QWidget()  # Store reference for notification drawer
         self.main_container.setStyleSheet("""
             QWidget {
-                background: rgba(0, 0, 0, 0.05);
+                background: rgba(0, 0, 0, 0.01);
             }
         """)
         main_layout = QVBoxLayout(self.main_container)
@@ -447,11 +447,11 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         main_layout.setSpacing(0)
           # Custom title bar (now includes AI status bar)
         self.title_bar = self._create_title_bar()
-        main_layout.addWidget(self.title_bar)        # Content area - NO MARGINS to touch borders, proper background for mouse events
+        main_layout.addWidget(self.title_bar)        # Content area - NO MARGINS to touch borders, minimal background for mouse events
         self.content_widget = QWidget()  # Store reference for notification drawer
         self.content_widget.setStyleSheet("""
             QWidget {
-                background: rgba(0, 0, 0, 0.05);
+                background: rgba(0, 0, 0, 0.01);
             }
         """)
         content_layout = QHBoxLayout(self.content_widget)

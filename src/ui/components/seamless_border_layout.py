@@ -31,10 +31,10 @@ class SeamlessResizeBorder(QFrame):
         self.resize_start_geometry = QRect()
         
         # Set cursor based on direction
-        self.setCursor(self._get_cursor_for_direction())        # Make border properly opaque for reliable mouse events
+        self.setCursor(self._get_cursor_for_direction())        # Make border more transparent but still functional for mouse events
         self.setStyleSheet("""
             QFrame {
-                background: rgba(0, 0, 0, 0.05);
+                background: rgba(0, 0, 0, 0.01);
                 border: none;
             }
         """)
@@ -138,12 +138,12 @@ class SeamlessBorderLayout:
         current_widget = window.centralWidget()
         if not current_widget:
             print("❌ No central widget found")
-            return        # Create main container with borders and proper background for mouse events
+            return        # Create main container with borders and minimal background for mouse events
         main_container = QWidget()
-        # Use enough opacity to capture mouse events while preserving Mica  
+        # Use minimal opacity to capture mouse events while preserving Mica  
         main_container.setStyleSheet("""
             QWidget {
-                background: rgba(0, 0, 0, 0.05);
+                background: rgba(0, 0, 0, 0.01);
             }
         """)
           # Apply Mica effect to the main container 
