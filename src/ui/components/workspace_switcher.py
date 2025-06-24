@@ -41,10 +41,13 @@ class WorkspaceSwitcher(QWidget):
         
     def _setup_ui(self):
         """Setup the workspace switcher UI"""
-        # Main horizontal layout
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 8, 16, 8)
-        layout.setSpacing(12)
+        # Main horizontal layout        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 2, 4, 2)  # Minimal margins
+        layout.setSpacing(6)  # Reduced spacing
+        
+        # Set size policies
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self.setFixedHeight(32)  # Fixed height to match bottom bar
         
         # Workspace icon
         self.workspace_icon = QLabel()

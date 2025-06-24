@@ -2,8 +2,10 @@
 Bottom Bar Component for Main Window
 Contains workspace switcher, status information, and other useful widgets
 """
-from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, 
-                            QFrame, QSizePolicy, QSpacerItem)
+from PyQt6.QtWidgets import (
+    QWidget, QHBoxLayout, QVBoxLayout, QLabel, 
+    QPushButton, QFrame, QSizePolicy, QSpacerItem
+)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QIcon, QFont
 from .styles import GlassmorphismHelper, ModernStyles
@@ -22,25 +24,16 @@ class BottomBar(QWidget):
         self.auth_manager = auth_manager
         self.session_manager = session_manager
         
-        # Debug output to check if authentication context is available
-        print(f"🔍 BottomBar Debug:")
-        print(f"   auth_manager: {auth_manager is not None}")
-        print(f"   session_manager: {session_manager is not None}")
-        if auth_manager:
-            print(f"   auth_manager type: {type(auth_manager)}")
-        if session_manager:
-            print(f"   session_manager type: {type(session_manager)}")
-        
         self._setup_ui()
         self._apply_styling()
         self._setup_timer()
-        
+    
     def _setup_ui(self):
         """Setup the bottom bar UI"""
         # Main horizontal layout
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 8, 16, 8)
-        layout.setSpacing(16)
+        layout.setContentsMargins(8, 4, 8, 4)  # Reduced margins
+        layout.setSpacing(8)  # Reduced spacing
         
         # Left section - Status info
         self._create_left_section(layout)
@@ -78,16 +71,13 @@ class BottomBar(QWidget):
         layout.addStretch()
         
         center_widget = QWidget()
+        center_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         center_layout = QHBoxLayout(center_widget)
         center_layout.setContentsMargins(0, 0, 0, 0)
         center_layout.setSpacing(8)
-        
-        print(f"🔍 BottomBar Center Section Debug:")
-        print(f"   auth_manager exists: {self.auth_manager is not None}")
-        print(f"   session_manager exists: {self.session_manager is not None}")
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         if self.auth_manager and self.session_manager:
-            print("   Creating WorkspaceSwitcher...")
             # Import and create workspace switcher if in multi-tenant mode
             try:
                 from .workspace_switcher import WorkspaceSwitcher
@@ -97,21 +87,17 @@ class BottomBar(QWidget):
                     parent=self
                 )
                 center_layout.addWidget(self.workspace_switcher)
-                print("   ✅ WorkspaceSwitcher created successfully!")
-            except ImportError as e:
-                print(f"   ❌ ImportError: {e}")
+            except ImportError:
                 # Fallback if workspace switcher not available
                 workspace_label = QLabel("🏢 Single Tenant Mode")
                 workspace_label.setObjectName("WorkspaceLabel")
                 center_layout.addWidget(workspace_label)
-            except Exception as e:
-                print(f"   ❌ Exception creating WorkspaceSwitcher: {e}")
+            except Exception:
                 # Fallback on any error
                 workspace_label = QLabel("🏢 Error Loading Switcher")
                 workspace_label.setObjectName("WorkspaceLabel")
                 center_layout.addWidget(workspace_label)
         else:
-            print("   Using single tenant mode indicator...")
             # Single tenant mode indicator
             workspace_label = QLabel("📊 AI Accountant")
             workspace_label.setObjectName("WorkspaceLabel")
@@ -143,26 +129,27 @@ class BottomBar(QWidget):
             right_layout.addWidget(user_label)
         
         layout.addWidget(right_widget)
-        
+    
     def _apply_styling(self):
         """Apply modern styling to the bottom bar"""
         MicaEffect.apply_mica(self, dark_mode=True)
         GlassmorphismHelper.apply_main_container_effect(self)
         
+        # Set fixed height for the bottom bar
+        self.setFixedHeight(36)
+        
         self.setStyleSheet(f"""
             BottomBar {{
-                background: rgba(30, 30, 30, 0.95);
+                background: rgba(30, 30, 30, 0.98);
                 border-top: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 0px;
-                min-height: 40px;
-                max-height: 40px;
+                padding: 0px;
             }}
             
             QLabel#StatusLabel {{
                 color: #4CAF50;
                 font-size: {ResponsiveHelper.scale_size(11, 10, 12)}px;
                 font-weight: 500;
-                padding: 2px 6px;
+                padding: 2px 4px;
                 background: rgba(76, 175, 80, 0.1);
                 border: 1px solid rgba(76, 175, 80, 0.3);
                 border-radius: 4px;
@@ -172,24 +159,24 @@ class BottomBar(QWidget):
                 color: #FFFFFF;
                 font-size: {ResponsiveHelper.scale_size(12, 11, 13)}px;
                 font-weight: 600;
-                padding: 4px 12px;
+                padding: 2px 8px;
                 background: rgba(74, 144, 226, 0.2);
                 border: 1px solid rgba(74, 144, 226, 0.4);
-                border-radius: 6px;
+                border-radius: 4px;
             }}
             
             QLabel#TimeLabel {{
                 color: #CCCCCC;
                 font-size: {ResponsiveHelper.scale_size(11, 10, 12)}px;
                 font-weight: 400;
-                padding: 2px 6px;
+                padding: 2px 4px;
             }}
             
             QLabel#UserLabel {{
                 color: #FFFFFF;
                 font-size: {ResponsiveHelper.scale_size(11, 10, 12)}px;
                 font-weight: 500;
-                padding: 2px 8px;
+                padding: 2px 6px;
                 background: rgba(255, 255, 255, 0.1);
                 border: 1px solid rgba(255, 255, 255, 0.2);
                 border-radius: 4px;
@@ -201,7 +188,7 @@ class BottomBar(QWidget):
         self.timer = QTimer()
         self.timer.timeout.connect(self._update_dynamic_content)
         self.timer.start(30000)  # Update every 30 seconds
-        
+
     def _update_dynamic_content(self):
         """Update time and other dynamic content"""
         self._update_time()
@@ -211,7 +198,7 @@ class BottomBar(QWidget):
         """Update the time display"""
         current_time = datetime.now().strftime("%H:%M")
         self.time_label.setText(f"🕐 {current_time}")
-        
+    
     def _update_connection_status(self):
         """Update connection status indicator"""
         if self.auth_manager and hasattr(self.auth_manager, 'current_user') and self.auth_manager.current_user:
