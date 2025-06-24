@@ -547,11 +547,13 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         # Add stretch to push buttons to the right
         right_layout.addStretch()
         
-        # Add compact sync button
-        from .components.compact_sync_button import CompactSyncButton
-        self.sync_button = CompactSyncButton()
-        self.sync_button.sync_requested.connect(self._manual_sync)
-        right_layout.addWidget(self.sync_button)
+        # Add compact connection indicator (WiFi-style)
+        from .components.compact_connection_indicator import CompactConnectionIndicator
+        self.connection_indicator = CompactConnectionIndicator()
+        right_layout.addWidget(self.connection_indicator)
+        
+        # Initialize connection status immediately
+        QTimer.singleShot(100, self._initial_connection_check)
         
         # Add notification button
         from .components.notification_button import NotificationButton
@@ -1270,102 +1272,104 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             raise Exception(f"Failed to initialize accounting database: {e}")
     
     def _setup_sync_updates(self):
-        """Setup periodic sync status updates."""
+        """Setup periodic connection status updates."""
         self.sync_timer = QTimer()
-        self.sync_timer.timeout.connect(self._update_sync_status)
+        self.sync_timer.timeout.connect(self._update_connection_status)
         self.sync_timer.start(5000)  # Update every 5 seconds
         # Initial status update
-        self._update_sync_status()
+        self._update_connection_status()
     
-    def _update_sync_status(self):
-        """Update sync status from offline manager."""
-        if hasattr(self, 'sync_button') and hasattr(self.accounting_system, 'offline_manager'):
-            try:
-                # Create status similar to the old db_manager format
-                offline_mgr = self.accounting_system.offline_manager
-                status = {
-                    'local_available': True,  # SQLite cache always available
-                    'remote_available': self.accounting_system.is_online,
-                    'prefer_local': False,  # Supabase-first approach
-                    'auto_sync_enabled': True,
-                    'sync_status': {
-                        'last_sync': getattr(offline_mgr.sync_status, 'last_sync', None),
-                        'pending_operations': getattr(offline_mgr, 'pending_operations', 0),
-                        'failed_operations': getattr(offline_mgr.sync_status, 'failed_operations', 0),
-                        'conflicts': getattr(offline_mgr.sync_status, 'conflicts', 0),
-                        'is_syncing': getattr(offline_mgr.sync_status, 'is_syncing', False)
-                    }
-                }
+    def _update_connection_status(self):
+        """Update connection status from offline manager."""
+        if not hasattr(self, 'connection_indicator'):
+            return
+            
+        try:
+            # Check if accounting system is available and properly initialized
+            if hasattr(self, 'accounting_system') and self.accounting_system:
+                # Get connection status from accounting system
+                is_online = getattr(self.accounting_system, 'is_online', False)
                 
-                self.sync_button.update_connection_status(status)
+                # If accounting system says offline, do a quick internet test
+                if not is_online:
+                    is_online = self._test_internet_connectivity()
                 
-                # Check for sync issues
-                sync_status = status.get('sync_status', {})
-                if sync_status.get('failed_operations', 0) > 0:
-                    self.add_sync_notification(
-                        "Sync Issues",
-                        f"{sync_status['failed_operations']} operations failed to sync. Check your connection.",
-                        "warning"
-                    )
-                elif sync_status.get('pending_operations', 0) > 0 and not self.accounting_system.is_online:
-                    self.add_sync_notification(
-                        "Working Offline",
-                        f"{sync_status['pending_operations']} changes will sync when online.",
-                        "info"
-                    )
+                # Handle connecting state
+                if hasattr(self.accounting_system, 'offline_manager') and self.accounting_system.offline_manager:
+                    offline_mgr = self.accounting_system.offline_manager
+                    sync_status = getattr(offline_mgr, 'sync_status', None)
                     
-            except Exception as e:
-                self.logger.error(f"Failed to update sync status: {e}")
-                if hasattr(self, 'sync_button'):
-                    self.sync_button.show_error(f"Status update failed")
+                    if sync_status:
+                        is_syncing = getattr(sync_status, 'is_syncing', False)
+                        self.connection_indicator.set_connecting_state(is_syncing)
+                        
+                        # Check for sync issues (notifications only)
+                        failed_ops = getattr(sync_status, 'failed_operations', 0)
+                        pending_ops = getattr(offline_mgr, 'pending_operations', 0)
+                        
+                        if failed_ops > 0:
+                            self.add_sync_notification(
+                                "Sync Issues",
+                                f"{failed_ops} operations failed to sync. Check your connection.",
+                                "warning"
+                            )
+                        elif pending_ops > 0 and not is_online:
+                            self.add_sync_notification(
+                                "Working Offline",
+                                f"{pending_ops} changes will sync when online.",
+                                "info"
+                            )
+                
+                # Update connection indicator (no quality - just connected/disconnected)
+                self.connection_indicator.update_connection_status(is_online)
+                self.logger.debug(f"Connection status updated: online={is_online}")
+                
+            else:
+                # No accounting system available - test basic internet connectivity
+                is_online = self._test_internet_connectivity()
+                self.connection_indicator.update_connection_status(is_online)
+                self.logger.debug(f"No accounting system - basic internet test: online={is_online}")
+                    
+        except Exception as e:
+            self.logger.error(f"Failed to update connection status: {e}")
+            # Set offline state on error
+            if hasattr(self, 'connection_indicator'):
+                self.connection_indicator.update_connection_status(False)
+                
+    def _initial_connection_check(self):
+        """Perform initial connection check when UI is ready"""
+        try:
+            if hasattr(self, 'connection_indicator'):
+                # Start with a basic internet connectivity test
+                is_online = self._test_internet_connectivity()
+                self.connection_indicator.update_connection_status(is_online)
+                self.logger.debug(f"Initial connection check: online={is_online}")
+        except Exception as e:
+            self.logger.error(f"Initial connection check failed: {e}")
+            if hasattr(self, 'connection_indicator'):
+                self.connection_indicator.update_connection_status(False)
     
-    def _manual_sync(self):
-        """Trigger manual synchronization."""
-        if hasattr(self.accounting_system, 'offline_manager'):
+    def _test_internet_connectivity(self):
+        """Quick test for internet connectivity"""
+        try:
+            import urllib.request
+            import socket
+            
+            # First try a quick socket connection to Google DNS
+            socket.create_connection(("8.8.8.8", 53), timeout=2)
+            return True
+        except (socket.timeout, socket.error, OSError):
             try:
-                self.logger.info("Manual sync requested...")
-                
-                # Notify that sync is starting
-                if hasattr(self, 'notify_sync_started'):
-                    self.notify_sync_started()
-                
-                # Trigger sync
-                if self.accounting_system.is_online:
-                    synced_count = self.accounting_system.offline_manager.sync_pending_operations(
-                        self.accounting_system.supabase
-                    )
-                    self.logger.info(f"Manual sync completed: {synced_count} operations synced")
-                    
-                    if hasattr(self, 'add_sync_notification'):
-                        self.add_sync_notification(
-                            "Sync Complete",
-                            f"Successfully synced {synced_count} operations.",
-                            "success"
-                        )
-                else:
-                    if hasattr(self, 'add_sync_notification'):
-                        self.add_sync_notification(
-                            "Sync Failed",
-                            "Cannot sync while offline. Changes will sync automatically when online.",
-                            "warning"
-                        )
-                
-                # Show success in sync button
-                if hasattr(self, 'sync_button'):
-                    self.sync_button.show_success("Sync completed")
-                
-                # Notify sync completion
-                self.notify_sync_completed()
-                
-            except Exception as e:
-                self.logger.error(f"Manual sync failed: {e}")
-                
-                # Show error in sync button
-                if hasattr(self, 'sync_button'):
-                    self.sync_button.show_error(f"Sync failed")
-                
-                # Notify sync failure
-                self.notify_sync_failed(str(e))
+                # Fallback: try Cloudflare DNS
+                socket.create_connection(("1.1.1.1", 53), timeout=2)
+                return True
+            except (socket.timeout, socket.error, OSError):
+                try:
+                    # Last attempt: try HTTP request to a reliable site
+                    urllib.request.urlopen('http://www.google.com', timeout=3)
+                    return True
+                except:
+                    return False
 
     def _show_notifications(self):
         """Notification button clicked - show/hide notification drawer"""
@@ -1405,19 +1409,9 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             print(f"Error adding welcome notification: {e}")
     
     def log_activity(self, message):
-        """Log an activity to the sync button."""
-        # Compact sync button doesn't log activities - it only shows status
+        """Log an activity - connection indicator shows status automatically."""
+        # Connection indicator automatically shows status based on accounting system
         pass
-            
-    def show_sync_success(self, message):
-        """Show a success message in the sync button."""
-        if hasattr(self, 'sync_button'):
-            self.sync_button.show_success(message)
-            
-    def show_sync_error(self, message):
-        """Show an error message in the sync button.""" 
-        if hasattr(self, 'sync_button'):
-            self.sync_button.show_error(message)
     
     def get_connection_status(self):
         """Get connection status for external access."""
@@ -1826,6 +1820,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         """Update AI context with fresh accounting data"""
         try:
             fresh_data = self._gather_current_accounting_data()
+           
             self.ai_processor.update_context('accounting', fresh_data)
             self.logger.debug("Updated AI context with fresh accounting data")
         except Exception as e:
@@ -1861,3 +1856,16 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
                 }
             """)
             main_layout.addWidget(bottom_spacer)
+
+    def _initial_connection_check(self):
+        """Perform initial connection check when UI is ready"""
+        try:
+            if hasattr(self, 'connection_indicator'):
+                # Start with a basic internet connectivity test
+                is_online = self._test_internet_connectivity()
+                self.connection_indicator.update_connection_status(is_online)
+                self.logger.debug(f"Initial connection check: online={is_online}")
+        except Exception as e:
+            self.logger.error(f"Initial connection check failed: {e}")
+            if hasattr(self, 'connection_indicator'):
+                self.connection_indicator.update_connection_status(False)

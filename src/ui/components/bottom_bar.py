@@ -35,7 +35,7 @@ class BottomBar(QWidget):
         layout.setContentsMargins(8, 4, 8, 4)  # Reduced margins
         layout.setSpacing(8)  # Reduced spacing
         
-        # Left section - Status info
+        # Left section - App branding
         self._create_left_section(layout)
         
         # Center section - Workspace switcher (if available)
@@ -45,23 +45,17 @@ class BottomBar(QWidget):
         self._create_right_section(layout)
         
     def _create_left_section(self, layout):
-        """Create left section with status info"""
+        """Create left section with app info"""
         left_widget = QWidget()
         left_layout = QHBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(12)
         
-        # Connection status indicator
-        self.connection_status = QLabel()
-        self.connection_status.setObjectName("StatusLabel")
-        self._update_connection_status()
-        left_layout.addWidget(self.connection_status)
-        
-        # Database status
-        self.db_status = QLabel("💾 Local DB")
-        self.db_status.setObjectName("StatusLabel")
-        self.db_status.setToolTip("Database connection status")
-        left_layout.addWidget(self.db_status)
+        # App name/brand
+        app_label = QLabel("📊 AI Accountant")
+        app_label.setObjectName("AppLabel")
+        app_label.setToolTip("Modern AI-Powered Accounting System")
+        left_layout.addWidget(app_label)
         
         layout.addWidget(left_widget)
         
@@ -99,9 +93,9 @@ class BottomBar(QWidget):
                 center_layout.addWidget(workspace_label)
         else:
             # Single tenant mode indicator
-            workspace_label = QLabel("📊 AI Accountant")
+            workspace_label = QLabel("🏢 Workspace")
             workspace_label.setObjectName("WorkspaceLabel")
-            workspace_label.setToolTip("Running in single-tenant mode")
+            workspace_label.setToolTip("Single tenant workspace")
             center_layout.addWidget(workspace_label)
         
         layout.addWidget(center_widget)
@@ -132,24 +126,34 @@ class BottomBar(QWidget):
     
     def _apply_styling(self):
         """Apply modern styling to the bottom bar"""
-        MicaEffect.apply_mica(self, dark_mode=True)
-        GlassmorphismHelper.apply_main_container_effect(self)
+        try:
+            MicaEffect.apply_mica(self, dark_mode=True)
+            GlassmorphismHelper.apply_main_container_effect(self)
+        except Exception:
+            # Fallback if styling fails
+            pass
         
         # Set fixed height for the bottom bar
         self.setFixedHeight(36)
+        
+        # Make sure the widget is visible
+        self.setVisible(True)
+        self.show()
         
         self.setStyleSheet(f"""
             BottomBar {{
                 background: rgba(30, 30, 30, 0.98);
                 border-top: 1px solid rgba(255, 255, 255, 0.1);
                 padding: 0px;
+                min-height: 36px;
+                max-height: 36px;
             }}
             
-            QLabel#StatusLabel {{
+            QLabel#AppLabel {{
                 color: #4CAF50;
-                font-size: {ResponsiveHelper.scale_size(11, 10, 12)}px;
-                font-weight: 500;
-                padding: 2px 4px;
+                font-size: {ResponsiveHelper.scale_size(12, 11, 13)}px;
+                font-weight: 600;
+                padding: 2px 8px;
                 background: rgba(76, 175, 80, 0.1);
                 border: 1px solid rgba(76, 175, 80, 0.3);
                 border-radius: 4px;
@@ -192,21 +196,11 @@ class BottomBar(QWidget):
     def _update_dynamic_content(self):
         """Update time and other dynamic content"""
         self._update_time()
-        self._update_connection_status()
         
     def _update_time(self):
         """Update the time display"""
         current_time = datetime.now().strftime("%H:%M")
         self.time_label.setText(f"🕐 {current_time}")
-    
-    def _update_connection_status(self):
-        """Update connection status indicator"""
-        if self.auth_manager and hasattr(self.auth_manager, 'current_user') and self.auth_manager.current_user:
-            self.connection_status.setText("🟢 Connected")
-            self.connection_status.setToolTip("Connected to Supabase")
-        else:
-            self.connection_status.setText("🔵 Local")
-            self.connection_status.setToolTip("Running in local mode")
             
     def refresh_workspace_info(self):
         """Refresh workspace switcher if available"""
