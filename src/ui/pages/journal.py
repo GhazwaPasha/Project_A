@@ -10,7 +10,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QDate, QPropertyAnimation, QEasingCurve
 from datetime import datetime
-from ...core.accounting_system import AccountingSystem
+# TODO: Update to use new supabase_offline_manager instead of old AccountingSystem
+# from ...core.accounting_system import AccountingSystem
 from ...core.events import accounting_events
 from ..components.scrollbar_styles import ModernScrollbarStyles
 from ..components.widgets import PageHeader, EditableAccountComboBox

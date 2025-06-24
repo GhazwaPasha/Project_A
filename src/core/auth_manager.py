@@ -164,9 +164,53 @@ class AuthManager:
         return self.current_user
     
     def get_user_organizations(self) -> List[Dict[str, Any]]:
-        """Get all organizations the current user belongs to"""
-        return self.user_organizations
-        
+        """Get list of organizations for current user using non-recursive function"""
+        try:
+            if not self.current_user:
+                self.logger.error("No authenticated user")
+                return []
+            
+            # Use the helper function that bypasses RLS recursion
+            response = self.supabase.rpc('get_user_organizations', {
+                'p_user_id': self.current_user.id
+            }).execute()
+            
+            if not response.data:
+                return []
+            
+            # Format organizations data
+            organizations = []
+            for org_data in response.data:
+                organizations.append({
+                    'id': org_data['organization_id'],
+                    'name': org_data['organization_name'],
+                    'role': org_data['user_role']
+                })
+            
+            # Cache organizations
+            self.user_organizations = organizations
+            return organizations
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get user organizations: {e}")
+            return []
+
+    def set_database_context(self, user_id: str, organization_id: str = None, role: str = None):
+        """Set PostgreSQL session variables for RLS policies"""
+        try:
+            # Use the Supabase RPC function to set context
+            self.supabase.rpc('set_app_context', {
+                'user_id': user_id,
+                'organization_id': organization_id,
+                'role': role or 'accountant'
+            }).execute()
+            
+            self.logger.info(f"Database context set for user {user_id}, org {organization_id}, role {role}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to set database context: {e}")
+            raise
+            
     def get_organization_members(self, organization_id: str) -> List[Dict[str, Any]]:
         """Get all members of an organization"""
         try:
@@ -354,11 +398,22 @@ class AuthManager:
             return {"success": False, "error": str(e)}
     
     def get_user_role(self, organization_id: str) -> Optional[str]:
-        """Get user role in specific organization"""
-        for org in self.user_organizations:
-            if org.get('organization_id') == organization_id:
-                return org.get('role')
-        return None
+        """Get user's role in specific organization"""
+        try:
+            if not self.current_user:
+                return None
+                
+            response = self.supabase.table('organization_members').select(
+                'role'
+            ).eq('user_id', self.current_user.id).eq(
+                'organization_id', organization_id
+            ).single().execute()
+            
+            return response.data['role'] if response.data else None
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get user role: {e}")
+            return None
     
     def _load_user_profile(self):
         """Load extended user profile"""
@@ -377,22 +432,9 @@ class AuthManager:
             self.logger.error(f"Failed to load user profile: {e}")
     
     def _load_user_organizations(self):
-        """Load organizations user belongs to"""
-        try:
-            if not self.current_user:
-                return
-            
-            result = self.supabase.table('organization_members').select('''
-                *,
-                organizations (*)
-            ''').eq('user_id', self.current_user.id).eq('is_active', True).execute()
-            
-            self.user_organizations = result.data if result.data else []
-            
-        except Exception as e:
-            self.logger.error(f"Failed to load user organizations: {e}")
-            self.user_organizations = []
-    
+        """Load and cache user organizations"""
+        self.user_organizations = self.get_user_organizations()
+        
     def _create_user_profile(self, user_id: str, first_name: str, last_name: str, email: str):
         """Create user profile in users table"""
         try:

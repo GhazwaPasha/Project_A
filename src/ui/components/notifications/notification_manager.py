@@ -22,12 +22,12 @@ class NotificationManager(QObject):
     def __init__(self, db_path: Optional[str] = None):
         super().__init__()
         self.logger = logging.getLogger(__name__)
-        
-        # Database setup
-        self.db_path = db_path or os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 
-            'notifications.db'
-        )
+          # Database setup - use cache directory
+        if not db_path:
+            cache_dir = os.path.join(os.path.expanduser('~'), '.ai_accountant_cache')
+            os.makedirs(cache_dir, exist_ok=True)
+            db_path = os.path.join(cache_dir, 'notifications.db')
+        self.db_path = db_path
         self._init_database()
         
         # In-memory cache for active notifications

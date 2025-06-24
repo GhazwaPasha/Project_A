@@ -16,20 +16,20 @@ from .budget_manager import BudgetManager
 class EnhancedAccountingSystem:
     """Enhanced accounting system with advanced features."""
     
-    def __init__(self, db_manager, base_accounting_system, organization_id=None, user_id=None):
-        self.db_manager = db_manager
+    def __init__(self, base_accounting_system, organization_id=None, user_id=None):
         self.base_system = base_accounting_system
+        self.offline_manager = base_accounting_system.offline_manager  # Use the offline manager as db interface
         self.organization_id = organization_id
         self.user_id = user_id
         self.logger = logging.getLogger(__name__)
         
-        # Initialize enhanced components
-        self.enhanced_schema = EnhancedDatabaseSchema(db_manager)
-        self.period_manager = PeriodClosingManager(db_manager, organization_id, user_id)
-        self.audit_manager = AuditTrailManager(db_manager)
-        self.cash_flow_manager = AdvancedCashFlowManager(db_manager, base_accounting_system)
-        self.ratio_calculator = FinancialRatioCalculator(db_manager, base_accounting_system)
-        self.budget_manager = BudgetManager(db_manager, base_accounting_system, organization_id)
+        # Initialize enhanced components - use offline_manager as db interface
+        self.enhanced_schema = EnhancedDatabaseSchema(self.offline_manager)
+        self.period_manager = PeriodClosingManager(self.offline_manager, organization_id, user_id)
+        self.audit_manager = AuditTrailManager(self.offline_manager)
+        self.cash_flow_manager = AdvancedCashFlowManager(self.offline_manager, base_accounting_system)
+        self.ratio_calculator = FinancialRatioCalculator(self.offline_manager, base_accounting_system)
+        self.budget_manager = BudgetManager(self.offline_manager, base_accounting_system, organization_id)
         
         self._initialized = False
     
@@ -501,6 +501,10 @@ class EnhancedAccountingSystem:
     def add_journal_entries_with_progress(self, entries, progress_callback=None):
         """Add journal entries with progress tracking using base system."""
         return self.base_system.add_journal_entries_with_progress(entries, progress_callback)
+
+    def get_journal_entries_by_date_range(self, start_date, end_date):
+        """Get journal entries by date range - alias for get_journal_entries with dates"""
+        return self.base_system.get_journal_entries(start_date, end_date)
     
     def seed_hierarchical_accounts(self):
         """Seed chart of accounts using base system."""

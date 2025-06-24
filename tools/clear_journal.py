@@ -1,38 +1,27 @@
 #!/usr/bin/env python3
 """
-Utility script to clear all journal entries from the accounting system.
-Use with caution as this operation cannot be undone!
+Script to clear journal entries from the accounting system.
+
+Updated for the new Supabase-based system.
 """
 
 import os
 import sys
 
-# Add project root to Python path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
-
-from src.core.accounting_system import AccountingSystem
-
 def main():
-    try:
-        # Get the database path
-        db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'accounting.db')
-        
-        # Initialize the accounting system
-        system = AccountingSystem(db_path)
-        
-        # Clear all entries
-        entries_deleted = system.clear_journal_entries()
-        
-        print(f"Successfully deleted {entries_deleted} journal entries from the system.")
-        
-    except Exception as e:
-        print(f"Error clearing journal entries: {e}", file=sys.stderr)
-        sys.exit(1)
+    print("🗑️ Clear Journal Tool")
+    print("=" * 25)
+    print("❌ This tool needs to be updated to work with the new Supabase-based system.")
+    print("The old AccountingSystem has been replaced with supabase_offline_manager.")
+    print("")
+    print("To use this tool:")
+    print("1. Update to use EnhancedSupabaseOnlyManager")
+    print("2. Add proper authentication and organization context")
+    print("3. Use the new data deletion methods with proper RLS")
+    print("")
+    print("For now, you can delete data directly from Supabase dashboard.")
+    print("")
+    print("⚠️ Warning: This tool will delete all journal entries in the current organization!")
 
-if __name__ == "__main__":
-    response = input("WARNING: This will delete ALL journal entries. This cannot be undone!\nAre you sure you want to continue? (yes/no): ")
-    if response.lower() == 'yes':
-        main()
-    else:
-        print("Operation cancelled.")
+if __name__ == '__main__':
+    main()

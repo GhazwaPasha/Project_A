@@ -167,28 +167,61 @@ class SessionManager:
         """Check if the current user is an admin in the current organization"""
         return self.current_role in ['admin', 'super_admin'] if self.current_role else False
     
-    def set_active_organization(self, org_id: str) -> bool:
-        """Set the active organization by ID"""
+    def get_available_organizations(self) -> list:
+        """Get list of organizations available to current user"""
         try:
-            if not self.auth_manager.current_user:
+            if not self.auth_manager or not self.auth_manager.current_user:
+                self.logger.error("No authenticated user")
+                return []
+            
+            # Get organizations from auth manager
+            organizations = self.auth_manager.get_user_organizations()
+              # Format organizations for display
+            return [
+                {
+                    'id': org.get('id'),
+                    'name': org.get('name', 'Unnamed Organization'),
+                    'role': org.get('role', 'member')
+                }
+                for org in organizations
+            ] if organizations else []
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get organizations: {e}")
+            return []
+    
+    def set_active_organization(self, organization_id: str) -> bool:
+        """Set the active organization by ID and update database context"""
+        try:
+            if not self.auth_manager or not self.auth_manager.current_user:
+                self.logger.error("No authenticated user")
                 return False
             
-            # Get organization data for this user
-            user_orgs = self.auth_manager.get_user_organizations()
-            if not user_orgs:
+            # Get organization data
+            organizations = self.get_available_organizations()
+            org_data = next((org for org in organizations if org['id'] == organization_id), None)
+            
+            if not org_data:
+                self.logger.error(f"Organization {organization_id} not found")
                 return False
             
-            # Find the organization
-            target_org = None
-            for org in user_orgs:
-                if org.get('organizations', {}).get('id') == org_id:
-                    target_org = org
-                    break
+            # Set as current organization
+            success = self.set_current_organization(org_data)
             
-            if target_org:
-                return self.set_current_organization(target_org)
+            if success:
+                # CRITICAL: Set database context for RLS policies
+                try:
+                    self.auth_manager.set_database_context(
+                        user_id=self.get_current_user_id(),
+                        organization_id=organization_id,
+                        role=self.current_role
+                    )
+                    self.logger.info(f"Database context updated for organization: {organization_id}")
+                except Exception as e:
+                    self.logger.error(f"Failed to set database context: {e}")
+                    # Don't fail the organization switch if context setting fails
             
-            return False
+            return success
             
         except Exception as e:
             self.logger.error(f"Failed to set active organization: {e}")

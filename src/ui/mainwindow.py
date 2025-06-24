@@ -2,8 +2,8 @@ from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSta
 from PyQt6.QtCore import Qt, QSize, QTimer, QEvent
 from PyQt6.QtGui import QIcon, QPalette, QColor
 
-# Import PostgreSQL accounting system
-from ..core.accounting_system_postgresql import AccountingSystemPostgreSQL as AccountingSystem
+# Import Supabase offline-capable system
+from ..core.supabase_offline_manager import EnhancedSupabaseOnlyManager as AccountingSystem
 
 from .components.mica_effect import MicaEffect
 from .components.styles import ModernStyles, GlassmorphismHelper
@@ -122,16 +122,10 @@ class ModernSidebarButton(QPushButton):
                 border: none;            }}        """)
 
 class MainWindow(QMainWindow, MicaWindowWithBorders):
-    def __init__(self, db_mode='postgresql', prefer_local=False, auto_sync=False, 
-                 auth_manager=None, session_manager=None):
+    def __init__(self, auth_manager=None, session_manager=None):
         super().__init__()
         self.setWindowTitle("AI Accountant - Multi-Tenant SaaS")
         self.setMinimumSize(1200, 800)
-        
-        # Store sync settings
-        self.db_mode = db_mode
-        self.prefer_local = prefer_local
-        self.auto_sync = auto_sync
           # Store authentication context
         self.auth_manager = auth_manager
         self.session_manager = session_manager
@@ -142,16 +136,15 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         # Initialize session tracking
         self.start_time = datetime.now()
         
-        # Use single database file in project root
-        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'accounting.db')        # Initialize accounting system with PostgreSQL or SQLite fallback
-        self.accounting_system = self._initialize_accounting_system(db_path)        
+        # Initialize the new Supabase-based accounting system
+        self.accounting_system = self._initialize_accounting_system()
         # Keep backward compatibility for existing pages
         self.system = self.accounting_system
-        
-        # Initialize notification system
+          # Initialize notification system
         from .components.notifications.notification_manager import NotificationManager
         self.notification_manager = NotificationManager()
-          # Initialize Enhanced AI command processor
+        
+        # Initialize Enhanced AI command processor
         from .components.enhanced_ai_processor import ContextAwareAI
         self.ai_processor = ContextAwareAI(self)
         
@@ -176,12 +169,10 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         
         # Apply global styling first
         self._apply_global_consistent_styling()
-          # Apply font settings to the application
-        self._apply_font_settings()
+          # Apply font settings to the application        self._apply_font_settings()
         
-        # Setup sync status updates if in hybrid mode
-        if self.db_mode == 'hybrid':
-            self._setup_sync_updates()
+        # Setup sync status updates - always enabled in new architecture
+        self._setup_sync_updates()
         
         # Initialize AI context with startup data
         self._initialize_ai_context()
@@ -200,9 +191,18 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         # Clean up AI processor thread
         if self.ai_processor and self.ai_processor.processing_thread:
             self.ai_processor.stop_processing()
-        
-        # Clean up any other resources
-        self.accounting_system.close()
+          # Clean up any other resources
+        if hasattr(self.accounting_system, 'close'):
+            self.accounting_system.close()
+        elif hasattr(self.accounting_system, 'offline_manager'):
+            # Perform final sync if online
+            try:
+                if self.accounting_system.is_online:
+                    self.accounting_system.offline_manager.sync_pending_operations(
+                        self.accounting_system.supabase
+                    )
+            except Exception as e:
+                self.logger.error(f"Final sync failed: {e}")
         
         super().closeEvent(event)
 
@@ -1217,14 +1217,13 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             for i in range(self.stack.count()):
                 page = self.stack.widget(i)
                 if hasattr(page, '_apply_styling') and callable(page._apply_styling):
-                    page._apply_styling()        # Force a style refresh
-        self.style().unpolish(self)
+                    page._apply_styling()        # Force a style refresh        self.style().unpolish(self)
         self.style().polish(self)
     
-    def _initialize_accounting_system(self, db_path):
-        """Initialize PostgreSQL accounting system with enhanced features and multi-tenant context."""
+    def _initialize_accounting_system(self):
+        """Initialize Supabase-first accounting system with offline support and multi-tenant context."""
         try:
-            self.logger.info(f"Initializing enhanced accounting system in {self.db_mode} mode...")
+            self.logger.info(f"Initializing Supabase offline-capable accounting system...")
             
             # Get organization context from session manager
             organization_id = None
@@ -1233,51 +1232,38 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             if self.session_manager:
                 organization_id = self.session_manager.get_active_organization_id()
                 user_id = self.session_manager.get_current_user_id()
+                self.logger.info(f"Using organization context: {organization_id}, user: {user_id}")
             
-            if self.db_mode == 'hybrid':
-                # Use enhanced database manager with local/remote sync and multi-tenant context
-                from ..core.database_manager import DatabaseManager
-                db_manager = DatabaseManager(
-                    prefer_local=self.prefer_local,
-                    auto_sync=self.auto_sync,
-                    organization_id=organization_id,
-                    user_id=user_id
-                )
-                base_system = AccountingSystem(
-                    organization_id=organization_id,
-                    user_id=user_id
-                )
-                base_system.db_manager = db_manager
-                self.logger.info(f"✅ Hybrid multi-tenant accounting system initialized for org: {organization_id}")
-            else:
-                # Use standard PostgreSQL system with multi-tenant context
-                base_system = AccountingSystem(
-                    organization_id=organization_id,
-                    user_id=user_id
-                )
-                self.logger.info(f"✅ PostgreSQL multi-tenant accounting system initialized for org: {organization_id}")
-            
-            # Initialize enhanced accounting system with advanced features
-            from ..core.enhanced_accounting_system import EnhancedAccountingSystem
-            enhanced_system = EnhancedAccountingSystem(
-                db_manager=base_system.db_manager if hasattr(base_system, 'db_manager') else None,
-                base_accounting_system=base_system,
+            # Initialize the enhanced Supabase manager with offline support
+            accounting_system = AccountingSystem(
                 organization_id=organization_id,
                 user_id=user_id
             )
             
-            # Initialize enhanced features
+            # Test connectivity and cache data if online
+            if accounting_system.is_online:
+                self.logger.info("✅ Supabase connection established - caching data for offline use")
+                accounting_system._refresh_cache()
+            else:
+                self.logger.warning("📱 Starting in offline mode - using cached data")
+              # Wrap with enhanced features if available
             try:
+                from ..core.enhanced_accounting_system import EnhancedAccountingSystem
+                enhanced_system = EnhancedAccountingSystem(
+                    base_accounting_system=accounting_system,
+                    organization_id=organization_id,
+                    user_id=user_id
+                )
+                
+                # Initialize enhanced features
                 init_results = enhanced_system.initialize_enhanced_features()
                 self.logger.info(f"Enhanced features initialization results: {init_results}")
                 
-                # Store the enhanced system as the main system
-                enhanced_system.base_system = base_system  # Keep reference to base system
                 return enhanced_system
                 
             except Exception as e:
-                self.logger.warning(f"Enhanced features initialization failed, using base system: {e}")
-                return base_system
+                self.logger.warning(f"Enhanced features not available, using base system: {e}")
+                return accounting_system
                 
         except Exception as e:
             self.logger.error(f"Accounting system initialization failed: {e}")
@@ -1287,16 +1273,33 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         """Setup periodic sync status updates."""
         self.sync_timer = QTimer()
         self.sync_timer.timeout.connect(self._update_sync_status)
-        self.sync_timer.start(5000)  # Update every 5 seconds        # Initial status update
+        self.sync_timer.start(5000)  # Update every 5 seconds
+        # Initial status update
         self._update_sync_status()
     
     def _update_sync_status(self):
-        """Update sync status from database manager."""
-        if hasattr(self, 'sync_button') and hasattr(self.accounting_system, 'db_manager'):
+        """Update sync status from offline manager."""
+        if hasattr(self, 'sync_button') and hasattr(self.accounting_system, 'offline_manager'):
             try:
-                status = self.accounting_system.db_manager.get_connection_status()
+                # Create status similar to the old db_manager format
+                offline_mgr = self.accounting_system.offline_manager
+                status = {
+                    'local_available': True,  # SQLite cache always available
+                    'remote_available': self.accounting_system.is_online,
+                    'prefer_local': False,  # Supabase-first approach
+                    'auto_sync_enabled': True,
+                    'sync_status': {
+                        'last_sync': getattr(offline_mgr.sync_status, 'last_sync', None),
+                        'pending_operations': getattr(offline_mgr, 'pending_operations', 0),
+                        'failed_operations': getattr(offline_mgr.sync_status, 'failed_operations', 0),
+                        'conflicts': getattr(offline_mgr.sync_status, 'conflicts', 0),
+                        'is_syncing': getattr(offline_mgr.sync_status, 'is_syncing', False)
+                    }
+                }
+                
                 self.sync_button.update_connection_status(status)
-                  # Check for sync status changes and notify
+                
+                # Check for sync issues
                 sync_status = status.get('sync_status', {})
                 if sync_status.get('failed_operations', 0) > 0:
                     self.add_sync_notification(
@@ -1304,30 +1307,48 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
                         f"{sync_status['failed_operations']} operations failed to sync. Check your connection.",
                         "warning"
                     )
-                elif sync_status.get('conflicts', 0) > 0:
-                    self.notify_sync_conflict(sync_status['conflicts'])
+                elif sync_status.get('pending_operations', 0) > 0 and not self.accounting_system.is_online:
+                    self.add_sync_notification(
+                        "Working Offline",
+                        f"{sync_status['pending_operations']} changes will sync when online.",
+                        "info"
+                    )
                     
             except Exception as e:
                 self.logger.error(f"Failed to update sync status: {e}")
-                self.sync_button.show_error(f"Status update failed")
-                  # Add notification for status update failure
-                self.add_sync_notification(
-                    "Sync Status Error",
-                    "Failed to check synchronization status. Please check your connection.",
-                    "error"
-                )
-                
+                if hasattr(self, 'sync_button'):
+                    self.sync_button.show_error(f"Status update failed")
+    
     def _manual_sync(self):
         """Trigger manual synchronization."""
-        if hasattr(self.accounting_system, 'db_manager'):
+        if hasattr(self.accounting_system, 'offline_manager'):
             try:
                 self.logger.info("Manual sync requested...")
                 
                 # Notify that sync is starting
-                self.notify_sync_started()
+                if hasattr(self, 'notify_sync_started'):
+                    self.notify_sync_started()
                 
-                # Trigger sync (this will be implemented in the sync manager)
-                self.accounting_system.db_manager._perform_sync()
+                # Trigger sync
+                if self.accounting_system.is_online:
+                    synced_count = self.accounting_system.offline_manager.sync_pending_operations(
+                        self.accounting_system.supabase
+                    )
+                    self.logger.info(f"Manual sync completed: {synced_count} operations synced")
+                    
+                    if hasattr(self, 'add_sync_notification'):
+                        self.add_sync_notification(
+                            "Sync Complete",
+                            f"Successfully synced {synced_count} operations.",
+                            "success"
+                        )
+                else:
+                    if hasattr(self, 'add_sync_notification'):
+                        self.add_sync_notification(
+                            "Sync Failed",
+                            "Cannot sync while offline. Changes will sync automatically when online.",
+                            "warning"
+                        )
                 
                 # Show success in sync button
                 if hasattr(self, 'sync_button'):

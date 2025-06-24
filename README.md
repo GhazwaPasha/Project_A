@@ -35,8 +35,8 @@ Project_A/
 │   ├── core/
 │   │   ├── auth_manager.py         # Supabase authentication
 │   │   ├── session_manager.py     # User sessions & permissions
-│   │   ├── database_manager.py    # Multi-tenant database support
-│   │   └── accounting_system_postgresql.py # Core accounting logic
+│   │   ├── supabase_offline_manager.py # Main backend with offline support
+│   │   └── enhanced_accounting_system.py # Enhanced features
 │   └── ui/
 │       ├── auth/
 │       │   ├── login_window.py     # Modern login dialog

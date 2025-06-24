@@ -111,43 +111,27 @@ class SmartApp:
             
         except Exception as e:
             QMessageBox.warning(parent_window, "Error", f"Could not open signup dialog: {str(e)}")
-    
+
     def start_without_auth(self):
         """Start without authentication (single-tenant mode)"""
         print("🚀 Starting in single-tenant mode...")
         return self.start_main_app()
-    
+
     def start_main_app(self, auth_manager=None, session_manager=None):
         """Start the main application window"""
         try:
             # Create main window with optional auth context
-            if auth_manager and session_manager:
-                main_window = MainWindow(
-                    db_mode='hybrid', 
-                    prefer_local=True, 
-                    auto_sync=True,
-                    auth_manager=auth_manager,
-                    session_manager=session_manager
-                )
-            else:
-                main_window = MainWindow(
-                    db_mode='hybrid', 
-                    prefer_local=True, 
-                    auto_sync=True
-                )
+            main_window = MainWindow(
+                auth_manager=auth_manager,
+                session_manager=session_manager
+            )
             
             main_window.show()
             return self.app.exec()
             
         except Exception as e:
-            if "auth_manager" in str(e) or "session_manager" in str(e):
-                print("⚠️  Multi-tenant features not available, using single-tenant mode...")
-                # Fallback to original constructor
-                main_window = MainWindow(db_mode='hybrid', prefer_local=True, auto_sync=True)
-                main_window.show()
-                return self.app.exec()
-            else:
-                raise
+            print(f"⚠️  Error starting application: {e}")
+            raise
     
     def show_startup_error(self, error_message: str):
         """Show startup error dialog"""

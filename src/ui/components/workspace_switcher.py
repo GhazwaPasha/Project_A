@@ -24,255 +24,177 @@ class WorkspaceSwitcher(QWidget):
         self.workspaces = []
         self.current_workspace = None
         
-        print("🔍 WorkspaceSwitcher: Starting initialization...")
-        try:
-            print("🔍 WorkspaceSwitcher: Setting up UI...")
-            self._setup_ui()
-            print("🔍 WorkspaceSwitcher: Applying styling...")
-            self._apply_styling()
-            print("🔍 WorkspaceSwitcher: Loading workspaces...")
-            self._load_workspaces()
-            print("🔍 WorkspaceSwitcher: Initialization complete!")
-        except Exception as e:
-            print(f"❌ WorkspaceSwitcher initialization error: {e}")
-            import traceback
-            traceback.print_exc()
-            raise
+        self._setup_ui()
+        self._apply_styling()
+        self._load_workspaces()
         
     def _setup_ui(self):
         """Setup the workspace switcher UI"""
-        # Main horizontal layout        layout = QHBoxLayout(self)
-        layout.setContentsMargins(4, 2, 4, 2)  # Minimal margins
-        layout.setSpacing(6)  # Reduced spacing
+        # Main horizontal layout
+        self.layout = QHBoxLayout(self)
+        self.layout.setContentsMargins(8, 4, 8, 4)
+        self.layout.setSpacing(6)
         
-        # Set size policies
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setFixedHeight(32)  # Fixed height to match bottom bar
+        # Set fixed size for consistency
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.setFixedHeight(32)
+        self.setFixedWidth(200)
         
         # Workspace icon
         self.workspace_icon = QLabel()
         icon_path = os.path.join("assets", "icons", "global_orgs_new.svg")
         if os.path.exists(icon_path):
             icon = QIcon(icon_path)
-            self.workspace_icon.setPixmap(icon.pixmap(20, 20))
+            self.workspace_icon.setPixmap(icon.pixmap(16, 16))
         else:
             self.workspace_icon.setText("🏢")
-        layout.addWidget(self.workspace_icon)
+        self.workspace_icon.setFixedSize(20, 20)
+        self.layout.addWidget(self.workspace_icon)
         
         # Current workspace label
-        self.workspace_label = QLabel("Personal Workspace")
+        self.workspace_label = QLabel("Loading...")
         self.workspace_label.setObjectName("WorkspaceLabel")
-        layout.addWidget(self.workspace_label)
+        self.workspace_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.layout.addWidget(self.workspace_label, 1)  # Give label stretch priority
         
         # Workspace dropdown button
-        self.workspace_button = QPushButton()
+        self.workspace_button = QPushButton("▼")
         self.workspace_button.setObjectName("WorkspaceButton")
-        self.workspace_button.setText("▼")
-        self.workspace_button.setMaximumSize(24, 24)
+        self.workspace_button.setFixedSize(20, 20)
         self.workspace_button.clicked.connect(self._show_workspace_menu)
-        layout.addWidget(self.workspace_button)
-        
-        # Add some stretch to center the component
-        layout.addStretch()
-        
-        # Set size policy to prefer minimum size
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setMaximumHeight(40)
+        self.layout.addWidget(self.workspace_button)
         
     def _apply_styling(self):
-        """Apply glassmorphism styling to the workspace switcher"""
-        # Apply glassmorphism effect
-        GlassmorphismHelper.apply_glass_effect(self, blur_radius=20, opacity=0.15)
-        
-        # Add subtle shadow
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(10)
-        shadow.setOffset(0, 2)
-        shadow.setColor(QColor(0, 0, 0, 50))
-        self.setGraphicsEffect(shadow)
-        
-        self.setStyleSheet(f"""
-            WorkspaceSwitcher {{
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 20px;
-                backdrop-filter: blur(10px);
-            }}
+        """Apply styling to the workspace switcher"""
+        # Add subtle background and border
+        self.setStyleSheet("""
+            WorkspaceSwitcher {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 16px;
+            }
             
-            QLabel#WorkspaceLabel {{
+            QLabel {
                 color: white;
-                font-size: {ResponsiveHelper.scale_size(13, 12, 14)}px;
+                font-size: 12px;
+                padding: 0px;
+            }
+            
+            QLabel#WorkspaceLabel {
+                color: white;
                 font-weight: 500;
+            }
+            
+            QPushButton#WorkspaceButton {
                 background: transparent;
                 border: none;
-                padding: 4px 8px;
-            }}
-            
-            QPushButton#WorkspaceButton {{
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 12px;
-                color: white;
+                color: rgba(255, 255, 255, 0.7);
                 font-size: 10px;
-                font-weight: bold;
-                padding: 2px;
-            }}
+                padding: 0px;
+            }
             
-            QPushButton#WorkspaceButton:hover {{
-                background: rgba(255, 255, 255, 0.2);
-                border: 1px solid rgba(255, 255, 255, 0.3);
-            }}
-            
-            QPushButton#WorkspaceButton:pressed {{
-                background: rgba(255, 255, 255, 0.3);
-            }}
+            QPushButton#WorkspaceButton:hover {
+                color: white;
+            }
         """)
-        
-    def _load_workspaces(self):
-        """Load user's workspaces from auth manager"""
-        if not self.auth_manager or not self.session_manager:
-            return
-            
+      def _load_workspaces(self):
+        """Load available workspaces from session manager"""
         try:
-            # Get user organizations
-            user_orgs = self.auth_manager.get_user_organizations()
-            self.workspaces = []
+            if not self.session_manager:
+                self.workspace_label.setText("Personal Workspace")
+                self.workspace_button.setEnabled(False)
+                return
+                
+            if not self.auth_manager or not self.auth_manager.current_user:
+                self.workspace_label.setText("Not Logged In")
+                self.workspace_button.setEnabled(False)
+                return
+                
+            # Get workspaces from session manager
+            self.workspaces = self.session_manager.get_available_organizations()
             
-            if user_orgs:
-                for org_member in user_orgs:
-                    org = org_member.get('organizations', {})
-                    if org:
-                        workspace = {
-                            'id': org.get('id'),
-                            'name': org.get('name', 'Unknown Organization'),
-                            'role': org_member.get('role', 'accountant'),
-                            'type': 'personal' if "'s Workspace" in org.get('name', '') else 'organization'
-                        }
-                        self.workspaces.append(workspace)
-            
-            # Set current workspace
+            if not self.workspaces:
+                self.workspace_label.setText("Personal Workspace")
+                self.workspace_button.setEnabled(True)
+                return
+                
+            # Get current workspace
             current_org = self.session_manager.get_current_organization()
             if current_org:
-                self.current_workspace = current_org.get('id')
-                self._update_display()
-            elif self.workspaces:
-                # Default to first workspace
-                self.current_workspace = self.workspaces[0]['id']
-                self._update_display()
+                self.current_workspace = current_org
+                self.workspace_label.setText(current_org.get('name', 'Unknown'))
+            else:
+                # Set first organization as active if none is selected
+                first_org = self.workspaces[0]
+                if self.session_manager.set_active_organization(first_org['id']):
+                    self.current_workspace = first_org
+                    self.workspace_label.setText(first_org['name'])
+                else:
+                    self.workspace_label.setText("Select Organization")
+            
+            self.workspace_button.setEnabled(True)
                 
         except Exception as e:
             print(f"Error loading workspaces: {e}")
-            # Fallback for when auth is not available
-            self.workspace_label.setText("Local Workspace")
-            self.workspace_button.hide()
-    
-    def _update_display(self):
-        """Update the displayed workspace name"""
-        if not self.current_workspace:
-            return
-            
-        for workspace in self.workspaces:
-            if workspace['id'] == self.current_workspace:
-                # Show workspace name and type
-                name = workspace['name']
-                if workspace['type'] == 'personal':
-                    self.workspace_label.setText(f"🏠 {name}")
-                else:
-                    self.workspace_label.setText(f"🏢 {name}")
-                break
+            import traceback
+            traceback.print_exc()
+            self.workspace_label.setText("Personal Workspace")
+            self.workspace_button.setEnabled(False)
     
     def _show_workspace_menu(self):
-        """Show workspace selection menu"""
-        if not self.workspaces:
-            return
+        """Show the workspace selection menu"""
+        try:
+            menu = QMenu(self)
+            menu.setWindowFlags(menu.windowFlags() | Qt.WindowType.FramelessWindowHint | Qt.WindowType.NoDropShadowWindowHint)
+            menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
             
-        menu = QMenu(self)
-        menu.setObjectName("WorkspaceMenu")
-        
-        # Style the menu
-        menu.setStyleSheet(f"""
-            QMenu#WorkspaceMenu {{
-                background: rgba(30, 30, 30, 0.95);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 8px;
-                padding: 4px;
-                backdrop-filter: blur(10px);
-            }}
+            # Style the menu
+            menu.setStyleSheet("""
+                QMenu {
+                    background: rgba(45, 45, 48, 0.98);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 8px;
+                    padding: 4px;
+                }
+                QMenu::item {
+                    color: white;
+                    background: transparent;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                    margin: 2px;
+                }
+                QMenu::item:selected {
+                    background: rgba(255, 255, 255, 0.1);
+                }
+            """)
             
-            QMenu#WorkspaceMenu::item {{
-                background: transparent;
-                color: white;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-size: {ResponsiveHelper.scale_size(13, 12, 14)}px;
-            }}
+            # Add all workspaces to menu
+            for workspace in self.workspaces:
+                action = menu.addAction(workspace.get('name', 'Unknown'))
+                action.setData(workspace.get('id'))
             
-            QMenu#WorkspaceMenu::item:selected {{
-                background: rgba(74, 144, 226, 0.8);
-            }}
+            # Show menu aligned with button
+            action = menu.exec(self.workspace_button.mapToGlobal(
+                self.workspace_button.rect().bottomLeft()
+            ))
             
-            QMenu#WorkspaceMenu::item:disabled {{
-                color: rgba(255, 255, 255, 0.5);
-            }}
-            
-            QMenu#WorkspaceMenu::separator {{
-                height: 1px;
-                background: rgba(255, 255, 255, 0.2);
-                margin: 4px 8px;
-            }}
-        """)
-        
-        # Add workspace options
-        personal_workspaces = [w for w in self.workspaces if w['type'] == 'personal']
-        org_workspaces = [w for w in self.workspaces if w['type'] == 'organization']
-        
-        # Personal workspaces section
-        if personal_workspaces:
-            personal_header = menu.addAction("Personal Workspaces")
-            personal_header.setEnabled(False)
-            
-            for workspace in personal_workspaces:
-                action = menu.addAction(f"🏠 {workspace['name']}")
-                action.setData(workspace)
-                if workspace['id'] == self.current_workspace:
-                    action.setText(f"🏠 {workspace['name']} ✓")
-                action.triggered.connect(lambda checked, w=workspace: self._switch_workspace(w))
-        
-        # Separator if both types exist
-        if personal_workspaces and org_workspaces:
-            menu.addSeparator()
-        
-        # Organization workspaces section
-        if org_workspaces:
-            if personal_workspaces:  # Only add header if there are personal workspaces too
-                org_header = menu.addAction("Organizations")
-                org_header.setEnabled(False)
-            
-            for workspace in org_workspaces:
-                role_text = workspace['role'].replace('_', ' ').title()
-                action = menu.addAction(f"🏢 {workspace['name']} ({role_text})")
-                action.setData(workspace)
-                if workspace['id'] == self.current_workspace:
-                    action.setText(f"🏢 {workspace['name']} ({role_text}) ✓")
-                action.triggered.connect(lambda checked, w=workspace: self._switch_workspace(w))
-        
-        # Show menu
-        button_rect = self.workspace_button.geometry()
-        menu_pos = self.mapToGlobal(button_rect.bottomLeft())
-        menu.exec(menu_pos)
+            if action:
+                workspace_id = action.data()
+                workspace_name = action.text()
+                self._switch_workspace(workspace_id, workspace_name)
+                
+        except Exception as e:
+            print(f"Error showing workspace menu: {e}")
     
-    def _switch_workspace(self, workspace):
-        """Switch to selected workspace"""
-        if workspace['id'] != self.current_workspace:
-            self.current_workspace = workspace['id']
-            self._update_display()
-            
-            # Update session manager
-            if self.session_manager:
-                self.session_manager.set_active_organization(workspace['id'])
-            
-            # Emit signal for main window to handle
-            self.workspace_changed.emit(workspace['id'], workspace['name'])
+    def _switch_workspace(self, workspace_id, workspace_name):
+        """Switch to the selected workspace"""
+        try:
+            if self.session_manager.set_active_organization(workspace_id):
+                self.current_workspace = {'id': workspace_id, 'name': workspace_name}
+                self.workspace_label.setText(workspace_name)
+                self.workspace_changed.emit(workspace_id, workspace_name)
+        except Exception as e:
+            print(f"Error switching workspace: {e}")
     
     def refresh_workspaces(self):
         """Refresh the list of available workspaces"""
