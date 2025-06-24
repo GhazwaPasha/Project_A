@@ -1811,26 +1811,32 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             self.logger.warning(f"Could not update AI with fresh data: {e}")
 
     def _create_bottom_bar(self, main_layout):
-        """Create the bottom bar - currently just a spacer since AI bar is in title bar"""
+        """Create the bottom bar with workspace switcher and status info"""
         try:
-            # Since the AI bar is in the title bar, we just need a small bottom spacer
-            # for proper window padding and Mica effect
+            from .components.bottom_bar import BottomBar
+            
+            # Create bottom bar with auth context if available
+            self.bottom_bar = BottomBar(
+                auth_manager=self.auth_manager,
+                session_manager=self.session_manager,
+                parent=self
+            )
+            
+            # Add the bottom bar to the main layout
+            main_layout.addWidget(self.bottom_bar)
+            
+            self.logger.debug("Bottom bar created successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Error creating bottom bar: {e}")
+            # Fallback to spacer if bottom bar creation fails
             bottom_spacer = QFrame()
             bottom_spacer.setObjectName("BottomSpacer")
-            bottom_spacer.setFixedHeight(5)  # Small spacer for proper Mica effect
-            
-            # Apply minimal styling for Mica transparency
+            bottom_spacer.setFixedHeight(5)
             bottom_spacer.setStyleSheet("""
                 QFrame#BottomSpacer {
                     background: rgba(0, 0, 0, 0.01);
                     border: none;
                 }
             """)
-            
-            # Add the bottom spacer to the main layout
             main_layout.addWidget(bottom_spacer)
-            
-            self.logger.debug("Bottom spacer created successfully")
-            
-        except Exception as e:
-            self.logger.error(f"Error creating bottom bar: {e}")
