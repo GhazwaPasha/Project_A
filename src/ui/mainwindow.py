@@ -17,7 +17,7 @@ from datetime import datetime
 from .pages.dashboard import ResponsiveHelper
 
 # Import AI components
-from .components.ai_command_processor import AICommandProcessor
+from .components.enhanced_ai_processor import ContextAwareAI
 
 # Import the frameless window mixin for complete window management
 from .components.frameless_window_mixin import FramelessWindowMixin
@@ -151,10 +151,9 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         # Initialize notification system
         from .components.notifications.notification_manager import NotificationManager
         self.notification_manager = NotificationManager()
-        
-        # Initialize AI command processor
-        from .components.ai_command_processor import AICommandProcessor
-        self.ai_processor = AICommandProcessor(self)
+          # Initialize Enhanced AI command processor
+        from .components.enhanced_ai_processor import ContextAwareAI
+        self.ai_processor = ContextAwareAI(self)
         
         self.sidebar_expanded = False  # Start collapsed for a cleaner look
         self.dark_mode = True  # Default to dark mode for better Mica effect
@@ -177,14 +176,18 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         
         # Apply global styling first
         self._apply_global_consistent_styling()
-        
-        # Apply font settings to the application
+          # Apply font settings to the application
         self._apply_font_settings()
         
         # Setup sync status updates if in hybrid mode
         if self.db_mode == 'hybrid':
             self._setup_sync_updates()
-          # Install event filter for handling clicks outside notification drawer        self.installEventFilter(self)
+        
+        # Initialize AI context with startup data
+        self._initialize_ai_context()
+        
+        # Install event filter for handling clicks outside notification drawer
+        self.installEventFilter(self)
         
         # Use QTimer to apply Mica effect after window is fully shown
         QTimer.singleShot(100, self._apply_mica_effect_delayed)
@@ -204,16 +207,18 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         super().closeEvent(event)
 
     def _connect_ai_signals(self):
-        """Connect signals from the AI processor to the main window slots."""
+        """Connect signals from the Enhanced AI processor to the main window slots."""
         self.ai_processor.response_ready.connect(self.simple_ai_bar.set_ai_response)
         self.ai_processor.error_occurred.connect(self.simple_ai_bar.set_error_message)
         self.ai_processor.processing_started.connect(self.simple_ai_bar.show_processing_indicator)
         self.ai_processor.processing_finished.connect(self.simple_ai_bar.hide_processing_indicator)
         
-        # Connect command execution signals
-        self.ai_processor.navigation_requested.connect(self.navigate_to_page)
-        # self.ai_processor.report_requested.connect(self.generate_report) # Placeholder
-        # self.ai_processor.reminder_created.connect(self.add_reminder) # Placeholder
+        # Connect enhanced command execution signals
+        self.ai_processor.navigation_requested.connect(self._handle_ai_navigation)
+        self.ai_processor.report_requested.connect(self._handle_ai_report_request)
+        self.ai_processor.reminder_created.connect(self._handle_ai_reminder_creation)
+        self.ai_processor.action_executed.connect(self._handle_ai_action)
+        self.ai_processor.context_updated.connect(self._handle_ai_context_update)
         
         # Connect the AI bar's command submission to the processor
         if hasattr(self, 'simple_ai_bar'):
@@ -581,8 +586,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         right_layout.addWidget(close_btn)
         
         # AI Status Bar - always centered between left and right containers
-        self.ai_status_bar = self._create_simple_ai_status_bar()
-        
+        self.ai_status_bar = self._create_simple_ai_status_bar()        
         # Add all containers to main layout with equal stretch for perfect centering
         layout.addWidget(left_container, 1)  # Left side takes 1/3
         layout.addWidget(self.ai_status_bar, 1)  # Center AI status takes 1/3 
@@ -592,7 +596,9 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
     def _create_simple_ai_status_bar(self):
         """Create simple AI status bar for title bar integration"""
         try:
-            from .components.simple_ai_status_bar import SimpleAIStatusBar            # Create a container that will hold the AI status bar
+            from .components.simple_ai_status_bar import SimpleAIStatusBar
+            
+            # Create a container that will hold the AI status bar
             container = QFrame()
             container.setObjectName("AIStatusContainer")
             container.setMaximumHeight(40)  # Match title bar height for proper alignment
@@ -601,15 +607,18 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             layout = QHBoxLayout(container)
             layout.setContentsMargins(20, 0, 20, 0)  # Add horizontal margins for better centering
             layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-              # Create the simple AI status bar
+            
+            # Create the simple AI status bar
             self.simple_ai_bar = SimpleAIStatusBar(self)
-            self.simple_ai_bar.setMaximumHeight(30)  # AI bar height            self.simple_ai_bar.setMinimumHeight(30)  # Ensure consistent height
+            self.simple_ai_bar.setMaximumHeight(30)  # AI bar height
+            self.simple_ai_bar.setMinimumHeight(30)  # Ensure consistent height
             layout.addWidget(self.simple_ai_bar)
             
             return container
             
         except Exception as e:
-            print(f"Error creating simple AI status bar: {e}")            # Return placeholder
+            print(f"Error creating simple AI status bar: {e}")
+            # Return placeholder
             placeholder = QLabel("AI Assistant")
             placeholder.setStyleSheet("color: #cccccc; font-size: 12px; padding: 4px;")
             return placeholder
@@ -659,7 +668,8 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             return {"page": "dashboard", "time": datetime.now().isoformat()}
 
     def _update_ai_context(self):
-        """Update AI context when page changes"""        # Update simple AI status bar with new context
+        """Update AI context when page changes"""
+        # Update simple AI status bar with new context
         if hasattr(self, 'simple_ai_bar'):
             try:
                 self._update_ai_status()
@@ -669,7 +679,12 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
     def _on_page_changed(self, index: int):
         """Handle page changes and update AI context"""
         self.stack.setCurrentIndex(index)
-        self._update_ai_context()
+        
+        # Update AI context with new page information
+        page_names = ['dashboard', 'journal', 'ledger', 'trial_balance', 'reports', 
+                     'accounts', 'reminders', 'period_closing']
+        if 0 <= index < len(page_names):
+            self._update_ai_page_context(page_names[index])
         
         # Update which sidebar button is checked
         for i, btn in enumerate(self.sidebar_buttons):
@@ -1535,321 +1550,287 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         # The status bar will handle displaying the response
         pass
     
-    def _handle_ai_navigation(self, page: str, parameters: dict):
-        """Handle AI navigation requests"""
-        try:
-            # Map page names to tab indices
-            page_map = {
-                'dashboard': 0,
-                'journal': 1,
-                'ledger': 2,
-                'trial_balance': 3,
-                'reports': 4,
-                'accounts': 5,
-                'reminders': 6,
-                'team': 7,
-                'settings': 8,
-                'budget': 9
-            }
-            
-            if page in page_map:
-                tab_index = page_map[page]
-                if hasattr(self, 'tab_widget'):
-                    self.tab_widget.setCurrentIndex(tab_index)
-                    # Apply any additional parameters if needed
-                    if parameters:
-                        self._apply_navigation_parameters(page, parameters)
-            else:
-                self.logger.warning(f"Unknown page for navigation: {page}")
-                
-        except Exception as e:
-            self.logger.error(f"Navigation error: {e}")
-    
-    def _handle_ai_report(self, report_type: str, parameters: dict):
-        """Handle AI report generation requests"""
-        try:
-            # Switch to reports tab first
-            if hasattr(self, 'tab_widget'):
-                self.tab_widget.setCurrentIndex(4)  # Reports tab
-            
-            # Generate the requested report
-            if report_type == 'trial_balance':
-                self._generate_trial_balance_report(parameters)
-            elif report_type == 'balance_sheet':
-                self._generate_balance_sheet_report(parameters)
-            elif report_type == 'income_statement':
-                self._generate_income_statement_report(parameters)
-            elif report_type == 'cash_flow':
-                self._generate_cash_flow_report(parameters)
-            else:
-                self.logger.warning(f"Unknown report type: {report_type}")
-                
-        except Exception as e:
-            self.logger.error(f"Report generation error: {e}")
-    
-    def _handle_ai_reminder(self, reminder_data: dict):
-        """Handle AI reminder creation"""
-        try:
-            # Use the existing reminder manager if available
-            if hasattr(self, 'reminder_manager'):
-                self.reminder_manager.add_reminder(reminder_data)
-            else:
-                # Fallback: save to reminders file
-                self._save_reminder_to_file(reminder_data)
-                
-        except Exception as e:
-            self.logger.error(f"Reminder creation error: {e}")
-    
-    def _apply_navigation_parameters(self, page: str, parameters: dict):
-        """Apply additional parameters for navigation"""
-        # Handle date ranges, filters, etc. based on the page
-        if page == 'journal' and 'date_from' in parameters:
-            # Apply date filter to journal view
-            pass
-        elif page == 'accounts' and 'account_type' in parameters:
-            # Filter accounts by type
-            pass
-    
-    def _generate_trial_balance_report(self, parameters: dict):
-        """Generate trial balance report with parameters"""
-        # Implement trial balance generation
-        pass
-    
-    def _generate_balance_sheet_report(self, parameters: dict):
-        """Generate balance sheet report with parameters"""
-        # Implement balance sheet generation
-        pass
-    
-    def _generate_income_statement_report(self, parameters: dict):
-        """Generate income statement report with parameters"""
-        # Implement income statement generation
-        pass
-    
-    def _generate_cash_flow_report(self, parameters: dict):
-        """Generate cash flow report with parameters"""
-        # Implement cash flow generation
-        pass
-    
-    def _save_reminder_to_file(self, reminder_data: dict):
-        """Save reminder to file as fallback"""
-        try:
-            import json
-            reminders_file = 'reminders_data.json'
-            
-            # Load existing reminders
-            try:
-                with open(reminders_file, 'r') as f:
-                    data = json.load(f)
-            except (FileNotFoundError, json.JSONDecodeError):
-                data = {'reminders': []}
-            
-            # Add new reminder
-            reminder_data['id'] = f"ai_reminder_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            reminder_data['created_at'] = datetime.now().isoformat()
-            reminder_data['acknowledged'] = False
-            
-            data['reminders'].append(reminder_data)
-            
-            # Save back to file
-            with open(reminders_file, 'w') as f:
-                json.dump(data, f, indent=2)
-                
-        except Exception as e:
-            self.logger.error(f"Error saving reminder to file: {e}")
-            
-    def _handle_navigation_command(self, parameters: dict):
-        """Handle navigation commands"""
-        page = parameters.get('page', '').lower()
-        page_map = {
-            'dashboard': 0,
-            'journal': 1,
-            'ledger': 2,
-            'trial balance': 3,
-            'trial_balance': 3,
-            'reports': 4,
-            'accounts': 5,
-            'reminders': 6,
-            'tasks': 6,
-            'team': 7,
-            'org settings': 8,
-            'settings': 11
+    def _handle_ai_navigation(self, page_name: str, parameters: dict):
+        """Enhanced navigation handler with parameter application and context updates"""
+        self.logger.info(f"Enhanced AI navigation: page='{page_name}', params={parameters}")
+        
+        # Update AI context before navigation
+        self._update_ai_context_for_navigation(page_name, parameters)
+        
+        # Perform navigation
+        page_mapping = {
+            'dashboard': 0, 'journal': 1, 'ledger': 2, 'trial_balance': 3,
+            'reports': 4, 'accounts': 5, 'reminders': 6, 'period_closing': 7,
+            'settings': -1  # Settings is usually last
         }
         
-        page_index = page_map.get(page)
-        if page_index is not None and hasattr(self, 'stack'):
-            self.stack.setCurrentIndex(page_index)
-            # Update sidebar button selection
-            if hasattr(self, 'sidebar_buttons') and page_index < len(self.sidebar_buttons):
-                for btn in self.sidebar_buttons:
-                    btn.setChecked(False)
-                self.sidebar_buttons[page_index].setChecked(True)
-                
-    def _handle_data_query_command(self, parameters: dict):
-        """Handle data query commands"""
-        query_type = parameters.get('query', '')
+        if page_name in page_mapping:
+            target_index = page_mapping[page_name]
+            if target_index >= 0:
+                self.stack.setCurrentIndex(target_index)
+                if target_index < len(self.sidebar_buttons):
+                    # Update sidebar selection
+                    for btn in self.sidebar_buttons:
+                        btn.setChecked(False)
+                    self.sidebar_buttons[target_index].setChecked(True)
+            
+            # Apply parameters to the target page
+            self._apply_navigation_parameters(page_name, parameters)
+            
+            # Update AI context with new page state
+            self._update_ai_page_context(page_name)
+    
+    def _handle_ai_report_request(self, report_type: str, parameters: dict):
+        """Handle AI-requested report generation with smart parameter handling"""
+        self.logger.info(f"AI report request: type='{report_type}', params={parameters}")
         
-        # Implement basic data queries
-        if 'balance' in query_type.lower():
-            # For now, show a placeholder response
-            self._show_ai_notification("Data query feature coming soon! You asked about: " + query_type)
+        # Navigate to reports page first if not already there
+        if self.stack.currentIndex() != 4:  # Reports page index
+            self._handle_ai_navigation('reports', {})
+        
+        # Get current reports page and apply parameters
+        current_widget = self.stack.currentWidget()
+        if hasattr(current_widget, 'generate_report'):
+            # Try to call the report generation method with AI parameters
+            try:
+                current_widget.generate_report(report_type, parameters)
+                self.logger.info(f"Successfully generated {report_type} report")
+            except Exception as e:
+                self.logger.error(f"Failed to generate report: {e}")
         else:
-            self._show_ai_notification(f"Searching for: {query_type}")
-            
-    def _handle_reminder_command(self, parameters: dict):
-        """Handle reminder commands"""
-        reminder_text = parameters.get('reminder_text', '')
-        reminder_time = parameters.get('reminder_time', '')
-        recurring = parameters.get('recurring', 'none')
-        
-        if reminder_text:
-            # Navigate to reminders page if not already there
-            current_page = self.stack.currentIndex() if hasattr(self, 'stack') else 0
-            if current_page != 6:  # Reminders page index
-                self._handle_navigation_command({'page': 'reminders'})
-            
-            # Add reminder via notification
-            self._show_ai_notification(f"Reminder set: {reminder_text}")
-            
-    def _handle_notification_command(self, parameters: dict, message: str):
-        """Handle notification commands"""
-        self._show_ai_notification(message)
-        
-    def _show_ai_notification(self, message: str):
-        """Show AI notification"""
-        if hasattr(self, 'notification_manager'):
-            self.notification_manager.add_notification(
-                title="AI Assistant",
-                message=message,
-                notification_type="info"
-            )
-            
-    def _show_ai_error(self, error_msg: str):
-        """Show AI error message"""
-        if hasattr(self, 'notification_manager'):
-            self.notification_manager.add_notification(
-                title="AI Error",
-                message=error_msg,
-                notification_type="error"
-            )
-            
-    def _on_ai_processing_started(self):
-        """Handle AI processing started"""
-        if hasattr(self, 'simple_ai_bar'):
-            self.simple_ai_bar.is_processing = True
-            self.simple_ai_bar.setReadOnly(True)
-            self.simple_ai_bar.setText("Processing...")
-            self.simple_ai_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.simple_ai_bar.setCursor(Qt.CursorShape.ArrowCursor)
-    def _on_ai_processing_finished(self):
-        """Handle AI processing finished"""
-        if hasattr(self, 'simple_ai_bar'):
-            self.simple_ai_bar.is_processing = False
-        
-    def _on_ai_error(self, error_msg: str):
-        """Handle AI processing error"""
-        self._show_ai_error(error_msg)
+            self.logger.warning("Current page doesn't support report generation")
     
-    def _connect_ai_signals(self):
-        """Connect AI processor signals to handlers"""
-        # Connect AI status bar signals to command processor
-        if hasattr(self, 'simple_ai_bar'):
-            self.simple_ai_bar.returnPressed.connect(self._process_ai_command)        # Connect AI processor signals
-        if hasattr(self, 'ai_processor'):
-            self.ai_processor.response_ready.connect(self._handle_ai_response)
-            self.ai_processor.navigation_requested.connect(self._handle_ai_navigation)
-            self.ai_processor.report_requested.connect(self._handle_ai_report)
-            self.ai_processor.reminder_created.connect(self._handle_ai_reminder)
-            self.ai_processor.processing_started.connect(self._on_ai_processing_started)
-            self.ai_processor.processing_finished.connect(self._on_ai_processing_finished)
-            self.ai_processor.error_occurred.connect(self._on_ai_error)
-            
-            # Connect AI processor to status bar
-            if hasattr(self, 'simple_ai_bar'):
-                self.ai_processor.response_ready.connect(self.simple_ai_bar.handle_ai_response)
-                self.ai_processor.processing_started.connect(self.simple_ai_bar.handle_processing_started)
-                self.ai_processor.processing_finished.connect(self.simple_ai_bar.handle_processing_finished)
-                self.ai_processor.error_occurred.connect(self.simple_ai_bar.handle_ai_error)
-                  
-    def _on_workspace_changed(self, org_id: str, org_name: str):
-        """Handle workspace change"""
+    def _handle_ai_reminder_creation(self, reminder_data: dict):
+        """Handle AI-created reminders with rich data structure"""
+        self.logger.info(f"AI reminder creation: {reminder_data}")
+        
         try:
-            self.logger.info(f"Switching to workspace: {org_name} (ID: {org_id})")
-            
-            # Update session manager
-            if self.session_manager:
-                success = self.session_manager.set_active_organization(org_id)
-                if success:
-                    # Refresh all pages that depend on organization context
-                    self._refresh_organization_dependent_pages()
-                    
-                    # Update window title to show current workspace
-                    self.setWindowTitle(f"AI Accountant - {org_name}")
-                    
-                    # Show notification
-                    if hasattr(self, 'notification_manager'):
-                        self.notification_manager.show_notification(
-                            f"Switched to {org_name}",
-                            f"Now working in {'personal workspace' if 'Workspace' in org_name else 'organization'}: {org_name}",
-                            "info"
-                        )
-                else:
-                    self.logger.error(f"Failed to switch to workspace {org_name}")
-            
-        except Exception as e:
-            self.logger.error(f"Error switching workspace: {e}")
+            # Save reminder to the reminders system
             if hasattr(self, 'notification_manager'):
-                self.notification_manager.show_notification(
-                    "Workspace Switch Failed",
-                    f"Could not switch to {org_name}. Please try again.",
-                    "error"                )
-    
-    def _refresh_organization_dependent_pages(self):
-        """Refresh pages that depend on organization context"""
-        try:
-            # Iterate through all pages in the stack
-            for i in range(self.stack.count()):
-                page = self.stack.widget(i)
-                  # Try common refresh method names
-                if hasattr(page, 'refresh_data'):
-                    page.refresh_data()
-                elif hasattr(page, 'load_data'):
-                    page.load_data()
-                elif hasattr(page, '_load_data'):
-                    page._load_data()
-                elif hasattr(page, 'refresh_organization_data'):
-                    page.refresh_organization_data()
-                elif hasattr(page, 'load_dashboard_data'):
-                    # Specifically for dashboard page
-                    page.load_dashboard_data()
-                elif hasattr(page, '_load_team_members'):
-                    # Specifically for team management page
-                    page._load_team_members()
-                elif hasattr(page, '_load_users'):
-                    # Specifically for user management page  
-                    page._load_users()
-                    
-            self.logger.info("Refreshed organization-dependent pages")
-                    
+                # Add to notification manager if available
+                self.notification_manager.add_reminder(reminder_data)
+            
+            # If not on reminders page, optionally navigate there
+            # For now, just log the successful creation
+            self.logger.info(f"Successfully created reminder: {reminder_data.get('title', 'Untitled')}")
+            
+            # Update AI context with new reminder data
+            self._update_ai_reminders_context()
+            
         except Exception as e:
-            self.logger.error(f"Error refreshing organization-dependent pages: {e}")
+            self.logger.error(f"Failed to create reminder: {e}")
     
-    def refresh_workspace_switcher(self):
-        """Refresh the workspace switcher (call when user joins/leaves organizations)"""
-        if hasattr(self, 'bottom_bar'):
-            self.bottom_bar.refresh_workspace_info()
+    def _handle_ai_action(self, action_type: str, results: dict):
+        """Handle various AI-executed actions"""
+        self.logger.info(f"AI action executed: {action_type} -> {results}")
+        
+        # Handle different action types
+        if action_type == "data_export":
+            self._handle_data_export(results)
+        elif action_type == "filter_applied":
+            self._handle_filter_application(results)
+        elif action_type == "calculation_performed":
+            self._handle_calculation_results(results)
+        # Add more action handlers as needed
     
+    def _handle_ai_context_update(self, context_data: dict):
+        """Handle AI context updates to keep the assistant informed"""
+        self.logger.debug(f"AI context updated: {context_data}")
+        # Context updates are primarily for AI awareness, minimal UI action needed
+    
+    def _update_ai_context_for_navigation(self, target_page: str, parameters: dict):
+        """Update AI context before navigation to help with parameter application"""
+        context = {
+            'navigation_intent': {
+                'target_page': target_page,
+                'parameters': parameters,
+                'timestamp': datetime.now().isoformat()
+            }
+        }
+        self.ai_processor.update_context('application', context)
+    
+    def _update_ai_page_context(self, page_name: str):
+        """Update AI context with current page state and available data"""
+        current_widget = self.stack.currentWidget()
+        page_data = {}
+        
+        # Extract relevant data from current page
+        if hasattr(current_widget, 'get_current_data'):
+            try:
+                page_data = current_widget.get_current_data()
+            except Exception as e:
+                self.logger.warning(f"Could not get page data: {e}")
+        
+        # Update AI context
+        context = {
+            'page': page_name,
+            'data': page_data,
+            'timestamp': datetime.now().isoformat()
+        }
+        self.ai_processor.update_context('page', context)
+    
+    def _update_ai_reminders_context(self):
+        """Update AI context with current reminders data"""
+        try:
+            # Get reminders from the reminders page or notification manager
+            reminders_data = {}
+            if hasattr(self, 'notification_manager'):
+                reminders_data = {
+                    'active_reminders': self.notification_manager.get_active_reminders(),
+                    'upcoming_deadlines': self.notification_manager.get_upcoming_deadlines()
+                }
+            
+            self.ai_processor.update_context('reminders', reminders_data)
+        except Exception as e:
+            self.logger.warning(f"Could not update reminders context: {e}")
+    
+    def _apply_navigation_parameters(self, page_name: str, parameters: dict):
+        """Apply AI-provided parameters to the target page"""
+        if not parameters:
+            return
+        
+        current_widget = self.stack.currentWidget()
+        
+        try:
+            # Handle common parameters
+            if 'date_range' in parameters:
+                date_range = parameters['date_range']
+                if hasattr(current_widget, 'set_date_range'):
+                    current_widget.set_date_range(date_range.get('start'), date_range.get('end'))
+            
+            if 'filters' in parameters:
+                filters = parameters['filters']
+                if hasattr(current_widget, 'apply_filters'):
+                    current_widget.apply_filters(filters)
+            
+            if 'account_filter' in parameters:
+                account = parameters['account_filter']
+                if hasattr(current_widget, 'filter_by_account'):
+                    current_widget.filter_by_account(account)
+            
+            # Add more parameter handling as needed
+            self.logger.info(f"Applied parameters to {page_name}: {parameters}")
+            
+        except Exception as e:
+            self.logger.warning(f"Could not apply parameters to {page_name}: {e}")
+    
+    def _handle_data_export(self, results: dict):
+        """Handle data export actions initiated by AI"""
+        # Placeholder for data export handling
+        self.logger.info(f"Data export requested: {results}")
+    
+    def _handle_filter_application(self, results: dict):
+        """Handle filter application actions initiated by AI"""
+        # Placeholder for filter handling
+        self.logger.info(f"Filters applied: {results}")
+    
+    def _handle_calculation_results(self, results: dict):
+        """Handle calculation results from AI"""
+        # Placeholder for calculation results handling
+        self.logger.info(f"Calculation results: {results}")
+
+    def _initialize_ai_context(self):
+        """Initialize AI context with application startup data"""
+        try:
+            # Initialize with basic application state
+            app_context = {
+                'startup_time': datetime.now().isoformat(),
+                'application_mode': 'multi_tenant' if hasattr(self, 'auth_manager') else 'single_tenant',
+                'current_user': getattr(self.auth_manager, 'current_user', None) if hasattr(self, 'auth_manager') else None
+            }
+            self.ai_processor.update_context('application', app_context)
+            
+            # Initialize with fresh accounting data
+            fresh_accounting_data = self._gather_current_accounting_data()
+            fresh_accounting_data.update({
+                'database_connected': True,  # If we got this far, DB is connected
+                'currency_symbol': self.currency_symbol
+            })
+            self.ai_processor.update_context('accounting', fresh_accounting_data)
+            
+            # Initialize with current page (dashboard by default)
+            self._update_ai_page_context('dashboard')
+            
+            self.logger.info("AI context initialized successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to initialize AI context: {e}")
+    
+    def _gather_current_accounting_data(self):
+        """Gather current accounting data for AI context"""
+        try:
+            accounting_data = {}
+            
+            # Get basic account information
+            if hasattr(self.accounting_system, 'get_accounts'):
+                try:
+                    accounts = self.accounting_system.get_accounts()
+                    accounting_data['total_accounts'] = len(accounts) if accounts else 0
+                    accounting_data['account_types'] = list(set([acc.get('type', 'Unknown') for acc in accounts[:10]]))  # Sample of types
+                except Exception as e:
+                    self.logger.warning(f"Could not fetch accounts: {e}")
+            
+            # Get recent transactions (last 10)
+            if hasattr(self.accounting_system, 'get_journal_entries'):
+                try:
+                    recent_entries = self.accounting_system.get_journal_entries(limit=10)
+                    accounting_data['recent_transactions_count'] = len(recent_entries) if recent_entries else 0
+                    if recent_entries:
+                        accounting_data['latest_transaction_date'] = recent_entries[0].get('date', 'Unknown')
+                except Exception as e:
+                    self.logger.warning(f"Could not fetch recent transactions: {e}")
+            
+            # Get account balances summary
+            if hasattr(self.accounting_system, 'get_trial_balance'):
+                try:
+                    trial_balance = self.accounting_system.get_trial_balance()
+                    if trial_balance:
+                        total_debits = sum([acc.get('debit', 0) for acc in trial_balance])
+                        total_credits = sum([acc.get('credit', 0) for acc in trial_balance])
+                        accounting_data['trial_balance_summary'] = {
+                            'total_debits': total_debits,
+                            'total_credits': total_credits,
+                            'in_balance': abs(total_debits - total_credits) < 0.01
+                        }
+                except Exception as e:
+                    self.logger.warning(f"Could not fetch trial balance: {e}")
+            
+            return accounting_data
+            
+        except Exception as e:
+            self.logger.error(f"Error gathering accounting data: {e}")
+            return {}
+    
+    def _update_ai_with_fresh_data(self):
+        """Update AI context with fresh accounting data"""
+        try:
+            fresh_data = self._gather_current_accounting_data()
+            self.ai_processor.update_context('accounting', fresh_data)
+            self.logger.debug("Updated AI context with fresh accounting data")
+        except Exception as e:
+            self.logger.warning(f"Could not update AI with fresh data: {e}")
+
     def _create_bottom_bar(self, main_layout):
-        """Create and add bottom bar to the main window"""
-        from .components.bottom_bar import BottomBar
-        
-        self.bottom_bar = BottomBar(
-            auth_manager=self.auth_manager,
-            session_manager=self.session_manager,
-            parent=self
-        )
-        
-        # Connect workspace change signal if workspace switcher is available
-        if hasattr(self.bottom_bar, 'workspace_switcher'):
-            self.bottom_bar.workspace_switcher.workspace_changed.connect(self._on_workspace_changed)
-        
-        main_layout.addWidget(self.bottom_bar)
+        """Create the bottom bar - currently just a spacer since AI bar is in title bar"""
+        try:
+            # Since the AI bar is in the title bar, we just need a small bottom spacer
+            # for proper window padding and Mica effect
+            bottom_spacer = QFrame()
+            bottom_spacer.setObjectName("BottomSpacer")
+            bottom_spacer.setFixedHeight(5)  # Small spacer for proper Mica effect
+            
+            # Apply minimal styling for Mica transparency
+            bottom_spacer.setStyleSheet("""
+                QFrame#BottomSpacer {
+                    background: rgba(0, 0, 0, 0.01);
+                    border: none;
+                }
+            """)
+            
+            # Add the bottom spacer to the main layout
+            main_layout.addWidget(bottom_spacer)
+            
+            self.logger.debug("Bottom spacer created successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Error creating bottom bar: {e}")

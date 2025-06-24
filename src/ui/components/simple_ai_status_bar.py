@@ -36,8 +36,7 @@ class SimpleAIStatusBar(QLineEdit):
         self.wellness_enabled = True
         self.break_reminder_interval = 2  # hours
         self.last_break_reminder = datetime.now() - timedelta(hours=2)
-        
-        # Setup UI
+          # Setup UI
         self._setup_ui()
         self._setup_animations()
         self._apply_styling()
@@ -45,15 +44,15 @@ class SimpleAIStatusBar(QLineEdit):
         
     def _setup_dynamic_status(self):
         """Setup timers and monitoring for dynamic status display"""
-        # Main status update timer - checks every 30 seconds
+        # Main status update timer - checks every 2 minutes for better performance
         self.status_timer = QTimer()
         self.status_timer.timeout.connect(self._update_dynamic_status)
-        self.status_timer.start(30000)  # 30 seconds
+        self.status_timer.start(120000)  # 2 minutes instead of 30 seconds
         
-        # Notification checker - checks every 10 seconds
+        # Notification checker - checks every 30 seconds for responsive notifications
         self.notification_timer = QTimer()
         self.notification_timer.timeout.connect(self._check_notifications)
-        self.notification_timer.start(10000)  # 10 seconds
+        self.notification_timer.start(30000)  # 30 seconds instead of 10 seconds
         
         # Initial status set
         self._update_dynamic_status()
@@ -166,33 +165,7 @@ class SimpleAIStatusBar(QLineEdit):
         self.min_width_animation.start()
         
         # Update fixed width after animation
-        QTimer.singleShot(300, lambda: self.setFixedWidth(500))
-        
-    def _collapse_to_normal(self):
-        """Collapse the input field back to a status display"""
-        self.is_expanded = False
-        self.is_processing = False
-        
-        # Restore read-only status display
-        self.setReadOnly(True)
-        self.setPlaceholderText("") # Clear placeholder
-        self.setText("Ask AI anything...") # Reset to default
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.clearFocus()
-        
-        # Animate width collapse
-        self.width_animation.setStartValue(self.width())
-        self.width_animation.setEndValue(350)
-        self.min_width_animation.setStartValue(self.width())
-        self.min_width_animation.setEndValue(350)
-        
-        self.width_animation.start()
-        self.min_width_animation.start()
-
-        # Update fixed width after animation
-        QTimer.singleShot(300, lambda: self.setFixedWidth(350))
-    
+        QTimer.singleShot(300, lambda: self.setFixedWidth(500))        
     def _process_input(self):
         """Process user input by emitting a signal."""
         user_input = self.text().strip()
@@ -333,8 +306,7 @@ class SimpleAIStatusBar(QLineEdit):
                 "Well-organized chart of accounts = clear reporting 🗂️",
                 "Your account structure looks professional 💼",
                 "Account balances reflecting business health 📊"
-            ],
-            "reports": [
+            ],            "reports": [
                 "Reports transform data into business insights 📈",
                 "Financial reports are your business compass 🧭",
                 "Numbers tell the story - you're the author ✍️"
@@ -343,36 +315,40 @@ class SimpleAIStatusBar(QLineEdit):
     
     def _update_dynamic_status(self):
         """Update the status bar with dynamic content when idle"""
-        if self.is_expanded or self.is_processing:
-            return
+        try:
+            if self.is_expanded or self.is_processing:
+                return
+                
+            current_time = datetime.now()
             
-        current_time = datetime.now()
-        
-        # Check for background processes first
-        if self.background_processes:
-            self._show_background_process_status()
-            return
-            
-        # Check for unread notifications
-        if self.unread_notifications_count > 0:
-            self._show_notification_reminder()
-            return
-            
-        # Check if it's time for a motivational message
-        time_since_last_message = current_time - self.last_motivational_message_time
-        if time_since_last_message.total_seconds() > 3600:  # 1 hour
-            self._show_motivational_message()
-            return
-            
-        # Check for break reminders
-        time_since_last_break = current_time - self.last_break_reminder
-        if (self.wellness_enabled and 
-            time_since_last_break.total_seconds() > self.break_reminder_interval * 3600):
-            self._show_break_reminder()
-            return
-            
-        # Default context-aware message
-        self._show_context_message()
+            # Check for background processes first
+            if self.background_processes:
+                self._show_background_process_status()
+                return
+                
+            # Check for unread notifications
+            if self.unread_notifications_count > 0:
+                self._show_notification_reminder()
+                return
+                
+            # Check if it's time for a motivational message
+            time_since_last_message = current_time - self.last_motivational_message_time
+            if time_since_last_message.total_seconds() > 3600:  # 1 hour
+                self._show_motivational_message()
+                return
+                
+            # Check for break reminders
+            time_since_last_break = current_time - self.last_break_reminder
+            if (self.wellness_enabled and 
+                time_since_last_break.total_seconds() > self.break_reminder_interval * 3600):
+                self._show_break_reminder()
+                return
+                
+            # Default context-aware message
+            self._show_context_message()
+        except Exception as e:
+            # Silent fail - don't disrupt the UI
+            print(f"AI Status Bar update error: {e}")
     
     def _show_motivational_message(self):
         """Display a motivational message"""

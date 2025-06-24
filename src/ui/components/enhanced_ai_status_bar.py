@@ -11,6 +11,7 @@ import json
 import random
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
+from .enhanced_ai_processor import ContextAwareAI
 
 class MotivationalMessageManager:
     """Manages motivational and wellness messages for the AI status bar"""
@@ -278,96 +279,6 @@ class StatusDisplayManager:
         """Set the number of unread notifications"""
         self.notification_count = count
 
-class AICommandProcessor(QThread):
-    """Processes AI commands in a separate thread"""
-    
-    command_processed = pyqtSignal(dict)
-    processing_started = pyqtSignal(dict)
-    processing_finished = pyqtSignal()
-    error_occurred = pyqtSignal(str)
-    
-    def __init__(self):
-        super().__init__()
-        self.command_queue = []
-        self.current_command = None
-        
-    def process_command(self, command: str, context: Dict[str, Any] = None):
-        """Add command to processing queue"""
-        self.command_queue.append({
-            'command': command,
-            'context': context or {},
-            'timestamp': datetime.now()
-        })
-        
-        if not self.isRunning():
-            self.start()
-    
-    def run(self):
-        """Process commands from queue"""
-        while self.command_queue:
-            self.current_command = self.command_queue.pop(0)
-            self._process_single_command(self.current_command)
-    
-    def _process_single_command(self, command_data: Dict[str, Any]):
-        """Process a single command"""
-        try:
-            command = command_data['command']
-            context = command_data['context']
-            
-            # Emit processing started
-            self.processing_started.emit({
-                'type': 'command_analysis',
-                'command': command
-            })
-            
-            # Simulate AI processing (replace with actual Mistral API call)
-            time.sleep(1)
-            
-            # Parse command type and generate response
-            response = self._generate_ai_response(command, context)
-            
-            # Emit completion
-            self.command_processed.emit(response)
-            self.processing_finished.emit()
-            
-        except Exception as e:
-            self.error_occurred.emit(str(e))
-    
-    def _generate_ai_response(self, command: str, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate AI response (placeholder for Mistral API integration)"""
-        # This is where we'll integrate with Mistral API
-        # For now, return a simple response
-        
-        command_lower = command.lower()
-        
-        if any(word in command_lower for word in ['report', 'show', 'generate']):
-            return {
-                'type': 'report',
-                'action': 'generate_report',
-                'response': f"I'll generate that report for you. Analyzing your request: '{command}'",
-                'data': {'report_type': 'custom', 'parameters': {}}
-            }
-        elif any(word in command_lower for word in ['remind', 'reminder']):
-            return {
-                'type': 'reminder',
-                'action': 'create_reminder',
-                'response': f"I'll set up that reminder for you: '{command}'",
-                'data': {'reminder_text': command}
-            }
-        elif any(word in command_lower for word in ['go', 'navigate', 'open']):
-            return {
-                'type': 'navigation',
-                'action': 'navigate',
-                'response': f"Navigating as requested: '{command}'",
-                'data': {'target_page': 'dashboard'}
-            }
-        else:
-            return {
-                'type': 'general',
-                'action': 'general_response',
-                'response': f"I understand you want to: '{command}'. Let me help you with that.",
-                'data': {}
-            }
 
 class EnhancedAIStatusBar(QLineEdit):
     """Enhanced AI Status Bar with comprehensive functionality"""
@@ -378,10 +289,9 @@ class EnhancedAIStatusBar(QLineEdit):
         self.is_expanded = False
         self.is_processing = False
         self.placeholder_text = "🤖 AI Assistant - Ask me anything!"
-        
-        # Initialize components
+          # Initialize components
         self.display_manager = StatusDisplayManager(self)
-        self.ai_processor = AICommandProcessor()
+        self.ai_processor = ContextAwareAI()
         
         # Setup UI and connections
         self._setup_ui()
@@ -454,12 +364,11 @@ class EnhancedAIStatusBar(QLineEdit):
                 border: 1px solid rgba(100, 181, 246, 0.3);
                 outline: none;
                 text-align: center;
-            }
-        """)
+            }        """)
     
     def _setup_ai_connections(self):
         """Setup AI processor signal connections"""
-        self.ai_processor.command_processed.connect(self._handle_ai_response)
+        self.ai_processor.response_ready.connect(self._handle_ai_response)
         self.ai_processor.processing_started.connect(self._on_processing_started)
         self.ai_processor.processing_finished.connect(self._on_processing_finished)
         self.ai_processor.error_occurred.connect(self._on_ai_error)
@@ -511,12 +420,14 @@ class EnhancedAIStatusBar(QLineEdit):
         self.setReadOnly(True)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setCursor(Qt.CursorShape.ArrowCursor)
-        
-        # Get current context
+          # Get current context
         context = self._get_current_context()
         
+        # Update AI processor context
+        self.ai_processor.update_context("application", context)
+        
         # Process with AI
-        self.ai_processor.process_command(user_input, context)
+        self.ai_processor.process_command(user_input)
     
     def _get_current_context(self) -> Dict[str, Any]:
         """Get current application context"""
