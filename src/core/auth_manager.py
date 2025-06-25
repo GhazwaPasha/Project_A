@@ -1,12 +1,10 @@
 """
-Authentication Manager for Supabase integration
-Fast implementation with all essential features
+Clean Authentication Manager for Supabase
+Works with the new multi-tenant schema (NEW_SCHEMA.sql)
 """
-import os
 import logging
 from typing import Optional, Dict, Any, List
-from datetime import datetime, timedelta
-import json
+from datetime import datetime
 
 try:
     from supabase import create_client, Client
@@ -15,8 +13,11 @@ except ImportError:
     SUPABASE_AVAILABLE = False
     Client = None
 
+from .config import DatabaseConfig
+from .supabase_manager import SupabaseManager
+
 class AuthManager:
-    """Fast authentication manager with Supabase integration"""
+    """Clean authentication manager with Supabase integration"""
     
     def __init__(self):
         self.logger = logging.getLogger(__name__)
@@ -24,17 +25,18 @@ class AuthManager:
         if not SUPABASE_AVAILABLE:
             raise ImportError("Supabase client not available. Install with: pip install supabase")
         
+        # Validate configuration
+        DatabaseConfig.validate_config()
+        
         # Initialize Supabase client
-        supabase_url = os.getenv('SUPABASE_URL')
-        supabase_key = os.getenv('SUPABASE_ANON_KEY')
+        self.supabase = create_client(
+            DatabaseConfig.SUPABASE_URL,
+            DatabaseConfig.SUPABASE_ANON_KEY
+        )
         
-        if not supabase_url or not supabase_key:
-            raise ValueError("SUPABASE_URL and SUPABASE_ANON_KEY must be set in environment")
-        
-        self.supabase = create_client(supabase_url, supabase_key)
+        self.db_manager = None
         self.current_user = None
-        self.user_organizations = []
-        self.session_token = None
+        self.current_session = None
         
     def sign_in(self, email: str, password: str) -> Dict[str, Any]:
         """Sign in user with email/password"""
@@ -46,478 +48,307 @@ class AuthManager:
             
             if result.user:
                 self.current_user = result.user
-                self.session_token = result.session.access_token if result.session else None
+                self.current_session = result.session
                 
-                # Load user profile and organizations
-                self._load_user_profile()
-                self._load_user_organizations()
-                  # Update last login
-                self._update_last_login()
+                # Initialize database manager with user
+                self.db_manager = SupabaseManager(result.user.id)
                 
-                self.logger.info(f"User {email} signed in successfully")
-                return {
-                    "success": True, 
-                    "user": {
-                        "id": result.user.id,
-                        "email": result.user.email,
-                        "email_confirmed_at": str(result.user.email_confirmed_at) if result.user.email_confirmed_at else None,
-                        "created_at": str(result.user.created_at) if result.user.created_at else None,
-                        "user_metadata": result.user.user_metadata or {},
-                        "app_metadata": result.user.app_metadata or {}
-                    },
-                    "organizations": self.user_organizations
+                # Update last sign in
+                self.db_manager.update_user_profile(result.user.id, {
+                    'last_sign_in_at': datetime.now().isoformat()
+                })
+                
+                # Get user's organizations
+                organizations = self.get_user_organizations()
+                
+                # Convert user object to dict
+                user_data = {
+                    'id': result.user.id,
+                    'email': result.user.email,
+                    'created_at': result.user.created_at,
+                    'updated_at': result.user.updated_at,
+                    'email_confirmed_at': getattr(result.user, 'email_confirmed_at', None),
+                    'last_sign_in_at': getattr(result.user, 'last_sign_in_at', None)
                 }
-            
-            return {"success": False, "error": "Invalid credentials"}
-            
+                
+                return {
+                    'success': True,
+                    'user': user_data,
+                    'organizations': organizations,
+                    'session': result.session,
+                    'message': 'Successfully signed in'
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': 'Invalid credentials',
+                    'message': 'Email or password is incorrect'
+                }
+                
         except Exception as e:
-            self.logger.error(f"Sign in failed: {e}")
-            return {"success": False, "error": str(e)}
+            self.logger.error(f"Sign in error: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'message': 'Sign in failed'
+            }
     
-    def sign_up(self, email: str, password: str, first_name: str = "", last_name: str = "", 
-                organization_type: str = "personal", organization_name: str = None, invitation_code: str = None) -> Dict[str, Any]:
-        """Sign up new user with automatic personal workspace creation"""
+    def sign_up(self, email: str, password: str, full_name: str = None, 
+                first_name: str = None, last_name: str = None,
+                organization_type: str = "personal", organization_name: str = None,
+                invitation_code: str = None) -> Dict[str, Any]:
+        """Sign up new user with organization setup"""
         try:
-            # Basic signup with Supabase Auth
+            # Combine first and last name if provided
+            if first_name and last_name:
+                full_name = f"{first_name} {last_name}"
+            elif not full_name:
+                full_name = email.split('@')[0]
+            
+            self.logger.info(f"Starting signup for email: {email}")
+            
+            # Sign up with user metadata
             result = self.supabase.auth.sign_up({
                 "email": email,
-                "password": password
+                "password": password,
+                "options": {
+                    "data": {
+                        "full_name": full_name,
+                        "first_name": first_name or "",
+                        "last_name": last_name or ""
+                    }
+                }
             })
             
-            if not result.user:
-                return {"success": False, "error": "Failed to create account"}
+            self.logger.info(f"Supabase auth.sign_up result: user={result.user is not None}")
             
-            user_id = result.user.id
-            
-            # Create user profile
-            user_profile = self._create_user_profile(user_id, first_name, last_name, email)
-              # Handle organization assignment
-            if organization_type == "new" and organization_name:
-                # Create new organization and make user the owner
-                org_id = self._create_organization(organization_name, user_id)
-                self._add_user_to_organization(user_id, org_id, "organization_owner")
+            if result.user:
+                self.logger.info(f"User created successfully: {result.user.id}")
                 
-            elif organization_type == "existing" and invitation_code:
-                # Join existing organization using invitation code
-                self._join_organization_by_invitation(user_id, invitation_code)
+                # The user profile will be created automatically by the trigger
+                # Wait a moment and then set up organization
+                import time
+                time.sleep(1)  # Wait for trigger to complete
+                
+                self.logger.info("Creating SupabaseManager for organization setup")
+                temp_manager = SupabaseManager(result.user.id)
+                
+                self.logger.info(f"Setting up organization: type={organization_type}")
+                
+                # Handle organization setup based on type
+                org_result = self._setup_user_organization(
+                    temp_manager, result.user.id, organization_type, 
+                    organization_name, invitation_code
+                )
+                
+                self.logger.info(f"Organization setup result: {org_result}")
+                
+                return {
+                    'success': True,
+                    'user': result.user,
+                    'organization': org_result,
+                    'message': 'Account created successfully'
+                }
             else:
-                # Create personal workspace for the user (default behavior)
-                if first_name and last_name:
-                    personal_workspace_name = f"{first_name} {last_name}'s Workspace"
-                elif first_name:
-                    personal_workspace_name = f"{first_name}'s Workspace"
-                else:
-                    personal_workspace_name = "Personal Workspace"
-                    
-                org_id = self._create_organization(personal_workspace_name, user_id)
-                self._add_user_to_organization(user_id, org_id, "organization_owner")
-            
-            self.logger.info(f"User {email} signed up successfully")
-            return {
-                "success": True,
-                "user": {
-                    "id": result.user.id,
-                    "email": result.user.email,
-                    "email_confirmed_at": str(result.user.email_confirmed_at) if result.user.email_confirmed_at else None,
-                    "created_at": str(result.user.created_at) if result.user.created_at else None,
-                    "user_metadata": result.user.user_metadata or {},
-                    "app_metadata": result.user.app_metadata or {}
-                },
-                "user_profile": user_profile,
-                "message": "Account created successfully! Please check your email for verification."
-            }
-            
+                self.logger.error("Supabase auth.sign_up returned no user")
+                return {
+                    'success': False,
+                    'error': 'Failed to create account',
+                    'message': 'Account creation failed'
+                }
+                
         except Exception as e:
-            self.logger.error(f"Sign up failed: {e}")
-            return {"success": False, "error": str(e)}
+            self.logger.error(f"Sign up error: {e}")
+            import traceback
+            self.logger.error(f"Sign up traceback: {traceback.format_exc()}")
+            return {
+                'success': False,
+                'error': f"Database error saving new user",
+                'message': 'Account creation failed'
+            }
     
-    def sign_out(self) -> bool:
+    def sign_out(self) -> Dict[str, Any]:
         """Sign out current user"""
         try:
-            self.supabase.auth.sign_out()
+            result = self.supabase.auth.sign_out()
             self.current_user = None
-            self.user_organizations = []
-            self.session_token = None
-            self.logger.info("User signed out successfully")
-            return True
+            self.current_session = None
+            self.db_manager = None
+            
+            return {
+                'success': True,
+                'message': 'Successfully signed out'
+            }
         except Exception as e:
-            self.logger.error(f"Sign out failed: {e}")
-            return False
-    
-    def has_valid_session(self) -> bool:
-        """Check if user has valid session"""
-        try:
-            session = self.supabase.auth.get_session()
-            if session and session.access_token:
-                self.current_user = session.user
-                self.session_token = session.access_token
-                self._load_user_profile()
-                self._load_user_organizations()
-                return True
-            return False
-        except Exception as e:
-            self.logger.error(f"Session check failed: {e}")
-            return False
+            self.logger.error(f"Sign out error: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'message': 'Sign out failed'
+            }
     
     def get_current_user(self) -> Optional[Dict[str, Any]]:
-        """Get current user data"""
-        return self.current_user
+        """Get current authenticated user"""
+        if not self.current_user:
+            return None
+            
+        return {
+            'id': self.current_user.id,
+            'email': self.current_user.email,
+            'created_at': self.current_user.created_at
+        }
+    
+    def get_user_profile(self) -> Optional[Dict[str, Any]]:
+        """Get current user's profile"""
+        if not self.current_user or not self.db_manager:
+            return None
+        
+        return self.db_manager.get_user_profile()
     
     def get_user_organizations(self) -> List[Dict[str, Any]]:
-        """Get list of organizations for current user using non-recursive function"""
-        try:
-            if not self.current_user:
-                self.logger.error("No authenticated user")
-                return []
-            
-            # Use the helper function that bypasses RLS recursion
-            response = self.supabase.rpc('get_user_organizations', {
-                'p_user_id': self.current_user.id
-            }).execute()
-            
-            if not response.data:
-                return []
-            
-            # Format organizations data
-            organizations = []
-            for org_data in response.data:
-                organizations.append({
-                    'id': org_data['organization_id'],
-                    'name': org_data['organization_name'],
-                    'role': org_data['user_role']
-                })
-            
-            # Cache organizations
-            self.user_organizations = organizations
-            return organizations
-            
-        except Exception as e:
-            self.logger.error(f"Failed to get user organizations: {e}")
+        """Get organizations for current user"""
+        if not self.current_user or not self.db_manager:
             return []
-
-    def set_database_context(self, user_id: str, organization_id: str = None, role: str = None):
-        """Set PostgreSQL session variables for RLS policies"""
-        try:
-            # Use the Supabase RPC function to set context
-            self.supabase.rpc('set_app_context', {
-                'user_id': user_id,
-                'organization_id': organization_id,
-                'role': role or 'accountant'
-            }).execute()
-            
-            self.logger.info(f"Database context set for user {user_id}, org {organization_id}, role {role}")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to set database context: {e}")
-            raise
-            
-    def get_organization_members(self, organization_id: str) -> List[Dict[str, Any]]:
-        """Get all members of an organization"""
-        try:
-            if not self.current_user:
-                return []
-            
-            # Get organization members with user details
-            result = self.supabase.table('organization_members').select(
-                '*, users!inner(first_name, last_name, display_name, email, last_login_at)'
-            ).eq('organization_id', organization_id).eq('is_active', True).execute()
-            
-            return result.data if result.data else []
-            
-        except Exception as e:
-            self.logger.error(f"Failed to get organization members: {e}")
-            return []
+        
+        return self.db_manager.get_organizations()
     
-    def get_pending_invitations(self, organization_id: str) -> List[Dict[str, Any]]:
-        """Get pending invitations for an organization"""
-        try:
-            if not self.current_user:
-                return []
-            
-            # Get pending invitations with inviter details
-            result = self.supabase.table('organization_members').select(
-                '*, invited_by_user:users!invited_by(display_name)'
-            ).eq('organization_id', organization_id).is_('joined_at', 'null').execute()
-            
-            return result.data if result.data else []
-            
-        except Exception as e:
-            self.logger.error(f"Failed to get pending invitations: {e}")
-            return []
-    
-    def update_member_role(self, member_id: str, new_role: str) -> Dict[str, Any]:
-        """Update a member's role in the organization"""
-        try:
-            if not self.current_user:
-                return {"success": False, "error": "User not authenticated"}
-            
-            # Update the member's role
-            result = self.supabase.table('organization_members').update({
-                'role': new_role,
-                'updated_at': 'now()'
-            }).eq('id', member_id).execute()
-            
-            if result.data:
-                return {"success": True, "message": "Role updated successfully"}
-            else:
-                return {"success": False, "error": "Failed to update role"}
-                
-        except Exception as e:
-            self.logger.error(f"Failed to update member role: {e}")
-            return {"success": False, "error": str(e)}
-    
-    def remove_organization_member(self, member_id: str) -> Dict[str, Any]:
-        """Remove a member from the organization"""
-        try:
-            if not self.current_user:
-                return {"success": False, "error": "User not authenticated"}
-            
-            # Set member as inactive instead of deleting
-            result = self.supabase.table('organization_members').update({
-                'is_active': False,
-                'updated_at': 'now()'
-            }).eq('id', member_id).execute()
-            
-            if result.data:
-                return {"success": True, "message": "Member removed successfully"}
-            else:
-                return {"success": False, "error": "Failed to remove member"}
-                
-        except Exception as e:
-            self.logger.error(f"Failed to remove member: {e}")
-            return {"success": False, "error": str(e)}
-    
-    def cancel_invitation(self, invitation_id: str) -> Dict[str, Any]:
-        """Cancel a pending invitation"""
-        try:
-            if not self.current_user:
-                return {"success": False, "error": "User not authenticated"}
-            
-            # Delete the invitation record
-            result = self.supabase.table('organization_members').delete().eq('id', invitation_id).execute()
-            
-            return {"success": True, "message": "Invitation cancelled"}
-                
-        except Exception as e:
-            self.logger.error(f"Failed to cancel invitation: {e}")
-            return {"success": False, "error": str(e)}
-    
-    def send_invitation_email(self, email: str, organization_name: str, inviter_name: str, invitation_token: str) -> bool:
-        """Send invitation email to user (placeholder for email service)"""
-        try:
-            # This is a placeholder for email integration
-            # In production, you would integrate with an email service like SendGrid, AWS SES, etc.
-            self.logger.info(f"Email invitation sent to {email} for organization {organization_name}")
-            return True
-        except Exception as e:
-            self.logger.error(f"Failed to send invitation email: {e}")
+    def is_super_admin(self) -> bool:
+        """Check if current user is super admin"""
+        if not self.current_user or not self.db_manager:
             return False
-
-    def create_organization(self, name: str, description: str = "") -> Dict[str, Any]:
-        """Create new organization and make current user the owner"""
-        try:
-            if not self.current_user:
-                return {"success": False, "error": "User not authenticated"}
-            
-            # Generate slug from name
-            slug = name.lower().replace(' ', '-').replace('_', '-')
-            # Remove special characters and ensure uniqueness
-            import re
-            slug = re.sub(r'[^a-z0-9-]', '', slug)
-              # Create organization (using only available columns)
-            org_data = {
-                "name": name,
-                "slug": slug
-            }
-            
-            org_result = self.supabase.table('organizations').insert(org_data).execute()
-            
-            if org_result.data:
-                org = org_result.data[0]
-                
-                # Add user as organization owner
-                member_result = self.supabase.table('organization_members').insert({
-                    "organization_id": org['id'],
-                    "user_id": self.current_user.id,
-                    "role": "organization_owner"
-                }).execute()
-                
-                if member_result.data:
-                    # Reload user organizations
-                    self._load_user_organizations()
-                    
-                    self.logger.info(f"Organization '{name}' created successfully")
-                    return {"success": True, "organization": org}
-            
-            return {"success": False, "error": "Failed to create organization"}
-            
-        except Exception as e:
-            self.logger.error(f"Create organization failed: {e}")
-            return {"success": False, "error": str(e)}
+        
+        return self.db_manager.is_super_admin()
     
-    def invite_user_to_organization(self, email: str, organization_id: str, role: str = "accountant") -> Dict[str, Any]:
-        """Invite user to organization"""
+    def get_user_role_in_organization(self, org_id: str) -> Optional[str]:
+        """Get current user's role in specific organization"""
+        if not self.current_user or not self.db_manager:
+            return None
+        
+        return self.db_manager.get_user_role_in_organization(org_id)
+    
+    def has_permission(self, org_id: str, required_roles: List[str]) -> bool:
+        """Check if user has required permission in organization"""
+        if self.is_super_admin():
+            return True
+        
+        user_role = self.get_user_role_in_organization(org_id)
+        return user_role in required_roles if user_role else False
+    
+    def can_read_accounting_data(self, org_id: str) -> bool:
+        """Check if user can read accounting data"""
+        return self.has_permission(org_id, ['organization_owner', 'accountant', 'member'])
+    
+    def can_modify_accounting_data(self, org_id: str) -> bool:
+        """Check if user can modify accounting data"""
+        return self.has_permission(org_id, ['organization_owner', 'accountant'])
+    
+    def can_manage_organization(self, org_id: str) -> bool:
+        """Check if user can manage organization"""
+        return self.has_permission(org_id, ['organization_owner'])
+    
+    def can_close_periods(self, org_id: str) -> bool:
+        """Check if user can close periods"""
+        return self.has_permission(org_id, ['organization_owner'])
+    
+    def reset_password(self, email: str) -> Dict[str, Any]:
+        """Send password reset email"""
         try:
-            if not self.current_user:
-                return {"success": False, "error": "User not authenticated"}
+            result = self.supabase.auth.reset_password_email(email)
+            return {
+                'success': True,
+                'message': 'Password reset email sent'
+            }
+        except Exception as e:
+            self.logger.error(f"Password reset error: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'message': 'Failed to send password reset email'
+            }
+    
+    def get_session_info(self) -> Optional[Dict[str, Any]]:
+        """Get current session information"""
+        if not self.current_session:
+            return None
             
-            # Check if user has permission to invite
-            if not self._can_manage_users(organization_id):
-                return {"success": False, "error": "Permission denied"}
+        return {
+            'access_token': self.current_session.access_token,
+            'refresh_token': self.current_session.refresh_token,
+            'expires_at': self.current_session.expires_at,
+            'user': self.get_current_user()
+        }
+    
+    def _setup_user_organization(self, db_manager: SupabaseManager, user_id: str, 
+                                org_type: str, org_name: str = None, 
+                                invitation_code: str = None) -> Dict[str, Any]:
+        """Setup user organization based on signup type"""
+        try:
+            self.logger.info(f"Setting up organization for user {user_id}, type: {org_type}")
             
-            # Generate invitation token
-            import uuid
-            invitation_token = str(uuid.uuid4())
-            expires_at = datetime.now() + timedelta(days=7)
+            # Wait a moment for the user profile trigger to complete
+            import time
+            time.sleep(0.5)
             
-            # Create invitation record
-            invite_result = self.supabase.table('organization_members').insert({
-                "organization_id": organization_id,
-                "user_id": None,  # Will be filled when user accepts
-                "role": role,
-                "invited_by": self.current_user.id,
-                "invited_at": datetime.now().isoformat(),
-                "invitation_token": invitation_token,
-                "invitation_expires_at": expires_at.isoformat(),
-                "is_active": False
-            }).execute()
-            
-            if invite_result.data:
-                # TODO: Send invitation email
-                self.logger.info(f"User {email} invited to organization")
+            if org_type == "personal":
+                self.logger.info("Creating personal workspace")
+                # Create personal workspace
+                org_data = {
+                    'name': f"Personal Workspace",
+                    'description': 'Personal accounting workspace',
+                    'settings': {'workspace_type': 'personal'}
+                }
+                
+                self.logger.info(f"Creating organization with data: {org_data}")
+                org = db_manager.create_organization(org_data)
+                self.logger.info(f"Organization created: {org}")
+                
+                if org:
+                    # Add user as organization owner
+                    self.logger.info(f"Adding user {user_id} as organization owner")
+                    membership = db_manager.add_organization_member(
+                        org['id'], user_id, 'organization_owner'
+                    )
+                    self.logger.info(f"Membership created: {membership}")
+                    return {'type': 'personal', 'organization': org, 'membership': membership}
+                else:
+                    self.logger.error("Failed to create organization")
+                    return {'error': 'Failed to create personal workspace'}
+                
+            elif org_type == "new":
+                # Create new organization
+                if not org_name:
+                    return {'error': 'Organization name required for new organization'}
+                
+                self.logger.info(f"Creating new organization: {org_name}")
+                org_data = {
+                    'name': org_name,
+                    'description': f'Organization: {org_name}',
+                    'settings': {'workspace_type': 'organization'}
+                }
+                
+                org = db_manager.create_organization(org_data)
+                if org:
+                    # Add user as organization owner
+                    membership = db_manager.add_organization_member(
+                        org['id'], user_id, 'organization_owner'
+                    )
+                    return {'type': 'new', 'organization': org, 'membership': membership}
+                else:
+                    return {'error': 'Failed to create organization'}
+                
+            elif org_type == "existing":
+                # Join existing organization via invitation code
+                # For now, return a placeholder - this would need invitation system
                 return {
-                    "success": True, 
-                    "invitation_token": invitation_token,
-                    "message": f"Invitation sent to {email}"
+                    'type': 'existing', 
+                    'message': 'Invitation system not yet implemented',
+                    'invitation_code': invitation_code
                 }
             
-            return {"success": False, "error": "Failed to create invitation"}
+            return {'error': f'Unknown organization type: {org_type}'}
             
         except Exception as e:
-            self.logger.error(f"Invite user failed: {e}")
-            return {"success": False, "error": str(e)}
-    
-    def get_user_role(self, organization_id: str) -> Optional[str]:
-        """Get user's role in specific organization"""
-        try:
-            if not self.current_user:
-                return None
-                
-            response = self.supabase.table('organization_members').select(
-                'role'
-            ).eq('user_id', self.current_user.id).eq(
-                'organization_id', organization_id
-            ).single().execute()
-            
-            return response.data['role'] if response.data else None
-            
-        except Exception as e:
-            self.logger.error(f"Failed to get user role: {e}")
-            return None
-    
-    def _load_user_profile(self):
-        """Load extended user profile"""
-        try:
-            if not self.current_user:
-                return
-            
-            result = self.supabase.table('users').select('*').eq('id', self.current_user.id).execute()
-            if result.data:
-                self.user_profile = result.data[0]
-            else:
-                # Create profile if doesn't exist
-                self._create_user_profile(self.current_user.id, "", "", self.current_user.email)
-                
-        except Exception as e:
-            self.logger.error(f"Failed to load user profile: {e}")
-    
-    def _load_user_organizations(self):
-        """Load and cache user organizations"""
-        self.user_organizations = self.get_user_organizations()
-        
-    def _create_user_profile(self, user_id: str, first_name: str, last_name: str, email: str):
-        """Create user profile in users table"""
-        try:
-            display_name = f"{first_name} {last_name}".strip() or email.split('@')[0]
-            
-            self.supabase.table('users').insert({
-                "id": user_id,
-                "first_name": first_name,
-                "last_name": last_name,
-                "display_name": display_name
-            }).execute()
-        except Exception as e:
-            self.logger.error(f"Failed to create user profile: {e}")
-    
-    def _update_last_login(self):
-        """Update user's last login timestamp"""
-        try:
-            if not self.current_user:
-                return
-            
-            self.supabase.table('users').update({
-                "last_login_at": datetime.now().isoformat()
-            }).eq('id', self.current_user.id).execute()
-            
-        except Exception as e:
-            self.logger.error(f"Failed to update last login: {e}")
-    
-    def _can_manage_users(self, organization_id: str) -> bool:
-        """Check if user can manage users in organization"""
-        role = self.get_user_role(organization_id)
-        return role in ['organization_owner', 'organization_admin']
-    
-    def _create_organization(self, name: str, owner_id: str) -> str:
-        """Create a new organization"""
-        try:
-            # Generate slug from name
-            slug = name.lower().replace(" ", "-").replace("_", "-")
-            
-            # Insert organization
-            result = self.supabase.table("organizations").insert({
-                "name": name,
-                "slug": slug,
-                "settings": {},
-                "is_active": True
-            }).execute()
-            
-            if result.data:
-                org_id = result.data[0]["id"]
-                self.logger.info(f"Created organization {name} with ID {org_id}")
-                return org_id
-            else:
-                raise Exception("Failed to create organization")
-                
-        except Exception as e:
-            self.logger.error(f"Failed to create organization: {e}")
-            raise
-    
-    def _add_user_to_organization(self, user_id: str, org_id: str, role_name: str):
-        """Add user to organization with specified role"""
-        try:
-            # Add user to organization (using role name directly, not role_id)
-            self.supabase.table("organization_members").insert({
-                "organization_id": org_id,
-                "user_id": user_id,
-                "role": role_name,
-                "is_active": True,
-                "joined_at": "now()"
-            }).execute()
-            
-            self.logger.info(f"Added user {user_id} to org {org_id} with role {role_name}")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to add user to organization: {e}")
-            raise
-    
-    def _join_organization_by_invitation(self, user_id: str, invitation_code: str):
-        """Join organization using invitation code"""
-        try:
-            # TODO: Implement invitation code logic
-            # For now, this is a placeholder
-            self.logger.warning("Invitation code feature not yet implemented")
-            raise Exception("Invitation codes not yet supported")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to join organization by invitation: {e}")
-            raise
+            self.logger.error(f"Organization setup error: {e}")
+            import traceback
+            self.logger.error(f"Organization setup traceback: {traceback.format_exc()}")
+            return {'error': str(e)}

@@ -855,10 +855,17 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         # Super admin pages (visible to super admins only)
         super_admin_pages = [PlatformOverviewPage, GlobalOrganizationsPage]
         
-        # Settings page (always visible)
-        settings_pages = [SettingsPage]          # Add all pages to stack with proper initialization
-        all_pages = standard_pages + org_pages + admin_pages + super_admin_pages + settings_pages
-        for idx, PageClass in enumerate(all_pages):
+        # Add all pages to stack in the same order as navigation buttons
+        # Order must match nav_items: Dashboard, Journal, Ledger, Trial Balance, Reports, Accounts,
+        # Reminders, Period Closing, Team, Org Settings, User Mgmt, Platform, Global Orgs, Settings
+        page_classes_in_order = [
+            DashboardPage, JournalPage, LedgerPage, TrialBalancePage, 
+            ReportsPage, HierarchicalAccountsPage, RemindersTasksPage, PeriodClosingPage,
+            TeamManagementPage, OrganizationSettingsPage, UserManagementPage,
+            PlatformOverviewPage, GlobalOrganizationsPage, SettingsPage
+        ]
+        
+        for idx, PageClass in enumerate(page_classes_in_order):
             if PageClass in [TeamManagementPage, OrganizationSettingsPage, UserManagementPage, 
                            PlatformOverviewPage, GlobalOrganizationsPage]:
                 # Pass auth_manager and session_manager for organization/user management pages
@@ -1442,20 +1449,25 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         is_super_admin = self.session_manager.is_super_admin()
         can_manage_users = self.session_manager.can_manage_users()
         
-        # Standard pages (always visible): Dashboard, Journal, Ledger, Trial Balance, Reports, Accounts
-        always_visible = [0, 1, 2, 3, 4, 5]
+        # Page indices based on nav_items order:
+        # 0: Dashboard, 1: Journal, 2: Ledger, 3: Trial Balance, 4: Reports, 5: Accounts
+        # 6: Reminders, 7: Period Closing, 8: Team, 9: Org Settings, 10: User Mgmt
+        # 11: Platform, 12: Global Orgs, 13: Settings
         
-        # Organization pages: Team (6), Org Settings (7) - visible to all org members
-        org_visible = [6, 7] if self.session_manager.get_active_organization_id() else []
+        # Standard pages (always visible): Dashboard, Journal, Ledger, Trial Balance, Reports, Accounts, Reminders, Period Closing
+        always_visible = [0, 1, 2, 3, 4, 5, 6, 7]
         
-        # Admin pages: User Mgmt (8) - visible to admins and owners
-        admin_visible = [8] if can_manage_users else []
+        # Organization pages: Team, Org Settings - visible to all org members
+        org_visible = [8, 9] if self.session_manager.get_active_organization_id() else []
         
-        # Super admin pages: Platform (9), Global Orgs (10) - visible to super admins only
-        super_admin_visible = [9, 10] if is_super_admin else []
+        # Admin pages: User Mgmt - visible to admins and owners
+        admin_visible = [10] if can_manage_users else []
         
-        # Settings (11) - always visible
-        settings_visible = [11]
+        # Super admin pages: Platform, Global Orgs - visible to super admins only
+        super_admin_visible = [11, 12] if is_super_admin else []
+        
+        # Settings - always visible
+        settings_visible = [13]
         
         # Combine all visible indices
         visible_indices = always_visible + org_visible + admin_visible + super_admin_visible + settings_visible
