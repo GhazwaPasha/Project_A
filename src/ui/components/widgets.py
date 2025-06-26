@@ -311,45 +311,41 @@ class DateRangeSelector(QWidget):
         self._setup_ui()
         
     def _setup_ui(self):
-        """Setup the date range selector UI."""
-        from ..common import QHBoxLayout, QLabel, QButtonGroup, QPushButton, QDateEdit, QDate
+        """Setup the date range selector UI with level filter styling."""
+        from ..common import QHBoxLayout, QLabel, QButtonGroup, QPushButton, QDateEdit, QDate, QFrame
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 8, 0, 8)
         layout.setSpacing(12)
         
-        # Quick filters on the left
+        # Create container frame like level filter
+        filter_group = QFrame()
+        filter_group.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 8px;
+                padding: 4px;
+            }
+        """)
+        
+        filter_layout = QHBoxLayout(filter_group)
+        filter_layout.setSpacing(4)
+        filter_layout.setContentsMargins(4, 4, 4, 4)
+        
+        # Quick filters with level filter styling
         self.quick_buttons = QButtonGroup(self)
         quick_filters = ["This Month", "Last Month", "This Quarter", "This Year", "All Time"]
         
         for i, filter_name in enumerate(quick_filters):
             btn = QPushButton(filter_name)
             btn.setCheckable(True)
-            btn.setStyleSheet("""
-                QPushButton {
-                    background: rgba(255, 255, 255, 0.08);
-                    border: 1px solid rgba(0, 0, 0, 0.3);
-                    color: white;
-                    border-radius: 8px;
-                    padding: 8px 16px;
-                    font-weight: 500;
-                    font-size: 12px;
-                    min-height: 32px;
-                }
-                QPushButton:hover {
-                    background: rgba(255, 255, 255, 0.12);
-                    border: 1px solid rgba(100, 181, 246, 0.3);
-                }
-                QPushButton:checked {
-                    background: rgba(100, 181, 246, 0.15);
-                    border: 1px solid rgba(100, 181, 246, 0.5);
-                    color: #90CAF9;
-                }
-            """)
+            btn.setStyleSheet(self._get_date_filter_button_style())
             btn.clicked.connect(self._quick_filter_selected)
             self.quick_buttons.addButton(btn, i)
-            layout.addWidget(btn)
+            filter_layout.addWidget(btn)
         
+        layout.addWidget(filter_group)
         layout.addStretch()  # This pushes the date pickers to the right
         
         # Custom date range on the right with Windows 11 styling
@@ -358,22 +354,24 @@ class DateRangeSelector(QWidget):
         self.from_date.setCalendarPopup(True)
         date_picker_style = """
             QDateEdit {
-                background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(0, 0, 0, 0.3);
-                border-radius: 8px;
-                padding: 6px 12px;
-                color: white;
-                font-size: 12px;
-                min-height: 32px;
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 6px;
+                padding: 4px 16px;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 13px;
+                font-weight: 500;
+                margin: 0;
                 min-width: 130px;
+                min-height: 40px;
             }
             QDateEdit:hover {
-                background: rgba(255, 255, 255, 0.12);
-                border: 1px solid rgba(100, 181, 246, 0.3);
+                background: rgba(255, 255, 255, 0.08);
+                color: white;
             }
             QDateEdit:focus {
-                background: rgba(255, 255, 255, 0.12);
-                border: 1px solid rgba(100, 181, 246, 0.5);
+                background: rgba(0, 120, 215, 0.3);
+                color: white;
             }
             QDateEdit::drop-down {
                 border: none;
@@ -476,6 +474,33 @@ class DateRangeSelector(QWidget):
             self.to_date.setDate(today)
             
         self._on_date_changed()
+        
+    def _get_date_filter_button_style(self):
+        """Get Windows 11 style date filter button styling to match level filter."""
+        return """
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 13px;
+                font-weight: 500;
+                margin: 0;
+                min-width: 70px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.08);
+                color: white;
+            }
+            QPushButton:checked {
+                background: rgba(0, 120, 215, 0.3);
+                color: white;
+            }
+            QPushButton:checked:hover {
+                background: rgba(0, 120, 215, 0.4);
+            }
+        """
         
     def get_date_range(self):
         """Get the selected date range."""

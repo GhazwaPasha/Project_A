@@ -6,7 +6,7 @@ Refactored to eliminate code duplication and vestigial components
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QLineEdit, QFrame, QDateEdit, QMessageBox, 
-    QScrollArea, QSizePolicy, QTabWidget, QApplication
+    QScrollArea, QSizePolicy, QTabWidget, QApplication, QStackedWidget, QButtonGroup
 )
 from PyQt6.QtCore import Qt, QDate, QPropertyAnimation, QEasingCurve
 from datetime import datetime
@@ -127,7 +127,7 @@ class JournalPage(QWidget):
     def _apply_styling(self):
         """Apply modern glassmorphism styling."""
         GlassmorphismHelper.apply_main_container_effect(self)
-        self.setStyleSheet(self._get_tab_style() + ModernStyles.get_complete_stylesheet())
+        self.setStyleSheet(ModernStyles.get_complete_stylesheet())
         
     def _setup_ui(self):
         """Setup the tabbed interface."""
@@ -144,56 +144,93 @@ class JournalPage(QWidget):
         # Small spacer to align with other pages
         main_layout.addSpacing(ResponsiveHelper.scale_size(20, 16, 24))
         
-        # Tab widget - aligned with other pages' quick filters
-        self.tab_widget = QTabWidget()
-        self.tab_widget.setStyleSheet(self._get_tab_style())
+        # Create custom tab selector with level filter styling
+        self._create_tab_selector(main_layout)
+        
+        # Create stacked widget for tab content
+        self.stacked_widget = QStackedWidget()
         
         # Single entry tab
         self.single_entry_tab = SingleEntryTab(self.system)
-        self.tab_widget.addTab(self.single_entry_tab, "Single Entry")
+        self.stacked_widget.addWidget(self.single_entry_tab)
         
         # Bulk entry tab
         self.bulk_entry_tab = BulkEntryPage(self.system)
-        self.tab_widget.addTab(self.bulk_entry_tab, "Bulk Entry")
-          # Set default tab
-        self.tab_widget.setCurrentIndex(0)
-        main_layout.addWidget(self.tab_widget, 1)  # Use default stretch factor for natural spacing
+        self.stacked_widget.addWidget(self.bulk_entry_tab)
+        
+        # Set default tab
+        self.stacked_widget.setCurrentIndex(0)
+        main_layout.addWidget(self.stacked_widget, 1)  # Use default stretch factor for natural spacing
     
-    def _get_tab_style(self):
-        """Get the styling for the tab widget."""
-        return """
-            QTabWidget::pane {
-                border: none;
-                background: transparent;
-                margin-top: 2px;
-            }
-            
-            QTabBar::tab {
-                background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(0, 0, 0, 0.3);
-                color: white;
+    def _create_tab_selector(self, layout):
+        """Create tab selector with level filter container styling."""
+        # Container for tab selector
+        tab_container_layout = QHBoxLayout()
+        tab_container_layout.setContentsMargins(0, 8, 0, 8)
+        tab_container_layout.setSpacing(12)
+        
+        # Create container frame like level filter
+        tab_group = QFrame()
+        tab_group.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.05);
                 border-radius: 8px;
+                padding: 4px;
+            }
+        """)
+        
+        tab_layout = QHBoxLayout(tab_group)
+        tab_layout.setSpacing(4)
+        tab_layout.setContentsMargins(4, 4, 4, 4)
+        
+        # Tab buttons with level filter styling
+        self.tab_buttons = QButtonGroup(self)
+        tab_options = [("Single Entry", 0), ("Bulk Entry", 1)]
+        
+        for i, (tab_name, tab_index) in enumerate(tab_options):
+            btn = QPushButton(tab_name)
+            btn.setCheckable(True)
+            if i == 0:  # Default to first tab
+                btn.setChecked(True)
+            btn.setStyleSheet(self._get_tab_filter_button_style())
+            btn.clicked.connect(lambda checked, idx=tab_index: self._switch_tab(idx))
+            self.tab_buttons.addButton(btn, tab_index)
+            tab_layout.addWidget(btn)
+        
+        tab_container_layout.addWidget(tab_group)
+        tab_container_layout.addStretch()  # Push tabs to the left
+        
+        layout.addLayout(tab_container_layout)
+        
+    def _switch_tab(self, tab_index):
+        """Switch to the specified tab."""
+        self.stacked_widget.setCurrentIndex(tab_index)
+        
+    def _get_tab_filter_button_style(self):
+        """Get Windows 11 style tab filter button styling to match level filter."""
+        return """
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 6px;
                 padding: 8px 16px;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 13px;
                 font-weight: 500;
-                font-size: 12px;
-                margin-right: 8px;
-                min-width: 100px;
-                min-height: 32px;
+                margin: 0;
+                min-width: 80px;
             }
-            
-            QTabBar::tab:hover {
-                background: rgba(255, 255, 255, 0.12);
-                border: 1px solid rgba(100, 181, 246, 0.3);
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.08);
+                color: white;
             }
-            
-            QTabBar::tab:selected {
-                background: rgba(100, 181, 246, 0.15);
-                border: 1px solid rgba(100, 181, 246, 0.5);
-                color: #90CAF9;
+            QPushButton:checked {
+                background: rgba(0, 120, 215, 0.3);
+                color: white;
             }
-            
-            QTabBar::tab:first {
-                margin-left: 0;
+            QPushButton:checked:hover {
+                background: rgba(0, 120, 215, 0.4);
             }
         """
 
@@ -229,37 +266,15 @@ class SingleEntryTab(QWidget):
     def _setup_ui(self):
         """Setup the single entry tab UI with fixed top section and scrollable transactions."""
         tab_layout = QVBoxLayout(self)
-        tab_layout.setContentsMargins(0, 0, 0, 0)
-        tab_layout.setSpacing(0)
-        
-        # Create a scroll area for the entire content to allow form expansion
-        main_scroll = QScrollArea()
-        main_scroll.setWidgetResizable(True)
-        main_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        main_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        main_scroll.setStyleSheet("""
-            QScrollArea {
-                background: transparent;
-                border: none;
-            }
-            QWidget#scrollAreaWidgetContents {
-                background: transparent;
-            }
-        """ + ModernScrollbarStyles.get_vertical_scrollbar_style())
-        
-        # Main container (now scrollable to accommodate form expansion)
-        main_container = QWidget()
-        main_container.setObjectName("scrollAreaWidgetContents")
-        main_layout = QVBoxLayout(main_container)
-        main_layout.setContentsMargins(0, ResponsiveHelper.scale_size(24, 16, 32),
+        tab_layout.setContentsMargins(0, ResponsiveHelper.scale_size(24, 16, 32),
                                      0, ResponsiveHelper.scale_size(24, 16, 32))
-        main_layout.setSpacing(ResponsiveHelper.scale_size(24, 16, 32))
+        tab_layout.setSpacing(ResponsiveHelper.scale_size(24, 16, 32))
         
-        # Entry form (now has unlimited vertical space to expand)
+        # Entry form (fixed at top)
         self.entry_form = self._create_entry_form()
-        main_layout.addWidget(self.entry_form)
+        tab_layout.addWidget(self.entry_form)
         
-        # Transaction History Header (fixed)
+        # Transaction History Header
         header_label = QLabel("Transaction History")
         header_label.setStyleSheet("""
             color: rgba(255, 255, 255, 0.9);
@@ -269,7 +284,7 @@ class SingleEntryTab(QWidget):
             background: transparent;
             border: none;
         """)
-        main_layout.addWidget(header_label)
+        tab_layout.addWidget(header_label)
         
         # Create headers frame with proper height and styling
         self.headers_frame = QFrame()
@@ -317,12 +332,9 @@ class SingleEntryTab(QWidget):
             """)
             headers_layout.addWidget(header)
         
-        main_layout.addWidget(self.headers_frame)        
-        # Add the main scroll area to tab layout
-        main_scroll.setWidget(main_container)
-        tab_layout.addWidget(main_scroll)
+        tab_layout.addWidget(self.headers_frame)
         
-        # Transactions scroll area is now part of the main container
+        # Transactions scroll area (only scrollable section)
         self.transactions_scroll = QScrollArea()
         self.transactions_scroll.setWidgetResizable(True)
         self.transactions_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -337,14 +349,15 @@ class SingleEntryTab(QWidget):
             QWidget { background: transparent; }
         """ + ModernScrollbarStyles.get_vertical_scrollbar_style()
         self.transactions_scroll.setStyleSheet(transactions_scroll_style)
-          # Transactions container widget (scrollable content)
+        
+        # Transactions container widget (scrollable content)
         self.transactions_widget = QWidget()
         self.transactions_widget.setObjectName("scrollAreaWidgetContents")
         self.transactions_layout = QVBoxLayout(self.transactions_widget)
         self.transactions_layout.setContentsMargins(8, 8, 8, ResponsiveHelper.scale_size(24, 16, 32))
         self.transactions_layout.setSpacing(4)  # Reduced spacing between cards for a more modern look
         self.transactions_scroll.setWidget(self.transactions_widget)
-        main_layout.addWidget(self.transactions_scroll, 1)  # This takes remaining space in main container
+        tab_layout.addWidget(self.transactions_scroll, 1)  # This takes remaining space
         
     def _create_entry_form(self):
         """Create expandable entry form."""
