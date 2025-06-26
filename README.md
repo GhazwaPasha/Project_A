@@ -46,8 +46,11 @@ Project_A/
 │       ├── pages/                  # Application pages
 │       └── mainwindow.py          # Main application window
 ├── tools/
-│   ├── setup_multitenant.py       # Database migration script
-│   ├── create_multitenant_schema.sql # SQL migration
+│   ├── setup_multitenant.py       # Database utilities
+│   ├── manage_super_admin.py      # Super admin management
+│   ├── generate_entries.py        # Test data generation
+│   ├── export_journal.py          # Data export utilities
+│   └── clear_journal.py           # Data cleanup utilities
 │   └── setup_local_postgres.py    # Local database setup
 └── assets/                         # Icons and fonts
 ```
