@@ -60,17 +60,35 @@ class BottomBar(QWidget):
                 # Fallback if workspace switcher not available
                 workspace_label = QLabel("🏢 Single Tenant Mode")
                 workspace_label.setObjectName("WorkspaceLabel")
+                workspace_label.setStyleSheet("""
+                    background: rgba(255, 255, 255, 0.08);
+                    border: 1px solid rgba(0, 0, 0, 0.3);
+                    border-radius: 8px;
+                    padding: 4px 8px;
+                """)
                 right_layout.addWidget(workspace_label)
             except Exception:
                 # Fallback on any error
                 workspace_label = QLabel("🏢 Error Loading Switcher")
                 workspace_label.setObjectName("WorkspaceLabel")
+                workspace_label.setStyleSheet("""
+                    background: rgba(255, 255, 255, 0.08);
+                    border: 1px solid rgba(0, 0, 0, 0.3);
+                    border-radius: 8px;
+                    padding: 4px 8px;
+                """)
                 right_layout.addWidget(workspace_label)
         else:
             # Single tenant mode indicator
             workspace_label = QLabel("🏢 Workspace")
             workspace_label.setObjectName("WorkspaceLabel")
             workspace_label.setToolTip("Single tenant workspace")
+            workspace_label.setStyleSheet("""
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                padding: 4px 8px;
+            """)
             right_layout.addWidget(workspace_label)
         
         layout.addWidget(right_widget)
@@ -104,10 +122,10 @@ class BottomBar(QWidget):
                 color: #FFFFFF;
                 font-size: {ResponsiveHelper.scale_size(12, 11, 13)}px;
                 font-weight: 600;
-                padding: 2px 8px;
-                background: rgba(74, 144, 226, 0.2);
-                border: 1px solid rgba(74, 144, 226, 0.4);
-                border-radius: 4px;
+                padding: 4px 12px;
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
             }}
         """)
         

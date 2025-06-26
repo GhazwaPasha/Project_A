@@ -68,7 +68,7 @@ class ModernSidebarButton(QPushButton):
         """Apply modern responsive styling to the sidebar button with translucent design."""
         # Get responsive values
         font_size = ResponsiveHelper.scale_size(14, 12, 16)
-        border_radius = ResponsiveHelper.scale_size(10, 8, 12)
+        border_radius = ResponsiveHelper.scale_size(16, 12, 20)
         padding_v = ResponsiveHelper.scale_size(12, 10, 16)
         
         # CRITICAL: Different padding for expanded vs collapsed to center icon properly

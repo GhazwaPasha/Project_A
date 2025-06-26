@@ -5,6 +5,7 @@ Shows user's profile picture (if available) or placeholder with sign out option
 from PyQt6.QtWidgets import QWidget, QPushButton, QMenu, QHBoxLayout
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPixmap, QIcon, QPainterPath
+from ..common import ResponsiveHelper
 import logging
 import os
 
@@ -40,25 +41,25 @@ class UserProfileButton(QWidget):
         self.profile_btn.setFixedSize(40, 32)
         self.profile_btn.clicked.connect(self._show_profile_menu)
         
-        # Apply styling to match AI status bar design
-        self.profile_btn.setStyleSheet("""
-            QPushButton#ProfileButton {
+        # Apply styling to match dashboard cards with 6px border-radius
+        self.profile_btn.setStyleSheet(f"""
+            QPushButton#ProfileButton {{
                 background: transparent;
                 border: none;
-                border-radius: 8px;
+                border-radius: 6px;
                 padding: 0px;
                 margin: 0px;
-            }
-            QPushButton#ProfileButton:hover {
+            }}
+            QPushButton#ProfileButton:hover {{
                 background: rgba(255, 255, 255, 0.12);
                 border: 1px solid rgba(100, 181, 246, 0.3);
-                border-radius: 8px;
-            }
-            QPushButton#ProfileButton:pressed {
+                border-radius: 6px;
+            }}
+            QPushButton#ProfileButton:pressed {{
                 background: rgba(255, 255, 255, 0.15);
                 border: 1px solid rgba(100, 181, 246, 0.5);
-                border-radius: 8px;
-            }
+                border-radius: 6px;
+            }}
         """)
         
         layout.addWidget(self.profile_btn)
@@ -198,27 +199,34 @@ class UserProfileButton(QWidget):
         menu = QMenu(self)
         menu.setObjectName("ProfileMenu")
         
-        # Style the menu to match the app theme
-        menu.setStyleSheet("""
-            QMenu#ProfileMenu {
-                background-color: #2b2b2b;
-                border: 1px solid #555;
-                border-radius: 6px;
+        # Style the menu to match the app theme with responsive border-radius
+        border_radius = ResponsiveHelper.scale_size(10, 8, 12)
+        item_radius = ResponsiveHelper.scale_size(5, 4, 6)
+        menu.setStyleSheet(f"""
+            QMenu#ProfileMenu {{
+                background: rgba(30, 30, 30, 0.98);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: {border_radius}px;
                 padding: 4px;
                 color: white;
-            }
-            QMenu#ProfileMenu::item {
-                background-color: transparent;
+                font-family: 'Segoe UI', system-ui, sans-serif;
+                font-size: 12px;
+            }}
+            QMenu#ProfileMenu::item {{
+                color: white;
+                background: transparent;
                 padding: 8px 16px;
-                border-radius: 4px;
+                border-radius: {item_radius}px;
                 margin: 2px;
-            }
-            QMenu#ProfileMenu::item:selected {
-                background-color: #404040;
-            }
-            QMenu#ProfileMenu::item:pressed {
-                background-color: #505050;
-            }
+                font-weight: 500;
+            }}
+            QMenu#ProfileMenu::item:selected {{
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
+            }}
+            QMenu#ProfileMenu::item:pressed {{
+                background: rgba(255, 255, 255, 0.15);
+            }}
         """)
         
         # Add user info (if available)
