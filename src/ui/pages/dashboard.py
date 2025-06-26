@@ -28,9 +28,9 @@ class DashboardPage(QWidget):
         # Main layout with responsive margins
         main_layout = QVBoxLayout(self)
         responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
-        main_layout.setContentsMargins(responsive_margin, responsive_margin, 
+        main_layout.setContentsMargins(responsive_margin, 0,  # Remove top margin
                                      responsive_margin, responsive_margin)
-        main_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
+        main_layout.setSpacing(16)  # Standardized spacing
         
         # Page header
         header = PageHeader("Dashboard", "Financial overview and quick actions")
@@ -76,7 +76,6 @@ class DashboardPage(QWidget):
                 font-size: {ResponsiveHelper.scale_size(20, 16, 24)}px;
                 font-weight: 600;
                 background: transparent;
-                margin-bottom: {ResponsiveHelper.scale_size(16, 12, 20)}px;
             }}
         """)
         main_layout.addWidget(actions_title)

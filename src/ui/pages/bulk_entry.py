@@ -55,9 +55,9 @@ class BulkEntryPage(QWidget):
         """Setup the main UI."""
         page_layout = QVBoxLayout(self)
         # Use 0 left/right margins when used as tab - parent JournalPage provides those
-        page_layout.setContentsMargins(0, ResponsiveHelper.scale_size(24, 16, 32),
+        page_layout.setContentsMargins(0, 0,  # Remove top margin for seamless flow
                                      0, ResponsiveHelper.scale_size(24, 16, 32))
-        page_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
+        page_layout.setSpacing(16)  # Standardized spacing
         
         # Toolbar
         toolbar_section = self._create_toolbar()
@@ -102,7 +102,6 @@ class BulkEntryPage(QWidget):
                 background: rgba(255, 255, 255, 0.08);
                 border: 1px solid rgba(0, 0, 0, 0.3);
                 border-radius: 8px;
-                margin-bottom: 8px;
             }
         """)
         

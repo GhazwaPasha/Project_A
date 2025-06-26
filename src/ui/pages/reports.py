@@ -463,9 +463,9 @@ class ReportsPage(QWidget):
         # Main page layout - no scroll area at page level
         page_layout = QVBoxLayout(page)
         responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
-        page_layout.setContentsMargins(responsive_margin, responsive_margin, 
+        page_layout.setContentsMargins(responsive_margin, 0,  # Remove top margin
                                      responsive_margin, responsive_margin)
-        page_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
+        page_layout.setSpacing(16)  # Standardized spacing
         
         # Fixed top section (header, date selector, KPIs)
         # Page header
@@ -495,7 +495,7 @@ class ReportsPage(QWidget):
         scroll_layout = QVBoxLayout(scroll_widget)
         # No left/right margins since page already has them
         scroll_layout.setContentsMargins(0, 0, 0, 0)
-        scroll_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
+        scroll_layout.setSpacing(16)  # Standardized spacing
         
         # KPI section (now inside scroll area)
         self._create_kpi_section(scroll_layout)

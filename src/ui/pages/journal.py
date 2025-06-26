@@ -133,18 +133,15 @@ class JournalPage(QWidget):
         """Setup the tabbed interface."""
         main_layout = QVBoxLayout(self)
         responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
-        main_layout.setContentsMargins(responsive_margin, responsive_margin, 
+        main_layout.setContentsMargins(responsive_margin, 0,  # Remove top margin
                                      responsive_margin, responsive_margin)
-        main_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))  # Match other pages
+        main_layout.setSpacing(16)  # Standardized spacing
         
-        # Page header with small margin
+        # Page header
         header = PageHeader("Journal Entry", "Record and manage your financial transactions")
         main_layout.addWidget(header)
         
-        # Small spacer to align with other pages
-        main_layout.addSpacing(ResponsiveHelper.scale_size(20, 16, 24))
-        
-        # Create custom tab selector with level filter styling
+        # Create custom tab selector with level filter styling (no extra spacing)
         self._create_tab_selector(main_layout)
         
         # Create stacked widget for tab content
@@ -166,7 +163,7 @@ class JournalPage(QWidget):
         """Create tab selector with level filter container styling."""
         # Container for tab selector
         tab_container_layout = QHBoxLayout()
-        tab_container_layout.setContentsMargins(0, 8, 0, 8)
+        tab_container_layout.setContentsMargins(0, 8, 0, 8)  # Match DateRangeSelector margins
         tab_container_layout.setSpacing(12)
         
         # Create container frame like level filter
@@ -266,9 +263,9 @@ class SingleEntryTab(QWidget):
     def _setup_ui(self):
         """Setup the single entry tab UI with fixed top section and scrollable transactions."""
         tab_layout = QVBoxLayout(self)
-        tab_layout.setContentsMargins(0, ResponsiveHelper.scale_size(24, 16, 32),
+        tab_layout.setContentsMargins(0, 0,  # Remove top margin for seamless flow
                                      0, ResponsiveHelper.scale_size(24, 16, 32))
-        tab_layout.setSpacing(ResponsiveHelper.scale_size(24, 16, 32))
+        tab_layout.setSpacing(16)  # Standardized spacing
         
         # Entry form (fixed at top)
         self.entry_form = self._create_entry_form()
@@ -280,7 +277,6 @@ class SingleEntryTab(QWidget):
             color: rgba(255, 255, 255, 0.9);
             font-size: 18px;
             font-weight: 600;
-            margin-bottom: 8px;
             background: transparent;
             border: none;
         """)
@@ -293,7 +289,6 @@ class SingleEntryTab(QWidget):
                 background: rgba(255, 255, 255, 0.08);
                 border: 1px solid rgba(0, 0, 0, 0.3);
                 border-radius: 8px;
-                margin-bottom: 8px;
                 min-height: 45px;
             }
             QLabel {

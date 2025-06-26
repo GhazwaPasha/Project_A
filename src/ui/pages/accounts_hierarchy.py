@@ -425,9 +425,9 @@ class HierarchicalAccountsPage(QWidget):
         """Setup the enhanced accounts page UI."""
         layout = QVBoxLayout(self)
         responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
-        layout.setContentsMargins(responsive_margin, responsive_margin, 
+        layout.setContentsMargins(responsive_margin, 0,  # Remove top margin
                                 responsive_margin, responsive_margin)
-        layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
+        layout.setSpacing(16)  # Standardized spacing
         
         # Page header with enhanced description
         header = PageHeader(
