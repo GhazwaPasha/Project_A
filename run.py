@@ -186,6 +186,10 @@ class CleanApp:
             if hasattr(main_window, 'refresh_workspace_switcher'):
                 main_window.refresh_workspace_switcher()
             
+            # Force refresh user profile button to show initials
+            if hasattr(main_window, 'user_profile_button') and session_manager:
+                main_window.user_profile_button.update_user_profile(session_manager)
+            
             return self.app.exec()
             
         except Exception as e:

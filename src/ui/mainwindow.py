@@ -558,6 +558,12 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         # Initialize connection status immediately
         QTimer.singleShot(100, self._initial_connection_check)
         
+        # Add user profile button
+        from .components.user_profile_button import UserProfileButton
+        self.user_profile_button = UserProfileButton(session_manager=self.session_manager)
+        self.user_profile_button.sign_out_requested.connect(self._handle_sign_out)
+        right_layout.addWidget(self.user_profile_button)
+        
         # Add notification button
         from .components.notification_button import NotificationButton
         self.notification_button = NotificationButton(notification_manager=self.notification_manager)
@@ -893,6 +899,52 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             self.showNormal()
         else:
             self.showMaximized()
+    
+    def _handle_sign_out(self):
+        """Handle user sign out request"""
+        try:
+            from PyQt6.QtWidgets import QMessageBox
+            
+            # Confirm sign out
+            reply = QMessageBox.question(
+                self, 
+                "Sign Out", 
+                "Are you sure you want to sign out?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                self.logger.info("User signing out...")
+                
+                # Clear session data
+                if self.session_manager:
+                    self.session_manager.clear_session()
+                
+                # Close current window and restart application
+                self.close()
+                
+                # Restart the application to show login screen
+                import sys
+                import os
+                python_executable = sys.executable
+                
+                # Get the main script path (go up from src/ui/mainwindow.py to run.py)
+                current_file = os.path.abspath(__file__)
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+                script_path = os.path.join(project_root, "run.py")
+                
+                if os.path.exists(script_path):
+                    # Restart the application
+                    import subprocess
+                    subprocess.Popen([python_executable, script_path])
+                else:
+                    self.logger.error(f"Could not find run.py at: {script_path}")
+                
+        except Exception as e:
+            self.logger.error(f"Error during sign out: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _toggle_maximize(self):
         """Legacy method - use _handle_maximize_button instead."""
@@ -1410,6 +1462,10 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         self.logger.info("Session manager updated - refreshing navigation visibility")
         self._update_navigation_visibility()
         
+        # Update user profile button with new session
+        if hasattr(self, 'user_profile_button'):
+            self.user_profile_button.update_user_profile(session_manager)
+        
         # Organization context has changed - workspace switcher will be updated via signal
 
     def refresh_navigation_for_testing(self):
@@ -1501,32 +1557,14 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
                         should_show = can_view
                         print(f"🔍 DEBUG: Page {i} ({page_key}): can_view = {can_view}")
                         
-                        # TEMPORARY FALLBACK: If database permission check fails, use role-based fallback
-                        if not can_view and user_role == 'organization_owner':
-                            # For organization owners in personal workspaces, show core accounting pages
-                            core_pages = ['dashboard', 'journal_entries', 'reports', 'accounts', 'settings']
-                            if page_key in core_pages:
-                                should_show = True
-                                print(f"🔍 DEBUG: FALLBACK - Showing {page_key} for organization_owner")
-                        
                     except Exception as e:
                         print(f"🔍 DEBUG: Error checking permissions for page {i} ({page_key}): {e}")
-                        
-                        # FALLBACK: If there's an error, use role-based logic
-                        if user_role == 'organization_owner':
-                            # Show core pages for organization owners
-                            core_pages = ['dashboard', 'journal_entries', 'reports', 'accounts', 'settings']
-                            should_show = page_key in core_pages
-                            print(f"🔍 DEBUG: FALLBACK ERROR - Page {i} ({page_key}): {should_show}")
-                        else:
-                            should_show = (i == 0)  # Dashboard only for other roles
+                        # Default to hiding on error, except for dashboard
+                        should_show = (i == 0)  # Dashboard should be visible by default
                         
                 else:
                     # No specific permission mapping - default behavior
-                    if user_role == 'organization_owner':
-                        should_show = (i in [0, 13])  # Dashboard and Settings for owners without mapping
-                    else:
-                        should_show = (i == 0)  # Show dashboard by default
+                    should_show = (i == 0)  # Show dashboard by default
                     print(f"🔍 DEBUG: Page {i} - no mapping, showing: {should_show}")
                 
                 button.setVisible(should_show)
