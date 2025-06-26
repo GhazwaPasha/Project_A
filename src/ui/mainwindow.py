@@ -183,6 +183,9 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         # Use QTimer to apply Mica effect after window is fully shown
         QTimer.singleShot(100, self._apply_mica_effect_delayed)
         
+        # Update navigation visibility after everything is set up
+        QTimer.singleShot(200, self._update_navigation_visibility)
+        
         # Add a welcome notification after startup
         QTimer.singleShot(2000, self._add_welcome_notification)
         
@@ -1028,7 +1031,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             except:
                 print("⚠️  All styling failed")
                 
-    def _set_window_control_icons(self, minimize_btn, maximize_btn, close_btn, sync_btn=None):
+    def _set_window_control_icons(self, minimize_btn, maximize_btn, close_btn):
         """Set icons for window control buttons with modern styling."""
         # Apply modern borderless styling to all window control buttons
         window_control_style = """
@@ -1074,34 +1077,6 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             maximize_icon = QIcon("assets/icons/maximize.svg")
             close_icon = QIcon("assets/icons/close.svg")
             
-            # Load sync icon and create white version for dark theme
-            if sync_btn:
-                from PyQt6.QtGui import QPainter, QPixmap
-                sync_icon = QIcon("assets/icons/sync.svg")
-                
-                # Create a white version of the sync icon for dark theme
-                if not sync_icon.isNull():
-                    # Get the original pixmap
-                    original_pixmap = sync_icon.pixmap(QSize(16, 16))
-                    
-                    # Create a white version
-                    white_pixmap = QPixmap(16, 16)
-                    white_pixmap.fill(Qt.GlobalColor.transparent)
-                    
-                    painter = QPainter(white_pixmap)
-                    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-                    
-                    # Draw the original as a mask and fill with white
-                    painter.drawPixmap(0, 0, original_pixmap)
-                    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-                    painter.fillRect(white_pixmap.rect(), Qt.GlobalColor.white)
-                    painter.end()
-                    
-                    # Create new icon with white pixmap
-                    sync_icon = QIcon(white_pixmap)
-            else:
-                sync_icon = None
-            
             if not minimize_icon.isNull():
                 minimize_btn.setIcon(minimize_icon)
                 minimize_btn.setIconSize(QSize(16, 16))
@@ -1121,14 +1096,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
                 close_btn.setIconSize(QSize(16, 16))
                 close_btn.setText("")  # Clear text when icon is set
             else:
-                close_btn.setText("×")            # Handle sync button icon
-            if sync_btn:
-                if sync_icon and not sync_icon.isNull():
-                    sync_btn.setIcon(sync_icon)
-                    sync_btn.setIconSize(QSize(16, 16))
-                    sync_btn.setText("")  # Clear text when icon is set
-                else:
-                    sync_btn.setText("↻")  # Sync/refresh symbol
+                close_btn.setText("×")
                 
         except Exception as e:
             print(f"Failed to load window control icons: {e}")
@@ -1136,14 +1104,11 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             minimize_btn.setText("─")
             maximize_btn.setText("□")
             close_btn.setText("×")
-            if sync_btn:
-                sync_btn.setText("↻")
-                  # Apply the styling
+                  
+        # Apply the styling
         minimize_btn.setStyleSheet(window_control_style)
         maximize_btn.setStyleSheet(window_control_style)
         close_btn.setStyleSheet(window_control_style)
-        if sync_btn:
-            sync_btn.setStyleSheet(window_control_style)
         
     def keyPressEvent(self, event):
         """Handle keyboard shortcuts."""
@@ -1439,15 +1404,45 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
                 }
             }
     
+    def set_session_manager(self, session_manager):
+        """Set or update the session manager and refresh UI accordingly"""
+        self.session_manager = session_manager
+        self.logger.info("Session manager updated - refreshing navigation visibility")
+        self._update_navigation_visibility()
+        
+        # Organization context has changed - workspace switcher will be updated via signal
+
+    def refresh_navigation_for_testing(self):
+        """Manual method to refresh navigation - useful for testing"""
+        print("🔄 Manually refreshing navigation visibility...")
+        if self.session_manager:
+            print(f"   Current role: {self.session_manager.get_current_user_role()}")
+            print(f"   Is super admin: {self.session_manager.is_super_admin()}")
+            print(f"   Active org: {self.session_manager.get_active_organization_id()}")
+        else:
+            print("   No session manager available")
+        self._update_navigation_visibility()
+
     def _update_navigation_visibility(self):
         """Update sidebar navigation visibility based on user role."""
-        if not self.session_manager or not hasattr(self, 'sidebar_buttons'):
+        if not hasattr(self, 'sidebar_buttons') or not self.sidebar_buttons:
+            self.logger.debug("Navigation visibility check skipped - no sidebar buttons available")
+            return
+            
+        if not self.session_manager:
+            self.logger.debug("Navigation visibility check skipped - no session manager")
+            # Show all pages when no session manager (fallback)
+            for button in self.sidebar_buttons:
+                button.show()
             return
             
         # Define which buttons are visible for which roles
         user_role = self.session_manager.get_current_user_role()
         is_super_admin = self.session_manager.is_super_admin()
         can_manage_users = self.session_manager.can_manage_users()
+        
+        # Debug logging for role-based visibility
+        self.logger.info(f"Navigation visibility check - Role: {user_role}, Super Admin: {is_super_admin}, Can Manage Users: {can_manage_users}")
         
         # Page indices based on nav_items order:
         # 0: Dashboard, 1: Journal, 2: Ledger, 3: Trial Balance, 4: Reports, 5: Accounts
@@ -1472,12 +1467,20 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         # Combine all visible indices
         visible_indices = always_visible + org_visible + admin_visible + super_admin_visible + settings_visible
         
+        self.logger.info(f"Visible page indices: {visible_indices}")
+        self.logger.info(f"Super admin pages (11-12) visible: {11 in visible_indices and 12 in visible_indices}")
+        
         # Update button visibility
         for i, button in enumerate(self.sidebar_buttons):
             if i in visible_indices:
                 button.show()
+                if i in [11, 12]:  # Platform and Global Orgs
+                    self.logger.debug(f"Showing super admin page button {i}")
             else:
                 button.hide()
+                self.logger.debug(f"Hiding button {i} (not in visible indices)")
+                if i in [11, 12]:  # Platform and Global Orgs
+                    self.logger.debug(f"Hiding super admin page button {i} - user is not super admin")
     
     def _on_organization_changed(self, org_id):
         """Handle organization change from the organization switcher."""
@@ -1749,6 +1752,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
     def _handle_filter_application(self, results: dict):
         """Handle filter application actions initiated by AI"""
         # Placeholder for filter handling
+       
         self.logger.info(f"Filters applied: {results}")
     
     def _handle_calculation_results(self, results: dict):
@@ -1853,6 +1857,10 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             # Add the bottom bar to the main layout
             main_layout.addWidget(self.bottom_bar)
             
+            # Connect workspace switcher signal if available
+            if hasattr(self.bottom_bar, 'workspace_switcher'):
+                self.bottom_bar.workspace_switcher.workspace_changed.connect(self._on_workspace_changed)
+            
             self.logger.debug("Bottom bar created successfully")
             
         except Exception as e:
@@ -1881,3 +1889,65 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             self.logger.error(f"Initial connection check failed: {e}")
             if hasattr(self, 'connection_indicator'):
                 self.connection_indicator.update_connection_status(False)
+    
+    def _on_workspace_changed(self, organization_id: str, organization_name: str):
+        """Handle workspace/organization change from switcher"""
+        try:
+            self.logger.info(f"Workspace changed to: {organization_name} (ID: {organization_id})")
+            
+            # Update window title to show current workspace
+            base_title = "Modern Accounting"
+            self.setWindowTitle(f"{base_title} - {organization_name}")
+            
+            # Refresh current page content with new organization context
+            if hasattr(self, 'content_stack') and self.content_stack.currentWidget():
+                current_page = self.content_stack.currentWidget()
+                if hasattr(current_page, 'refresh_data'):
+                    current_page.refresh_data()
+                    
+            # Update navigation visibility based on new organization
+            self._update_navigation_visibility()
+            
+            self.logger.debug(f"Successfully switched to workspace: {organization_name}")
+            
+        except Exception as e:
+            self.logger.error(f"Error handling workspace change: {e}")
+            import traceback
+            traceback.print_exc()
+            
+    def _update_navigation_visibility(self):
+        """Update navigation menu visibility based on current organization"""
+        try:
+            if not self.session_manager:
+                return
+                
+            current_org = self.session_manager.get_current_organization()
+            if not current_org:
+                return
+                
+            # Get user role in current organization
+            user_role = current_org.get('user_role', 'member')
+            is_admin = user_role in ['admin', 'owner']
+            
+            # Update navigation based on role
+            if hasattr(self, 'nav_menu'):
+                # Enable/disable admin features based on role
+                admin_items = ['settings', 'team', 'user_management']
+                for item_name in admin_items:
+                    if hasattr(self.nav_menu, f'{item_name}_action'):
+                        action = getattr(self.nav_menu, f'{item_name}_action')
+                        action.setEnabled(is_admin)
+                        
+            self.logger.debug(f"Navigation updated for role: {user_role} (admin: {is_admin})")
+            
+        except Exception as e:
+            self.logger.error(f"Error updating navigation visibility: {e}")
+    
+    def refresh_workspace_switcher(self):
+        """Refresh the workspace switcher with current organizations"""
+        try:
+            if hasattr(self, 'bottom_bar') and hasattr(self.bottom_bar, 'refresh_workspace_info'):
+                self.bottom_bar.refresh_workspace_info()
+                self.logger.debug("Workspace switcher refreshed")
+        except Exception as e:
+            self.logger.error(f"Error refreshing workspace switcher: {e}")

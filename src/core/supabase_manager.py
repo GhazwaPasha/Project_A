@@ -21,20 +21,26 @@ from .config import DatabaseConfig
 class SupabaseManager:
     """Clean Supabase database manager for the new schema."""
     
-    def __init__(self, user_id: Optional[str] = None):
+    def __init__(self, user_id: Optional[str] = None, authenticated_client: Any = None):
         self.logger = logging.getLogger(__name__)
         
         if not SUPABASE_AVAILABLE:
             raise ImportError("Supabase client not available. Install with: pip install supabase")
         
-        # Validate configuration
-        DatabaseConfig.validate_config()
-        
-        # Initialize Supabase client
-        self.supabase = create_client(
-            DatabaseConfig.SUPABASE_URL,
-            DatabaseConfig.SUPABASE_ANON_KEY
-        )
+        # Use authenticated client if provided, otherwise create new one
+        if authenticated_client:
+            self.supabase = authenticated_client
+            self.logger.debug("Using authenticated Supabase client")
+        else:
+            # Validate configuration
+            DatabaseConfig.validate_config()
+            
+            # Initialize Supabase client
+            self.supabase = create_client(
+                DatabaseConfig.SUPABASE_URL,
+                DatabaseConfig.SUPABASE_ANON_KEY
+            )
+            self.logger.debug("Created new Supabase client")
         
         self.current_user_id = user_id
         
@@ -53,8 +59,35 @@ class SupabaseManager:
             return None
             
         try:
+            # First try the user_profiles table
             result = self.supabase.table('user_profiles').select('*').eq('id', uid).execute()
-            return result.data[0] if result.data else None
+            if result.data:
+                return result.data[0]
+            
+            # Fallback to users table if profile doesn't exist yet
+            users_result = self.supabase.table('users').select('*').eq('id', uid).execute()
+            if users_result.data:
+                user_data = users_result.data[0]
+                # Try to create profile from user data
+                profile_data = {
+                    'id': user_data['id'],
+                    'email': user_data['email'],
+                    'full_name': user_data.get('full_name'),
+                    'avatar_url': user_data.get('avatar_url'),
+                    'phone': user_data.get('phone'),
+                    'is_super_admin': False,
+                    'preferences': {}
+                }
+                
+                # Try to create the profile
+                try:
+                    profile_result = self.supabase.table('user_profiles').insert(profile_data).execute()
+                    return profile_result.data[0] if profile_result.data else profile_data
+                except Exception as e:
+                    self.logger.warning(f"Could not create user profile, returning user data: {e}")
+                    return profile_data
+                    
+            return None
         except Exception as e:
             self.logger.error(f"Error getting user profile: {e}")
             return None
@@ -82,10 +115,13 @@ class SupabaseManager:
         """Check if user is a super admin."""
         uid = user_id or self.current_user_id
         if not uid:
+            self.logger.debug("is_super_admin: No user ID available")
             return False
             
         profile = self.get_user_profile(uid)
-        return profile and profile.get('is_super_admin', False)
+        is_admin = profile and profile.get('is_super_admin', False)
+        self.logger.debug(f"is_super_admin check for user {uid}: profile={bool(profile)}, is_super_admin={is_admin}")
+        return is_admin
     
     # ================================
     # ORGANIZATION OPERATIONS
@@ -95,23 +131,63 @@ class SupabaseManager:
         """Get all organizations for a user."""
         uid = user_id or self.current_user_id
         if not uid:
+            self.logger.error("get_organizations: No user ID available")
             return []
             
         try:
-            # Get user's organizations through membership
-            result = self.supabase.table('organization_members')\
-                .select('organization_id, role, organizations(*)')\
-                .eq('user_id', uid)\
-                .eq('is_active', True)\
-                .execute()
+            self.logger.debug(f"Getting organizations for user: {uid}")
             
-            organizations = []
-            for member in result.data:
-                org = member['organizations']
-                org['user_role'] = member['role']
-                organizations.append(org)
-            
-            return organizations
+            # Use the clean Supabase helper function
+            try:
+                result = self.supabase.rpc('get_user_organizations').execute()
+                self.logger.debug(f"RPC get_user_organizations result: {len(result.data) if result.data else 0} records")
+                
+                organizations = []
+                for member_data in result.data:
+                    org_id = member_data.get('organization_id')
+                    if org_id:
+                        # Get full organization data
+                        org_result = self.supabase.table('organizations').select('*').eq('id', org_id).execute()
+                        if org_result.data:
+                            org = org_result.data[0]
+                            org['user_role'] = member_data.get('role', 'member')
+                            # Add organization type information
+                            org['organization_type'] = self.get_organization_type(org)
+                            org['is_personal_workspace'] = self.is_personal_workspace(org)
+                            organizations.append(org)
+                            
+                self.logger.info(f"Found {len(organizations)} organizations for user {uid}")
+                return organizations
+                
+            except Exception as rpc_error:
+                self.logger.warning(f"RPC call failed: {rpc_error}, falling back to direct query")
+                
+                # Fallback: Direct query
+                result = self.supabase.table('organization_members')\
+                    .select('organization_id, role, organizations(*)')\
+                    .eq('user_id', uid)\
+                    .eq('is_active', True)\
+                    .execute()
+                
+                self.logger.debug(f"Organization members query result: {len(result.data)} records")
+                
+                organizations = []
+                for member in result.data:
+                    if member.get('organizations'):
+                        org = member['organizations']
+                        org['user_role'] = member['role']
+                        # Add organization type information
+                        org['organization_type'] = self.get_organization_type(org)
+                        org['is_personal_workspace'] = self.is_personal_workspace(org)
+                        organizations.append(org)
+                        org_type = org.get('organization_type', 'unknown')
+                        self.logger.debug(f"Added organization: {org.get('name', 'Unknown')} (Role: {member['role']}, Type: {org_type})")
+                    else:
+                        self.logger.warning(f"Member record missing organization data: {member}")
+                
+                self.logger.info(f"Found {len(organizations)} organizations for user {uid}")
+                return organizations
+                
         except Exception as e:
             self.logger.error(f"Error getting user organizations: {e}")
             return []
@@ -395,3 +471,104 @@ class SupabaseManager:
         except Exception as e:
             self.logger.error(f"Error creating period closing: {e}")
             return None
+    
+    # ================================
+    # ORGANIZATION TYPE AND PERSONAL WORKSPACE DETECTION
+    # ================================
+    
+    def is_personal_workspace(self, organization: Dict[str, Any]) -> bool:
+        """Check if an organization is a personal workspace (single-member organization)."""
+        try:
+            org_id = organization.get('id')
+            if not org_id:
+                return False
+            
+            # Method 1: Check organization_type column if it exists
+            org_type = organization.get('organization_type')
+            if org_type:
+                return org_type == 'personal'
+            
+            # Method 2: Check metadata for organization_type
+            metadata = organization.get('metadata', {})
+            if isinstance(metadata, dict):
+                return metadata.get('organization_type') == 'personal'
+            
+            # Method 3: Check metadata JSON string
+            if isinstance(metadata, str):
+                try:
+                    import json
+                    meta_dict = json.loads(metadata)
+                    return meta_dict.get('organization_type') == 'personal'
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+            
+            # Method 4: Fallback - count active members
+            return self._count_organization_members(org_id) == 1
+            
+        except Exception as e:
+            self.logger.error(f"Error checking if organization is personal workspace: {e}")
+            return False
+    
+    def _count_organization_members(self, org_id: str) -> int:
+        """Count active members in an organization."""
+        try:
+            result = self.supabase.table('organization_members')\
+                .select('id', count='exact')\
+                .eq('organization_id', org_id)\
+                .eq('is_active', True)\
+                .execute()
+            return result.count or 0
+        except Exception as e:
+            self.logger.error(f"Error counting organization members: {e}")
+            return 0
+    
+    def get_organization_type(self, organization: Dict[str, Any]) -> str:
+        """Get the type of organization ('personal' or 'team')."""
+        if self.is_personal_workspace(organization):
+            return 'personal'
+        return 'team'
+    
+    def get_user_personal_workspace(self, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Get the user's personal workspace organization."""
+        uid = user_id or self.current_user_id
+        if not uid:
+            return None
+        
+        try:
+            # Get all user organizations
+            organizations = self.get_organizations(uid)
+            
+            # Find the personal workspace
+            for org in organizations:
+                if self.is_personal_workspace(org):
+                    return org
+            
+            return None
+        except Exception as e:
+            self.logger.error(f"Error getting user personal workspace: {e}")
+            return None
+    
+    def get_user_team_organizations(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get all team (multi-member) organizations for a user."""
+        uid = user_id or self.current_user_id
+        if not uid:
+            return []
+        
+        try:
+            # Get all user organizations
+            organizations = self.get_organizations(uid)
+            
+            # Filter for team organizations only
+            team_orgs = []
+            for org in organizations:
+                if not self.is_personal_workspace(org):
+                    team_orgs.append(org)
+            
+            return team_orgs
+        except Exception as e:
+            self.logger.error(f"Error getting user team organizations: {e}")
+            return []
+
+    # ================================
+    # ORGANIZATION OPERATIONS (CONTINUED)
+    # ================================

@@ -67,6 +67,71 @@ class CleanApp:
             # Show login window
             login_window = LoginWindow(auth_manager)
             
+            # Store session manager reference
+            session_manager = None
+            
+            # Handle successful login and set up session
+            def handle_login_success(user_data, organizations):
+                nonlocal session_manager
+                from src.core.session_manager import SessionManager
+                session_manager = SessionManager(auth_manager)
+                
+                print(f"🔍 Debug: Received {len(organizations)} organizations from auth manager")
+                for i, org in enumerate(organizations):
+                    print(f"   Org {i+1}: {org.get('name', 'Unknown')} (ID: {org.get('id', 'Unknown')}) Role: {org.get('user_role', 'Unknown')}")
+                
+                # Initialize session with user data
+                success = session_manager.initialize_session(user_data)
+                if success:
+                    current_org = session_manager.get_current_organization()
+                    print(f"✅ User logged in: {user_data.get('email', 'Unknown')} - Active org: {current_org.get('name', 'Unknown')}")
+                    print(f"   Role in org: {session_manager.get_current_user_role()}")
+                    print(f"   Is super admin: {session_manager.is_super_admin()}")
+                    print(f"   Organization type: {session_manager.get_current_organization_type()}")
+                else:
+                    print(f"❌ Failed to initialize session for {user_data.get('email', 'Unknown')}")
+                    
+                    # Check for existing personal workspace
+                    if not organizations:
+                        print("� No organizations in initial fetch, checking for existing personal workspace...")
+                        try:
+                            # Try to find the user's personal workspace directly
+                            result = auth_manager.db_manager.supabase.table('organizations')\
+                                .select('*')\
+                                .eq('created_by', user_data.get('id'))\
+                                .eq('organization_type', 'personal')\
+                                .execute()
+
+                            if result.data:
+                                print("✅ Found existing personal workspace, reinitializing session...")
+                                success = session_manager.initialize_session(user_data)
+                                if not success:
+                                    print("❌ Failed to initialize session with existing workspace")
+                                    print("Debug info:")
+                                    print(f"  Found org: {result.data[0]}")
+                            else:
+                                print("❌ No personal workspace found for user!")
+                                print("Debug info:")
+                                print(f"  User ID: {user_data.get('id')}")
+                                print(f"  Email: {user_data.get('email')}")
+                                
+                                # Also check organization_members table
+                                members = auth_manager.db_manager.supabase.table('organization_members')\
+                                    .select('organization_id')\
+                                    .eq('user_id', user_data.get('id'))\
+                                    .execute()
+                                    
+                                print(f"  Organization memberships found: {len(members.data) if members.data else 0}")
+                                
+                        except Exception as e:
+                            print(f"❌ Error checking for personal workspace: {e}")
+                            if hasattr(e, 'code'):
+                                print(f"  Error code: {e.code}")
+                            if hasattr(e, 'details'):
+                                print(f"  Details: {e.details}")
+            
+            login_window.login_successful.connect(handle_login_success)
+            
             # Connect signup signal to show signup dialog
             def show_signup():
                 signup_dialog = SignupDialog(auth_manager, login_window)
@@ -79,9 +144,20 @@ class CleanApp:
             login_window.signup_requested.connect(show_signup)
             
             if login_window.exec() == login_window.DialogCode.Accepted:
+                # Ensure session manager was created during login
+                if session_manager is None:
+                    print("⚠️  Session manager not created - creating fallback")
+                    from src.core.session_manager import SessionManager
+                    session_manager = SessionManager(auth_manager)
+                    
+                    # Try to get organizations again
+                    organizations = auth_manager.get_user_organizations()
+                    if organizations:
+                        session_manager.set_current_organization(organizations[0])
+                        print(f"🔧 Fallback: Set organization {organizations[0].get('name', 'Unknown')}")
+                
                 # Start main app with authentication context
-                # Note: MainWindow will initialize its own accounting system
-                return self.start_main_app(auth_manager, None)
+                return self.start_main_app(auth_manager, session_manager)
             else:
                 print("Login cancelled by user")
                 return 0
@@ -100,7 +176,16 @@ class CleanApp:
                 session_manager=session_manager
             )
             
+            # If session manager was created after MainWindow, update it
+            if session_manager and hasattr(main_window, 'set_session_manager'):
+                main_window.set_session_manager(session_manager)
+            
             main_window.show()
+            
+            # Refresh workspace switcher after window is shown to ensure it has latest data
+            if hasattr(main_window, 'refresh_workspace_switcher'):
+                main_window.refresh_workspace_switcher()
+            
             return self.app.exec()
             
         except Exception as e:
@@ -112,10 +197,10 @@ class CleanApp:
         QMessageBox.critical(None, "Configuration Required", 
                            "Supabase configuration is required to run this application.\n\n"
                            "Please:\n"
-                           "1. Set up your Supabase project\n"
-                           "2. Run the NEW_SCHEMA.sql script in Supabase SQL Editor\n"
+                           "1. ✅ Supabase project is set up\n"
+                           "2. ✅ CLEAN_SUPABASE_RESET.sql has been run successfully\n"
                            "3. Configure your .env file with Supabase credentials\n"
-                           "4. Run: python setup_initial_data.py")
+                           "4. Test user signup to verify auto-user creation works")
     
     def show_startup_error(self, error_message: str):
         """Show startup error dialog"""
@@ -134,9 +219,9 @@ def main():
         print("❌ Supabase not configured!")
         print("   Required setup:")
         print("   1. Create Supabase project")
-        print("   2. Run NEW_SCHEMA.sql in Supabase SQL Editor")
+        print("   2. Run CLEAN_SUPABASE_RESET.sql in Supabase SQL Editor")
         print("   3. Configure .env with your Supabase credentials")
-        print("   4. Run: python setup_initial_data.py")
+        print("   4. Test user signup to verify auto-user creation works")
     
     print("-" * 40)
     

@@ -50,8 +50,8 @@ class AuthManager:
                 self.current_user = result.user
                 self.current_session = result.session
                 
-                # Initialize database manager with user
-                self.db_manager = SupabaseManager(result.user.id)
+                # Initialize database manager with authenticated client
+                self.db_manager = SupabaseManager(result.user.id, authenticated_client=self.supabase)
                 
                 # Update last sign in
                 self.db_manager.update_user_profile(result.user.id, {
@@ -60,6 +60,7 @@ class AuthManager:
                 
                 # Get user's organizations
                 organizations = self.get_user_organizations()
+                self.logger.debug(f"Retrieved {len(organizations)} organizations for user {result.user.email}")
                 
                 # Convert user object to dict
                 user_data = {
@@ -131,7 +132,7 @@ class AuthManager:
                 time.sleep(1)  # Wait for trigger to complete
                 
                 self.logger.info("Creating SupabaseManager for organization setup")
-                temp_manager = SupabaseManager(result.user.id)
+                temp_manager = SupabaseManager(result.user.id, authenticated_client=self.supabase)
                 
                 self.logger.info(f"Setting up organization: type={organization_type}")
                 
@@ -207,17 +208,31 @@ class AuthManager:
     
     def get_user_organizations(self) -> List[Dict[str, Any]]:
         """Get organizations for current user"""
-        if not self.current_user or not self.db_manager:
+        if not self.current_user:
+            self.logger.debug("🔍 Debug: get_user_organizations - No current user")
             return []
         
-        return self.db_manager.get_organizations()
+        if not self.db_manager:
+            self.logger.debug("🔍 Debug: get_user_organizations - No db_manager")
+            return []
+        
+        self.logger.debug(f"🔍 Debug: Getting organizations for user {self.current_user.email}")
+        organizations = self.db_manager.get_organizations()
+        self.logger.debug(f"🔍 Debug: Found {len(organizations)} organizations")
+        
+        return organizations
     
     def is_super_admin(self) -> bool:
         """Check if current user is super admin"""
         if not self.current_user or not self.db_manager:
+            self.logger.debug("🔍 Debug: is_super_admin - No current user or db_manager")
             return False
         
-        return self.db_manager.is_super_admin()
+        user_id = self.current_user.id
+        self.logger.debug(f"🔍 Debug: Checking super admin status for user {user_id}")
+        result = self.db_manager.is_super_admin(user_id)
+        self.logger.debug(f"🔍 Debug: Super admin check result: {result}")
+        return result
     
     def get_user_role_in_organization(self, org_id: str) -> Optional[str]:
         """Get current user's role in specific organization"""

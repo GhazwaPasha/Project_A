@@ -97,7 +97,8 @@ class WorkspaceSwitcher(QWidget):
                 color: white;
             }
         """)
-      def _load_workspaces(self):
+
+    def _load_workspaces(self):
         """Load available workspaces from session manager"""
         try:
             if not self.session_manager:
@@ -202,134 +203,26 @@ class WorkspaceSwitcher(QWidget):
     
     def set_current_workspace(self, org_id: str):
         """Set the current workspace programmatically"""
-        self.current_workspace = org_id
-        self._update_display()
-
-
-class CompactWorkspaceSwitcher(QWidget):
-    """
-    A more compact version for smaller spaces
-    """
-    workspace_changed = pyqtSignal(str, str)
-    
-    def __init__(self, auth_manager=None, session_manager=None, parent=None):
-        super().__init__(parent)
-        self.auth_manager = auth_manager
-        self.session_manager = session_manager
-        self.workspaces = []
-        self.current_workspace = None
-        
-        self._setup_ui()
-        self._apply_styling()
-        self._load_workspaces()
-        
-    def _setup_ui(self):
-        """Setup compact UI"""
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 4, 8, 4)
-        layout.setSpacing(6)
-        
-        # Just a combo box for workspace selection
-        self.workspace_combo = QComboBox()
-        self.workspace_combo.setObjectName("WorkspaceCombo")
-        self.workspace_combo.currentTextChanged.connect(self._on_workspace_changed)
-        layout.addWidget(self.workspace_combo)
-        
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setMaximumHeight(32)
-    
-    def _apply_styling(self):
-        """Apply compact styling"""
-        self.setStyleSheet(f"""
-            QComboBox#WorkspaceCombo {{
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 16px;
-                color: white;
-                padding: 4px 12px;
-                font-size: {ResponsiveHelper.scale_size(12, 11, 13)}px;
-                min-width: 150px;
-            }}
-            
-            QComboBox#WorkspaceCombo::drop-down {{
-                border: none;
-                background: transparent;
-                width: 20px;
-            }}
-            
-            QComboBox#WorkspaceCombo::down-arrow {{
-                image: none;
-                border: none;
-                width: 0;
-                height: 0;
-            }}
-            
-            QComboBox#WorkspaceCombo:hover {{
-                background: rgba(255, 255, 255, 0.15);
-                border: 1px solid rgba(255, 255, 255, 0.3);
-            }}
-            
-            QComboBox#WorkspaceCombo QAbstractItemView {{
-                background: rgba(30, 30, 30, 0.95);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 8px;
-                color: white;
-                selection-background-color: rgba(74, 144, 226, 0.8);
-                outline: none;
-            }}
-        """)
-    
-    def _load_workspaces(self):
-        """Load workspaces into combo box"""
-        if not self.auth_manager:
-            self.workspace_combo.addItem("🏠 Local Workspace")
-            return
-            
         try:
-            user_orgs = self.auth_manager.get_user_organizations()
-            self.workspace_combo.clear()
-            self.workspaces = []
-            
-            if user_orgs:
-                for org_member in user_orgs:
-                    org = org_member.get('organizations', {})
-                    if org:
-                        workspace = {
-                            'id': org.get('id'),
-                            'name': org.get('name', 'Unknown'),
-                            'role': org_member.get('role', 'accountant'),
-                            'type': 'personal' if "'s Workspace" in org.get('name', '') else 'organization'
-                        }
-                        self.workspaces.append(workspace)
-                        
-                        # Add to combo box
-                        if workspace['type'] == 'personal':
-                            display_name = f"🏠 {workspace['name']}"
-                        else:
-                            role_text = workspace['role'].replace('_', ' ').title()
-                            display_name = f"🏢 {workspace['name']} ({role_text})"
-                        
-                        self.workspace_combo.addItem(display_name)
-                        
+            # Find the organization by ID
+            for workspace in self.workspaces:
+                if workspace.get('id') == org_id:
+                    self.current_workspace = workspace
+                    self.workspace_label.setText(workspace.get('name', 'Unknown'))
+                    return True
+            return False
         except Exception as e:
-            print(f"Error loading compact workspaces: {e}")
-            self.workspace_combo.addItem("🏠 Local Workspace")
+            print(f"Error setting current workspace: {e}")
+            return False
+
+    def get_current_workspace_id(self) -> str:
+        """Get the current workspace ID"""
+        if self.current_workspace:
+            return self.current_workspace.get('id', '')
+        return ''
     
-    def _on_workspace_changed(self, text):
-        """Handle workspace selection change"""
-        if not self.workspaces:
-            return
-            
-        index = self.workspace_combo.currentIndex()
-        if 0 <= index < len(self.workspaces):
-            workspace = self.workspaces[index]
-            self.current_workspace = workspace['id']
-            
-            if self.session_manager:
-                self.session_manager.set_active_organization(workspace['id'])
-            
-            self.workspace_changed.emit(workspace['id'], workspace['name'])
-    
-    def refresh_workspaces(self):
-        """Refresh workspaces"""
-        self._load_workspaces()
+    def get_current_workspace_name(self) -> str:
+        """Get the current workspace name"""
+        if self.current_workspace:
+            return self.current_workspace.get('name', 'Unknown')
+        return 'Unknown'
