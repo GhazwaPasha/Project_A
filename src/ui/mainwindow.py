@@ -1424,63 +1424,197 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         self._update_navigation_visibility()
 
     def _update_navigation_visibility(self):
-        """Update sidebar navigation visibility based on user role."""
-        if not hasattr(self, 'sidebar_buttons') or not self.sidebar_buttons:
-            self.logger.debug("Navigation visibility check skipped - no sidebar buttons available")
-            return
+        """Update sidebar navigation visibility based on database-driven permissions."""
+        print("🔍 DEBUG: _update_navigation_visibility() called")
+        
+        try:
+            if not hasattr(self, 'sidebar_buttons') or not self.sidebar_buttons:
+                print("🔍 DEBUG: No sidebar buttons available")
+                return
+                
+            print(f"🔍 DEBUG: Found {len(self.sidebar_buttons)} sidebar buttons")
             
-        if not self.session_manager:
-            self.logger.debug("Navigation visibility check skipped - no session manager")
-            # Show all pages when no session manager (fallback)
-            for button in self.sidebar_buttons:
-                button.show()
-            return
+            if not self.session_manager:
+                print("🔍 DEBUG: No session manager - showing all buttons")
+                for button in self.sidebar_buttons:
+                    button.show()
+                return
             
-        # Define which buttons are visible for which roles
+            print("🔍 DEBUG: Session manager found, getting org info...")
+            
+            # Get current organization and auth manager
+            org_id = self.session_manager.get_active_organization_id()
+            auth_manager = getattr(self.session_manager, 'auth_manager', None)
+            
+            print(f"🔍 DEBUG: org_id = {org_id}, auth_manager = {auth_manager is not None}")
+            
+            if not auth_manager or not org_id:
+                print("🔍 DEBUG: No auth manager or organization - showing basic pages")
+                for i, button in enumerate(self.sidebar_buttons):
+                    button.setVisible(i in [0, 13])  # Only Dashboard and Settings
+                return
+            
+            print("🔍 DEBUG: Getting user role and org type...")
+            
+            user_role = self.session_manager.get_current_user_role()
+            org_type = self.session_manager.get_current_organization_type()
+            
+            print(f"🔍 DEBUG: Role: {user_role}, Org Type: {org_type}")
+            
+            # Define page key mappings for nav_items indices:
+            page_mappings = {
+                0: 'dashboard',
+                1: 'journal_entries',
+                2: 'journal_entries',  # Ledger uses same permissions as journal
+                3: 'reports',  # Trial Balance is a type of report
+                4: 'reports',
+                5: 'accounts',
+                6: 'dashboard',  # Reminders/tasks use dashboard permissions for now
+                7: 'settings',  # Period closing needs admin permissions
+                8: 'team_management',  # Team management
+                9: 'organization_settings',  # Org settings
+                10: 'user_management',  # User management
+                11: 'platform_overview',  # Platform overview - use database permissions
+                12: 'global_organizations',  # Global organizations - use database permissions
+                13: 'settings'  # General settings
+            }
+            
+            # Pages that should be hidden for personal workspaces (single-user orgs)
+            personal_workspace_hidden = [8, 9, 10] if org_type == 'personal' else []  # Team, Org Settings, User Mgmt
+            
+            print(f"🔍 DEBUG: Personal workspace hidden pages: {personal_workspace_hidden}")
+            
+            # Update button visibility based on permissions
+            visible_count = 0
+            for i, button in enumerate(self.sidebar_buttons):
+                should_show = False
+                
+                # Skip pages that don't make sense for personal workspaces
+                if i in personal_workspace_hidden:
+                    should_show = False
+                    print(f"🔍 DEBUG: Page {i} hidden for personal workspace")
+                elif page_mappings.get(i):
+                    # Check database permissions for this page
+                    page_key = page_mappings[i]
+                    try:
+                        can_view = auth_manager.can_access_page(page_key, org_id, 'view')
+                        should_show = can_view
+                        print(f"🔍 DEBUG: Page {i} ({page_key}): can_view = {can_view}")
+                        
+                        # TEMPORARY FALLBACK: If database permission check fails, use role-based fallback
+                        if not can_view and user_role == 'organization_owner':
+                            # For organization owners in personal workspaces, show core accounting pages
+                            core_pages = ['dashboard', 'journal_entries', 'reports', 'accounts', 'settings']
+                            if page_key in core_pages:
+                                should_show = True
+                                print(f"🔍 DEBUG: FALLBACK - Showing {page_key} for organization_owner")
+                        
+                    except Exception as e:
+                        print(f"🔍 DEBUG: Error checking permissions for page {i} ({page_key}): {e}")
+                        
+                        # FALLBACK: If there's an error, use role-based logic
+                        if user_role == 'organization_owner':
+                            # Show core pages for organization owners
+                            core_pages = ['dashboard', 'journal_entries', 'reports', 'accounts', 'settings']
+                            should_show = page_key in core_pages
+                            print(f"🔍 DEBUG: FALLBACK ERROR - Page {i} ({page_key}): {should_show}")
+                        else:
+                            should_show = (i == 0)  # Dashboard only for other roles
+                        
+                else:
+                    # No specific permission mapping - default behavior
+                    if user_role == 'organization_owner':
+                        should_show = (i in [0, 13])  # Dashboard and Settings for owners without mapping
+                    else:
+                        should_show = (i == 0)  # Show dashboard by default
+                    print(f"🔍 DEBUG: Page {i} - no mapping, showing: {should_show}")
+                
+                button.setVisible(should_show)
+                if should_show:
+                    visible_count += 1
+                    
+            print(f"🔍 DEBUG: Navigation updated: {visible_count}/{len(self.sidebar_buttons)} tabs visible")
+            
+        except Exception as e:
+            print(f"🔍 DEBUG: Error in navigation visibility: {e}")
+            import traceback
+            traceback.print_exc()
+            # Fallback: show all buttons
+            if hasattr(self, 'sidebar_buttons'):
+                for button in self.sidebar_buttons:
+                    button.show()
+
+    def _on_organization_changed(self, org_id):
+        org_id = self.session_manager.get_active_organization_id()
+        auth_manager = getattr(self.session_manager, 'auth_manager', None)
+        
+        if not auth_manager or not org_id:
+            self.logger.debug("Navigation visibility check skipped - no auth manager or organization")
+            # Show basic pages when no organization context
+            for i, button in enumerate(self.sidebar_buttons):
+                button.setVisible(i in [0, 13])  # Only Dashboard and Settings
+            return
+        
         user_role = self.session_manager.get_current_user_role()
-        is_super_admin = self.session_manager.is_super_admin()
-        can_manage_users = self.session_manager.can_manage_users()
+        org_type = self.session_manager.get_current_organization_type()
         
-        # Debug logging for role-based visibility
-        self.logger.info(f"Navigation visibility check - Role: {user_role}, Super Admin: {is_super_admin}, Can Manage Users: {can_manage_users}")
+        # Debug logging for permission-based visibility
+        self.logger.info(f"🔐 Navigation visibility check - Role: {user_role}, Org Type: {org_type}, Org: {org_id}")
+        self.logger.info(f"� Navigation visibility check - Role: {user_role}, Super Admin: False, Org: {org_id}")
         
-        # Page indices based on nav_items order:
+        # Define page key mappings for nav_items indices:
         # 0: Dashboard, 1: Journal, 2: Ledger, 3: Trial Balance, 4: Reports, 5: Accounts
         # 6: Reminders, 7: Period Closing, 8: Team, 9: Org Settings, 10: User Mgmt
         # 11: Platform, 12: Global Orgs, 13: Settings
+        page_mappings = {
+            0: 'dashboard',
+            1: 'journal_entries',
+            2: 'journal_entries',  # Ledger uses same permissions as journal
+            3: 'reports',  # Trial Balance is a type of report
+            4: 'reports',
+            5: 'accounts',
+            6: 'dashboard',  # Reminders/tasks use dashboard permissions for now
+            7: 'settings',  # Period closing needs admin permissions
+            8: 'team_management',  # Team management
+            9: 'organization_settings',  # Org settings
+            10: 'user_management',  # User management
+            11: 'platform_overview',  # Platform overview - use database permissions
+            12: 'global_organizations',  # Global organizations - use database permissions
+            13: 'settings'  # General settings
+        }
         
-        # Standard pages (always visible): Dashboard, Journal, Ledger, Trial Balance, Reports, Accounts, Reminders, Period Closing
-        always_visible = [0, 1, 2, 3, 4, 5, 6, 7]
+        # Pages that should be hidden for personal workspaces (single-user orgs)
+        personal_workspace_hidden = [8, 9, 10] if org_type == 'personal' else []  # Team, Org Settings, User Mgmt
         
-        # Organization pages: Team, Org Settings - visible to all org members
-        org_visible = [8, 9] if self.session_manager.get_active_organization_id() else []
-        
-        # Admin pages: User Mgmt - visible to admins and owners
-        admin_visible = [10] if can_manage_users else []
-        
-        # Super admin pages: Platform, Global Orgs - visible to super admins only
-        super_admin_visible = [11, 12] if is_super_admin else []
-        
-        # Settings - always visible
-        settings_visible = [13]
-        
-        # Combine all visible indices
-        visible_indices = always_visible + org_visible + admin_visible + super_admin_visible + settings_visible
-        
-        self.logger.info(f"Visible page indices: {visible_indices}")
-        self.logger.info(f"Super admin pages (11-12) visible: {11 in visible_indices and 12 in visible_indices}")
-        
-        # Update button visibility
+        # Update button visibility based on permissions
         for i, button in enumerate(self.sidebar_buttons):
-            if i in visible_indices:
-                button.show()
-                if i in [11, 12]:  # Platform and Global Orgs
-                    self.logger.debug(f"Showing super admin page button {i}")
+            should_show = False
+            
+            # Skip pages that don't make sense for personal workspaces
+            if i in personal_workspace_hidden:
+                should_show = False
+                self.logger.debug(f"Page {i} hidden for personal workspace")
+            elif page_mappings.get(i):
+                # Check database permissions for this page
+                page_key = page_mappings[i]
+                try:
+                    can_view = auth_manager.can_access_page(page_key, org_id, 'view')
+                    should_show = can_view
+                    self.logger.debug(f"Page {i} ({page_key}): can_view = {can_view}")
+                except Exception as e:
+                    self.logger.error(f"Error checking permissions for page {i} ({page_key}): {e}")
+                    # Default to hiding on error, except for dashboard
+                    should_show = (i == 0)  # Dashboard should be visible by default
+                    
             else:
-                button.hide()
-                self.logger.debug(f"Hiding button {i} (not in visible indices)")
-                if i in [11, 12]:  # Platform and Global Orgs
-                    self.logger.debug(f"Hiding super admin page button {i} - user is not super admin")
+                # No specific permission mapping - default behavior
+                should_show = (i == 0)  # Show dashboard by default
+            
+            button.setVisible(should_show)
+            
+        # Log summary
+        visible_count = sum(1 for button in self.sidebar_buttons if button.isVisible())
+        self.logger.info(f"Navigation updated: {visible_count}/{len(self.sidebar_buttons)} tabs visible for {org_type} workspace (role: '{user_role}')")
     
     def _on_organization_changed(self, org_id):
         """Handle organization change from the organization switcher."""
@@ -1915,34 +2049,6 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             import traceback
             traceback.print_exc()
             
-    def _update_navigation_visibility(self):
-        """Update navigation menu visibility based on current organization"""
-        try:
-            if not self.session_manager:
-                return
-                
-            current_org = self.session_manager.get_current_organization()
-            if not current_org:
-                return
-                
-            # Get user role in current organization
-            user_role = current_org.get('user_role', 'member')
-            is_admin = user_role in ['admin', 'owner']
-            
-            # Update navigation based on role
-            if hasattr(self, 'nav_menu'):
-                # Enable/disable admin features based on role
-                admin_items = ['settings', 'team', 'user_management']
-                for item_name in admin_items:
-                    if hasattr(self.nav_menu, f'{item_name}_action'):
-                        action = getattr(self.nav_menu, f'{item_name}_action')
-                        action.setEnabled(is_admin)
-                        
-            self.logger.debug(f"Navigation updated for role: {user_role} (admin: {is_admin})")
-            
-        except Exception as e:
-            self.logger.error(f"Error updating navigation visibility: {e}")
-    
     def refresh_workspace_switcher(self):
         """Refresh the workspace switcher with current organizations"""
         try:

@@ -250,20 +250,20 @@ class AuthManager:
         return user_role in required_roles if user_role else False
     
     def can_read_accounting_data(self, org_id: str) -> bool:
-        """Check if user can read accounting data"""
-        return self.has_permission(org_id, ['organization_owner', 'accountant', 'member'])
+        """Check if user can read accounting data - use database permissions"""
+        return self.can_access_page('journal_entries', org_id, 'view')
     
     def can_modify_accounting_data(self, org_id: str) -> bool:
-        """Check if user can modify accounting data"""
-        return self.has_permission(org_id, ['organization_owner', 'accountant'])
+        """Check if user can modify accounting data - use database permissions"""
+        return self.can_access_page('journal_entries', org_id, 'create') or self.can_access_page('journal_entries', org_id, 'edit')
     
     def can_manage_organization(self, org_id: str) -> bool:
-        """Check if user can manage organization"""
-        return self.has_permission(org_id, ['organization_owner'])
+        """Check if user can manage organization - use database permissions"""
+        return self.can_access_page('organization_settings', org_id, 'edit')
     
     def can_close_periods(self, org_id: str) -> bool:
-        """Check if user can close periods"""
-        return self.has_permission(org_id, ['organization_owner'])
+        """Check if user can close periods - use database permissions"""
+        return self.can_access_page('settings', org_id, 'edit')
     
     def reset_password(self, email: str) -> Dict[str, Any]:
         """Send password reset email"""
@@ -302,61 +302,93 @@ class AuthManager:
             
             # Wait a moment for the user profile trigger to complete
             import time
-            time.sleep(0.5)
+            time.sleep(1.0)  # Increased wait time for trigger completion
             
-            if org_type == "personal":
-                self.logger.info("Creating personal workspace")
-                # Create personal workspace
-                org_data = {
-                    'name': f"Personal Workspace",
-                    'description': 'Personal accounting workspace',
-                    'settings': {'workspace_type': 'personal'}
+            # Every user automatically gets a personal workspace from the database trigger
+            # We should always find their auto-created personal workspace first
+            self.logger.info("Looking for auto-created personal workspace")
+            
+            try:
+                # Find the user's personal workspace (created by trigger)
+                result = self.supabase.table('organizations')\
+                    .select('*')\
+                    .eq('settings->>workspace_type', 'personal')\
+                    .in_('id', 
+                         self.supabase.table('organization_members')\
+                         .select('organization_id')\
+                         .eq('user_id', user_id)\
+                         .eq('role', 'organization_owner')
+                    )\
+                    .execute()
+                
+                personal_workspace = result.data[0] if result.data else None
+                
+                if personal_workspace:
+                    self.logger.info(f"Found auto-created personal workspace: {personal_workspace['id']}")
+                else:
+                    self.logger.warning("No auto-created personal workspace found - creating one manually")
+                    # Fallback: create personal workspace manually if trigger failed
+                    org_data = {
+                        'name': f"Personal Workspace",
+                        'description': 'Personal accounting workspace',
+                        'settings': {'workspace_type': 'personal', 'created_manually': True}
+                    }
+                    
+                    personal_workspace = db_manager.create_organization(org_data)
+                    if personal_workspace:
+                        db_manager.add_organization_member(
+                            personal_workspace['id'], user_id, 'organization_owner'
+                        )
+                    
+            except Exception as e:
+                self.logger.error(f"Error finding personal workspace: {e}")
+                return {'error': 'Failed to find or create personal workspace'}
+            
+            # Now handle the requested organization type
+            if org_type == "personal" or not org_type:
+                # User just wants their personal workspace (this is the default)
+                self.logger.info("User choosing personal workspace only")
+                return {
+                    'type': 'personal', 
+                    'organization': personal_workspace,
+                    'message': 'Personal workspace ready'
                 }
                 
-                self.logger.info(f"Creating organization with data: {org_data}")
-                org = db_manager.create_organization(org_data)
-                self.logger.info(f"Organization created: {org}")
-                
-                if org:
-                    # Add user as organization owner
-                    self.logger.info(f"Adding user {user_id} as organization owner")
-                    membership = db_manager.add_organization_member(
-                        org['id'], user_id, 'organization_owner'
-                    )
-                    self.logger.info(f"Membership created: {membership}")
-                    return {'type': 'personal', 'organization': org, 'membership': membership}
-                else:
-                    self.logger.error("Failed to create organization")
-                    return {'error': 'Failed to create personal workspace'}
-                
             elif org_type == "new":
-                # Create new organization
+                # User wants to create an additional multi-user organization
                 if not org_name:
                     return {'error': 'Organization name required for new organization'}
                 
-                self.logger.info(f"Creating new organization: {org_name}")
+                self.logger.info(f"Creating additional multi-user organization: {org_name}")
                 org_data = {
                     'name': org_name,
-                    'description': f'Organization: {org_name}',
+                    'description': f'Multi-user organization: {org_name}',
                     'settings': {'workspace_type': 'organization'}
                 }
                 
-                org = db_manager.create_organization(org_data)
-                if org:
+                new_org = db_manager.create_organization(org_data)
+                if new_org:
                     # Add user as organization owner
                     membership = db_manager.add_organization_member(
-                        org['id'], user_id, 'organization_owner'
+                        new_org['id'], user_id, 'organization_owner'
                     )
-                    return {'type': 'new', 'organization': org, 'membership': membership}
+                    return {
+                        'type': 'new', 
+                        'organization': new_org, 
+                        'personal_workspace': personal_workspace,
+                        'membership': membership,
+                        'message': f'Created organization "{org_name}" - you also have access to your personal workspace'
+                    }
                 else:
                     return {'error': 'Failed to create organization'}
                 
             elif org_type == "existing":
-                # Join existing organization via invitation code
+                # Join existing organization via invitation code (personal workspace still exists)
                 # For now, return a placeholder - this would need invitation system
                 return {
                     'type': 'existing', 
-                    'message': 'Invitation system not yet implemented',
+                    'personal_workspace': personal_workspace,
+                    'message': 'Invitation system not yet implemented - you can use your personal workspace',
                     'invitation_code': invitation_code
                 }
             
@@ -367,3 +399,69 @@ class AuthManager:
             import traceback
             self.logger.error(f"Organization setup traceback: {traceback.format_exc()}")
             return {'error': str(e)}
+
+    def get_page_permissions(self, page_key: str, org_id: str) -> Dict[str, Any]:
+        """Get user's permissions for a specific page in an organization"""
+        try:
+            if not self.db_manager:
+                self.logger.warning("No database manager available for permission check")
+                return {'view': False, 'create': False, 'edit': False, 'delete': False}
+            
+            # Call the database function to get permissions
+            result = self.supabase.rpc('get_page_permissions', {
+                'page_key': page_key,
+                'org_id': org_id
+            })
+            
+            if result.data:
+                return result.data
+            else:
+                self.logger.warning(f"No permissions found for page {page_key} in org {org_id}")
+                return {'view': False, 'create': False, 'edit': False, 'delete': False}
+                
+        except Exception as e:
+            self.logger.error(f"Failed to get page permissions for {page_key}: {e}")
+            return {'view': False, 'create': False, 'edit': False, 'delete': False}
+    
+    def can_access_page(self, page_key: str, org_id: str, permission_type: str = 'view') -> bool:
+        """Check if the current user can access a specific page with given permission"""
+        try:
+            if not self.db_manager:
+                self.logger.warning("No database manager available for permission check")
+                return False
+            
+            # Call the database function to check access
+            result = self.supabase.rpc('can_access_page', {
+                'page_key': page_key,
+                'org_id': org_id,
+                'permission_type': permission_type
+            })
+            
+            return bool(result.data) if result.data is not None else False
+                
+        except Exception as e:
+            self.logger.error(f"Failed to check page access for {page_key}: {e}")
+            return False
+
+    def get_user_page_permissions(self, org_id: str) -> Dict[str, Dict[str, Any]]:
+        """Get all page permissions for the current user in an organization"""
+        try:
+            if not self.db_manager:
+                self.logger.warning("No database manager available for permission check")
+                return {}
+            
+            # Define all pages that need permission checks
+            pages = [
+                'dashboard', 'accounts', 'journal_entries', 'reports', 
+                'settings', 'user_management', 'team_management', 'organization_settings'
+            ]
+            
+            permissions = {}
+            for page in pages:
+                permissions[page] = self.get_page_permissions(page, org_id)
+            
+            return permissions
+                
+        except Exception as e:
+            self.logger.error(f"Failed to get user page permissions: {e}")
+            return {}

@@ -170,34 +170,13 @@ class SessionManager:
         return result
         
     def _get_user_permissions(self) -> Dict[str, Any]:
-        """Get user permissions based on role"""
-        role_permissions = {
-            'super_admin': {
-                'platform': {'manage': True, 'view': True},
-                'organizations': {'create': True, 'delete': True, 'manage': True, 'view': True},
-                'users': {'create': True, 'delete': True, 'manage': True, 'view': True},
-                'accounting': {'create': True, 'read': True, 'update': True, 'delete': True}
-            },
-            'organization_owner': {
-                'organization': {'manage': True, 'delete': True, 'billing': True},
-                'users': {'invite': True, 'remove': True, 'manage_roles': True},
-                'accounting': {'create': True, 'read': True, 'update': True, 'delete': True}
-            },
-            'organization_admin': {
-                'organization': {'manage': True, 'settings': True},
-                'users': {'invite': True, 'remove': True, 'assign_accountant': True},
-                'accounting': {'create': True, 'read': True, 'update': True, 'delete': True}
-            },
-            'accountant': {
-                'accounting': {'create': True, 'read': True, 'update': True, 'delete': True},
-                'reports': {'generate': True, 'export': True}
-            },
-            'member': {
-                'accounting': {'read': True},
-                'reports': {'view': True}
-            }
-        }
-        return role_permissions.get(self.current_role, {})
+        """Get user permissions from database-driven permissions"""
+        if not self.current_organization:
+            return {}
+        
+        # Get all page permissions for current user in current organization
+        org_id = self.current_organization['id']
+        return self.auth_manager.get_user_page_permissions(org_id)
 
     def get_current_context(self) -> Dict[str, Any]:
         """Get current user and organization context for database operations"""
@@ -268,43 +247,74 @@ class SessionManager:
     # Permission checks
     def can_manage_organization(self) -> bool:
         """Check if user can manage current organization settings"""
-        return self.current_role in ['super_admin', 'organization_owner', 'organization_admin']
+        if not self.current_organization:
+            return False
+        return self.auth_manager.can_access_page('organization_settings', self.current_organization['id'], 'edit')
 
     def can_invite_users(self) -> bool:
         """Check if user can invite others to current organization"""
+        if not self.current_organization:
+            return False
         if self._get_org_type(self.current_organization) == 'personal':
             return False
-        return self.current_role in ['super_admin', 'organization_owner', 'organization_admin']
+        return self.auth_manager.can_access_page('user_management', self.current_organization['id'], 'create')
 
     def can_manage_team(self) -> bool:
         """Check if user can manage team members"""
+        if not self.current_organization:
+            return False
         if self._get_org_type(self.current_organization) == 'personal':
             return False
-        return self.current_role in ['super_admin', 'organization_owner', 'organization_admin']
+        return self.auth_manager.can_access_page('team_management', self.current_organization['id'], 'edit')
 
     def can_manage_users(self) -> bool:
         """Check if current user can manage users in the organization"""
-        return self.current_role in ['super_admin', 'organization_owner', 'organization_admin']
+        if not self.current_organization:
+            return False
+        return self.auth_manager.can_access_page('user_management', self.current_organization['id'], 'edit')
 
     def has_permission(self, permission: str) -> bool:
-        """Check if current user has a specific permission"""
-        permissions = self._get_user_permissions()
-        
+        """Check if current user has a specific permission using database-driven permissions"""
+        if not self.current_organization:
+            return False
+            
         # Super admin has all permissions
         if self.current_role == 'super_admin':
             return True
         
-        # Parse permission string (e.g., "accounting.create", "users.manage")
+        # Parse permission string and map to database page permissions
         parts = permission.split('.')
         if len(parts) != 2:
             return False
         
         category, action = parts
+        org_id = self.current_organization['id']
         
-        if category in permissions:
-            if isinstance(permissions[category], dict):
-                return permissions[category].get(action, False)
-            return permissions[category] == True
+        # Map legacy permission categories to database page keys
+        page_mapping = {
+            'accounting': 'journal_entries',
+            'users': 'user_management',
+            'organization': 'organization_settings',
+            'reports': 'reports',
+            'settings': 'settings'
+        }
+        
+        # Map legacy actions to database permission types
+        action_mapping = {
+            'read': 'view',
+            'create': 'create',
+            'update': 'edit',
+            'edit': 'edit',
+            'delete': 'delete',
+            'manage': 'edit',
+            'view': 'view'
+        }
+        
+        page_key = page_mapping.get(category)
+        permission_type = action_mapping.get(action)
+        
+        if page_key and permission_type:
+            return self.auth_manager.can_access_page(page_key, org_id, permission_type)
         
         return False
         
@@ -318,7 +328,9 @@ class SessionManager:
         
     def can_close_periods(self) -> bool:
         """Check if user can close accounting periods"""
-        return self.current_role in ['super_admin', 'organization_owner', 'organization_admin']
+        if not self.current_organization:
+            return False
+        return self.auth_manager.can_access_page('settings', self.current_organization['id'], 'edit')
         
     def is_accountant(self) -> bool:
         """Check if user is an accountant"""

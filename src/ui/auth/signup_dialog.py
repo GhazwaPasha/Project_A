@@ -70,17 +70,21 @@ class SignupDialog(QDialog):
         self.confirm_password_input.setObjectName("input")
         password_layout.addWidget(self.confirm_password_input)
         
-        layout.addLayout(password_layout)        # Organization type
+        layout.addLayout(password_layout)        # Organization type - clarified messaging
+        org_type_label = QLabel("Choose your workspace setup:")
+        org_type_label.setObjectName("subtitle")
+        layout.addWidget(org_type_label)
+        
         self.org_combo = QComboBox()
         self.org_combo.setObjectName("combo")
-        self.org_combo.addItem("Personal Workspace (Just for you)", "personal")
-        self.org_combo.addItem("Create New Organization (For team/company)", "new")
-        self.org_combo.addItem("Join Existing Organization", "existing")
+        self.org_combo.addItem("Personal Workspace Only (Recommended)", "personal")
+        self.org_combo.addItem("Personal + Create New Organization", "new")
+        self.org_combo.addItem("Personal + Join Existing Organization", "existing")
         self.org_combo.currentTextChanged.connect(self._on_org_type_changed)
         layout.addWidget(self.org_combo)
         
         # Help text for workspace type
-        self.workspace_help = QLabel("✅ Perfect for individual users - creates your private workspace automatically")
+        self.workspace_help = QLabel("✅ You'll get a private personal workspace automatically. Perfect for individual use!")
         self.workspace_help.setObjectName("help_text")
         self.workspace_help.setWordWrap(True)
         layout.addWidget(self.workspace_help)
