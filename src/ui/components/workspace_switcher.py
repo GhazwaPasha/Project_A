@@ -35,10 +35,11 @@ class WorkspaceSwitcher(QWidget):
         self.layout.setContentsMargins(8, 4, 8, 4)
         self.layout.setSpacing(6)
         
-        # Set fixed size for consistency
+        # Set fixed size for consistency - more compact design
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.setFixedHeight(32)
-        self.setFixedWidth(200)
+        self.setFixedHeight(28)  # Slightly smaller to match AI status bar
+        self.setMinimumWidth(180)  # Minimum width
+        self.setMaximumWidth(250)  # Maximum width
         
         # Workspace icon
         self.workspace_icon = QLabel()
@@ -48,7 +49,7 @@ class WorkspaceSwitcher(QWidget):
             self.workspace_icon.setPixmap(icon.pixmap(16, 16))
         else:
             self.workspace_icon.setText("🏢")
-        self.workspace_icon.setFixedSize(20, 20)
+        self.workspace_icon.setFixedSize(16, 16)
         self.layout.addWidget(self.workspace_icon)
         
         # Current workspace label
@@ -60,29 +61,40 @@ class WorkspaceSwitcher(QWidget):
         # Workspace dropdown button
         self.workspace_button = QPushButton("▼")
         self.workspace_button.setObjectName("WorkspaceButton")
-        self.workspace_button.setFixedSize(20, 20)
+        self.workspace_button.setFixedSize(16, 16)
         self.workspace_button.clicked.connect(self._show_workspace_menu)
         self.layout.addWidget(self.workspace_button)
         
     def _apply_styling(self):
-        """Apply styling to the workspace switcher"""
-        # Add subtle background and border
+        """Apply styling to match AI status bar design"""
+        # Match AI status bar styling
         self.setStyleSheet("""
             WorkspaceSwitcher {
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 16px;
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                padding: 4px 8px;
+            }
+            
+            WorkspaceSwitcher:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
             }
             
             QLabel {
                 color: white;
                 font-size: 12px;
+                font-family: 'Segoe UI', system-ui, sans-serif;
+                font-weight: 500;
                 padding: 0px;
+                background: transparent;
+                border: none;
             }
             
             QLabel#WorkspaceLabel {
                 color: white;
                 font-weight: 500;
+                text-align: center;
             }
             
             QPushButton#WorkspaceButton {
@@ -91,10 +103,13 @@ class WorkspaceSwitcher(QWidget):
                 color: rgba(255, 255, 255, 0.7);
                 font-size: 10px;
                 padding: 0px;
+                margin: 0px;
             }
             
             QPushButton#WorkspaceButton:hover {
                 color: white;
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 4px;
             }
         """)
 
@@ -149,13 +164,16 @@ class WorkspaceSwitcher(QWidget):
             menu.setWindowFlags(menu.windowFlags() | Qt.WindowType.FramelessWindowHint | Qt.WindowType.NoDropShadowWindowHint)
             menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
             
-            # Style the menu
+            # Style the menu to match our design system
             menu.setStyleSheet("""
                 QMenu {
-                    background: rgba(45, 45, 48, 0.98);
-                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    background: rgba(30, 30, 30, 0.98);
+                    border: 1px solid rgba(0, 0, 0, 0.3);
                     border-radius: 8px;
                     padding: 4px;
+                    color: white;
+                    font-family: 'Segoe UI', system-ui, sans-serif;
+                    font-size: 12px;
                 }
                 QMenu::item {
                     color: white;
@@ -163,9 +181,14 @@ class WorkspaceSwitcher(QWidget):
                     padding: 8px 16px;
                     border-radius: 4px;
                     margin: 2px;
+                    font-weight: 500;
                 }
                 QMenu::item:selected {
-                    background: rgba(255, 255, 255, 0.1);
+                    background: rgba(255, 255, 255, 0.12);
+                    border: 1px solid rgba(100, 181, 246, 0.3);
+                }
+                QMenu::item:pressed {
+                    background: rgba(255, 255, 255, 0.15);
                 }
             """)
             

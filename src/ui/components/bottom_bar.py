@@ -6,13 +6,12 @@ from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, 
     QPushButton, QFrame, QSizePolicy, QSpacerItem
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIcon, QFont
 from .styles import GlassmorphismHelper, ModernStyles
 from .mica_effect import MicaEffect
 from ..common import ResponsiveHelper
 import os
-from datetime import datetime
 
 class BottomBar(QWidget):
     """
@@ -26,7 +25,6 @@ class BottomBar(QWidget):
         
         self._setup_ui()
         self._apply_styling()
-        self._setup_timer()
     
     def _setup_ui(self):
         """Setup the bottom bar UI"""
@@ -35,41 +33,18 @@ class BottomBar(QWidget):
         layout.setContentsMargins(8, 4, 8, 4)  # Reduced margins
         layout.setSpacing(8)  # Reduced spacing
         
-        # Left section - App branding
-        self._create_left_section(layout)
-        
-        # Center section - Workspace switcher (if available)
-        self._create_center_section(layout)
-        
-        # Right section - Additional info
-        self._create_right_section(layout)
-        
-    def _create_left_section(self, layout):
-        """Create left section with app info"""
-        left_widget = QWidget()
-        left_layout = QHBoxLayout(left_widget)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(12)
-        
-        # App name/brand
-        app_label = QLabel("📊 AI Accountant")
-        app_label.setObjectName("AppLabel")
-        app_label.setToolTip("Modern AI-Powered Accounting System")
-        left_layout.addWidget(app_label)
-        
-        layout.addWidget(left_widget)
-        
-    def _create_center_section(self, layout):
-        """Create center section with workspace switcher"""
-        # Add stretch to push center content to the middle
+        # Add stretch to push workspace switcher to the right
         layout.addStretch()
         
-        center_widget = QWidget()
-        center_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        center_layout = QHBoxLayout(center_widget)
-        center_layout.setContentsMargins(0, 0, 0, 0)
-        center_layout.setSpacing(8)
-        center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Right section - Workspace switcher
+        self._create_right_section(layout)
+        
+    def _create_right_section(self, layout):
+        """Create right section with workspace switcher"""
+        right_widget = QWidget()
+        right_layout = QHBoxLayout(right_widget)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(8)
         
         if self.auth_manager and self.session_manager:
             # Import and create workspace switcher if in multi-tenant mode
@@ -80,47 +55,23 @@ class BottomBar(QWidget):
                     session_manager=self.session_manager,
                     parent=self
                 )
-                center_layout.addWidget(self.workspace_switcher)
+                right_layout.addWidget(self.workspace_switcher)
             except ImportError:
                 # Fallback if workspace switcher not available
                 workspace_label = QLabel("🏢 Single Tenant Mode")
                 workspace_label.setObjectName("WorkspaceLabel")
-                center_layout.addWidget(workspace_label)
+                right_layout.addWidget(workspace_label)
             except Exception:
                 # Fallback on any error
                 workspace_label = QLabel("🏢 Error Loading Switcher")
                 workspace_label.setObjectName("WorkspaceLabel")
-                center_layout.addWidget(workspace_label)
+                right_layout.addWidget(workspace_label)
         else:
             # Single tenant mode indicator
             workspace_label = QLabel("🏢 Workspace")
             workspace_label.setObjectName("WorkspaceLabel")
             workspace_label.setToolTip("Single tenant workspace")
-            center_layout.addWidget(workspace_label)
-        
-        layout.addWidget(center_widget)
-        layout.addStretch()
-        
-    def _create_right_section(self, layout):
-        """Create right section with additional info"""
-        right_widget = QWidget()
-        right_layout = QHBoxLayout(right_widget)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(12)
-        
-        # Current time
-        self.time_label = QLabel()
-        self.time_label.setObjectName("TimeLabel")
-        self._update_time()
-        right_layout.addWidget(self.time_label)
-        
-        # User info (if available)
-        if self.auth_manager and hasattr(self.auth_manager, 'current_user') and self.auth_manager.current_user:
-            user_email = getattr(self.auth_manager.current_user, 'email', 'User')
-            user_label = QLabel(f"👤 {user_email}")
-            user_label.setObjectName("UserLabel")
-            user_label.setToolTip(f"Signed in as {user_email}")
-            right_layout.addWidget(user_label)
+            right_layout.addWidget(workspace_label)
         
         layout.addWidget(right_widget)
     
@@ -149,16 +100,6 @@ class BottomBar(QWidget):
                 max-height: 36px;
             }}
             
-            QLabel#AppLabel {{
-                color: #4CAF50;
-                font-size: {ResponsiveHelper.scale_size(12, 11, 13)}px;
-                font-weight: 600;
-                padding: 2px 8px;
-                background: rgba(76, 175, 80, 0.1);
-                border: 1px solid rgba(76, 175, 80, 0.3);
-                border-radius: 4px;
-            }}
-            
             QLabel#WorkspaceLabel {{
                 color: #FFFFFF;
                 font-size: {ResponsiveHelper.scale_size(12, 11, 13)}px;
@@ -168,47 +109,9 @@ class BottomBar(QWidget):
                 border: 1px solid rgba(74, 144, 226, 0.4);
                 border-radius: 4px;
             }}
-            
-            QLabel#TimeLabel {{
-                color: #CCCCCC;
-                font-size: {ResponsiveHelper.scale_size(11, 10, 12)}px;
-                font-weight: 400;
-                padding: 2px 4px;
-            }}
-            
-            QLabel#UserLabel {{
-                color: #FFFFFF;
-                font-size: {ResponsiveHelper.scale_size(11, 10, 12)}px;
-                font-weight: 500;
-                padding: 2px 6px;
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 4px;
-            }}
         """)
         
-    def _setup_timer(self):
-        """Setup timer for updating dynamic content"""
-        self.timer = QTimer()
-        self.timer.timeout.connect(self._update_dynamic_content)
-        self.timer.start(30000)  # Update every 30 seconds
-
-    def _update_dynamic_content(self):
-        """Update time and other dynamic content"""
-        self._update_time()
-        
-    def _update_time(self):
-        """Update the time display"""
-        current_time = datetime.now().strftime("%H:%M")
-        self.time_label.setText(f"🕐 {current_time}")
-            
     def refresh_workspace_info(self):
         """Refresh workspace switcher if available"""
         if hasattr(self, 'workspace_switcher'):
             self.workspace_switcher.refresh_workspaces()
-            
-    def update_user_info(self, user_email=None):
-        """Update user information display"""
-        # This can be called when user signs in/out
-        # For now, we'll refresh the entire right section
-        self._setup_ui()
