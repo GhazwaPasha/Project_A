@@ -3,7 +3,7 @@ Reminders & Tasks Page - Manage reminders, tasks, and recurring events
 """
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                             QLineEdit, QTextEdit, QDateTimeEdit, QComboBox, QFrame,
-                            QScrollArea, QCheckBox, QGroupBox, QTabWidget, QMessageBox)
+                            QScrollArea, QCheckBox, QGroupBox, QStackedWidget, QButtonGroup, QMessageBox)
 from PyQt6.QtCore import Qt, QDateTime, QTimer, pyqtSignal, QDate, QTime
 from PyQt6.QtGui import QFont, QIcon
 from datetime import datetime, timedelta
@@ -11,7 +11,9 @@ import json
 import os
 
 from ..components.widgets import PageHeader
-from ..components.styles import ModernStyles
+from ..components.styles import ModernStyles, GlassmorphismHelper
+from ..components.scrollbar_styles import ModernScrollbarStyles
+from ..common import ResponsiveHelper
 
 
 class ReminderItem(QFrame):
@@ -31,53 +33,106 @@ class ReminderItem(QFrame):
     def _setup_ui(self):
         """Setup reminder item UI"""
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(12)
+        layout.setContentsMargins(16, 12, 16, 12)  # Consistent with journal card margins
+        layout.setSpacing(12)  # Consistent spacing
         
         # Complete checkbox
         self.complete_cb = QCheckBox()
         self.complete_cb.setChecked(self.reminder_data.get('completed', False))
         self.complete_cb.toggled.connect(self._on_complete_toggled)
+        self.complete_cb.setStyleSheet("""
+            QCheckBox {
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+                border: 2px solid rgba(255, 255, 255, 0.3);
+                border-radius: 4px;
+                background: rgba(255, 255, 255, 0.08);
+            }
+            QCheckBox::indicator:hover {
+                border: 2px solid rgba(100, 181, 246, 0.5);
+                background: rgba(255, 255, 255, 0.12);
+            }
+            QCheckBox::indicator:checked {
+                background: rgba(76, 175, 80, 0.8);
+                border: 2px solid rgba(76, 175, 80, 1.0);
+            }
+            QCheckBox::indicator:checked:hover {
+                background: rgba(76, 175, 80, 0.9);
+            }
+        """)
         layout.addWidget(self.complete_cb)
         
         # Reminder details
         details_layout = QVBoxLayout()
         details_layout.setSpacing(4)
         
-        # Title
+        # Title with consistent styling
         title = QLabel(self.reminder_data.get('title', 'Untitled Reminder'))
-        title.setFont(QFont("Segoe UI", 11, QFont.Weight.Medium))
+        title.setStyleSheet("""
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 500;
+            font-size: 14px;
+            background: transparent;
+            border: none;
+            padding: 0px;
+            margin: 0px;
+        """)
         details_layout.addWidget(title)
         
-        # Description
+        # Description with consistent styling
         if self.reminder_data.get('description'):
             desc = QLabel(self.reminder_data['description'])
-            desc.setStyleSheet("color: rgba(255, 255, 255, 0.7); font-size: 10px;")
+            desc.setStyleSheet("""
+                color: rgba(255, 255, 255, 0.7);
+                font-size: 12px;
+                background: transparent;
+                border: none;
+                padding: 0px;
+                margin: 0px;
+            """)
+            desc.setWordWrap(True)
             details_layout.addWidget(desc)
         
-        # Due date and time
+        # Due date and time with consistent styling
         due_datetime = self.reminder_data.get('due_datetime', '')
         if due_datetime:
             due_label = QLabel(f"Due: {due_datetime}")
-            due_label.setStyleSheet("color: rgba(100, 181, 246, 0.8); font-size: 10px;")
+            due_label.setStyleSheet("""
+                color: rgba(100, 181, 246, 0.8);
+                font-size: 12px;
+                background: transparent;
+                border: none;
+                padding: 0px;
+                margin: 0px;
+            """)
             details_layout.addWidget(due_label)
         
-        # Recurring info
+        # Recurring info with consistent styling
         recurring = self.reminder_data.get('recurring', 'none')
         if recurring != 'none':
             recurring_label = QLabel(f"Repeats: {recurring}")
-            recurring_label.setStyleSheet("color: rgba(255, 193, 7, 0.8); font-size: 10px;")
+            recurring_label.setStyleSheet("""
+                color: rgba(255, 193, 7, 0.8);
+                font-size: 12px;
+                background: transparent;
+                border: none;
+                padding: 0px;
+                margin: 0px;
+            """)
             details_layout.addWidget(recurring_label)
         
         layout.addLayout(details_layout, 1)
         
-        # Delete button
+        # Delete button with consistent styling
         delete_btn = QPushButton("×")
         delete_btn.setFixedSize(24, 24)
         delete_btn.setStyleSheet("""
             QPushButton {
-                background: rgba(255, 255, 255, 0.1);
-                border: none;
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
                 border-radius: 12px;
                 color: rgba(255, 255, 255, 0.6);
                 font-size: 16px;
@@ -85,7 +140,11 @@ class ReminderItem(QFrame):
             }
             QPushButton:hover {
                 background: rgba(244, 67, 54, 0.3);
+                border: 1px solid rgba(244, 67, 54, 0.5);
                 color: white;
+            }
+            QPushButton:pressed {
+                background: rgba(244, 67, 54, 0.4);
             }
         """)
         delete_btn.clicked.connect(self._on_delete_clicked)
@@ -101,19 +160,26 @@ class ReminderItem(QFrame):
                     background: rgba(255, 255, 255, 0.05);
                     border: 1px solid rgba(76, 175, 80, 0.3);
                     border-radius: 8px;
-                    margin: 2px 0;
+                    margin: 4px 0px;
+                    min-height: 48px;
+                }
+                QFrame:hover {
+                    background: rgba(255, 255, 255, 0.08);
+                    border: 1px solid rgba(76, 175, 80, 0.5);
                 }
             """)
         else:
             self.setStyleSheet("""
                 QFrame {
                     background: rgba(255, 255, 255, 0.08);
-                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border: 1px solid rgba(0, 0, 0, 0.3);
                     border-radius: 8px;
-                    margin: 2px 0;
+                    margin: 4px 0px;
+                    min-height: 48px;
                 }
                 QFrame:hover {
-                    border-color: rgba(100, 181, 246, 0.3);
+                    background: rgba(255, 255, 255, 0.12);
+                    border: 1px solid rgba(100, 181, 246, 0.3);
                 }
             """)
     
@@ -139,6 +205,7 @@ class RemindersTasksPage(QWidget):
         self.reminders_data = self._load_reminders()
         
         self._setup_ui()
+        self._apply_styling()
         self._load_reminder_items()
         
         # Timer for checking due reminders
@@ -146,66 +213,126 @@ class RemindersTasksPage(QWidget):
         self.check_timer.timeout.connect(self._check_due_reminders)
         self.check_timer.start(60000)  # Check every minute
         
+    def _apply_styling(self):
+        """Apply modern glassmorphism styling."""
+        GlassmorphismHelper.apply_main_container_effect(self)
+        self.setStyleSheet(ModernStyles.get_complete_stylesheet())
+        
     def _setup_ui(self):
         """Setup the reminders page UI"""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(20)
+        main_layout = QVBoxLayout(self)
+        responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
+        main_layout.setContentsMargins(responsive_margin, 0,  # Remove top margin for seamless flow
+                                     responsive_margin, responsive_margin)
+        main_layout.setSpacing(16)  # Standardized spacing
         
         # Page header
         header = PageHeader(
             title="Reminders & Tasks",
             subtitle="Manage your accounting reminders and recurring tasks"
         )
-        layout.addWidget(header)
-          # Tab widget for different views
-        self.tab_widget = QTabWidget()
-        self.tab_widget.setStyleSheet("""
-            QTabWidget::pane {
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 8px;
-                background: rgba(255, 255, 255, 0.05);
-            }
-            QTabBar::tab {
-                background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                border-bottom: none;
-                border-radius: 6px 6px 0 0;
-                padding: 8px 16px;
-                margin-right: 2px;
-                color: rgba(255, 255, 255, 0.7);
-                font-weight: 500;
-            }
-            QTabBar::tab:selected {
-                background: rgba(33, 150, 243, 0.3);
-                color: white;
-                border-color: rgba(33, 150, 243, 0.5);
-            }
-            QTabBar::tab:hover:!selected {
-                background: rgba(255, 255, 255, 0.12);
-                color: rgba(255, 255, 255, 0.9);
-            }
-        """)
+        main_layout.addWidget(header)
+        
+        # Create custom tab selector with modern styling (matching journal page)
+        self._create_tab_selector(main_layout)
+        
+        # Create stacked widget for tab content
+        self.stacked_widget = QStackedWidget()
         
         # Active reminders tab
         self.active_tab = self._create_active_reminders_tab()
-        self.tab_widget.addTab(self.active_tab, "Active Reminders")
+        self.stacked_widget.addWidget(self.active_tab)
         
         # Completed reminders tab
         self.completed_tab = self._create_completed_reminders_tab()
-        self.tab_widget.addTab(self.completed_tab, "Completed")
+        self.stacked_widget.addWidget(self.completed_tab)
         
         # Add new reminder tab
         self.add_tab = self._create_add_reminder_tab()
-        self.tab_widget.addTab(self.add_tab, "Add New")
+        self.stacked_widget.addWidget(self.add_tab)
         
-        layout.addWidget(self.tab_widget)
+        # Set default tab
+        self.stacked_widget.setCurrentIndex(0)
+        main_layout.addWidget(self.stacked_widget, 1)  # Use default stretch factor for natural spacing
+    
+    def _create_tab_selector(self, layout):
+        """Create tab selector with modern styling matching journal page."""
+        # Container for tab selector
+        tab_container_layout = QHBoxLayout()
+        tab_container_layout.setContentsMargins(0, 8, 0, 8)  # Match journal tab margins
+        tab_container_layout.setSpacing(12)
+        
+        # Create container frame like level filter
+        tab_group = QFrame()
+        tab_group.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 8px;
+                padding: 4px;
+            }
+        """)
+        
+        tab_layout = QHBoxLayout(tab_group)
+        tab_layout.setSpacing(4)
+        tab_layout.setContentsMargins(4, 4, 4, 4)
+        
+        # Tab buttons with modern styling
+        self.tab_buttons = QButtonGroup(self)
+        tab_options = [("Active Reminders", 0), ("Completed", 1), ("Add New", 2)]
+        
+        for i, (tab_name, tab_index) in enumerate(tab_options):
+            btn = QPushButton(tab_name)
+            btn.setCheckable(True)
+            if i == 0:  # Default to first tab
+                btn.setChecked(True)
+            btn.setStyleSheet(self._get_tab_filter_button_style())
+            btn.clicked.connect(lambda checked, idx=tab_index: self._switch_tab(idx))
+            self.tab_buttons.addButton(btn, tab_index)
+            tab_layout.addWidget(btn)
+        
+        tab_container_layout.addWidget(tab_group)
+        tab_container_layout.addStretch()  # Push tabs to the left
+        
+        layout.addLayout(tab_container_layout)
+        
+    def _switch_tab(self, tab_index):
+        """Switch to the specified tab."""
+        self.stacked_widget.setCurrentIndex(tab_index)
+        
+    def _get_tab_filter_button_style(self):
+        """Get modern tab filter button styling to match journal page."""
+        return """
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 13px;
+                font-weight: 500;
+                margin: 0;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.08);
+                color: white;
+            }
+            QPushButton:checked {
+                background: rgba(0, 120, 215, 0.3);
+                color: white;
+            }
+            QPushButton:checked:hover {
+                background: rgba(0, 120, 215, 0.4);
+            }
+        """
         
     def _create_active_reminders_tab(self):
         """Create active reminders tab"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setContentsMargins(0, 0, 0, 0)  # Remove extra margins for seamless flow
+        layout.setSpacing(16)  # Standardized spacing
         
         # Scroll area for reminders
         scroll_area = QScrollArea()
@@ -213,9 +340,23 @@ class RemindersTasksPage(QWidget):
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         
+        # Apply modern scrollbar styling
+        scroll_style = """
+            QScrollArea {
+                background: transparent;
+                border: none;
+            }
+            QWidget#scrollAreaWidgetContents {
+                background: transparent;
+            }
+        """ + ModernScrollbarStyles.get_vertical_scrollbar_style()
+        scroll_area.setStyleSheet(scroll_style)
+        
         # Content widget
         self.active_content = QWidget()
+        self.active_content.setObjectName("scrollAreaWidgetContents")
         self.active_layout = QVBoxLayout(self.active_content)
+        self.active_layout.setContentsMargins(8, 8, 8, ResponsiveHelper.scale_size(24, 16, 32))
         self.active_layout.setSpacing(8)
         self.active_layout.addStretch()
         
@@ -228,15 +369,30 @@ class RemindersTasksPage(QWidget):
         """Create completed reminders tab"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setContentsMargins(0, 0, 0, 0)  # Remove extra margins for seamless flow
+        layout.setSpacing(16)  # Standardized spacing
         
         # Scroll area for completed reminders
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         
+        # Apply modern scrollbar styling
+        scroll_style = """
+            QScrollArea {
+                background: transparent;
+                border: none;
+            }
+            QWidget#scrollAreaWidgetContents {
+                background: transparent;
+            }
+        """ + ModernScrollbarStyles.get_vertical_scrollbar_style()
+        scroll_area.setStyleSheet(scroll_style)
+        
         # Content widget
         self.completed_content = QWidget()
+        self.completed_content.setObjectName("scrollAreaWidgetContents")
         self.completed_layout = QVBoxLayout(self.completed_content)
+        self.completed_layout.setContentsMargins(8, 8, 8, ResponsiveHelper.scale_size(24, 16, 32))
         self.completed_layout.setSpacing(8)
         self.completed_layout.addStretch()
         
@@ -249,71 +405,274 @@ class RemindersTasksPage(QWidget):
         """Create add new reminder tab"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        layout.setContentsMargins(0, 0, 0, 0)  # Remove extra margins for seamless flow
+        layout.setSpacing(16)  # Standardized spacing
         
-        # Form for new reminder
+        # Form for new reminder with modern styling (matching journal page)
         form_frame = QFrame()
         form_frame.setStyleSheet("""
             QFrame {
                 background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 12px;
-                padding: 20px;
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
             }
         """)
         form_layout = QVBoxLayout(form_frame)
-        form_layout.setSpacing(15)
+        form_layout.setContentsMargins(18, 18, 18, 18)  # Match journal form margins
+        form_layout.setSpacing(12)  # Match journal form spacing
         
         # Title input
-        title_label = QLabel("Reminder Title:")
-        title_label.setStyleSheet("color: white; font-weight: 500;")
+        title_label = QLabel("REMINDER TITLE")
+        title_label.setStyleSheet("""
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 11px;
+            font-weight: 600;
+            background: transparent;
+            border: none;
+            padding: 0px;
+            margin: 0px;
+            letter-spacing: 0.5px;
+        """)
         form_layout.addWidget(title_label)
         
         self.title_input = QLineEdit()
         self.title_input.setPlaceholderText("Enter reminder title...")
-        self.title_input.setStyleSheet(ModernStyles.get_input_style())
+        self.title_input.setStyleSheet("""
+            QLineEdit {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                padding: 8px 12px;
+                color: white;
+                font-size: 12px;
+                min-height: 32px;
+            }
+            QLineEdit:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
+            }
+            QLineEdit:focus {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+            }
+            QLineEdit::placeholder {
+                color: rgba(255, 255, 255, 0.5);
+            }
+        """)
         form_layout.addWidget(self.title_input)
         
         # Description input
-        desc_label = QLabel("Description (Optional):")
-        desc_label.setStyleSheet("color: white; font-weight: 500;")
+        desc_label = QLabel("DESCRIPTION (OPTIONAL)")
+        desc_label.setStyleSheet("""
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 11px;
+            font-weight: 600;
+            background: transparent;
+            border: none;
+            padding: 0px;
+            margin: 0px;
+            letter-spacing: 0.5px;
+        """)
         form_layout.addWidget(desc_label)
         
         self.desc_input = QTextEdit()
         self.desc_input.setPlaceholderText("Enter description...")
         self.desc_input.setMaximumHeight(80)
-        self.desc_input.setStyleSheet(ModernStyles.get_input_style())
+        self.desc_input.setStyleSheet("""
+            QTextEdit {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                padding: 8px 12px;
+                color: white;
+                font-size: 12px;
+            }
+            QTextEdit:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
+            }
+            QTextEdit:focus {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+            }
+        """)
         form_layout.addWidget(self.desc_input)
         
-        # Date and time
-        datetime_layout = QHBoxLayout()
-        
-        date_label = QLabel("Due Date:")
-        date_label.setStyleSheet("color: white; font-weight: 500;")
-        datetime_layout.addWidget(date_label)
+        # Date and time section
+        date_label = QLabel("DUE DATE & TIME")
+        date_label.setStyleSheet("""
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 11px;
+            font-weight: 600;
+            background: transparent;
+            border: none;
+            padding: 0px;
+            margin: 0px;
+            letter-spacing: 0.5px;
+        """)
+        form_layout.addWidget(date_label)
         
         self.date_input = QDateTimeEdit()
         self.date_input.setDateTime(QDateTime.currentDateTime().addDays(1))
         self.date_input.setCalendarPopup(True)
-        self.date_input.setStyleSheet(ModernStyles.get_input_style())
-        datetime_layout.addWidget(self.date_input)
-        
-        form_layout.addLayout(datetime_layout)
+        self.date_input.setStyleSheet("""
+            QDateTimeEdit {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                padding: 8px 12px;
+                color: white;
+                font-size: 12px;
+                min-height: 32px;
+            }
+            QDateTimeEdit:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
+            }
+            QDateTimeEdit:focus {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+            }
+            QDateTimeEdit::drop-down {
+                border: none;
+                width: 20px;
+            }
+            QDateTimeEdit::down-arrow {
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 4px solid rgba(255, 255, 255, 0.7);
+                margin-right: 6px;
+            }
+            QCalendarWidget {
+                background-color: rgb(32, 32, 32);
+                color: white;
+            }
+            QCalendarWidget QToolButton {
+                color: white;
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+                padding: 4px;
+            }
+            QCalendarWidget QToolButton:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
+            QCalendarWidget QMenu {
+                background-color: rgb(32, 32, 32);
+                color: white;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+            }
+            QCalendarWidget QSpinBox {
+                color: white;
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 4px;
+                padding: 2px;
+            }
+            QCalendarWidget QAbstractItemView:enabled {
+                color: white;
+                background: rgb(32, 32, 32);
+                selection-background-color: rgba(100, 181, 246, 0.3);
+                selection-color: white;
+            }
+            QCalendarWidget QWidget#qt_calendar_navigationbar {
+                background: rgb(32, 32, 32);
+            }
+        """)
+        form_layout.addWidget(self.date_input)
         
         # Recurring options
-        recurring_label = QLabel("Recurring:")
-        recurring_label.setStyleSheet("color: white; font-weight: 500;")
+        recurring_label = QLabel("RECURRING")
+        recurring_label.setStyleSheet("""
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 11px;
+            font-weight: 600;
+            background: transparent;
+            border: none;
+            padding: 0px;
+            margin: 0px;
+            letter-spacing: 0.5px;
+        """)
         form_layout.addWidget(recurring_label)
         
         self.recurring_combo = QComboBox()
         self.recurring_combo.addItems(["None", "Daily", "Weekly", "Monthly"])
-        self.recurring_combo.setStyleSheet(ModernStyles.get_input_style())
+        self.recurring_combo.setStyleSheet("""
+            QComboBox {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                padding: 8px 12px;
+                color: white;
+                font-size: 12px;
+                min-height: 32px;
+                min-width: 160px;
+            }
+            QComboBox:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.3);
+            }
+            QComboBox:focus {
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 20px;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 4px solid rgba(255, 255, 255, 0.7);
+                margin-right: 6px;
+            }
+            QComboBox QAbstractItemView {
+                background: rgba(40, 40, 40, 0.95);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                color: white;
+                selection-background-color: rgba(100, 181, 246, 0.2);
+                selection-color: white;
+                padding: 4px;
+            }
+            QComboBox QAbstractItemView::item {
+                padding: 8px 12px;
+                border: none;
+                border-radius: 4px;
+                margin: 2px;
+            }
+            QComboBox QAbstractItemView::item:hover {
+                background: rgba(100, 181, 246, 0.1);
+            }
+            QComboBox QAbstractItemView::item:selected {
+                background: rgba(100, 181, 246, 0.2);
+            }
+        """)
         form_layout.addWidget(self.recurring_combo)
         
-        # Add button
+        # Add button with primary styling (matching journal page)
         add_btn = QPushButton("Add Reminder")
-        add_btn.setStyleSheet(ModernStyles.get_button_style())
+        add_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(100, 181, 246, 0.2);
+                border: 1px solid rgba(100, 181, 246, 0.5);
+                border-radius: 8px;
+                color: #90CAF9;
+                padding: 8px 16px;
+                font-size: 12px;
+                font-weight: 500;
+                min-height: 32px;
+            }
+            QPushButton:hover {
+                background: rgba(100, 181, 246, 0.3);
+                border: 1px solid rgba(100, 181, 246, 0.7);
+            }
+            QPushButton:pressed {
+                background: rgba(100, 181, 246, 0.4);
+            }
+        """)
         add_btn.clicked.connect(self._add_new_reminder)
         form_layout.addWidget(add_btn)
         
@@ -394,7 +753,7 @@ class RemindersTasksPage(QWidget):
         self.recurring_combo.setCurrentIndex(0)
         
         # Switch to active tab
-        self.tab_widget.setCurrentIndex(0)
+        self.stacked_widget.setCurrentIndex(0)
         
         # Notify parent
         if hasattr(self.parent(), 'add_notification'):

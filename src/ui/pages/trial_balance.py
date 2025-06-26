@@ -59,9 +59,9 @@ class TrialBalancePage(QWidget):
           # Main layout for scroll content
         main_layout = QVBoxLayout(content_widget)
         responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
-        main_layout.setContentsMargins(responsive_margin, responsive_margin, 
+        main_layout.setContentsMargins(responsive_margin, 0,  # Remove top margin for seamless flow
                                      responsive_margin, responsive_margin)
-        main_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
+        main_layout.setSpacing(16)  # Standardized spacing
         
         # Page header
         header = PageHeader("Trial Balance", "Verify that total debits equal total credits")
@@ -87,7 +87,7 @@ class TrialBalancePage(QWidget):
         """Create compact balance status metrics - 4 essential cards."""
         # Single row of compact metrics
         metrics_layout = QHBoxLayout()
-        metrics_layout.setSpacing(ResponsiveHelper.scale_size(16, 12, 20))        
+        metrics_layout.setSpacing(16)  # Standardized spacing        
         # Create compact metric cards
         self.card_balance_status = self._create_compact_card("Balance Status", "Checking...", "")
         self.card_total_debits = self._create_compact_card("Total Debits", "0.00", "")

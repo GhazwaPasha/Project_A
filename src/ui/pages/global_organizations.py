@@ -29,9 +29,9 @@ class GlobalOrganizationsPage(QWidget):
         """Setup the global organizations UI"""
         main_layout = QVBoxLayout(self)
         responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
-        main_layout.setContentsMargins(responsive_margin, responsive_margin, 
+        main_layout.setContentsMargins(responsive_margin, 0,  # Remove top margin for seamless flow
                                      responsive_margin, responsive_margin)
-        main_layout.setSpacing(ResponsiveHelper.scale_size(24, 20, 32))
+        main_layout.setSpacing(16)  # Standardized spacing
         
         # Page header with actions
         header_layout = QHBoxLayout()

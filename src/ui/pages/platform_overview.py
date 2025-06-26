@@ -3,7 +3,7 @@ Super admin platform overview page for system administrators
 """
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                             QTableWidget, QTableWidgetItem, QHeaderView, QFrame, 
-                            QGroupBox, QProgressBar, QGridLayout, QTabWidget, QComboBox)
+                            QGroupBox, QProgressBar, QGridLayout, QStackedWidget, QButtonGroup, QComboBox)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QIcon, QFont
 from ..common import ResponsiveHelper
@@ -32,9 +32,9 @@ class PlatformOverviewPage(QWidget):
         """Setup the platform overview UI"""
         main_layout = QVBoxLayout(self)
         responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
-        main_layout.setContentsMargins(responsive_margin, responsive_margin, 
+        main_layout.setContentsMargins(responsive_margin, 0,  # Remove top margin for seamless flow
                                      responsive_margin, responsive_margin)
-        main_layout.setSpacing(ResponsiveHelper.scale_size(24, 20, 32))
+        main_layout.setSpacing(16)  # Standardized spacing
         
         # Page header with admin actions
         header_layout = QHBoxLayout()
@@ -66,20 +66,99 @@ class PlatformOverviewPage(QWidget):
         # Platform metrics
         self._create_metrics_section(main_layout)
         
-        # Tabs for detailed views
-        self.tabs = QTabWidget()
-        self.tabs.setObjectName("PlatformTabs")
+        # Create custom tab selector with modern styling (matching journal page)
+        self._create_tab_selector(main_layout)
+        
+        # Create stacked widget for tab content
+        self.stacked_widget = QStackedWidget()
         
         # System health tab
-        self._create_system_health_tab()
+        self.health_tab = self._create_system_health_tab()
+        self.stacked_widget.addWidget(self.health_tab)
         
         # Recent activity tab
-        self._create_activity_tab()
+        self.activity_tab = self._create_activity_tab()
+        self.stacked_widget.addWidget(self.activity_tab)
         
         # Alerts tab
-        self._create_alerts_tab()
+        self.alerts_tab = self._create_alerts_tab()
+        self.stacked_widget.addWidget(self.alerts_tab)
         
-        main_layout.addWidget(self.tabs)
+        # Set default tab
+        self.stacked_widget.setCurrentIndex(0)
+        main_layout.addWidget(self.stacked_widget, 1)  # Use default stretch factor for natural spacing
+    
+    def _create_tab_selector(self, layout):
+        """Create tab selector with modern styling matching journal page."""
+        # Container for tab selector
+        tab_container_layout = QHBoxLayout()
+        tab_container_layout.setContentsMargins(0, 8, 0, 8)  # Match journal tab margins
+        tab_container_layout.setSpacing(12)
+        
+        # Create container frame like level filter
+        tab_group = QFrame()
+        tab_group.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 8px;
+                padding: 4px;
+            }
+        """)
+        
+        tab_layout = QHBoxLayout(tab_group)
+        tab_layout.setSpacing(4)
+        tab_layout.setContentsMargins(4, 4, 4, 4)
+        
+        # Tab buttons with modern styling
+        self.tab_buttons = QButtonGroup(self)
+        tab_options = [("System Health", 0), ("Recent Activity", 1), ("Alerts", 2)]
+        
+        for i, (tab_name, tab_index) in enumerate(tab_options):
+            btn = QPushButton(tab_name)
+            btn.setCheckable(True)
+            if i == 0:  # Default to first tab
+                btn.setChecked(True)
+            btn.setStyleSheet(self._get_tab_filter_button_style())
+            btn.clicked.connect(lambda checked, idx=tab_index: self._switch_tab(idx))
+            self.tab_buttons.addButton(btn, tab_index)
+            tab_layout.addWidget(btn)
+        
+        tab_container_layout.addWidget(tab_group)
+        tab_container_layout.addStretch()  # Push tabs to the left
+        
+        layout.addLayout(tab_container_layout)
+        
+    def _switch_tab(self, tab_index):
+        """Switch to the specified tab."""
+        self.stacked_widget.setCurrentIndex(tab_index)
+        
+    def _get_tab_filter_button_style(self):
+        """Get modern tab filter button styling to match journal page."""
+        return """
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 13px;
+                font-weight: 500;
+                margin: 0;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.08);
+                color: white;
+            }
+            QPushButton:checked {
+                background: rgba(0, 120, 215, 0.3);
+                color: white;
+            }
+            QPushButton:checked:hover {
+                background: rgba(0, 120, 215, 0.4);
+            }
+        """
         
     def _create_metrics_section(self, main_layout):
         """Create the platform metrics cards section"""
@@ -194,7 +273,8 @@ class PlatformOverviewPage(QWidget):
         layout.addWidget(resources_group)
         layout.addStretch()
         
-        self.tabs.addTab(tab, "System Health")
+        
+        return tab
         
     def _create_activity_tab(self):
         """Create the recent activity monitoring tab"""
@@ -265,7 +345,8 @@ class PlatformOverviewPage(QWidget):
                 
         layout.addWidget(self.activity_table)
         
-        self.tabs.addTab(tab, "Recent Activity")
+        
+        return tab
         
     def _create_alerts_tab(self):
         """Create the system alerts tab"""
@@ -347,7 +428,8 @@ class PlatformOverviewPage(QWidget):
             
         layout.addWidget(self.alerts_table)
         
-        self.tabs.addTab(tab, "System Alerts")
+        
+        return tab
         
     def _create_alert_actions_widget(self, alert):
         """Create actions widget for an alert"""

@@ -3,6 +3,9 @@ Settings page for the accounting application.
 This module provides application configuration and preferences management.
 """
 
+import urllib.request
+import tempfile
+import os
 from ..common import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
     QLineEdit, QComboBox, QDateEdit,
@@ -77,9 +80,9 @@ class SettingsPage(QWidget):
         content_layout = QVBoxLayout(content_widget)
         
         responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
-        content_layout.setContentsMargins(responsive_margin, responsive_margin, 
-                                     responsive_margin, responsive_margin)
-        content_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 48))
+        content_layout.setContentsMargins(responsive_margin, 0,  # Remove top margin for seamless flow
+                                         responsive_margin, responsive_margin)
+        content_layout.setSpacing(16)  # Standardized spacing
         
         # Page header
         header = PageHeader("Settings", "Application configuration and preferences")

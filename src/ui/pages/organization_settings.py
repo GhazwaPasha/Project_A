@@ -3,7 +3,7 @@ Organization settings page for managing organization-specific configuration
 """
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                             QLineEdit, QComboBox, QTextEdit, QDateEdit, QCheckBox,
-                            QGroupBox, QFormLayout, QTabWidget, QFrame, QMessageBox,
+                            QGroupBox, QFormLayout, QStackedWidget, QButtonGroup, QFrame, QMessageBox,
                             QFileDialog, QProgressBar)
 from PyQt6.QtCore import Qt, QDate, pyqtSignal
 from PyQt6.QtGui import QPixmap, QIcon
@@ -32,9 +32,9 @@ class OrganizationSettingsPage(QWidget):
         """Setup the organization settings UI"""
         main_layout = QVBoxLayout(self)
         responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
-        main_layout.setContentsMargins(responsive_margin, responsive_margin, 
+        main_layout.setContentsMargins(responsive_margin, 0,  # Remove top margin for seamless flow
                                      responsive_margin, responsive_margin)
-        main_layout.setSpacing(ResponsiveHelper.scale_size(24, 20, 32))
+        main_layout.setSpacing(16)  # Standardized spacing
         
         # Page header with save button
         header_layout = QHBoxLayout()
@@ -55,24 +55,104 @@ class OrganizationSettingsPage(QWidget):
         header_layout.addLayout(save_layout)
         main_layout.addLayout(header_layout)
         
-        # Tabs for different settings categories
-        self.tabs = QTabWidget()
-        self.tabs.setObjectName("SettingsTabs")
+        # Create custom tab selector with modern styling (matching journal page)
+        self._create_tab_selector(main_layout)
+        
+        # Create stacked widget for tab content
+        self.stacked_widget = QStackedWidget()
         
         # General settings tab
-        self._create_general_tab()
+        self.general_tab = self._create_general_tab()
+        self.stacked_widget.addWidget(self.general_tab)
         
         # Financial settings tab
-        self._create_financial_tab()
+        self.financial_tab = self._create_financial_tab()
+        self.stacked_widget.addWidget(self.financial_tab)
         
         # User & Access tab
-        self._create_access_tab()
+        self.access_tab = self._create_access_tab()
+        self.stacked_widget.addWidget(self.access_tab)
         
         # Billing & Subscription tab
-        self._create_billing_tab()
+        self.billing_tab = self._create_billing_tab()
+        self.stacked_widget.addWidget(self.billing_tab)
         
-        main_layout.addWidget(self.tabs)
+        # Set default tab
+        self.stacked_widget.setCurrentIndex(0)
+        main_layout.addWidget(self.stacked_widget, 1)  # Use default stretch factor for natural spacing
         main_layout.addStretch()
+        
+    def _create_tab_selector(self, layout):
+        """Create tab selector with modern styling matching journal page."""
+        # Container for tab selector
+        tab_container_layout = QHBoxLayout()
+        tab_container_layout.setContentsMargins(0, 8, 0, 8)  # Match journal tab margins
+        tab_container_layout.setSpacing(12)
+        
+        # Create container frame like level filter
+        tab_group = QFrame()
+        tab_group.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 8px;
+                padding: 4px;
+            }
+        """)
+        
+        tab_layout = QHBoxLayout(tab_group)
+        tab_layout.setSpacing(4)
+        tab_layout.setContentsMargins(4, 4, 4, 4)
+        
+        # Tab buttons with modern styling
+        self.tab_buttons = QButtonGroup(self)
+        tab_options = [("General", 0), ("Financial", 1), ("User & Access", 2), ("Billing", 3)]
+        
+        for i, (tab_name, tab_index) in enumerate(tab_options):
+            btn = QPushButton(tab_name)
+            btn.setCheckable(True)
+            if i == 0:  # Default to first tab
+                btn.setChecked(True)
+            btn.setStyleSheet(self._get_tab_filter_button_style())
+            btn.clicked.connect(lambda checked, idx=tab_index: self._switch_tab(idx))
+            self.tab_buttons.addButton(btn, tab_index)
+            tab_layout.addWidget(btn)
+        
+        tab_container_layout.addWidget(tab_group)
+        tab_container_layout.addStretch()  # Push tabs to the left
+        
+        layout.addLayout(tab_container_layout)
+        
+    def _switch_tab(self, tab_index):
+        """Switch to the specified tab."""
+        self.stacked_widget.setCurrentIndex(tab_index)
+        
+    def _get_tab_filter_button_style(self):
+        """Get modern tab filter button styling to match journal page."""
+        return """
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 13px;
+                font-weight: 500;
+                margin: 0;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.08);
+                color: white;
+            }
+            QPushButton:checked {
+                background: rgba(0, 120, 215, 0.3);
+                color: white;
+            }
+            QPushButton:checked:hover {
+                background: rgba(0, 120, 215, 0.4);
+            }
+        """
         
     def _create_general_tab(self):
         """Create the general settings tab"""
@@ -143,7 +223,8 @@ class OrganizationSettingsPage(QWidget):
         layout.addWidget(branding_group)
         layout.addStretch()
         
-        self.tabs.addTab(tab, "General")
+        
+        return tab
         
     def _create_financial_tab(self):
         """Create the financial settings tab"""
@@ -200,7 +281,8 @@ class OrganizationSettingsPage(QWidget):
         layout.addWidget(tax_group)
         layout.addStretch()
         
-        self.tabs.addTab(tab, "Financial")
+        
+        return tab
         
     def _create_access_tab(self):
         """Create the user access settings tab"""
@@ -265,7 +347,8 @@ class OrganizationSettingsPage(QWidget):
         layout.addWidget(audit_group)
         layout.addStretch()
         
-        self.tabs.addTab(tab, "Access & Security")
+        
+        return tab
         
     def _create_billing_tab(self):
         """Create the billing and subscription tab"""
@@ -370,7 +453,8 @@ class OrganizationSettingsPage(QWidget):
         layout.addWidget(history_group)
         layout.addStretch()
         
-        self.tabs.addTab(tab, "Billing")
+        
+        return tab
         
     def _apply_styling(self):
         """Apply styling to the organization settings page"""
@@ -378,42 +462,6 @@ class OrganizationSettingsPage(QWidget):
         GlassmorphismHelper.apply_main_container_effect(self)
         
         self.setStyleSheet(f"""
-            QTabWidget#SettingsTabs {{
-                background: transparent;
-                border: none;
-            }}
-            
-            QTabWidget#SettingsTabs::pane {{
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 8px;
-                top: -1px;
-            }}
-            
-            QTabWidget#SettingsTabs::tab-bar {{
-                alignment: left;
-            }}
-            
-            QTabBar::tab {{
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                color: white;
-                padding: 12px 24px;
-                margin-right: 4px;
-                border-top-left-radius: 8px;
-                border-top-right-radius: 8px;
-                font-size: {ResponsiveHelper.scale_size(13, 12, 14)}px;
-            }}
-            
-            QTabBar::tab:selected {{
-                background: rgba(74, 144, 226, 0.3);
-                border-bottom: 2px solid rgba(74, 144, 226, 1.0);
-            }}
-            
-            QTabBar::tab:hover:!selected {{
-                background: rgba(255, 255, 255, 0.1);
-            }}
-            
             QGroupBox {{
                 color: white;
                 border: 1px solid rgba(255, 255, 255, 0.1);

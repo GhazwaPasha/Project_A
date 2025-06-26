@@ -4,7 +4,7 @@ User management page for advanced user administration
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                             QTableWidget, QTableWidgetItem, QHeaderView, QFrame, 
                             QDialog, QLineEdit, QComboBox, QMessageBox, QMenu,
-                            QTabWidget, QCheckBox, QDateEdit, QTextEdit, QGroupBox)
+                            QStackedWidget, QButtonGroup, QCheckBox, QDateEdit, QTextEdit, QGroupBox)
 from PyQt6.QtCore import Qt, pyqtSignal, QDate
 from PyQt6.QtGui import QIcon, QAction
 from ..common import ResponsiveHelper
@@ -29,9 +29,9 @@ class UserManagementPage(QWidget):
         """Setup the user management UI"""
         main_layout = QVBoxLayout(self)
         responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
-        main_layout.setContentsMargins(responsive_margin, responsive_margin, 
+        main_layout.setContentsMargins(responsive_margin, 0,  # Remove top margin for seamless flow
                                      responsive_margin, responsive_margin)
-        main_layout.setSpacing(ResponsiveHelper.scale_size(24, 20, 32))
+        main_layout.setSpacing(16)  # Standardized spacing
         
         # Page header with actions
         header_layout = QHBoxLayout()
@@ -59,25 +59,106 @@ class UserManagementPage(QWidget):
         header_layout.addLayout(action_layout)
         main_layout.addLayout(header_layout)
         
-        # Tabs for different user views
-        self.tabs = QTabWidget()
-        self.tabs.setObjectName("UserTabs")
+        # Create custom tab selector with modern styling (matching journal page)
+        self._create_tab_selector(main_layout)
+        
+        # Create stacked widget for tab content
+        self.stacked_widget = QStackedWidget()
         
         # Active users tab
-        self._create_active_users_tab()
+        self.active_tab = self._create_active_users_tab()
+        self.stacked_widget.addWidget(self.active_tab)
         
         # Roles & Permissions tab
-        self._create_roles_tab()
+        self.roles_tab = self._create_roles_tab()
+        self.stacked_widget.addWidget(self.roles_tab)
         
         # Access logs tab
-        self._create_access_logs_tab()
+        self.logs_tab = self._create_access_logs_tab()
+        self.stacked_widget.addWidget(self.logs_tab)
         
-        main_layout.addWidget(self.tabs)
+        # Set default tab
+        self.stacked_widget.setCurrentIndex(0)
+        main_layout.addWidget(self.stacked_widget, 1)  # Use default stretch factor for natural spacing
+    
+    def _create_tab_selector(self, layout):
+        """Create tab selector with modern styling matching journal page."""
+        # Container for tab selector
+        tab_container_layout = QHBoxLayout()
+        tab_container_layout.setContentsMargins(0, 8, 0, 8)  # Match journal tab margins
+        tab_container_layout.setSpacing(12)
+        
+        # Create container frame like level filter
+        tab_group = QFrame()
+        tab_group.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 8px;
+                padding: 4px;
+            }
+        """)
+        
+        tab_layout = QHBoxLayout(tab_group)
+        tab_layout.setSpacing(4)
+        tab_layout.setContentsMargins(4, 4, 4, 4)
+        
+        # Tab buttons with modern styling
+        self.tab_buttons = QButtonGroup(self)
+        tab_options = [("Active Users", 0), ("Roles & Permissions", 1), ("Access Logs", 2)]
+        
+        for i, (tab_name, tab_index) in enumerate(tab_options):
+            btn = QPushButton(tab_name)
+            btn.setCheckable(True)
+            if i == 0:  # Default to first tab
+                btn.setChecked(True)
+            btn.setStyleSheet(self._get_tab_filter_button_style())
+            btn.clicked.connect(lambda checked, idx=tab_index: self._switch_tab(idx))
+            self.tab_buttons.addButton(btn, tab_index)
+            tab_layout.addWidget(btn)
+        
+        tab_container_layout.addWidget(tab_group)
+        tab_container_layout.addStretch()  # Push tabs to the left
+        
+        layout.addLayout(tab_container_layout)
+        
+    def _switch_tab(self, tab_index):
+        """Switch to the specified tab."""
+        self.stacked_widget.setCurrentIndex(tab_index)
+        
+    def _get_tab_filter_button_style(self):
+        """Get modern tab filter button styling to match journal page."""
+        return """
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 13px;
+                font-weight: 500;
+                margin: 0;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.08);
+                color: white;
+            }
+            QPushButton:checked {
+                background: rgba(0, 120, 215, 0.3);
+                color: white;
+            }
+            QPushButton:checked:hover {
+                background: rgba(0, 120, 215, 0.4);
+            }
+        """
         
     def _create_active_users_tab(self):
         """Create the active users tab"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 0, 0, 0)  # Remove extra margins for seamless flow
+        layout.setSpacing(16)  # Standardized spacing
         layout.setSpacing(16)
         layout.setContentsMargins(16, 16, 16, 16)
         
@@ -145,14 +226,15 @@ class UserManagementPage(QWidget):
         
         layout.addWidget(self.users_table)
         
-        self.tabs.addTab(tab, "Active Users")
+        
+        return tab
         
     def _create_roles_tab(self):
         """Create the roles and permissions tab"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setSpacing(20)
-        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setContentsMargins(0, 0, 0, 0)  # Remove extra margins for seamless flow
+        layout.setSpacing(16)  # Standardized spacing
         
         # Roles overview section
         roles_group = QGroupBox("Organization Roles")
@@ -254,14 +336,15 @@ class UserManagementPage(QWidget):
         layout.addWidget(roles_group)
         layout.addStretch()
         
-        self.tabs.addTab(tab, "Roles & Permissions")
+        
+        return tab
         
     def _create_access_logs_tab(self):
         """Create the access logs tab"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setSpacing(16)
-        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setContentsMargins(0, 0, 0, 0)  # Remove extra margins for seamless flow
+        layout.setSpacing(16)  # Standardized spacing
         
         # Filter controls for logs
         log_filter_layout = QHBoxLayout()
@@ -327,7 +410,8 @@ class UserManagementPage(QWidget):
         self.logs_table.setAlternatingRowColors(True)
         layout.addWidget(self.logs_table)
         
-        self.tabs.addTab(tab, "Access Logs")
+        
+        return tab
         
     def _apply_styling(self):
         """Apply styling to the user management page"""

@@ -289,12 +289,21 @@ class PeriodClosingPage(QWidget):
         
     def _setup_ui(self):
         """Setup the period closing page UI."""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        main_layout = QVBoxLayout(self)
+        responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
+        main_layout.setContentsMargins(responsive_margin, 0,  # Remove top margin for seamless flow
+                                     responsive_margin, responsive_margin)
+        main_layout.setSpacing(16)  # Standardized spacing
         
         # Apply global styling to fix label backgrounds
         self._apply_global_styling()
+        
+        # Page header
+        header = PageHeader(
+            "Period Closing & Audit Management",
+            "Manage accounting periods, perform period closing, and review audit trails"
+        )
+        main_layout.addWidget(header)
         
         # Create scroll area for the main content
         scroll_area = QScrollArea()
@@ -303,23 +312,24 @@ class PeriodClosingPage(QWidget):
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         
         # Apply modern scrollbar styling
-        ModernScrollbarStyles.apply_to_widget(scroll_area)
+        scroll_area_style = """
+            QScrollArea, QWidget#scrollAreaWidgetContents {
+                background: transparent;
+                border: none;
+            }
+            QWidget { background: transparent; }
+        """ + ModernScrollbarStyles.get_vertical_scrollbar_style()
+        scroll_area.setStyleSheet(scroll_area_style)
         
         # Main content widget
         content_widget = QWidget()
+        content_widget.setObjectName("scrollAreaWidgetContents")
         scroll_area.setWidget(content_widget)
         
         # Content layout
         content_layout = QVBoxLayout(content_widget)
-        content_layout.setContentsMargins(24, 24, 24, 24)
-        content_layout.setSpacing(24)
-        
-        # Page header
-        header = PageHeader(
-            "Period Closing & Audit Management",
-            "Manage accounting periods, perform period closing, and review audit trails"
-        )
-        content_layout.addWidget(header)
+        content_layout.setContentsMargins(0, 0, 0, ResponsiveHelper.scale_size(24, 16, 32))
+        content_layout.setSpacing(16)  # Standardized spacing
         
         # Current Period Status Section
         self._create_period_status_section(content_layout)
@@ -329,17 +339,18 @@ class PeriodClosingPage(QWidget):
         
         # Audit Trail Section
         self._create_audit_trail_section(content_layout)
-          # Integrity Checks Section
+        
+        # Integrity Checks Section
         self._create_integrity_checks_section(content_layout)
         
-        layout.addWidget(scroll_area)
+        main_layout.addWidget(scroll_area, 1)  # This takes remaining space
         
     def _create_period_status_section(self, parent_layout):
         """Create the period status overview section."""
         # Section container (without background frame)
         section_widget = QWidget()
         section_layout = QVBoxLayout(section_widget)
-        section_layout.setContentsMargins(20, 20, 20, 20)
+        section_layout.setContentsMargins(0, 20, 0, 20)  # Remove left/right margins for proper alignment
         section_layout.setSpacing(16)
         
         # Section title
@@ -376,7 +387,7 @@ class PeriodClosingPage(QWidget):
         # Section container (without background frame)
         section_widget = QWidget()
         section_layout = QVBoxLayout(section_widget)
-        section_layout.setContentsMargins(20, 20, 20, 20)
+        section_layout.setContentsMargins(0, 20, 0, 20)  # Remove left/right margins for proper alignment
         section_layout.setSpacing(16)
         
         # Section title
@@ -505,7 +516,7 @@ class PeriodClosingPage(QWidget):
         """)
         
         section_layout = QVBoxLayout(section_frame)
-        section_layout.setContentsMargins(20, 20, 20, 20)
+        section_layout.setContentsMargins(0, 20, 0, 20)  # Remove left/right margins for proper alignment
         section_layout.setSpacing(16)
         
         # Section title and controls
@@ -626,7 +637,7 @@ class PeriodClosingPage(QWidget):
         """)
         
         section_layout = QVBoxLayout(section_frame)
-        section_layout.setContentsMargins(20, 20, 20, 20)
+        section_layout.setContentsMargins(0, 20, 0, 20)  # Remove left/right margins for proper alignment
         section_layout.setSpacing(16)
         
         # Section title
