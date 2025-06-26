@@ -427,19 +427,73 @@ class AuthManager:
         """Check if the current user can access a specific page with given permission"""
         try:
             if not self.db_manager:
+                print(f"🔍 DEBUG can_access_page: No database manager available")
                 self.logger.warning("No database manager available for permission check")
                 return False
             
-            # Call the database function to check access
-            result = self.supabase.rpc('can_access_page', {
-                'page_key': page_key,
-                'org_id': org_id,
-                'permission_type': permission_type
-            })
+            print(f"🔍 DEBUG can_access_page: Checking {page_key} for org {org_id} with permission {permission_type}")
             
-            return bool(result.data) if result.data is not None else False
+            # FIRST: Try database RPC call (if available)
+            try:
+                print(f"🔍 DEBUG can_access_page: Attempting RPC call...")
+                result = self.supabase.rpc('can_access_page', {
+                    'p_page_key': page_key,
+                    'p_org_id': org_id,
+                    'p_permission_type': permission_type
+                }).execute()
+                
+                print(f"🔍 DEBUG can_access_page: RPC success! Result = {result.data}")
+                return bool(result.data) if result.data is not None else False
+                
+            except Exception as rpc_error:
+                print(f"🔍 DEBUG can_access_page: RPC failed - {rpc_error}")
+                # Fall through to role-based check
+            
+            # FALLBACK: Use role-based permission check
+            try:
+                print(f"🔍 DEBUG can_access_page: Using role-based fallback...")
+                # Try to get user's role in the organization
+                user_role = self.get_user_role_in_organization(org_id)
+                if not user_role:
+                    print(f"🔍 DEBUG can_access_page: No role found for user in org {org_id}")
+                    return False
+                
+                # Define permissions based on role and page
+                role_permissions = {
+                    'organization_owner': {
+                        'dashboard': ['view', 'create', 'edit'],
+                        'journal_entries': ['view', 'create', 'edit', 'delete'],
+                        'accounts': ['view', 'create', 'edit', 'delete'],
+                        'reports': ['view', 'create'],
+                        'settings': ['view', 'edit'],
+                        'period_closing': ['view', 'create', 'edit'],
+                    },
+                    'accountant': {
+                        'dashboard': ['view'],
+                        'journal_entries': ['view', 'create', 'edit'],
+                        'accounts': ['view'],
+                        'reports': ['view'],
+                        'settings': ['view'],
+                    },
+                    'member': {
+                        'dashboard': ['view'],
+                        'reports': ['view'],
+                    }
+                }
+                
+                # Check if user has permission
+                page_perms = role_permissions.get(user_role, {}).get(page_key, [])
+                has_permission = permission_type in page_perms
+                
+                print(f"🔍 DEBUG can_access_page: Role-based check - {user_role} -> {page_key} -> {permission_type} = {has_permission}")
+                return has_permission
+                
+            except Exception as role_error:
+                print(f"🔍 DEBUG can_access_page: Role check error = {role_error}")
+                return False
                 
         except Exception as e:
+            print(f"🔍 DEBUG can_access_page: Exception = {e}")
             self.logger.error(f"Failed to check page access for {page_key}: {e}")
             return False
 
