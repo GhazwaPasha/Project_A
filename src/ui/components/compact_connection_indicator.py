@@ -4,7 +4,7 @@ Shows internet/Supabase connection status using WiFi icon with different states
 """
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPixmap
+from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPixmap, QIcon
 import logging
 import os
 
@@ -14,7 +14,7 @@ class CompactConnectionIndicator(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("CompactConnectionIndicator")
-        self.setFixedSize(32, 32)  # Exact size of window control buttons
+        self.setFixedSize(40, 32)  # Match window control button size exactly
         self.setToolTip("Connection Status")
         
         # Apply window control button styling
@@ -39,16 +39,18 @@ class CompactConnectionIndicator(QWidget):
         # Get the project root directory (3 levels up from src/ui/components/)
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
+        
+        # Use WiFi PNG icon only
         wifi_icon_path = os.path.join(project_root, "assets", "icons", "wifi.png")
         
         if os.path.exists(wifi_icon_path):
             pixmap = QPixmap(wifi_icon_path)
             if not pixmap.isNull():
-                # Scale the icon to match window control button size (14x14 pixels)
-                return pixmap.scaled(14, 14, Qt.AspectRatioMode.KeepAspectRatio, 
+                # Scale the icon to proper size for window control button alignment (16x16 pixels)
+                return pixmap.scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, 
                                    Qt.TransformationMode.SmoothTransformation)
         
-        # If icon doesn't exist or failed to load, return None
+        # If no icon found, return None
         self.logger.warning(f"WiFi icon not found at: {wifi_icon_path}")
         return None
     
@@ -177,47 +179,64 @@ class CompactConnectionIndicator(QWidget):
     
     def _draw_connected_icon(self, painter, icon_x, icon_y):
         """Draw WiFi icon in connected state (white color)"""
-        # Set white color for connected state
+        # Simply draw the icon with white color using composition
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-        painter.setOpacity(1.0)
         
-        # Fill with white color
-        painter.fillRect(icon_x, icon_y, self.wifi_icon.width(), self.wifi_icon.height(), 
-                        QColor(255, 255, 255))  # Pure white
+        # Create a white version of the icon
+        colored_pixmap = QPixmap(self.wifi_icon.size())
+        colored_pixmap.fill(Qt.GlobalColor.transparent)
         
-        # Apply the icon as a mask
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
-        painter.drawPixmap(icon_x, icon_y, self.wifi_icon)
+        temp_painter = QPainter(colored_pixmap)
+        temp_painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        temp_painter.drawPixmap(0, 0, self.wifi_icon)
+        
+        # Apply white color
+        temp_painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        temp_painter.fillRect(colored_pixmap.rect(), QColor(255, 255, 255))
+        temp_painter.end()
+        
+        # Draw the colored icon
+        painter.drawPixmap(icon_x, icon_y, colored_pixmap)
     
     def _draw_connecting_icon(self, painter, icon_x, icon_y):
         """Draw WiFi icon in connecting state (pulsing white)"""
-        # Create pulsing effect by varying opacity between white and grey
+        # Create pulsing effect by varying opacity
         pulse_phases = [0.4, 0.6, 0.8, 1.0]  # Opacity levels for animation
         opacity = pulse_phases[self.animation_phase]
         
-        # Use white color with pulsing opacity
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-        painter.setOpacity(1.0)
+        # Create a white version of the icon with pulsing opacity
+        colored_pixmap = QPixmap(self.wifi_icon.size())
+        colored_pixmap.fill(Qt.GlobalColor.transparent)
         
-        # Fill with white at varying opacity for pulsing effect
+        temp_painter = QPainter(colored_pixmap)
+        temp_painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        temp_painter.drawPixmap(0, 0, self.wifi_icon)
+        
+        # Apply white color with pulsing opacity
+        temp_painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
         white_color = QColor(255, 255, 255, int(255 * opacity))
-        painter.fillRect(icon_x, icon_y, self.wifi_icon.width(), self.wifi_icon.height(), 
-                        white_color)
+        temp_painter.fillRect(colored_pixmap.rect(), white_color)
+        temp_painter.end()
         
-        # Apply the icon as a mask
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
-        painter.drawPixmap(icon_x, icon_y, self.wifi_icon)
+        # Draw the colored icon
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        painter.drawPixmap(icon_x, icon_y, colored_pixmap)
     
     def _draw_offline_icon(self, painter, icon_x, icon_y):
         """Draw WiFi icon in offline state (dark grey color)"""
-        # Set dark grey color for disconnected state
+        # Create a grey version of the icon
+        colored_pixmap = QPixmap(self.wifi_icon.size())
+        colored_pixmap.fill(Qt.GlobalColor.transparent)
+        
+        temp_painter = QPainter(colored_pixmap)
+        temp_painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        temp_painter.drawPixmap(0, 0, self.wifi_icon)
+        
+        # Apply dark grey color
+        temp_painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        temp_painter.fillRect(colored_pixmap.rect(), QColor(80, 80, 80))
+        temp_painter.end()
+        
+        # Draw the colored icon
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-        painter.setOpacity(1.0)
-        
-        # Fill with dark grey color
-        painter.fillRect(icon_x, icon_y, self.wifi_icon.width(), self.wifi_icon.height(), 
-                        QColor(80, 80, 80))  # Dark grey
-        
-        # Apply the icon as a mask
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
-        painter.drawPixmap(icon_x, icon_y, self.wifi_icon)
+        painter.drawPixmap(icon_x, icon_y, colored_pixmap)
