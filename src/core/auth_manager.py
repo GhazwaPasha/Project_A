@@ -265,6 +265,18 @@ class AuthManager:
         """Check if user can close periods - use database permissions"""
         return self.can_access_page('settings', org_id, 'edit')
     
+    def can_create_journal_entries(self, org_id: str) -> bool:
+        """Check if user can create journal entries"""
+        return self.can_access_page('journal_entries', org_id, 'create')
+    
+    def can_create_accounts(self, org_id: str) -> bool:
+        """Check if user can create accounts"""
+        return self.can_access_page('accounts', org_id, 'create')
+    
+    def can_edit_accounts(self, org_id: str) -> bool:
+        """Check if user can edit accounts"""
+        return self.can_access_page('accounts', org_id, 'edit')
+    
     def reset_password(self, email: str) -> Dict[str, Any]:
         """Send password reset email"""
         try:

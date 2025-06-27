@@ -38,8 +38,29 @@ class BulkEntryPage(QWidget):
         self._skip_validation_updates = False
         self._memory_conservation_mode = False
         self._validation_cache = {}        # Load accounts once for all cards
-        accounts_data = self.system.get_postable_accounts()
-        self.formatted_accounts = [f"{acc['code']} - {acc['name']}" for acc in accounts_data]
+        try:
+            accounts_data = self.system.get_postable_accounts()
+            # Fix: accounts_data is now tuples (name, type, code, parent_code, level, is_postable, description)
+            # Index 2 = code, Index 0 = name
+            if accounts_data and len(accounts_data) > 0:
+                # Check if it's tuple format or dict format for compatibility
+                sample_account = accounts_data[0]
+                if isinstance(sample_account, tuple):
+                    # New tuple format: (name, type, code, parent_code, level, is_postable, description)
+                    self.formatted_accounts = [f"{acc[2]} - {acc[0]}" for acc in accounts_data if len(acc) >= 3]
+                elif isinstance(sample_account, dict):
+                    # Old dict format for backward compatibility
+                    self.formatted_accounts = [f"{acc.get('code', '')} - {acc.get('name', '')}" for acc in accounts_data]
+                else:
+                    # Fallback: empty list
+                    self.formatted_accounts = []
+                    print(f"⚠️  Unknown account data format: {type(sample_account)}")
+            else:
+                self.formatted_accounts = []
+                print("⚠️  No accounts loaded from system")
+        except Exception as e:
+            print(f"❌ Error loading accounts in bulk entry: {e}")
+            self.formatted_accounts = []
         self._setup_ui()
         self._add_new_card()  # Start with one empty card
         
@@ -190,10 +211,15 @@ class BulkEntryPage(QWidget):
         card.amount_edit.textChanged.connect(self._check_auto_add_card)
           # Connect validation styling updates with deferred validation for better performance
         if not self._bulk_import_mode:
-            card.desc_edit.textChanged.connect(self._defer_validation_update)
-            card.debit_combo.currentTextChanged.connect(self._defer_validation_update)
-            card.credit_combo.currentTextChanged.connect(self._defer_validation_update)
-            card.amount_edit.textChanged.connect(self._defer_validation_update)
+            # Use the improved connection method for better validation feedback
+            if hasattr(card, 'connect_validation_updates'):
+                card.connect_validation_updates(self._defer_validation_update)
+            else:
+                # Fallback to individual connections
+                card.desc_edit.textChanged.connect(self._defer_validation_update)
+                card.debit_combo.currentTextChanged.connect(self._defer_validation_update)
+                card.credit_combo.currentTextChanged.connect(self._defer_validation_update)
+                card.amount_edit.textChanged.connect(self._defer_validation_update)
         
         self.cards_layout.insertWidget(len(self.entry_cards), card)
         self.entry_cards.append(card)
@@ -337,13 +363,7 @@ class BulkEntryPage(QWidget):
                 
                 try:
                     # Save the individual entry
-                    self.system.add_journal_entry(
-                        entry_data['date'],
-                        entry_data['description'], 
-                        entry_data['debit_account'],
-                        entry_data['credit_account'],
-                        entry_data['amount']
-                    )
+                    self.system.add_journal_entry(entry_data)
                     
                     success_count += 1
                     cards_to_remove.append(card)
@@ -1020,9 +1040,30 @@ class BulkEntryPage(QWidget):
     
     def _refresh_accounts(self):
         """Internal method to refresh accounts when events are triggered."""
-        # Update the local accounts cache
-        accounts_data = self.system.get_postable_accounts()
-        self.formatted_accounts = [f"{acc['code']} - {acc['name']}" for acc in accounts_data]
-        
-        # Refresh all cards
-        self.refresh_accounts_from_system()
+        try:
+            # Update the local accounts cache
+            accounts_data = self.system.get_postable_accounts()
+            # Fix: accounts_data is now tuples (name, type, code, parent_code, level, is_postable, description)
+            # Index 2 = code, Index 0 = name
+            if accounts_data and len(accounts_data) > 0:
+                # Check if it's tuple format or dict format for compatibility
+                sample_account = accounts_data[0]
+                if isinstance(sample_account, tuple):
+                    # New tuple format: (name, type, code, parent_code, level, is_postable, description)
+                    self.formatted_accounts = [f"{acc[2]} - {acc[0]}" for acc in accounts_data if len(acc) >= 3]
+                elif isinstance(sample_account, dict):
+                    # Old dict format for backward compatibility
+                    self.formatted_accounts = [f"{acc.get('code', '')} - {acc.get('name', '')}" for acc in accounts_data]
+                else:
+                    # Fallback: empty list
+                    self.formatted_accounts = []
+                    print(f"⚠️  Unknown account data format during refresh: {type(sample_account)}")
+            else:
+                self.formatted_accounts = []
+                print("⚠️  No accounts loaded during refresh")
+            
+            # Refresh all cards
+            self.refresh_accounts_from_system()
+        except Exception as e:
+            print(f"❌ Error refreshing accounts in bulk entry: {e}")
+            self.formatted_accounts = []

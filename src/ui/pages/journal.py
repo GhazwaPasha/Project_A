@@ -847,7 +847,14 @@ class SingleEntryTab(QWidget):
             
             # Save to system
             if hasattr(self.system, 'add_journal_entry'):
-                entry_id = self.system.add_journal_entry(date, description, debit_account, credit_account, amount)
+                entry_data = {
+                    'date': date,
+                    'description': description,
+                    'debit_account': debit_account,
+                    'credit_account': credit_account,
+                    'amount': amount
+                }
+                entry_id = self.system.add_journal_entry(entry_data)
             
             QMessageBox.information(self, "Success", "Transaction saved successfully!")
             self._clear_form()

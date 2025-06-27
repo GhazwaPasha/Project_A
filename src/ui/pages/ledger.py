@@ -532,15 +532,26 @@ class LedgerDocumentView(QWidget):
                 for i, entry in enumerate(account_entries):
                     date, description, debit_account, credit_account, amount = entry
                     
-                    # Handle account name matching (accounts stored as "code - name" format)
-                    def account_matches(stored_account, target_account):
-                        if stored_account == target_account:
+                    # Handle account name matching (improved logic)
+                    def account_matches(journal_account, target_account_name):
+                        """Check if the journal account matches the target account name."""
+                        # Direct name match
+                        if journal_account == target_account_name:
                             return True
-                        # Check if it's in "code - name" format and matches
-                        if ' - ' in stored_account and stored_account.endswith(target_account):
+                        
+                        # Check if journal account is in "code - name" format
+                        if ' - ' in journal_account:
+                            parts = journal_account.split(' - ', 1)
+                            if len(parts) == 2:
+                                j_code, j_name = parts
+                                # Match by name (in case code is slightly different)
+                                if j_name == target_account_name:
+                                    return True
+                        
+                        # Partial match for cases where formatting might be inconsistent
+                        if target_account_name in journal_account or journal_account in target_account_name:
                             return True
-                        if ' - ' in stored_account and target_account in stored_account:
-                            return True
+                            
                         return False
                     
                     is_debit = account_matches(debit_account, self.account_name)
@@ -912,8 +923,8 @@ class TransactionRowCard(QFrame):
         desc_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         layout.addWidget(desc_label)
           # Other account
-        debit_account = self.entry_data['debit_account_name']
-        credit_account = self.entry_data['credit_account_name']
+        debit_account = self.entry_data.get('debit_account', '')
+        credit_account = self.entry_data.get('credit_account', '')
         other_account = credit_account if self.account_name == debit_account else debit_account
         
         other_label = QLabel(other_account)
@@ -1236,43 +1247,65 @@ class LedgerPage(QWidget):
             account_counts = {}
             
             # Helper function to match account names (handles "code - name" format)
-            def find_matching_account_name(stored_account, account_name):
-                """Check if the stored account matches the account name."""
-                if stored_account == account_name:
+            def find_matching_account_name(journal_account, card_account_name, card_account_code):
+                """Check if the journal account matches the card account."""
+                # Direct name match
+                if journal_account == card_account_name:
                     return True
-                # Check if it's in "code - name" format
-                if ' - ' in stored_account and stored_account.endswith(account_name):
+                
+                # Check if journal account is in "code - name" format
+                if ' - ' in journal_account:
+                    parts = journal_account.split(' - ', 1)
+                    if len(parts) == 2:
+                        j_code, j_name = parts
+                        # Match by code and name
+                        if j_code == card_account_code and j_name == card_account_name:
+                            return True
+                        # Match by name only (in case code is slightly different)
+                        if j_name == card_account_name:
+                            return True
+                
+                # Partial match for cases where formatting might be inconsistent
+                if card_account_name in journal_account or journal_account in card_account_name:
                     return True
-                if ' - ' in stored_account and account_name in stored_account:
-                    return True
+                    
                 return False
             
             for entry in entries:
-                if len(entry) >= 6:
-                    debit_account = entry['debit_account_name']
-                    credit_account = entry['credit_account_name']
-                    amount = float(entry['amount'])
+                # Handle both dictionary and tuple formats
+                if isinstance(entry, dict):
+                    debit_account = entry.get('debit_account', '')
+                    credit_account = entry.get('credit_account', '')
+                    amount = float(entry.get('amount', 0))
+                elif isinstance(entry, (list, tuple)) and len(entry) >= 5:
+                    # Tuple format: (date, description, debit_account, credit_account, amount)
+                    debit_account = entry[2]
+                    credit_account = entry[3]
+                    amount = float(entry[4])
+                else:
+                    continue  # Skip invalid entries
                     
-                    # Process each account in our cards
-                    for card in self.account_cards:
-                        account_name = card.account_data['name']
+                # Process each account in our cards
+                for card in self.account_cards:
+                    account_name = card.account_data['name']
+                    account_code = card.account_data.get('code', '')
+                    
+                    # Check if this entry affects this account
+                    is_debit_match = find_matching_account_name(debit_account, account_name, account_code)
+                    is_credit_match = find_matching_account_name(credit_account, account_name, account_code)
+                    
+                    if is_debit_match or is_credit_match:
+                        if account_name not in account_balances:
+                            account_balances[account_name] = 0.0
+                            account_counts[account_name] = 0
                         
-                        # Check if this entry affects this account
-                        is_debit_match = find_matching_account_name(debit_account, account_name)
-                        is_credit_match = find_matching_account_name(credit_account, account_name)
+                        if is_debit_match:
+                            account_balances[account_name] += amount
+                            account_counts[account_name] += 1
                         
-                        if is_debit_match or is_credit_match:
-                            if account_name not in account_balances:
-                                account_balances[account_name] = 0.0
-                                account_counts[account_name] = 0
-                            
-                            if is_debit_match:
-                                account_balances[account_name] += amount
-                                account_counts[account_name] += 1
-                            
-                            if is_credit_match:
-                                account_balances[account_name] -= amount
-                                account_counts[account_name] += 1
+                        if is_credit_match:
+                            account_balances[account_name] -= amount
+                            account_counts[account_name] += 1
             
             # Update card balances
             for card in self.account_cards:

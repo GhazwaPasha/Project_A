@@ -904,6 +904,28 @@ class UnifiedAccountingSystem:
         entries = self.get_journal_entries(start_date, end_date)
         ledger_entries = []
         
+        # Helper function to match account names (handles "code - name" format)
+        def account_matches(journal_account, target_account_name):
+            """Check if the journal account matches the target account name."""
+            # Direct name match
+            if journal_account == target_account_name:
+                return True
+            
+            # Check if journal account is in "code - name" format
+            if ' - ' in journal_account:
+                parts = journal_account.split(' - ', 1)
+                if len(parts) == 2:
+                    j_code, j_name = parts
+                    # Match by name (in case code is slightly different)
+                    if j_name == target_account_name:
+                        return True
+            
+            # Partial match for cases where formatting might be inconsistent
+            if target_account_name in journal_account or journal_account in target_account_name:
+                return True
+                
+            return False
+        
         for entry in entries:
             date = entry.get('date', '')
             description = entry.get('description', '')
@@ -911,7 +933,7 @@ class UnifiedAccountingSystem:
             credit_account = entry.get('credit_account', '')
             amount = float(entry.get('amount', 0))
             
-            if debit_account == account_name or credit_account == account_name:
+            if account_matches(debit_account, account_name) or account_matches(credit_account, account_name):
                 # Format: (date, description, debit_account, credit_account, amount)
                 ledger_entries.append((date, description, debit_account, credit_account, amount))
         

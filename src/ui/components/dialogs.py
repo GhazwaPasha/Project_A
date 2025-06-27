@@ -454,7 +454,14 @@ class JournalEntryDialog(QDialog):
             if debit_account == credit_account:
                 raise ValueError("Debit and credit accounts must be different")
                 
-            self.system.add_journal_entry(date, description, debit_account, credit_account, amount)
+            entry_data = {
+                'date': date,
+                'description': description,
+                'debit_account': debit_account,
+                'credit_account': credit_account,
+                'amount': amount
+            }
+            self.system.add_journal_entry(entry_data)
             self.accept()
             
         except ValueError as e:
@@ -802,7 +809,12 @@ class CustomReportBuilderDialog(QDialog):
         content += "<tr style='font-weight: bold;'><td>Date</td><td>Description</td><td>Debit</td><td>Credit</td><td>Amount</td></tr>"
         
         for entry in entries:
-            content += f"<tr><td>{entry['entry_date']}</td><td>{entry['description']}</td><td>{entry['debit_account_name']}</td><td>{entry['credit_account_name']}</td><td style='text-align: right;'>${entry['amount']:,.2f}</td></tr>"
+            debit_account = entry.get('debit_account', 'N/A')
+            credit_account = entry.get('credit_account', 'N/A')
+            entry_date = entry.get('date', entry.get('entry_date', 'N/A'))
+            description = entry.get('description', 'N/A')
+            amount = entry.get('amount', 0)
+            content += f"<tr><td>{entry_date}</td><td>{description}</td><td>{debit_account}</td><td>{credit_account}</td><td style='text-align: right;'>${amount:,.2f}</td></tr>"
         
         content += "</table>"
         return content
