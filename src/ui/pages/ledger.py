@@ -1161,7 +1161,7 @@ class LedgerPage(QWidget):
     def _load_accounts(self):
         """Load all accounts and create cards."""
         try:
-            accounts = self.system.get_all_accounts()
+            accounts = self.system.get_chart_of_accounts(active_only=False)
             self.all_accounts = accounts
             self._display_accounts(accounts)
             self._refresh_balances()

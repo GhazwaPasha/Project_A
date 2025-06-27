@@ -184,11 +184,11 @@ class DashboardPage(QWidget):
         trial_balance = self.system.get_trial_balance(from_date, to_date)
         total = 0.0
         
-        for account in accounts:
-            if account['type'] == 'Liability':
+        for name, acc_type, code, parent_code, level, is_postable, description in accounts:
+            if acc_type == 'Liability':
                 # Find balance for this account in trial balance
                 for tb_account in trial_balance:
-                    if tb_account['name'] == account['name']:
+                    if tb_account['name'] == name:
                         debit_total = float(tb_account['debit_total'])
                         credit_total = float(tb_account['credit_total'])
                         # For liabilities, credit increases balance

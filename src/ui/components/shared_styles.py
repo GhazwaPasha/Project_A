@@ -137,9 +137,16 @@ def get_label_style(field_type=None):
 def load_accounts_from_system(system):
     """Load accounts from the accounting system."""
     try:
-        if hasattr(system, 'get_all_accounts'):
+        if hasattr(system, 'get_chart_of_accounts'):
+            accounts_data = system.get_chart_of_accounts(active_only=False)
+            return [f"{acc['code']} - {acc['name']}" for acc in accounts_data if acc.get('is_postable', True)]
+        elif hasattr(system, 'get_all_accounts'):
             accounts_data = system.get_all_accounts()
-            return [f"{acc['code']} - {acc['name']}" for acc in accounts_data if acc['is_postable']]
+            # Handle tuple format: (name, type, code, parent_code, level, is_postable, description)
+            if accounts_data and isinstance(accounts_data[0], tuple):
+                return [f"{acc[2]} - {acc[0]}" for acc in accounts_data if acc[5]]  # acc[5] is is_postable
+            else:
+                return [f"{acc['code']} - {acc['name']}" for acc in accounts_data if acc.get('is_postable', True)]
         else:
             return ["1001 - Cash", "2001 - Accounts Payable"]
     except Exception as e:

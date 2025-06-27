@@ -3,7 +3,7 @@ from PyQt6.QtCore import Qt, QSize, QTimer, QEvent
 from PyQt6.QtGui import QIcon, QPalette, QColor
 
 # Import Supabase offline-capable system
-from ..core.supabase_offline_manager import EnhancedSupabaseOnlyManager as AccountingSystem
+from ..core.unified_accounting_system import UnifiedAccountingSystem as AccountingSystem
 
 from .components.mica_effect import MicaEffect
 from .components.styles import ModernStyles, GlassmorphismHelper
@@ -1260,18 +1260,20 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
                 user_id = self.session_manager.get_current_user_id()
                 self.logger.info(f"Using organization context: {organization_id}, user: {user_id}")
             
-            # Initialize the enhanced Supabase manager with offline support
-            accounting_system = AccountingSystem(
-                organization_id=organization_id,
-                user_id=user_id
-            )
+            # Initialize the unified accounting system
+            accounting_system = AccountingSystem(self.auth_manager)
             
-            # Test connectivity and cache data if online
+            # Set organization context
+            if organization_id:
+                success = accounting_system.set_organization(organization_id)
+                if not success:
+                    self.logger.error(f"Failed to set organization context: {organization_id}")
+            
+            # Test connectivity
             if accounting_system.is_online:
-                self.logger.info("✅ Supabase connection established - caching data for offline use")
-                accounting_system._refresh_cache()
+                self.logger.info("✅ Unified accounting system online")
             else:
-                self.logger.warning("📱 Starting in offline mode - using cached data")
+                self.logger.warning("📱 Starting in offline mode with cached data")
               # Wrap with enhanced features if available
             try:
                 from ..core.enhanced_accounting_system import EnhancedAccountingSystem

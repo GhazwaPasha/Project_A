@@ -387,9 +387,11 @@ class TrialBalancePage(QWidget):
             accounts = self.system.get_all_accounts()
             account_info = {}
             for account in accounts:
-                account_info[account['name']] = {
-                    'type': account['type'],
-                    'code': account['code'] or ''
+                # Unpack tuple: (name, type, code, parent_code, level, is_postable, description)
+                name, acc_type, code, parent_code, level, is_postable, description = account
+                account_info[name] = {
+                    'type': acc_type,
+                    'code': code or ''
                 }
             
             # Build trial balance data in the format expected by the UI

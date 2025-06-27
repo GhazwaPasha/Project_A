@@ -1,37 +1,80 @@
 """
-Enhanced Accounting System Integration
-Integrates all advanced features: audit trails, period closing, advanced cash flow, financial ratios, and budgeting
+Enhanced Accounting System - Now a wrapper around UnifiedAccountingSystem
+All advanced features are now integrated into the main system
 """
 
 import logging
 from datetime import datetime, date
 from typing import Dict, List, Optional, Any
 
-from .enhanced_database_schema import EnhancedDatabaseSchema
-from .period_closing import PeriodClosingManager, AuditTrailManager
-from .advanced_cash_flow import AdvancedCashFlowManager
-from .financial_ratios import FinancialRatioCalculator
-from .budget_manager import BudgetManager
+from .unified_accounting_system import UnifiedAccountingSystem
 
 class EnhancedAccountingSystem:
-    """Enhanced accounting system with advanced features."""
+    """
+    Enhanced accounting system - now just a wrapper around UnifiedAccountingSystem
+    for backward compatibility. All features are now integrated into the main system.
+    """
     
     def __init__(self, base_accounting_system, organization_id=None, user_id=None):
+        # The base_accounting_system is now the UnifiedAccountingSystem
         self.base_system = base_accounting_system
-        self.offline_manager = base_accounting_system.offline_manager  # Use the offline manager as db interface
         self.organization_id = organization_id
         self.user_id = user_id
         self.logger = logging.getLogger(__name__)
         
-        # Initialize enhanced components - use offline_manager as db interface
-        self.enhanced_schema = EnhancedDatabaseSchema(self.offline_manager)
-        self.period_manager = PeriodClosingManager(self.offline_manager, organization_id, user_id)
-        self.audit_manager = AuditTrailManager(self.offline_manager)
-        self.cash_flow_manager = AdvancedCashFlowManager(self.offline_manager, base_accounting_system)
-        self.ratio_calculator = FinancialRatioCalculator(self.offline_manager, base_accounting_system)
-        self.budget_manager = BudgetManager(self.offline_manager, base_accounting_system, organization_id)
+        # Set organization context if provided
+        if organization_id and hasattr(self.base_system, 'set_organization'):
+            self.base_system.set_organization(organization_id)
         
-        self._initialized = False
+        self.logger.info("Enhanced features are now integrated into UnifiedAccountingSystem")
+    
+    def initialize_enhanced_features(self, force_recreate: bool = False) -> Dict[str, bool]:
+        """Enhanced features are now built-in to the unified system"""
+        return {
+            'unified_system': True,
+            'offline_support': True,
+            'financial_calculations': True,
+            'advanced_reporting': True,
+            'note': 'All features are now integrated into UnifiedAccountingSystem'
+        }
+    
+    def get_comprehensive_financial_overview(self, as_of_date: date = None) -> Dict[str, Any]:
+        """Get comprehensive financial overview"""
+        if as_of_date is None:
+            as_of_date = date.today()
+        
+        overview = {
+            'generated_at': datetime.now().isoformat(),
+            'as_of_date': as_of_date.isoformat(),
+            'organization_id': self.organization_id
+        }
+        
+        try:
+            # Use unified system's methods
+            as_of_str = as_of_date.strftime('%Y-%m-%d')
+            year_start = as_of_date.replace(month=1, day=1).strftime('%Y-%m-%d')
+            
+            overview['financial_statements'] = {
+                'income_statement': self.base_system.generate_income_statement_breakdown(year_start, as_of_str),
+                'balance_sheet': self.base_system.generate_balance_sheet_breakdown(as_of_str),
+                'statement_of_equity': self.base_system.generate_statement_of_equity(year_start, as_of_str)
+            }
+            
+            overview['financial_health'] = self.base_system.get_financial_health_score(as_of_date)
+            overview['sync_status'] = self.base_system.get_sync_status()
+            
+        except Exception as e:
+            self.logger.error(f"Failed to generate comprehensive overview: {e}")
+            overview['error'] = str(e)
+        
+        return overview
+    
+    # Delegation methods - pass everything to the unified system
+    def __getattr__(self, name):
+        """Delegate all method calls to the unified system"""
+        if hasattr(self.base_system, name):
+            return getattr(self.base_system, name)
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
     
     def initialize_enhanced_features(self, force_recreate: bool = False) -> Dict[str, bool]:
         """Initialize all enhanced features."""
@@ -481,13 +524,18 @@ class EnhancedAccountingSystem:
         """Update account (alias for edit_account)."""
         return self.base_system.edit_account(*args, **kwargs)
     
-    def get_chart_of_accounts(self):
+    def get_chart_of_accounts(self, active_only: bool = True):
         """Get chart of accounts with hierarchy."""
         try:
-            return self.base_system.get_account_hierarchy()
-        except AttributeError:
-            # Fallback to all accounts if hierarchy method doesn't exist
-            return self.base_system.get_all_accounts()
+            return self.base_system.get_chart_of_accounts(active_only=active_only)
+        except (AttributeError, TypeError):
+            # Fallback - get accounts directly from db manager
+            if hasattr(self.base_system, 'db_manager'):
+                return self.base_system.db_manager.get_accounts()
+            elif hasattr(self.base_system, 'get_chart_of_accounts'):
+                # Try without parameters if the method doesn't support them
+                return self.base_system.get_chart_of_accounts()
+            return []
     
     # Critical missing methods from original system
     def clear_journal_entries(self):
@@ -734,35 +782,9 @@ class EnhancedAccountingSystem:
         return results[:limit]
       # Enhanced versions of base system methods that provide better UI compatibility
     def get_all_accounts(self):
-        """Get all accounts with enhanced formatting for UI compatibility."""
-        # Get raw accounts from base system
-        raw_accounts = self.base_system.get_all_accounts()
-        
-        # Convert tuples to dictionaries for UI compatibility
-        accounts = []
-        for account in raw_accounts:
-            try:
-                if isinstance(account, dict):
-                    # Already in dictionary format
-                    accounts.append(account)
-                elif isinstance(account, (tuple, list)) and len(account) >= 7:
-                    name, acc_type, code, parent_code, level, is_postable, description = account[:7]
-                    accounts.append({
-                        'name': name,
-                        'type': acc_type, 
-                        'code': code,
-                        'parent_code': parent_code,
-                        'level': level,
-                        'is_postable': bool(is_postable),
-                        'description': description or ""
-                    })
-                else:
-                    # Handle unexpected format
-                    self.logger.warning(f"Unexpected account format: {account}")
-            except Exception as e:
-                self.logger.error(f"Error processing account: {account}, error: {e}")
-                
-        return accounts
+        """Get all accounts in tuple format for UI compatibility."""
+        # Delegate to the unified base system's get_all_accounts which returns tuples
+        return self.base_system.get_all_accounts()
     
     def get_postable_accounts(self):
         """Get postable accounts with enhanced formatting."""

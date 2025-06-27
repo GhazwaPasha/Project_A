@@ -877,19 +877,25 @@ class HierarchicalAccountsPage(QWidget):
         
         try:
             # Get all accounts with fresh data
-            accounts = self.system.get_all_accounts()
+            accounts = self.system.get_chart_of_accounts(active_only=False)
             
             # Create items dictionary for quick lookup
             items = {}
-              # First pass: Create all items
+            
+            # First pass: Create all items
             for account in accounts:
-                name = account['name']
-                acc_type = account['type']
-                code = account['code']
-                parent_code = account['parent_code']
-                level = account['level']
-                is_postable = account['is_postable']
-                description = account['description']
+                # Handle dictionary format from get_chart_of_accounts
+                name = account.get('name', '')
+                acc_type = account.get('account_type', '') or account.get('type', '')  # Support both field names
+                code = account.get('code', '')
+                parent_id = account.get('parent_id')
+                description = account.get('description', '')
+                is_active = account.get('is_active', True)
+                
+                # Use enhanced fields from get_chart_of_accounts - these should always be present
+                level = account.get('level', 1)  # Default to level 1 if missing
+                parent_code = account.get('parent_code', '')
+                is_postable = account.get('is_postable', True)
                 
                 item = QTreeWidgetItem()
                 item.setText(0, code or "")
@@ -901,7 +907,8 @@ class HierarchicalAccountsPage(QWidget):
                 # Store account data in item
                 item.setData(0, Qt.ItemDataRole.UserRole, {
                     'name': name,
-                    'type': acc_type,
+                    'account_type': acc_type,  # Use consistent field name
+                    'type': acc_type,  # Keep for backward compatibility
                     'code': code,
                     'parent_code': parent_code,
                     'level': level,
@@ -1208,7 +1215,7 @@ class AccountDetailsPanel(QStackedWidget):
     def _on_form_submitted(self, data):
         """Handle form submission."""
         try:            # Start by verifying account doesn't already exist
-            existing_accounts = [acc['name'] for acc in self.system.get_all_accounts()]
+            existing_accounts = [acc['name'] for acc in self.system.get_chart_of_accounts(active_only=False)]
             if not self.form_card.edit_mode and data['name'] in existing_accounts:
                 msg = QMessageBox()
                 msg.setIcon(QMessageBox.Icon.Warning)
@@ -1370,7 +1377,7 @@ class AccountDetailsPanel(QStackedWidget):
             
             <div style="display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center;">
                 <div style="color: rgba(255,255,255,0.7); font-weight: 500;">Type</div>
-                <div style="color: white;">{account_data['type']}</div>
+                <div style="color: white;">{account_data['account_type']}</div>
                 
                 <div style="color: rgba(255,255,255,0.7); font-weight: 500;">Level</div>
                 <div style="color: white;">Level {account_data['level']}</div>
@@ -1386,3 +1393,42 @@ class AccountDetailsPanel(QStackedWidget):
         
         self.info_label.setText(info_html)
         self.info_label.setTextFormat(Qt.TextFormat.RichText)
+
+    def _calculate_level(self, account, all_accounts, visited=None):
+        """Calculate hierarchy level for an account"""
+        if visited is None:
+            visited = set()
+        
+        acc_id = account['id']
+        if acc_id in visited:  # Prevent infinite loops
+            return 1
+        visited.add(acc_id)
+        
+        parent_id = account.get('parent_id')
+        if not parent_id:
+            return 1  # Root level
+        
+        # Find parent account
+        parent_acc = next((acc for acc in all_accounts if acc['id'] == parent_id), None)
+        if not parent_acc:
+            return 1
+        
+        return self._calculate_level(parent_acc, all_accounts, visited) + 1
+    
+    def _get_parent_code(self, parent_id, all_accounts):
+        """Get parent account code from parent_id"""
+        if not parent_id:
+            return ''
+        
+        parent_acc = next((acc for acc in all_accounts if acc['id'] == parent_id), None)
+        return parent_acc.get('code', '') if parent_acc else ''
+    
+    def _is_postable(self, account, all_accounts):
+        """Determine if account is postable (leaf accounts that can have transactions)"""
+        acc_id = account['id']
+        
+        # Check if this account has any children
+        has_children = any(acc.get('parent_id') == acc_id for acc in all_accounts)
+        
+        # If it has no children, it's a leaf account and is postable
+        return not has_children

@@ -148,7 +148,7 @@ class ModernAccountDialog(QDialog):
         
         # Populate with existing accounts
         if self.system:
-            accounts = self.system.get_all_accounts()
+            accounts = self.system.get_chart_of_accounts(active_only=False)
             for account in accounts:
                 account_name = account['name']
                 if not self.edit_mode or account_name != self.original_name:
@@ -414,7 +414,7 @@ class JournalEntryDialog(QDialog):
     def _populate_accounts(self, combo):
         """Populate combo box with accounts."""
         if self.system:
-            accounts = self.system.get_all_accounts()
+            accounts = self.system.get_chart_of_accounts(active_only=False)
             for account in accounts:
                 combo.addItem(account['name'])
                 

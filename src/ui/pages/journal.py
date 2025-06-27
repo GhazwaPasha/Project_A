@@ -248,10 +248,19 @@ class SingleEntryTab(QWidget):
     def _load_accounts(self):
         """Load accounts from the system."""
         try:
-            if hasattr(self.system, 'get_all_accounts'):
-                accounts_data = self.system.get_all_accounts()
-                postable_accounts = [acc for acc in accounts_data if acc['is_postable']]
+            if hasattr(self.system, 'get_chart_of_accounts'):
+                accounts_data = self.system.get_chart_of_accounts(active_only=False)
+                postable_accounts = [acc for acc in accounts_data if acc.get('is_postable', True)]
                 self.accounts = [f"{acc['code']} - {acc['name']}" for acc in postable_accounts]
+            elif hasattr(self.system, 'get_all_accounts'):
+                accounts_data = self.system.get_all_accounts()
+                # Handle tuple format: (name, type, code, parent_code, level, is_postable, description)
+                if accounts_data and isinstance(accounts_data[0], tuple):
+                    postable_accounts = [acc for acc in accounts_data if acc[5]]  # acc[5] is is_postable
+                    self.accounts = [f"{acc[2]} - {acc[0]}" for acc in postable_accounts]
+                else:
+                    postable_accounts = [acc for acc in accounts_data if acc.get('is_postable', True)]
+                    self.accounts = [f"{acc['code']} - {acc['name']}" for acc in postable_accounts]
             else:
                 # No fallback accounts - system must have proper chart of accounts
                 self.accounts = []

@@ -731,3 +731,10 @@ class EnhancedSupabaseOnlyManager:
     def get_journal_entries_by_date_range(self, start_date: str, end_date: str) -> List[Dict]:
         """Get journal entries by date range - alias for compatibility"""
         return self.get_journal_entries(start_date, end_date)
+
+    def get_chart_of_accounts(self, active_only: bool = True) -> List[Dict]:
+        """Get chart of accounts (alias for get_accounts with active filter)"""
+        accounts = self.get_accounts()
+        if active_only:
+            return [acc for acc in accounts if acc.get('is_active', True)]
+        return accounts
