@@ -704,16 +704,24 @@ class SettingsPage(QWidget):
             font_manager.set_font_family(font_family)
             font_manager.set_font_scale(font_scale)
             
+            # Update ModernStyles to use the new font
+            from ..components.styles import ModernStyles
+            ModernStyles.set_font_family(font_family)
+            
             # Update main window currency if available
             main_window = self.window()
             if hasattr(main_window, 'set_currency_symbol'):
                 main_window.set_currency_symbol(currency_symbol)
             
-            # Apply font changes to the application
+            # Apply font changes to the application and refresh UI
             from PyQt6.QtWidgets import QApplication
             app = QApplication.instance()
             if app:
                 font_manager.apply_font_to_application(app)
+                
+                # Force refresh the main window UI
+                if hasattr(main_window, '_update_global_stylesheets'):
+                    main_window._update_global_stylesheets()
             
             # Show success message
             from PyQt6.QtWidgets import QMessageBox

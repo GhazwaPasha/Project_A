@@ -191,20 +191,8 @@ class TrialBalancePage(QWidget):
         
     def _create_trial_balance_table(self, main_layout):
         """Create professional trial balance table with date info."""
-        # Header with title and search box
+        # Header with search box and date info (no title)
         header_layout = QHBoxLayout()
-        
-        title = QLabel("Account Balances")
-        title.setStyleSheet(f"""
-            QLabel {{
-                color: white;                font-size: {ResponsiveHelper.scale_size(20, 16, 24)}px;
-                font-weight: 600;
-                background: transparent;
-            }}
-        """)
-        header_layout.addWidget(title)
-        
-        header_layout.addSpacing(4)
         
         # Search box - same as ledger tab
         self.search_input = QLineEdit()
@@ -239,8 +227,40 @@ class TrialBalancePage(QWidget):
         
         header_layout.addStretch()
         
-        # Date info label (replaces the card)
+        # Print button with same styling and height as info label
+        print_btn = QPushButton("Print Trial Balance")
+        # Set explicit height to match info label
+        button_height = ResponsiveHelper.scale_size(48, 44, 52)
+        print_btn.setFixedHeight(button_height)
+        print_btn.setStyleSheet(f"""
+            QPushButton {{
+                color: rgba(255, 255, 255, 0.8);
+                font-size: {ResponsiveHelper.scale_size(12, 11, 14)}px;
+                font-weight: 500;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 6px;
+                padding: 8px 12px;
+                min-width: 120px;
+                height: {button_height}px;
+            }}
+            QPushButton:hover {{
+                background: rgba(255, 255, 255, 0.08);
+                border-color: rgba(255, 255, 255, 0.2);
+            }}
+            QPushButton:pressed {{
+                background: rgba(255, 255, 255, 0.03);
+                border-color: rgba(255, 255, 255, 0.1);
+            }}
+        """)
+        print_btn.clicked.connect(self._print_trial_balance)
+        header_layout.addWidget(print_btn)
+        
+        header_layout.addSpacing(8)
+        
+        # Date info label with explicit height to match print button
         self.date_info_label = QLabel("")
+        self.date_info_label.setFixedHeight(button_height)
         self.date_info_label.setStyleSheet(f"""
             QLabel {{
                 color: rgba(255, 255, 255, 0.8);
@@ -250,6 +270,7 @@ class TrialBalancePage(QWidget):
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 6px;
                 padding: 8px 12px;
+                height: {button_height}px;
             }}
         """)
         header_layout.addWidget(self.date_info_label)
@@ -267,83 +288,81 @@ class TrialBalancePage(QWidget):
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
         
-        # Configure vertical header for proper row numbering
+        # Hide the vertical header (row numbers) to remove the black box
         vertical_header = self.table.verticalHeader()
-        vertical_header.setVisible(True)
-        vertical_header.setDefaultSectionSize(ResponsiveHelper.scale_size(45, 40, 50))  # Set proper row height
-        vertical_header.setMinimumSectionSize(ResponsiveHelper.scale_size(40, 35, 45))
-        vertical_header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
-        
-        # Style the vertical header for better visibility
-        vertical_header.setStyleSheet(f"""
-            QHeaderView::section {{
-                background: rgba(255, 255, 255, 0.1);
-                color: white;
-                border: none;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-                border-right: 1px solid rgba(255, 255, 255, 0.2);
-                font-weight: 500;
-                font-size: {ResponsiveHelper.scale_size(11, 10, 12)}px;
-                text-align: center;
-                padding: 4px;
-                min-width: {ResponsiveHelper.scale_size(40, 35, 45)}px;
-            }}
-        """)
+        vertical_header.setVisible(False)
         
         # Set column widths
         self.table.setColumnWidth(2, ResponsiveHelper.scale_size(120, 100, 140))
         self.table.setColumnWidth(3, ResponsiveHelper.scale_size(120, 100, 140))
-          # Professional styling with modern scrollbar
+          # Professional table styling matching the ledger
         table_style = f"""
             QTableWidget {{
-                background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(0, 0, 0, 0.3);
+                background: white;
+                border: 1px solid #E0E0E0;
                 border-radius: 8px;
-                color: white;
+                color: #333;
                 font-size: {ResponsiveHelper.scale_size(12, 11, 14)}px;
-                gridline-color: rgba(255, 255, 255, 0.1);
-                selection-background-color: rgba(100, 181, 246, 0.15);
+                gridline-color: #F0F0F0;
+                selection-background-color: #E3F2FD;
+                outline: none;
+                alternate-background-color: #FAFAFA;
             }}
             
             QTableWidget::item {{
-                padding: 8px 16px;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+                padding: 12px 16px;
+                border: none;
+                border-bottom: 1px solid #F0F0F0;
                 min-height: 32px;
-                color: rgba(255, 255, 255, 0.9);
+                color: #333;
+                background: transparent;
+            }}
+            
+            QTableWidget::item:alternate {{
+                background: #FAFAFA;
             }}
             
             QTableWidget::item:hover {{
-                background: rgba(255, 255, 255, 0.12);
-                border: 1px solid rgba(100, 181, 246, 0.3);
+                background: #E3F2FD;
             }}
             
             QTableWidget::item:selected {{
-                background: rgba(100, 181, 246, 0.15);
-                border: 1px solid rgba(100, 181, 246, 0.5);
-                color: #90CAF9;
+                background: #E3F2FD;
+                color: #1976D2;
             }}
             
             QHeaderView::section {{
-                background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(0, 0, 0, 0.3);
+                background: #1976D2;
+                border: none;
+                border-right: 1px solid #1565C0;
                 color: white;
-                padding: 8px 16px;
-                font-weight: 500;
-                font-size: 12px;
-                min-height: 32px;
+                padding: 12px 16px;
+                font-weight: 600;
+                font-size: {ResponsiveHelper.scale_size(13, 12, 14)}px;
+                min-height: 40px;
+                text-align: left;
             }}
             
-            QHeaderView::section:hover {{
-                background: rgba(255, 255, 255, 0.12);
-                border: 1px solid rgba(100, 181, 246, 0.3);
+            QHeaderView::section:last {{
+                border-right: none;
+            }}
+            
+            QHeaderView::section:first {{
+                border-top-left-radius: 8px;
+            }}
+            
+            QHeaderView::section:last {{
+                border-top-right-radius: 8px;
             }}
         """ + ModernScrollbarStyles.get_combined_scrollbar_style()
         
         self.table.setStyleSheet(table_style)
         
-        # Disable editing
+        # Disable editing and enable alternating colors
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.setSortingEnabled(True)        # Set minimum height to show at least 11 rows plus header and totals
+        self.table.setSortingEnabled(True)
+        self.table.setAlternatingRowColors(True)
+        self.table.setShowGrid(False)  # We'll use custom borders instead        # Set minimum height to show at least 11 rows plus header and totals
         # Calculation: Header(40) + 11 rows(45×11=495) + totals(50) + padding(30) = ~615px
         self.table.setMinimumHeight(ResponsiveHelper.scale_size(615, 560, 670))
         
@@ -476,10 +495,10 @@ class TrialBalancePage(QWidget):
         accounts = trial_data['accounts']
         self.table.setRowCount(len(accounts) + 1)  # +1 for totals only (no separator)
         
-        # Add account data
+        # Add account data with consistent row styling
         for row, account in enumerate(accounts):
-            # Set row height explicitly for each row
-            self.table.setRowHeight(row, ResponsiveHelper.scale_size(45, 40, 50))
+            # Set consistent row height matching ledger table
+            self.table.setRowHeight(row, 40)
             
             # Account name
             name_item = QTableWidgetItem(account['name'])
@@ -493,53 +512,56 @@ class TrialBalancePage(QWidget):
             self.table.setItem(row, 1, code_item)
             
             # Debit
-            debit_text = f"{account['debit']:,.2f}" if account['debit'] > 0 else ""
+            debit_text = format_currency(account['debit']) if account['debit'] > 0 else ""
             debit_item = QTableWidgetItem(debit_text)
             debit_item.setFlags(debit_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             debit_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self.table.setItem(row, 2, debit_item)
             
             # Credit
-            credit_text = f"{account['credit']:,.2f}" if account['credit'] > 0 else ""
+            credit_text = format_currency(account['credit']) if account['credit'] > 0 else ""
             credit_item = QTableWidgetItem(credit_text)
             credit_item.setFlags(credit_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             credit_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self.table.setItem(row, 3, credit_item)
         
-        # Totals row (no separator needed)
+        # Totals row with professional styling
         totals_row = len(accounts)
-        self.table.setRowHeight(totals_row, ResponsiveHelper.scale_size(50, 45, 55))  # Slightly taller for totals
+        self.table.setRowHeight(totals_row, 50)  # Slightly taller for totals
         
-        # Style totals row with different background
+        # TOTALS label with bold styling
         totals_label = QTableWidgetItem("TOTALS")
         totals_label.setFlags(totals_label.flags() & ~Qt.ItemFlag.ItemIsEditable)
         font = QFont()
         font.setBold(True)
+        font.setPointSize(ResponsiveHelper.scale_size(12, 11, 13))
         totals_label.setFont(font)
-        # Add background color to distinguish totals
-        totals_label.setBackground(QColor(255, 255, 255, 20))  # Subtle highlight
+        totals_label.setBackground(QColor(245, 245, 245))  # Light gray background
+        totals_label.setForeground(QColor(51, 51, 51))     # Dark text
         self.table.setItem(totals_row, 0, totals_label)
         
         # Empty cell for account code in totals
         empty_item = QTableWidgetItem("")
         empty_item.setFlags(empty_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        empty_item.setBackground(QColor(255, 255, 255, 20))
+        empty_item.setBackground(QColor(245, 245, 245))
         self.table.setItem(totals_row, 1, empty_item)
         
-        # Total debits
-        total_debits_item = QTableWidgetItem(f"{trial_data['total_debits']:,.2f}")
+        # Total debits with proper currency formatting
+        total_debits_item = QTableWidgetItem(format_currency(trial_data['total_debits']))
         total_debits_item.setFlags(total_debits_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         total_debits_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         total_debits_item.setFont(font)
-        total_debits_item.setBackground(QColor(255, 255, 255, 20))
+        total_debits_item.setBackground(QColor(245, 245, 245))
+        total_debits_item.setForeground(QColor(51, 51, 51))
         self.table.setItem(totals_row, 2, total_debits_item)
         
-        # Total credits
-        total_credits_item = QTableWidgetItem(f"{trial_data['total_credits']:,.2f}")
+        # Total credits with proper currency formatting
+        total_credits_item = QTableWidgetItem(format_currency(trial_data['total_credits']))
         total_credits_item.setFlags(total_credits_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         total_credits_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         total_credits_item.setFont(font)
-        total_credits_item.setBackground(QColor(255, 255, 255, 20))
+        total_credits_item.setBackground(QColor(245, 245, 245))
+        total_credits_item.setForeground(QColor(51, 51, 51))
         self.table.setItem(totals_row, 3, total_credits_item)
         
     def _filter_accounts(self):
@@ -584,3 +606,232 @@ class TrialBalancePage(QWidget):
             self._refresh_trial_balance(from_date, to_date)
         except Exception as e:
             print(f"Error refreshing currency display in trial balance: {e}")
+
+    def _print_trial_balance(self):
+        """Print or export the trial balance using Windows native print function."""
+        try:
+            import tempfile
+            import os
+            import webbrowser
+            import time
+            import threading
+            from datetime import datetime
+            
+            # Create a temporary HTML file with the trial balance content
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+                html_content = self._generate_trial_balance_html()
+                f.write(html_content)
+                temp_file = f.name
+            
+            # Open the HTML file in the default browser, which will allow printing
+            webbrowser.open('file://' + temp_file.replace('\\', '/'))
+            
+            # Show a message to the user
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "Print", 
+                "The trial balance has been opened in your web browser.\n"
+                "Use Ctrl+P or the browser's print menu to print the document.\n"
+                "The temporary file will be cleaned up automatically.")
+            
+            # Clean up the temporary file after a delay
+            def cleanup():
+                time.sleep(10)  # Wait 10 seconds before cleanup
+                try:
+                    os.unlink(temp_file)
+                except:
+                    pass
+            
+            threading.Thread(target=cleanup, daemon=True).start()
+                
+        except Exception as e:
+            print(f"Print error: {e}")
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "Print", 
+                f"Unable to open print preview: {str(e)}\n"
+                "You can manually copy the trial balance content or take a screenshot to print.")
+
+    def _generate_trial_balance_html(self):
+        """Generate HTML content for printing the trial balance."""
+        from datetime import datetime
+        
+        # Get current trial balance data
+        from_date, to_date = self.date_selector.get_date_range()
+        trial_data = self._calculate_trial_balance(from_date, to_date)
+        
+        # Get date range text
+        if from_date and to_date:
+            date_range = f"{from_date.toString('MMMM d, yyyy')} to {to_date.toString('MMMM d, yyyy')}"
+        else:
+            date_range = "All Time"
+        
+        # Generate table rows
+        table_rows = ""
+        for account in trial_data['accounts']:
+            debit_text = format_currency(account['debit']) if account['debit'] > 0 else ""
+            credit_text = format_currency(account['credit']) if account['credit'] > 0 else ""
+            
+            table_rows += f"""
+            <tr>
+                <td>{account['name']}</td>
+                <td style="text-align: center;">{account['code']}</td>
+                <td style="text-align: right;">{debit_text}</td>
+                <td style="text-align: right;">{credit_text}</td>
+            </tr>
+            """
+        
+        # Generate complete HTML
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Trial Balance</title>
+            <style>
+                body {{
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    margin: 40px;
+                    color: #333;
+                }}
+                .header {{
+                    text-align: center;
+                    margin-bottom: 30px;
+                }}
+                .title {{
+                    font-size: 24px;
+                    font-weight: bold;
+                    color: #1976D2;
+                    margin-bottom: 10px;
+                }}
+                .date-range {{
+                    font-size: 16px;
+                    color: #666;
+                    margin-bottom: 5px;
+                }}
+                .account-count {{
+                    font-size: 14px;
+                    color: #666;
+                }}
+                .summary {{
+                    background: #F5F5F5;
+                    border: 1px solid #E0E0E0;
+                    border-radius: 8px;
+                    padding: 20px;
+                    margin: 20px 0;
+                    display: flex;
+                    justify-content: space-around;
+                }}
+                .summary-item {{
+                    text-align: center;
+                    font-weight: 600;
+                    font-size: 14px;
+                }}
+                .summary-value {{
+                    font-size: 18px;
+                    color: #1976D2;
+                    margin-top: 5px;
+                }}
+                .balanced {{
+                    color: #4CAF50;
+                }}
+                .unbalanced {{
+                    color: #F44336;
+                }}
+                table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 20px;
+                }}
+                th {{
+                    background: #1976D2;
+                    color: white;
+                    padding: 12px;
+                    text-align: left;
+                    font-weight: 600;
+                }}
+                th.center {{
+                    text-align: center;
+                }}
+                th.right {{
+                    text-align: right;
+                }}
+                td {{
+                    padding: 8px 12px;
+                    border-bottom: 1px solid #E0E0E0;
+                    font-size: 12px;
+                }}
+                tr:nth-child(even) {{
+                    background-color: #FAFAFA;
+                }}
+                .totals-row {{
+                    background: #F5F5F5 !important;
+                    font-weight: 600;
+                    border-top: 2px solid #1976D2;
+                }}
+                .footer {{
+                    margin-top: 30px;
+                    text-align: right;
+                    font-size: 11px;
+                    color: #999;
+                    font-style: italic;
+                }}
+                @media print {{
+                    body {{ margin: 20px; }}
+                    .no-print {{ display: none; }}
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div class="title">TRIAL BALANCE</div>
+                <div class="date-range">Period: {date_range}</div>
+                <div class="account-count">{len(trial_data['accounts'])} accounts with balances</div>
+            </div>
+            
+            <div class="summary">
+                <div class="summary-item">
+                    <div>Total Debits</div>
+                    <div class="summary-value">{format_currency(trial_data['total_debits'])}</div>
+                </div>
+                <div class="summary-item">
+                    <div>Total Credits</div>
+                    <div class="summary-value">{format_currency(trial_data['total_credits'])}</div>
+                </div>
+                <div class="summary-item">
+                    <div>Difference</div>
+                    <div class="summary-value">{format_currency(trial_data['difference'])}</div>
+                </div>
+                <div class="summary-item">
+                    <div>Status</div>
+                    <div class="summary-value {'balanced' if trial_data['is_balanced'] else 'unbalanced'}">
+                        {'BALANCED' if trial_data['is_balanced'] else 'UNBALANCED'}
+                    </div>
+                </div>
+            </div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Account Name</th>
+                        <th class="center">Account Code</th>
+                        <th class="right">Debit</th>
+                        <th class="right">Credit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {table_rows}
+                    <tr class="totals-row">
+                        <td><strong>TOTALS</strong></td>
+                        <td></td>
+                        <td style="text-align: right;"><strong>{format_currency(trial_data['total_debits'])}</strong></td>
+                        <td style="text-align: right;"><strong>{format_currency(trial_data['total_credits'])}</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <div class="footer">
+                Generated on: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
+            </div>
+        </body>
+        </html>
+        """
+        
+        return html

@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QComboBox, QFrame, QScrollArea,
     QSpacerItem, QSizePolicy, QGridLayout, QStackedWidget
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFont, QColor, QPalette
 from datetime import datetime, timedelta
 from ...core.utils import format_currency
@@ -182,6 +182,9 @@ class LedgerDocumentView(QWidget):
         self.system = None
         self.from_date = None
         self.to_date = None
+        # Add font_family attribute for print/preview styling
+        from ..components.styles import ModernStyles
+        self.font_family = ModernStyles.get_font_family()
         self._setup_ui()
     
     def show_account_details(self, account_name, system, from_date, to_date):
@@ -191,13 +194,8 @@ class LedgerDocumentView(QWidget):
         self.from_date = from_date
         self.to_date = to_date
         
-        # Update the account title
-        self.account_title.setText(f"Account: {account_name}")
-        
-        # Update date range if provided
-        if from_date and to_date:
-            date_range = f"Period: {from_date.toString('MMMM d, yyyy')} to {to_date.toString('MMMM d, yyyy')}"
-            self.date_label.setText(date_range)
+        # Update the page header subtitle
+        self.page_header.update_subtitle(f"Account: {account_name}")
         
         self._load_ledger_data()
         
@@ -206,20 +204,33 @@ class LedgerDocumentView(QWidget):
         return f"""
             QWidget {{
                 background: white;
-                color: black;
+                color: #1A1A1A;
                 font-family: {ModernStyles.get_font_family()};
             }}
             QScrollArea {{
-                border: 1px solid #E0E0E0;
+                border: 1px solid rgba(0, 0, 0, 0.12);
                 background: white;
                 padding: 0px;
                 margin: 0px;
+                border-radius: 8px;
             }}
             QWidget#transactionsContainer {{
                 background: white;
                 border: none;
                 margin: 0px;
                 padding: 0px;
+            }}
+            QPushButton {{
+                font-family: {ModernStyles.get_font_family()};
+                font-weight: 600;
+                border-radius: 8px;
+                padding: 10px 20px;
+                border: none;
+                font-size: 14px;
+                min-height: 20px;
+            }}
+            QFrame {{
+                border-radius: 8px;
             }}
         """
     
@@ -232,77 +243,40 @@ class LedgerDocumentView(QWidget):
         layout.setContentsMargins(40, 30, 40, 30)
         layout.setSpacing(20)
         
-        # Header section
-        header_layout = QVBoxLayout()
-        header_layout.setSpacing(8)
+        # Page header (following standard pattern)
+        self.page_header = PageHeader("General Ledger", "Detailed account transactions")
+        layout.addWidget(self.page_header)
         
-        # Company/Title
-        title = QLabel("GENERAL LEDGER")
-        title.setStyleSheet("""
-            QLabel {
-                color: #1976D2;
-                font-size: 24px;
-                font-weight: 700;
-                text-align: center;
-                background: transparent;
-                border: none;
-            }
-        """)
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header_layout.addWidget(title)
+        # Date range selector (following standard pattern)
+        self.date_selector = DateRangeSelector()
+        self.date_selector.dateRangeChanged.connect(self._on_date_range_changed)
+        layout.addWidget(self.date_selector)
         
-        # Account name
-        self.account_title = QLabel(f"Account: {self.account_name}")
-        self.account_title.setStyleSheet("""
-            color: #333;
-            font-size: 18px;
-            font-weight: 600;
-            text-align: center;
-            background: transparent;
-            border: none;
-            margin: 10px 0px;
-        """)
-        self.account_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header_layout.addWidget(self.account_title)
-        
-        # Date range
-        if self.from_date and self.to_date:
-            date_range = f"Period: {self.from_date.toString('MMMM d, yyyy')} to {self.to_date.toString('MMMM d, yyyy')}"
-        else:
-            date_range = "Period: All Time"
-            
-        self.date_label = QLabel(date_range)
-        self.date_label.setStyleSheet("""
-            color: #666;
-            font-size: 14px;
-            text-align: center;
-            background: transparent;
-            border: none;
-        """)
-        self.date_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header_layout.addWidget(self.date_label)
-        
-        layout.addLayout(header_layout)
-        
-        # Navigation bar
+        # Navigation and action buttons bar
         nav_layout = QHBoxLayout()
         
-        back_btn = QPushButton("← Back to Account Overview")
+        # Back button with toolbar styling
+        back_btn = QPushButton("← Back")
+        # Back button with matching refresh button styling
+        back_btn = QPushButton("◀ Accounts")
+        back_btn.setFixedSize(140, 36)  # Same size as refresh button
         back_btn.setStyleSheet("""
             QPushButton {
-                background: #1976D2;
-                color: white;
-                border: none;
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.05);
                 border-radius: 6px;
-                padding: 8px 16px;
-                font-weight: 600;
-                font-size: 14px;
+                padding: 4px 16px;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 13px;
+                font-weight: 500;
             }
             QPushButton:hover {
-                background: #1565C0;
+                background: rgba(255, 255, 255, 0.08);
+                color: white;
             }
             QPushButton:pressed {
-                background: #0D47A1;
+                background: rgba(0, 120, 215, 0.3);
+                color: white;
             }
         """)
         back_btn.clicked.connect(self.backToOverview.emit)
@@ -310,23 +284,26 @@ class LedgerDocumentView(QWidget):
         
         nav_layout.addStretch()
         
-        # Print button
-        print_btn = QPushButton("🖨 Print Ledger")
+        # Print button with matching refresh button styling
+        print_btn = QPushButton("Print Ledger")
+        print_btn.setFixedSize(140, 36)  # Same size as refresh button
         print_btn.setStyleSheet("""
             QPushButton {
-                background: #4CAF50;
-                color: white;
-                border: none;
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.05);
                 border-radius: 6px;
-                padding: 8px 16px;
-                font-weight: 600;
-                font-size: 14px;
+                padding: 4px 16px;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 13px;
+                font-weight: 500;
             }
             QPushButton:hover {
-                background: #45A049;
+                background: rgba(255, 255, 255, 0.08);
+                color: white;
             }
             QPushButton:pressed {
-                background: #388E3C;
+                background: rgba(0, 120, 215, 0.3);
+                color: white;
             }
         """)
         print_btn.clicked.connect(self._print_ledger)
@@ -338,14 +315,14 @@ class LedgerDocumentView(QWidget):
         summary_frame = QFrame()
         summary_frame.setStyleSheet("""
             QFrame {
-                background: #F5F5F5;
-                border: 1px solid #E0E0E0;
-                border-radius: 8px;
+                background: rgba(245, 245, 245, 0.8);
+                border: 1px solid rgba(0, 0, 0, 0.08);
+                border-radius: 12px;
                 margin: 10px 0px;
             }
         """)
         summary_layout = QHBoxLayout(summary_frame)
-        summary_layout.setContentsMargins(20, 15, 20, 15)
+        summary_layout.setContentsMargins(24, 18, 24, 18)
         
         self.opening_balance_label = QLabel(f"Opening Balance: {format_currency(0)}")
         self.opening_balance_label.setStyleSheet("color: #333; font-weight: 600; font-size: 14px; background: transparent; border: none;")
@@ -883,6 +860,14 @@ class LedgerDocumentView(QWidget):
         
         return html
 
+    def _on_date_range_changed(self, from_date, to_date):
+        """Handle date range changes and reload ledger data."""
+        self.from_date = from_date
+        self.to_date = to_date
+        
+        # Reload ledger data with new date range
+        self._load_ledger_data()
+
 
 class TransactionRowCard(QFrame):
     """Individual transaction row in the detail panel."""
@@ -965,7 +950,7 @@ class LedgerPage(QWidget):
     def _apply_styling(self):
         """Apply modern glassmorphism styling to the ledger page."""
         GlassmorphismHelper.apply_main_container_effect(self)
-        self.setStyleSheet(ModernStyles.get_complete_stylesheet())
+        # Removed global stylesheet that was overriding button styling
     
     def _setup_ui(self):
         """Setup the main ledger UI."""
@@ -1107,25 +1092,24 @@ class LedgerPage(QWidget):
         
         # Refresh button
         refresh_btn = QPushButton("Refresh Balances")
+        refresh_btn.setFixedSize(140, 36)  # More compact size to fit the layout better
         refresh_btn.setStyleSheet("""
             QPushButton {
-                background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(0, 0, 0, 0.3);
-                border-radius: 8px;
-                padding: 8px 16px;
-                color: white;
-                font-size: 12px;
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 6px;
+                padding: 4px 16px;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 13px;
                 font-weight: 500;
-                min-height: 32px;
             }
             QPushButton:hover {
-                background: rgba(255, 255, 255, 0.12);
-                border: 1px solid rgba(100, 181, 246, 0.3);
+                background: rgba(255, 255, 255, 0.08);
+                color: white;
             }
             QPushButton:pressed {
-                background: rgba(100, 181, 246, 0.15);
-                border: 1px solid rgba(100, 181, 246, 0.5);
-                color: #90CAF9;
+                background: rgba(0, 120, 215, 0.3);
+                color: white;
             }
         """)
         refresh_btn.clicked.connect(self._refresh_balances)

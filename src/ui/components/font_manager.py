@@ -13,16 +13,17 @@ class FontManager:
     Font Manager for handling custom fonts in the application.
     This class provides utilities for loading, managing, and setting custom fonts.
     """
-    # Available font families for the application
+    # Curated font families for the application
     FONT_FAMILIES = {
         'default': 'Segoe UI',
-        'modern': 'Roboto',
-        'professional': 'Open Sans',
-        'creative': 'Poppins',
-        'classic': 'Times New Roman',
-        'code': 'Consolas',
-        'cascadia': 'Cascadia Code',
-        'jetbrains': 'JetBrains Mono'
+        'code_cascadia': 'Cascadia Code',
+        'code_mono': 'Cascadia Mono',
+        'code_courier': 'Courier New',
+        'serif_classic': 'Times New Roman',
+        'code_jetbrains': 'JetBrains Mono',
+        'sans_lucida': 'Lucida Sans Unicode',
+        'script_corsiva': 'Monotype Corsiva',
+        'sans_helvetica': 'Helvetica'
     }
     
     # Font weights for the application
@@ -37,79 +38,53 @@ class FontManager:
     def __init__(self):
         """Initialize the font manager."""
         self.settings = QSettings("AccountingApp", "Fonts")
-        self.loaded_fonts = []
+        self.loaded_fonts = []  # Will store (font_family_name, font_id, font_path)
         self.current_font_family = self.settings.value("font_family", self.FONT_FAMILIES['default'])
         self.current_font_scale = float(self.settings.value("font_scale", 1.0))
     
     def load_custom_fonts(self, font_directory=None):
         """
-        Load custom fonts from a directory.
-        
-        Args:
-            font_directory (str, optional): Directory containing font files. If None,
-                                            uses the default assets/fonts directory.
-        
-        Returns:
-            list: Names of successfully loaded font families.
+        Load JetBrains Mono fonts from assets directory.
         """
         if font_directory is None:
             # Get the application directory path
             if getattr(sys, 'frozen', False):
-                # If the application is frozen (compiled with PyInstaller)
                 app_path = os.path.dirname(sys.executable)
             else:
-                # If running from source code
                 app_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                
             font_directory = os.path.join(app_path, 'assets', 'fonts')
         
-        # Create fonts directory if it doesn't exist
-        if not os.path.exists(font_directory):
-            try:
-                os.makedirs(font_directory)
-                print(f"Created font directory: {font_directory}")
-            except Exception as e:
-                print(f"Error creating font directory: {e}")
-                return []
-          # Load fonts from the directory
         loaded_families = []
         if os.path.exists(font_directory):
-            for filename in os.listdir(font_directory):
-                if filename.lower().endswith(('.ttf', '.otf')):
-                    font_path = os.path.join(font_directory, filename)
-                    
-                    # Check if this font is already loaded
-                    already_loaded = any(font_path in str(loaded_path) for loaded_path, _ in self.loaded_fonts)
-                    if already_loaded:
-                        continue
-                        
+            # Only load JetBrains Mono fonts
+            jetbrains_fonts = ['JetBrainsMono-Regular.ttf', 'JetBrainsMono-Bold.ttf']
+            for filename in jetbrains_fonts:
+                font_path = os.path.join(font_directory, filename)
+                if os.path.exists(font_path):
                     font_id = QFontDatabase.addApplicationFont(font_path)
                     if font_id != -1:
                         font_families = QFontDatabase.applicationFontFamilies(font_id)
                         for family in font_families:
-                            loaded_families.append(family)
-                            self.loaded_fonts.append((font_path, font_id))
+                            if family not in loaded_families:
+                                loaded_families.append(family)
+                                self.loaded_fonts.append((family, font_id, font_path))
         
         return loaded_families
     
     def get_all_available_fonts(self):
         """
-        Get all available font families in the system and custom loaded fonts.
-        
-        Returns:
-            list: All available font families.
+        Return the preferred fonts including custom loaded ones.
         """
-        # Get system fonts using the static method
+        preferred = [
+            'Segoe UI', 'Cascadia Code', 'Cascadia Mono', 'Courier New', 'Times New Roman',
+            'JetBrains Mono', 'Lucida Sans Unicode', 'Monotype Corsiva', 'Helvetica'
+        ]
         system_fonts = QFontDatabase.families()
-        custom_fonts = [family for family, _ in self.loaded_fonts]
+        custom_fonts = [family for family, _, _ in self.loaded_fonts]
         
-        # Combine and remove duplicates while preserving order
-        all_fonts = []
-        for font in custom_fonts + list(system_fonts):
-            if font not in all_fonts:
-                all_fonts.append(font)
-                
-        return all_fonts
+        # Combine custom and system fonts, keeping only preferred ones
+        all_fonts = custom_fonts + [f for f in preferred if f in system_fonts]
+        return list(dict.fromkeys(all_fonts))  # Remove duplicates while preserving order
     
     def get_font_family(self):
         """
@@ -228,29 +203,18 @@ class FontManager:
         
     def get_available_font_families(self):
         """
-        Get a list of available font families from the predefined list.
-        
-        Returns:
-            list: List of available font family names
+        Return the user's preferred fonts including custom loaded ones.
         """
-        available_fonts = []
+        preferred = [
+            'Segoe UI', 'Cascadia Code', 'Cascadia Mono', 'Courier New', 'Times New Roman',
+            'JetBrains Mono', 'Lucida Sans Unicode', 'Monotype Corsiva', 'Helvetica'
+        ]
+        system_fonts = QFontDatabase.families()
+        custom_fonts = [family for family, _, _ in self.loaded_fonts]
         
-        # First add any custom loaded fonts
-        for family, _ in self.loaded_fonts:
-            if family not in available_fonts:
-                available_fonts.append(family)
-        
-        # Then add predefined fonts if they're available
-        for key, font_name in self.FONT_FAMILIES.items():
-            if font_name not in available_fonts and (self.is_font_available(font_name) or key == 'default'):
-                # Always include the default font even if not detected
-                available_fonts.append(font_name)
-        
-        # If no fonts are available, ensure at least the default system font is included
-        if not available_fonts:
-            available_fonts = ["Segoe UI", "Arial", "sans-serif"]
-            
-        return available_fonts
+        # Combine custom and system fonts, keeping only preferred ones
+        available = custom_fonts + [f for f in preferred if f in system_fonts]
+        return list(dict.fromkeys(available))  # Remove duplicates while preserving order
         
     def install_developer_fonts(self):
         """
@@ -396,5 +360,5 @@ class FontManager:
             print(f"Error downloading JetBrains Mono font: {e}")
             return []
 
-# Initialize a global instance
+# Initialize a global instance (fonts will be loaded when application starts)
 font_manager = FontManager()

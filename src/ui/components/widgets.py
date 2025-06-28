@@ -274,8 +274,8 @@ class PageHeader(QWidget):
         layout.setSpacing(ResponsiveHelper.scale_size(8, 6, 12))
         
         # Title
-        title_label = QLabel(self.title)
-        title_label.setStyleSheet(f"""
+        self.title_label = QLabel(self.title)
+        self.title_label.setStyleSheet(f"""
             QLabel {{
                 color: white;
                 font-size: {ResponsiveHelper.scale_size(28, 22, 36)}px;
@@ -283,27 +283,38 @@ class PageHeader(QWidget):
                 background: transparent;
             }}
         """)
-        layout.addWidget(title_label)
+        layout.addWidget(self.title_label)
         
-        # Subtitle (if provided)
-        if self.subtitle:
-            subtitle_label = QLabel(self.subtitle)
-            subtitle_label.setStyleSheet(f"""
-                QLabel {{
-                    color: rgba(255, 255, 255, 0.7);
-                    font-size: {ResponsiveHelper.scale_size(14, 12, 16)}px;
-                    font-weight: 400;
-                    background: transparent;
-                }}
-            """)
-            layout.addWidget(subtitle_label)
+        # Subtitle (always create, but hide if empty)
+        self.subtitle_label = QLabel(self.subtitle)
+        self.subtitle_label.setStyleSheet(f"""
+            QLabel {{
+                color: rgba(255, 255, 255, 0.7);
+                font-size: {ResponsiveHelper.scale_size(14, 12, 16)}px;
+                font-weight: 400;
+                background: transparent;
+            }}
+        """)
+        layout.addWidget(self.subtitle_label)
+        
+        if not self.subtitle:
+            self.subtitle_label.hide()
+    
+    def update_subtitle(self, subtitle):
+        """Update the subtitle text and show/hide as needed."""
+        self.subtitle = subtitle
+        self.subtitle_label.setText(subtitle)
+        if subtitle:
+            self.subtitle_label.show()
+        else:
+            self.subtitle_label.hide()
 
 
 class DateRangeSelector(QWidget):
     """Professional date range selector with quick filter buttons and custom range."""
       # Signal for compatibility with ledger
     from PyQt6.QtCore import pyqtSignal
-    dateRangeChanged = pyqtSignal()
+    dateRangeChanged = pyqtSignal(object, object)  # Emit from_date, to_date parameters
     
     def __init__(self, parent=None, callback=None):
         super().__init__(parent)
@@ -440,11 +451,14 @@ class DateRangeSelector(QWidget):
         
     def _on_date_changed(self):
         """Handle date changes - supports both callback and signal patterns."""
+        start_date, end_date = self.get_date_range()
+        
         if self.callback:
             # Get current date range and pass to callback
-            start_date, end_date = self.get_date_range()
             self.callback(start_date, end_date)
-        self.dateRangeChanged.emit()
+        
+        # Emit signal with date parameters
+        self.dateRangeChanged.emit(start_date, end_date)
         
     def _quick_filter_selected(self):
         """Handle quick filter selection."""
