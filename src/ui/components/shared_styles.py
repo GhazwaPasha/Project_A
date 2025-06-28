@@ -139,14 +139,35 @@ def load_accounts_from_system(system):
     try:
         if hasattr(system, 'get_chart_of_accounts'):
             accounts_data = system.get_chart_of_accounts(active_only=False)
-            return [f"{acc['code']} - {acc['name']}" for acc in accounts_data if acc.get('is_postable', True)]
+            # Handle both dict and tuple formats
+            if accounts_data and len(accounts_data) > 0:
+                sample_account = accounts_data[0]
+                if isinstance(sample_account, tuple):
+                    # Tuple format: (name, type, code, parent_code, level, is_postable, description)
+                    return [f"{acc[2]} - {acc[0]}" for acc in accounts_data if len(acc) > 5 and acc[5]]
+                else:
+                    # Dict format
+                    return [f"{acc['code']} - {acc['name']}" for acc in accounts_data if acc.get('is_postable', True)]
+        elif hasattr(system, 'get_postable_accounts'):
+            # Use the specific method for postable accounts
+            accounts_data = system.get_postable_accounts()
+            if accounts_data and len(accounts_data) > 0:
+                sample_account = accounts_data[0]
+                if isinstance(sample_account, tuple):
+                    # Tuple format: (name, type, code, parent_code, level, is_postable, description)
+                    return [f"{acc[2]} - {acc[0]}" for acc in accounts_data if len(acc) >= 3]
+                else:
+                    # Dict format
+                    return [f"{acc['code']} - {acc['name']}" for acc in accounts_data]
         elif hasattr(system, 'get_all_accounts'):
             accounts_data = system.get_all_accounts()
             # Handle tuple format: (name, type, code, parent_code, level, is_postable, description)
-            if accounts_data and isinstance(accounts_data[0], tuple):
-                return [f"{acc[2]} - {acc[0]}" for acc in accounts_data if acc[5]]  # acc[5] is is_postable
-            else:
-                return [f"{acc['code']} - {acc['name']}" for acc in accounts_data if acc.get('is_postable', True)]
+            if accounts_data and len(accounts_data) > 0:
+                sample_account = accounts_data[0]
+                if isinstance(sample_account, tuple):
+                    return [f"{acc[2]} - {acc[0]}" for acc in accounts_data if len(acc) > 5 and acc[5]]  # acc[5] is is_postable
+                else:
+                    return [f"{acc['code']} - {acc['name']}" for acc in accounts_data if acc.get('is_postable', True)]
         else:
             return ["1001 - Cash", "2001 - Accounts Payable"]
     except Exception as e:

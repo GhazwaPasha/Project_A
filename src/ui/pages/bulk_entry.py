@@ -12,6 +12,7 @@ from PyQt6.QtCore import Qt, QDate, pyqtSignal, QTimer
 import pandas as pd
 from ...core.utils import format_currency
 from ...core.events import accounting_events
+from ...core.account_matcher import AccountMatcher
 from ..components.scrollbar_styles import ModernScrollbarStyles
 from ..components.widgets import PageHeader, EditableAccountComboBox
 from ..components.card_based_entry import CardBasedTransactionEntry
@@ -39,28 +40,17 @@ class BulkEntryPage(QWidget):
         self._memory_conservation_mode = False
         self._validation_cache = {}        # Load accounts once for all cards
         try:
-            accounts_data = self.system.get_postable_accounts()
-            # Fix: accounts_data is now tuples (name, type, code, parent_code, level, is_postable, description)
-            # Index 2 = code, Index 0 = name
-            if accounts_data and len(accounts_data) > 0:
-                # Check if it's tuple format or dict format for compatibility
-                sample_account = accounts_data[0]
-                if isinstance(sample_account, tuple):
-                    # New tuple format: (name, type, code, parent_code, level, is_postable, description)
-                    self.formatted_accounts = [f"{acc[2]} - {acc[0]}" for acc in accounts_data if len(acc) >= 3]
-                elif isinstance(sample_account, dict):
-                    # Old dict format for backward compatibility
-                    self.formatted_accounts = [f"{acc.get('code', '')} - {acc.get('name', '')}" for acc in accounts_data]
-                else:
-                    # Fallback: empty list
-                    self.formatted_accounts = []
-                    print(f"⚠️  Unknown account data format: {type(sample_account)}")
-            else:
-                self.formatted_accounts = []
-                print("⚠️  No accounts loaded from system")
+            # Use the working load_accounts_from_system function
+            self.formatted_accounts = load_accounts_from_system(self.system)
+            
+            # Simple AccountMatcher for import assistance
+            self.account_matcher = AccountMatcher(self.formatted_accounts) if self.formatted_accounts else None
+            if self.account_matcher:
+                print(f"📊 AccountMatcher initialized with {len(self.formatted_accounts)} accounts")
         except Exception as e:
             print(f"❌ Error loading accounts in bulk entry: {e}")
             self.formatted_accounts = []
+            self.account_matcher = None
         self._setup_ui()
         self._add_new_card()  # Start with one empty card
         
@@ -635,12 +625,20 @@ class BulkEntryPage(QWidget):
                     if len(self.entry_cards) > 0:
                         card = self.entry_cards[-1]
                         
-                        # Set the entry data
+                        # Use AccountMatcher for intelligent account matching
+                        debit_account_raw = str(row.get('Debit Account', ''))
+                        credit_account_raw = str(row.get('Credit Account', ''))
+                        
+                        # Match accounts using AccountMatcher
+                        debit_account_matched = self._resolve_account_for_import(debit_account_raw)
+                        credit_account_matched = self._resolve_account_for_import(credit_account_raw)
+                        
+                        # Set the entry data with matched accounts
                         entry_data = {
                             'date': str(row.get('Date', '')),
                             'description': str(row.get('Description', '')),
-                            'debit_account': str(row.get('Debit Account', '')),
-                            'credit_account': str(row.get('Credit Account', '')),
+                            'debit_account': debit_account_matched,
+                            'credit_account': credit_account_matched,
                             'amount': str(row.get('Amount', ''))
                         }
                         card.set_entry_data(entry_data)
@@ -1026,44 +1024,59 @@ class BulkEntryPage(QWidget):
         """Handle account changes by refreshing the account list in all cards."""
         try:
             # Reload accounts from the system
-            accounts_data = self.system.get_postable_accounts()
-            self.formatted_accounts = [f"{acc['code']} - {acc['name']}" for acc in accounts_data]
+            all_accounts_data = self.system.get_all_accounts()
+            postable_accounts_data = self.system.get_postable_accounts()
+            
+            # Handle different account data formats
+            if postable_accounts_data and len(postable_accounts_data) > 0:
+                sample_account = postable_accounts_data[0]
+                if isinstance(sample_account, tuple):
+                    self.formatted_accounts = [f"{acc[2]} - {acc[0]}" for acc in postable_accounts_data if len(acc) >= 3]
+                    all_formatted_accounts = [f"{acc[2]} - {acc[0]}" for acc in all_accounts_data if len(acc) >= 3]
+                elif isinstance(sample_account, dict):
+                    self.formatted_accounts = [f"{acc.get('code', '')} - {acc.get('name', '')}" for acc in postable_accounts_data]
+                    all_formatted_accounts = [f"{acc.get('code', '')} - {acc.get('name', '')}" for acc in all_accounts_data]
+                else:
+                    self.formatted_accounts = []
+                    all_formatted_accounts = []
+            else:
+                self.formatted_accounts = []
+                all_formatted_accounts = []
+            
+            # Reinitialize AccountMatcher with ALL accounts (including non-postable)
+            self.account_matcher = AccountMatcher(all_formatted_accounts) if all_formatted_accounts else None
             
             # Update all existing cards with the new account list
             for card in self.entry_cards:
                 card.debit_combo.setAccountList(self.formatted_accounts)
                 card.credit_combo.setAccountList(self.formatted_accounts)
                 
-            print("✅ Account list refreshed in bulk entry page")
+            print("✅ Account list and matcher refreshed in bulk entry page")
         except Exception as e:
             print(f"❌ Error refreshing accounts in bulk entry: {e}")
+            self.account_matcher = None
     
     def _refresh_accounts(self):
         """Internal method to refresh accounts when events are triggered."""
         try:
-            # Update the local accounts cache
-            accounts_data = self.system.get_postable_accounts()
-            # Fix: accounts_data is now tuples (name, type, code, parent_code, level, is_postable, description)
-            # Index 2 = code, Index 0 = name
-            if accounts_data and len(accounts_data) > 0:
-                # Check if it's tuple format or dict format for compatibility
-                sample_account = accounts_data[0]
-                if isinstance(sample_account, tuple):
-                    # New tuple format: (name, type, code, parent_code, level, is_postable, description)
-                    self.formatted_accounts = [f"{acc[2]} - {acc[0]}" for acc in accounts_data if len(acc) >= 3]
-                elif isinstance(sample_account, dict):
-                    # Old dict format for backward compatibility
-                    self.formatted_accounts = [f"{acc.get('code', '')} - {acc.get('name', '')}" for acc in accounts_data]
-                else:
-                    # Fallback: empty list
-                    self.formatted_accounts = []
-                    print(f"⚠️  Unknown account data format during refresh: {type(sample_account)}")
-            else:
-                self.formatted_accounts = []
-                print("⚠️  No accounts loaded during refresh")
+            # Use the same simple approach as initialization
+            self.formatted_accounts = load_accounts_from_system(self.system)
+            self.account_matcher = AccountMatcher(self.formatted_accounts) if self.formatted_accounts else None
             
             # Refresh all cards
             self.refresh_accounts_from_system()
         except Exception as e:
             print(f"❌ Error refreshing accounts in bulk entry: {e}")
             self.formatted_accounts = []
+            self.account_matcher = None
+    
+    def _resolve_account_for_import(self, raw_account_name):
+        """Use AccountMatcher to resolve account name for import."""
+        if not raw_account_name or not raw_account_name.strip():
+            return ""
+        raw_account_name = str(raw_account_name).strip()
+        if self.account_matcher:
+            matched, confidence = self.account_matcher.match_account(raw_account_name, confidence_threshold=0.5)
+            if matched:
+                return matched
+        return raw_account_name

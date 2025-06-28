@@ -898,7 +898,7 @@ class EditableAccountComboBox(QComboBox):
         # Check if it's a valid account name that exists in our chart
         if text in self.valid_account_names:
             return True
-              # For partial input during typing: check if it's a valid part of an account
+          # For partial input during typing: check if it's a valid part of an account
         # But only if it's unique enough (at least 2 characters)
         if len(text) >= 2:
             text_lower = text.lower()
@@ -955,24 +955,36 @@ class EditableAccountComboBox(QComboBox):
             account_name = account.split(" - ", 1)[1] if " - " in account else ""
             if account_name.lower() == text.lower():
                 return account
-                  # Try partial matching for the closest account
+                
+        # Try partial matching for the closest account
         text_lower = text.lower()
         best_match = None
         best_score = 0
         
         for account in self.valid_accounts:
             account_lower = account.lower()
+            account_name = account.split(" - ", 1)[1] if " - " in account else account
+            account_name_lower = account_name.lower()
             score = 0
             
-            # Exact word match
-            if text_lower in account_lower.split():
+            # Exact word match in account name
+            if text_lower in account_name_lower.split():
                 score = 100
-            # Word starts with the text
-            elif any(word.startswith(text_lower) for word in account_lower.split()):
+            # Account name starts with the text
+            elif account_name_lower.startswith(text_lower):
+                score = 90
+            # Any word in account name starts with the text
+            elif any(word.startswith(text_lower) for word in account_name_lower.split()):
                 score = 75
-            # Contains the text
-            elif text_lower in account_lower:
+            # Text contains a word from account name (e.g., "Utilities" matches "Utilities Expense")
+            elif any(word in text_lower for word in account_name_lower.split() if len(word) >= 3):
+                score = 60
+            # Account name contains the text
+            elif text_lower in account_name_lower:
                 score = 50
+            # Contains the text anywhere in full account string
+            elif text_lower in account_lower:
+                score = 25
                 
             # Prefer shorter matches with equal scores
             if score > best_score or (score == best_score and len(account) < len(best_match or "")):
@@ -980,8 +992,6 @@ class EditableAccountComboBox(QComboBox):
                 best_match = account
                 
         return best_match if best_score > 0 else None
-                
-        return None
     
     def _show_validation_error(self, line_edit):
         """Show visual feedback for validation error."""
