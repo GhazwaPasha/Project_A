@@ -1090,9 +1090,9 @@ class LedgerPage(QWidget):
         
         filter_layout.addStretch()
         
-        # Refresh button
+        # Refresh button with height matching search field
         refresh_btn = QPushButton("Refresh Balances")
-        refresh_btn.setFixedSize(140, 36)  # More compact size to fit the layout better
+        refresh_btn.setFixedSize(140, 48)  # Match search field height (32px min-height + 16px padding)
         refresh_btn.setStyleSheet("""
             QPushButton {
                 background: rgba(255, 255, 255, 0.03);

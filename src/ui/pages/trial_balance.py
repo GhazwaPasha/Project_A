@@ -295,46 +295,46 @@ class TrialBalancePage(QWidget):
         # Set column widths
         self.table.setColumnWidth(2, ResponsiveHelper.scale_size(120, 100, 140))
         self.table.setColumnWidth(3, ResponsiveHelper.scale_size(120, 100, 140))
-          # Professional table styling matching the ledger
+          # Dark theme table styling to match UI
         table_style = f"""
             QTableWidget {{
-                background: white;
-                border: 1px solid #E0E0E0;
+                background: rgba(40, 40, 40, 0.95);
+                border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 8px;
-                color: #333;
+                color: #FFFFFF;
                 font-size: {ResponsiveHelper.scale_size(12, 11, 14)}px;
-                gridline-color: #F0F0F0;
-                selection-background-color: #E3F2FD;
+                gridline-color: rgba(255, 255, 255, 0.1);
+                selection-background-color: rgba(100, 181, 246, 0.3);
                 outline: none;
-                alternate-background-color: #FAFAFA;
+                alternate-background-color: rgba(255, 255, 255, 0.03);
             }}
             
             QTableWidget::item {{
                 padding: 12px 16px;
                 border: none;
-                border-bottom: 1px solid #F0F0F0;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
                 min-height: 32px;
-                color: #333;
+                color: #FFFFFF;
                 background: transparent;
             }}
             
             QTableWidget::item:alternate {{
-                background: #FAFAFA;
+                background: rgba(255, 255, 255, 0.03);
             }}
             
             QTableWidget::item:hover {{
-                background: #E3F2FD;
+                background: rgba(100, 181, 246, 0.2);
             }}
             
             QTableWidget::item:selected {{
-                background: #E3F2FD;
-                color: #1976D2;
+                background: rgba(100, 181, 246, 0.3);
+                color: #90CAF9;
             }}
             
             QHeaderView::section {{
-                background: #1976D2;
+                background: rgba(255, 255, 255, 0.08);
                 border: none;
-                border-right: 1px solid #1565C0;
+                border-right: 1px solid rgba(255, 255, 255, 0.15);
                 color: white;
                 padding: 12px 16px;
                 font-weight: 600;
