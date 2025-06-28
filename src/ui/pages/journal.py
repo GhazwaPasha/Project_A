@@ -365,7 +365,6 @@ class SingleEntryTab(QWidget):
         
     def _create_entry_form(self):
         """Create expandable entry form."""
-        from PyQt6.QtCore import QPropertyAnimation, QEasingCurve, QDate
         from PyQt6.QtWidgets import QGridLayout, QDateEdit, QLineEdit
         from ..components.shared_styles import get_field_style, get_button_style, get_label_style
         
@@ -376,8 +375,8 @@ class SingleEntryTab(QWidget):
         container = QFrame()
         container.setStyleSheet("""
             QFrame {
-                background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(0, 0, 0, 0.3);
+                background: transparent;
+                border: none;
                 border-radius: 8px;
             }
         """)
@@ -394,6 +393,7 @@ class SingleEntryTab(QWidget):
                 border: 1px solid rgba(0, 0, 0, 0.3);
                 border-top-left-radius: 8px;
                 border-top-right-radius: 8px;
+                border-bottom: none;
             }
             QFrame:hover {
                 background: rgba(255, 255, 255, 0.12);
@@ -423,7 +423,7 @@ class SingleEntryTab(QWidget):
                 color: rgba(255, 255, 255, 0.9);
             }
         """)
-        toggle_btn.setText("▼")  # Start with expanded state
+        toggle_btn.setText("▶")  # Start with collapsed state
         toggle_btn.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         header_layout.addWidget(title)
@@ -432,7 +432,15 @@ class SingleEntryTab(QWidget):
 
         # Collapsible content
         content = QFrame()
-        content.setStyleSheet("background: transparent;")
+        content.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-top: none;
+                border-bottom-left-radius: 8px;
+                border-bottom-right-radius: 8px;
+            }
+        """)
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(18, 8, 18, 18)
         content_layout.setSpacing(12)
@@ -733,12 +741,14 @@ class SingleEntryTab(QWidget):
         clear_btn.clicked.connect(self._clear_form)
         grid.addWidget(clear_btn, 2, 4)  # row 2, column 4 (Amount)
         
-        content_layout.addLayout(grid)        # Setup animation - start EXPANDED for debugging to see actual form
-        content.setVisible(True)  # Start expanded to see what we're working with
-        content.setMaximumHeight(16777215)  # Remove height constraints
+        content_layout.addLayout(grid)
+        
+        # Setup animation - start COLLAPSED
+        content.setVisible(False)  # Start collapsed
+        content.setMaximumHeight(0)  # Start with zero height
         layout.addWidget(content)
         
-        # No pre-measurement needed since we're starting expanded
+        # Animation setup
         animation = QPropertyAnimation(content, b"maximumHeight")
         animation.setDuration(250)
         animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
@@ -748,24 +758,15 @@ class SingleEntryTab(QWidget):
             expanded = content.isVisible()
             toggle_btn.setText("▶" if expanded else "▼")
             
+            # Stop any running animation and clear connections
             animation.stop()
             try:
                 animation.finished.disconnect()
             except TypeError:
-                pass
+                pass  # No connections to disconnect
             
             if not expanded:  # Currently collapsed, so expand
-                content.setVisible(True)
-                content.setMaximumHeight(16777215)
-                
-                # Force multiple layout passes to ensure proper sizing
-                for _ in range(3):  # Multiple passes for complex layouts                    content.style().polish(content)
-                    QApplication.processEvents()
-                    content.adjustSize()
-                    content.updateGeometry()
-                
-                # Calculate height based on content requirements with generous spacing
-                # Account for: 3 rows of inputs + margins + padding + buffer
+                # Calculate target height first before showing content
                 label_row_height = 24  # Labels row
                 input_row_height = 40  # Main input fields row  
                 button_row_height = 40  # AI input + buttons row
@@ -774,13 +775,16 @@ class SingleEntryTab(QWidget):
                 extra_buffer = 60  # Extra buffer for safety                
                 calculated_height = (label_row_height + input_row_height + button_row_height + 
                                    vertical_spacing + content_margins + extra_buffer)
-                  # Use a very generous minimum height to ensure full visibility
-                actual_height = max(content.height(), calculated_height, 300)  # Increased to 300px minimum
+                target_height = max(calculated_height, 300)  # Minimum 300px
                 
-                print(f"🔧 Expanding form - Content height: {content.height()}, Calculated: {calculated_height}, Using: {actual_height}")
+                # Set content to collapsed state first
+                content.setVisible(True)
+                content.setMaximumHeight(0)
                 
+                # Now animate to target height
                 animation.setStartValue(0)
-                animation.setEndValue(actual_height)
+                animation.setEndValue(target_height)
+                animation.finished.connect(lambda: content.setMaximumHeight(16777215))  # Remove height restriction after animation
                 animation.start()
             else:  # Currently expanded, so collapse
                 current_height = content.height()
