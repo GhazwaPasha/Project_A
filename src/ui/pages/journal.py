@@ -34,7 +34,7 @@ class TransactionCard(QFrame):
                 background: rgba(255, 255, 255, 0.08);
                 border: 1px solid rgba(0, 0, 0, 0.3);
                 border-radius: 8px;
-                margin: 4px 0px;
+                margin: 0px 0px;
                 min-height: 48px;
             }
             QFrame:hover {
@@ -359,7 +359,7 @@ class SingleEntryTab(QWidget):
         self.transactions_widget.setObjectName("scrollAreaWidgetContents")
         self.transactions_layout = QVBoxLayout(self.transactions_widget)
         self.transactions_layout.setContentsMargins(8, 8, 8, ResponsiveHelper.scale_size(24, 16, 32))
-        self.transactions_layout.setSpacing(4)  # Reduced spacing between cards for a more modern look
+        self.transactions_layout.setSpacing(0)  # Minimal spacing between cards (reduced by 90%)
         self.transactions_scroll.setWidget(self.transactions_widget)
         tab_layout.addWidget(self.transactions_scroll, 1)  # This takes remaining space
         
