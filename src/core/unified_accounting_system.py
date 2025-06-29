@@ -245,6 +245,10 @@ class OfflineCache:
                 try:
                     data = json.loads(op['data'])
                     
+                    # Normalize account_type for accounts table operations
+                    if op['table_name'] == 'accounts' and 'account_type' in data:
+                        data['account_type'] = data['account_type'].lower()
+                    
                     if op['operation_type'] == 'INSERT':
                         supabase_client.table(op['table_name']).insert(data).execute()
                     elif op['operation_type'] == 'UPDATE':
@@ -622,14 +626,24 @@ class UnifiedAccountingSystem:
         account_data['organization_id'] = self.current_organization_id
         account_data['created_by'] = self.current_user_id
         
+        # Convert account_type to lowercase to match database enum
+        if 'account_type' in account_data:
+            account_data['account_type'] = account_data['account_type'].lower()
+        
         # Try online first
         if self.is_online:
             try:
+                print(f"Debug: UnifiedAccountingSystem.create_account attempting online creation")
                 self._set_database_context()
                 result = self.db_manager.create_account(account_data)
+                print(f"Debug: UnifiedAccountingSystem.create_account online result: {result}")
                 if result:
+                    print(f"Debug: Online creation successful, returning: {result}")
                     return result
+                else:
+                    print(f"Debug: Online creation returned None, falling back to queue")
             except Exception as e:
+                print(f"Debug: UnifiedAccountingSystem.create_account online exception: {e}")
                 self.logger.error(f"Online account creation failed: {e}")
                 self.is_online = False
         
@@ -669,6 +683,41 @@ class UnifiedAccountingSystem:
         )
         return True
     
+    def delete_account(self, account_identifier: Union[int, str]) -> bool:
+        """Delete account by ID or name (soft delete)."""
+        if not self.current_organization_id:
+            return False
+        
+        if not self.auth_manager.can_edit_accounts(self.current_organization_id):
+            raise PermissionError("Insufficient permissions to delete accounts")
+        
+        # If identifier is a string (name), find the account ID
+        account_id = account_identifier
+        if isinstance(account_identifier, str):
+            accounts = self.get_chart_of_accounts(active_only=False)
+            account = next((acc for acc in accounts if acc['name'] == account_identifier), None)
+            if not account:
+                self.logger.error(f"Account '{account_identifier}' not found")
+                return False
+            account_id = account['id']
+        
+        # Try online first
+        if self.is_online:
+            try:
+                self._set_database_context()
+                return self.db_manager.delete_account(account_id)
+            except Exception as e:
+                self.logger.error(f"Online account deletion failed: {e}")
+                self.is_online = False
+        
+        # Queue for later sync if offline
+        delete_data = {'id': account_id, 'is_active': False}
+        self.offline_cache.queue_operation(
+            'UPDATE', 'accounts', delete_data,
+            self.current_organization_id, self.current_user_id
+        )
+        return True
+
     def is_account_postable(self, account_name_or_code: str) -> bool:
         """Check if account is postable"""
         accounts = self.get_chart_of_accounts(active_only=False)

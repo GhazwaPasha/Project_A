@@ -378,8 +378,13 @@ class EnhancedSupabaseOnlyManager:
         """Create account - queue if offline"""
         if self.is_online:
             try:
+                # Convert account_type to lowercase to match database enum
+                processed_data = dict(account_data)
+                if 'account_type' in processed_data:
+                    processed_data['account_type'] = processed_data['account_type'].lower()
+                
                 self._set_database_context()
-                result = self.supabase.table('accounts').insert(account_data).execute()
+                result = self.supabase.table('accounts').insert(processed_data).execute()
                 if result.data:
                     return {"success": True, "data": result.data[0]}
             except Exception as e:
@@ -387,10 +392,15 @@ class EnhancedSupabaseOnlyManager:
                 self.is_online = False  # Mark as offline and queue
         
         # Queue for later sync
+        # Convert account_type to lowercase for queued data too
+        queued_data = dict(account_data)
+        if 'account_type' in queued_data:
+            queued_data['account_type'] = queued_data['account_type'].lower()
+        
         self.offline_manager.queue_operation(
-            'INSERT', 'accounts', account_data, self.organization_id, self.user_id
+            'INSERT', 'accounts', queued_data, self.organization_id, self.user_id
         )
-        return {"success": True, "data": account_data, "queued": True}
+        return {"success": True, "data": queued_data, "queued": True}
     
     def get_journal_entries(self, start_date=None, end_date=None) -> List[Dict]:
         """Get journal entries with offline support"""

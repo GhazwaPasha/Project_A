@@ -5,7 +5,7 @@ All advanced features are now integrated into the main system
 
 import logging
 from datetime import datetime, date
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 
 from .unified_accounting_system import UnifiedAccountingSystem
 
@@ -493,6 +493,10 @@ class EnhancedAccountingSystem:
     def get_journal_entries(self, *args, **kwargs):
         """Get journal entries from base system."""
         return self.base_system.get_journal_entries(*args, **kwargs)
+    
+    def delete_account(self, account_identifier: Union[int, str]) -> bool:
+        """Delete account by delegating to base system."""
+        return self.base_system.delete_account(account_identifier)
     
     def add_journal_entry(self, *args, **kwargs):
         """Add journal entry to base system."""

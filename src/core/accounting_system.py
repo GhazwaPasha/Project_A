@@ -284,6 +284,27 @@ class AccountingSystem:
         """Deactivate an account."""
         return self.update_account(account_id, {'is_active': False})
 
+    def delete_account(self, account_identifier: Union[int, str]) -> bool:
+        """Delete account by ID or name (soft delete by deactivating)."""
+        if not self.current_organization_id:
+            return False
+        
+        if not self.auth_manager.can_write_accounting_data(self.current_organization_id):
+            return False
+        
+        # If identifier is a string (name), find the account ID
+        account_id = account_identifier
+        if isinstance(account_identifier, str):
+            # Get all accounts to find by name
+            accounts = self.get_chart_of_accounts(active_only=False)
+            account = next((acc for acc in accounts if acc['name'] == account_identifier), None)
+            if not account:
+                self.logger.error(f"Account '{account_identifier}' not found")
+                return False
+            account_id = account['id']
+        
+        return self.deactivate_account(account_id)
+
     # ================================
     # JOURNAL ENTRIES
     # ================================

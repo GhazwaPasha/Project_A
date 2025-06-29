@@ -89,7 +89,7 @@ class OfflineManager:
                     ''', (
                         item.get('id', str(uuid.uuid4())),
                         organization_id,
-                        item.get('date'),
+                        item.get('date',
                         item.get('description'),
                         item.get('amount'),
                         json.dumps(item),
@@ -261,6 +261,27 @@ class AccountingSystem:
         except Exception as e:
             self.logger.error(f"Error updating account: {e}")
             return False
+    
+    def delete_account(self, account_identifier: Union[int, str]) -> bool:
+        """Delete account by ID or name (soft delete)."""
+        if not self.current_organization_id:
+            return False
+        
+        if not self.auth_manager.can_write_accounting_data(self.current_organization_id):
+            return False
+        
+        # If identifier is a string (name), find the account ID
+        account_id = account_identifier
+        if isinstance(account_identifier, str):
+            accounts = self.get_chart_of_accounts(active_only=False)
+            account = next((acc for acc in accounts if acc['name'] == account_identifier), None)
+            if not account:
+                self.logger.error(f"Account '{account_identifier}' not found")
+                return False
+            account_id = account['id']
+        
+        # Soft delete by setting is_active to False
+        return self.update_account(account_id, {'is_active': False})
     
     # ================================
     # JOURNAL ENTRIES with Offline Support

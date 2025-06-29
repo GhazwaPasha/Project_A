@@ -859,8 +859,30 @@ class SingleEntryTab(QWidget):
                     'amount': amount
                 }
                 entry_id = self.system.add_journal_entry(entry_data)
+                
+                # Force immediate sync after journal entry creation
+                print("Debug: Journal entry created, attempting immediate sync...")
+                success_msg = "Transaction saved successfully!"
+                try:
+                    if hasattr(self.system, 'base_system'):
+                        sync_result = self.system.base_system.force_sync()
+                    else:
+                        sync_result = self.system.force_sync()
+                    
+                    print(f"Debug: Sync result after journal entry: {sync_result}")
+                    
+                    if sync_result.get('success'):
+                        print(f"Debug: Successfully synced {sync_result.get('synced_operations', 0)} operations after journal entry")
+                        success_msg += f"\n✅ Synced to database ({sync_result.get('synced_operations', 0)} operations)"
+                    else:
+                        print(f"Debug: Sync failed after journal entry: {sync_result.get('error', 'Unknown error')}")
+                        success_msg += "\n⚠️ Queued for sync when online"
+                except Exception as sync_error:
+                    print(f"Debug: Sync error after journal entry: {sync_error}")
+                    success_msg += "\n⚠️ Queued for sync when online"
+                    # Don't fail the journal entry creation for sync errors
             
-            QMessageBox.information(self, "Success", "Transaction saved successfully!")
+            QMessageBox.information(self, "Success", success_msg)
             self._clear_form()
             
             # Refresh transactions with improved timing

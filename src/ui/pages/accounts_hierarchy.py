@@ -3,6 +3,7 @@ Enhanced Chart of Accounts page with 3-level hierarchy system.
 This module provides an intuitive hierarchical UI for managing account structure.
 """
 
+import traceback
 from ..common import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QLineEdit, QGridLayout,
@@ -45,15 +46,16 @@ class AccountFormCard(QFrame):
         
         # Title section
         title_text = "Edit Account" if self.edit_mode else "Add New Account"
-        title = QLabel(title_text)
-        title.setStyleSheet("""
+        self.title_label = QLabel(title_text)
+        self.title_label.setObjectName('form_title')
+        self.title_label.setStyleSheet("""
             QLabel {
                 color: white;
                 font-size: 18px;
                 font-weight: 600;
             }
         """)
-        layout.addWidget(title)
+        layout.addWidget(self.title_label)
         
         # Form fields
         self._create_form_fields(layout)
@@ -110,7 +112,7 @@ class AccountFormCard(QFrame):
         code_label = QLabel("Account Code")
         code_label.setStyleSheet(self._get_label_style())
         self.code_edit = QLineEdit()
-        self.code_edit.setPlaceholderText("Auto-generated if empty")
+        self.code_edit.setPlaceholderText("Enter account code")
         self.code_edit.setStyleSheet(self._get_input_style())
         form_layout.addWidget(code_label, row, 0)
         form_layout.addWidget(self.code_edit, row, 1)
@@ -122,6 +124,7 @@ class AccountFormCard(QFrame):
         self.type_combo = QComboBox()
         self.type_combo.addItems(["Asset", "Liability", "Equity", "Revenue", "Expense"])
         self.type_combo.setStyleSheet(self._get_combo_style())
+        self.type_combo.currentTextChanged.connect(self._update_parent_options)
         form_layout.addWidget(type_label, row, 0)
         form_layout.addWidget(self.type_combo, row, 1)
         row += 1
@@ -144,10 +147,45 @@ class AccountFormCard(QFrame):
         # Parent Account
         parent_label = QLabel("Parent Account")
         parent_label.setStyleSheet(self._get_label_style())
-        self.parent_combo = QComboBox()
-        self.parent_combo.setStyleSheet(self._get_combo_style())
+        self.parent_input = QLineEdit()
+        self.parent_input.setPlaceholderText("Type to search parent accounts...")
+        self.parent_input.setStyleSheet(self._get_input_style())
+        
+        # Create completer for smart suggestions
+        self.parent_completer = QCompleter()
+        self.parent_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.parent_completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        self.parent_completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        self.parent_completer.setMaxVisibleItems(10)
+        
+        # Style the completer popup for better visibility
+        popup = self.parent_completer.popup()
+        popup.setStyleSheet("""
+            QListView {
+                background: rgba(30, 30, 30, 0.95);
+                color: white;
+                border: 1px solid rgba(0, 120, 215, 0.5);
+                border-radius: 4px;
+                font-size: 13px;
+                selection-background-color: rgba(0, 120, 215, 0.3);
+                outline: none;
+            }
+            QListView::item {
+                padding: 6px;
+                border: none;
+            }
+            QListView::item:hover {
+                background: rgba(0, 120, 215, 0.2);
+            }
+        """)
+        
+        self.parent_input.setCompleter(self.parent_completer)
+        
+        # Connect signals for validation and updating
+        self.parent_input.textChanged.connect(self._validate_parent_account)
+        
         form_layout.addWidget(parent_label, row, 0)
-        form_layout.addWidget(self.parent_combo, row, 1)
+        form_layout.addWidget(self.parent_input, row, 1)
         row += 1
         
         # Postable Checkbox
@@ -290,31 +328,148 @@ class AccountFormCard(QFrame):
         self._update_parent_options()
         
     def _update_parent_options(self):
-        """Update parent account options based on selected level."""
+        """Update parent account suggestions based on selected level and type."""
         if not self.system:
+            print("Debug: No system available")
             return
             
-        self.parent_combo.clear()
+        # Check if system has organization context
+        if hasattr(self.system, 'current_organization_id'):
+            org_id = getattr(self.system, 'current_organization_id', None)
+            print(f"Debug: System organization ID: {org_id}")
+            if not org_id:
+                print("Debug: No organization set in system - this may cause empty results")
+            
         level = self.level_combo.currentIndex() + 1
         
         if level == 1:
             # Level 1 accounts have no parent
-            self.parent_combo.addItem("None (Top Level)", "")
-            self.parent_combo.setEnabled(False)
+            self.parent_input.setEnabled(False)
+            self.parent_input.setPlaceholderText("Level 1 accounts have no parent")
+            self.parent_input.clear()
         else:
-            self.parent_combo.setEnabled(True)
-            self.parent_combo.addItem("Select Parent Account...", "")
+            self.parent_input.setEnabled(True)
+            self.parent_input.setPlaceholderText("Type to search parent accounts...")
             
-            # Get potential parents (accounts from previous levels)
-            max_parent_level = level - 1
-            potential_parents = self.system.get_parent_accounts(max_parent_level)
+            # Get all accounts and filter for potential parents
+            try:
+                all_accounts = self.system.get_chart_of_accounts(active_only=False)
+                current_type = self.type_combo.currentText()
+                
+                print(f"Debug: Level {level}, Type: {current_type}")
+                print(f"Debug: Found {len(all_accounts) if all_accounts else 0} total accounts")
+                
+                if not all_accounts:
+                    print("Debug: No accounts found - might need to check organization context")
+                    # Update completer with empty list
+                    model = QStringListModel([])
+                    self.parent_completer.setModel(model)
+                    return
+                
+                # Helper function to calculate level if not present
+                def calculate_account_level(account, all_accs):
+                    """Calculate account level based on parent hierarchy."""
+                    if isinstance(account, dict):
+                        parent_id = account.get('parent_id')
+                        if not parent_id:
+                            return 1
+                        
+                        # Find parent account
+                        for acc in all_accs:
+                            if isinstance(acc, dict) and acc.get('id') == parent_id:
+                                return calculate_account_level(acc, all_accs) + 1
+                        return 1
+                    return 1
+                
+                # Build list of eligible parent accounts
+                eligible_parents = []
+                for account in all_accounts:
+                    try:
+                        # Handle both dict and tuple formats
+                        if isinstance(account, dict):
+                            name = account.get('name', '')
+                            acc_type = account.get('account_type', '') or account.get('type', '')
+                            code = account.get('code', '')
+                            
+                            # Try to get level from account, calculate if missing
+                            acc_level = account.get('level')
+                            if acc_level is None:
+                                acc_level = calculate_account_level(account, all_accounts)
+                                print(f"Debug: Calculated level {acc_level} for account {code}")
+                        else:
+                            # Tuple format: (name, type, code, parent_code, level, is_postable, description)
+                            if len(account) >= 5:
+                                name, acc_type, code, parent_code, acc_level = account[:5]
+                            else:
+                                continue
+                        
+                        print(f"Debug: Account '{name}' - Type: {acc_type}, Level: {acc_level}, Code: {code}")
+                        
+                        # Only show accounts of the same type and lower level (potential parents)
+                        if (acc_type and acc_type.lower() == current_type.lower() and 
+                            acc_level < level and name.strip() and code.strip()):
+                            display_text = f"{code} - {name}"
+                            eligible_parents.append(display_text)
+                            print(f"Debug: Added eligible parent: {display_text}")
+                            
+                    except Exception as acc_error:
+                        print(f"Debug: Error processing account {account}: {acc_error}")
+                        continue
+                
+                print(f"Debug: Found {len(eligible_parents)} eligible parents")
+                
+                # Update completer with eligible parents
+                model = QStringListModel(eligible_parents)
+                self.parent_completer.setModel(model)
+                
+                # If we have eligible parents but the completer popup is not visible, 
+                # we might need to force it to refresh
+                if eligible_parents and hasattr(self.parent_completer, 'popup'):
+                    self.parent_completer.popup().hide()  # Reset popup state
+                    
+            except Exception as e:
+                print(f"Error loading parent accounts: {e}")
+                import traceback
+                traceback.print_exc()
+                # Clear completer on error
+                model = QStringListModel([])
+                self.parent_completer.setModel(model)
+    
+    def _validate_parent_account(self):
+        """Validate the entered parent account."""
+        if not self.parent_input.isEnabled():
+            return True
             
-            for name, acc_type, code, parent_code, acc_level, is_postable, _ in potential_parents:
-                # Only show accounts of the same type and appropriate level
-                if acc_type == self.type_combo.currentText() and acc_level < level:
-                    indent = "  " * (acc_level - 1)
-                    display_text = f"{indent}{code} - {name}"
-                    self.parent_combo.addItem(display_text, code)
+        text = self.parent_input.text().strip()
+        if not text:
+            # Empty is allowed (no parent)
+            self._set_parent_validation_style(True)
+            return True
+        
+        # Check if the entered text matches any of the eligible parents
+        model = self.parent_completer.model()
+        if model:
+            for i in range(model.rowCount()):
+                item_text = model.data(model.index(i, 0))
+                if item_text and (text == item_text or text.lower() in item_text.lower()):
+                    self._set_parent_validation_style(True)
+                    return True
+        
+        # Invalid parent account
+        self._set_parent_validation_style(False)
+        return False
+    
+    def _set_parent_validation_style(self, is_valid):
+        """Set validation styling for parent input."""
+        if is_valid:
+            self.parent_input.setStyleSheet(self._get_input_style())
+        else:
+            # Add red border for invalid input
+            invalid_style = self._get_input_style().replace(
+                "border: 1px solid rgba(255, 255, 255, 0.1);",
+                "border: 2px solid rgba(255, 99, 71, 0.8);"
+            )
+            self.parent_input.setStyleSheet(invalid_style)
     
     def set_account_data(self, account_data):
         """Set form data for editing."""
@@ -325,8 +480,11 @@ class AccountFormCard(QFrame):
         self.code_edit.setText(account_data['code'] or "")
         self.account_data = account_data  # Store for edit mode
         
-        # Set account type
-        type_index = self.type_combo.findText(account_data['type'])
+        # Set account type - capitalize to match combo box options
+        account_type = account_data.get('type', '') or account_data.get('account_type', '')
+        if account_type:
+            account_type = account_type.capitalize()
+        type_index = self.type_combo.findText(account_type)
         if type_index >= 0:
             self.type_combo.setCurrentIndex(type_index)
             
@@ -339,11 +497,27 @@ class AccountFormCard(QFrame):
         
         # Update parent options and set parent
         self._update_parent_options()
-        if account_data['parent_code']:
-            for i in range(self.parent_combo.count()):
-                if self.parent_combo.itemData(i) == account_data['parent_code']:
-                    self.parent_combo.setCurrentIndex(i)
-                    break
+        if account_data.get('parent_code'):
+            # Find the parent account and set it in the input field
+            try:
+                all_accounts = self.system.get_chart_of_accounts(active_only=False)
+                for account in all_accounts:
+                    if isinstance(account, dict):
+                        code = account.get('code', '')
+                        name = account.get('name', '')
+                    else:
+                        # Tuple format
+                        if len(account) >= 3:
+                            name, acc_type, code = account[:3]
+                        else:
+                            continue
+                    
+                    if code == account_data['parent_code']:
+                        self.parent_input.setText(f"{code} - {name}")
+                        break
+            except Exception as e:
+                print(f"Error setting parent account: {e}")
+                self.parent_input.setText(account_data['parent_code'])
                     
     def reset_form(self):
         """Reset the form to its initial state."""
@@ -351,7 +525,7 @@ class AccountFormCard(QFrame):
         self.code_edit.clear()
         self.type_combo.setCurrentIndex(0)
         self.level_combo.setCurrentIndex(0)
-        self.parent_combo.clear()
+        self.parent_input.clear()
         self.postable_check.setChecked(True)
         self.account_data = None
         self._update_parent_options()
@@ -367,22 +541,44 @@ class AccountFormCard(QFrame):
             msg.setStandardButtons(QMessageBox.StandardButton.Ok)
             msg.exec()
             return
+        
+        # Validate parent account if required
+        level = self.level_combo.currentIndex() + 1
+        parent_text = self.parent_input.text().strip()
+        parent_code = None
+        
+        if level > 1:
+            if not parent_text:
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Icon.Warning)
+                msg.setText("Parent account is required for this level")
+                msg.setWindowTitle("Validation Error")
+                msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+                msg.exec()
+                return
             
-        if self.level_combo.currentIndex() > 0 and not self.parent_combo.currentData():
-            msg = QMessageBox()
-            msg.setIcon(QMessageBox.Icon.Warning)
-            msg.setText("Parent account is required for this level")
-            msg.setWindowTitle("Validation Error")
-            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
-            msg.exec()
-            return
+            # Validate parent account
+            if not self._validate_parent_account():
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Icon.Warning)
+                msg.setText("Invalid parent account. Please select from the suggested accounts.")
+                msg.setWindowTitle("Validation Error")
+                msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+                msg.exec()
+                return
+            
+            # Extract parent code from the input (format: "CODE - NAME")
+            if " - " in parent_text:
+                parent_code = parent_text.split(" - ")[0].strip()
+            else:
+                parent_code = parent_text  # Fallback if format is different
             
         data = {
             'name': self.name_edit.text().strip(),
             'type': self.type_combo.currentText(),
             'code': self.code_edit.text().strip(),
-            'parent_code': self.parent_combo.currentData() or None,
-            'level': self.level_combo.currentIndex() + 1,
+            'parent_code': parent_code,
+            'level': level,
             'is_postable': self.postable_check.isChecked()
         }
         
@@ -779,7 +975,7 @@ class HierarchicalAccountsPage(QWidget):
         
         if msg.exec() == QMessageBox.StandardButton.Yes:
             try:
-                self.system.delete_account(account_data['name'])
+                result = self.system.delete_account(account_data['name'])
                 self._load_data()  # Refresh tree
                 self.details_panel.show_info(None)  # Clear details panel
             except Exception as e:
@@ -876,8 +1072,8 @@ class HierarchicalAccountsPage(QWidget):
         self.tree.clear()
         
         try:
-            # Get all accounts with fresh data
-            accounts = self.system.get_chart_of_accounts(active_only=False)
+            # Get all accounts with fresh data (only active accounts for display)
+            accounts = self.system.get_chart_of_accounts(active_only=True)
             
             # Create items dictionary for quick lookup
             items = {}
@@ -1173,8 +1369,11 @@ class AccountDetailsPanel(QStackedWidget):
         self.info_card = self._create_info_widget()
         self.addWidget(self.info_card)
         
-        # Create the form card (initially hidden)
-        self.form_card = None
+        # Create the form card immediately to ensure it's always available
+        self.form_card = AccountFormCard(system=self.system)
+        self.form_card.formSubmitted.connect(self._on_form_submitted)
+        self.form_card.formCancelled.connect(self._on_form_cancelled)
+        self.addWidget(self.form_card)
         
         # Set initial widget
         self.setCurrentWidget(self.info_card)
@@ -1183,25 +1382,20 @@ class AccountDetailsPanel(QStackedWidget):
         """Show the account form."""
         self.is_form_active = True
         
-        # Create new form if needed
-        if not self.form_card:
-            self.form_card = AccountFormCard(
-                system=self.system,
-                edit_mode=edit_mode,
-                account_data=account_data
-            )
-            self.form_card.formSubmitted.connect(self._on_form_submitted)
-            self.form_card.formCancelled.connect(self._on_form_cancelled)
-            self.addWidget(self.form_card)
+        # Reset form for new entry or update for editing
+        self.form_card.reset_form()
+        
+        if edit_mode and account_data:
+            self.form_card.set_account_data(account_data)
+            self.form_card.edit_mode = True
         else:
-            # Reset form for new entry or update for editing
-            self.form_card.reset_form()
-            if edit_mode and account_data:
-                self.form_card.set_account_data(account_data)
-                self.form_card.edit_mode = True
-            else:
-                self.form_card.edit_mode = False
-            
+            self.form_card.edit_mode = False
+        
+        # Update the form title
+        title_text = "Edit Account" if edit_mode else "Add New Account"
+        if hasattr(self.form_card, 'title_label'):
+            self.form_card.title_label.setText(title_text)
+        
         # Show the form
         self.setCurrentWidget(self.form_card)
         
@@ -1214,8 +1408,17 @@ class AccountDetailsPanel(QStackedWidget):
             
     def _on_form_submitted(self, data):
         """Handle form submission."""
-        try:            # Start by verifying account doesn't already exist
-            existing_accounts = [acc['name'] for acc in self.system.get_chart_of_accounts(active_only=False)]
+        try:
+            # Debug: Check what system we have
+            print(f"Debug: System type: {type(self.system)}")
+            if hasattr(self.system, 'base_system'):
+                print(f"Debug: Base system type: {type(self.system.base_system)}")
+                print(f"Debug: Base system organization: {getattr(self.system.base_system, 'current_organization_id', 'None')}")
+            print(f"Debug: System organization: {getattr(self.system, 'current_organization_id', 'None')}")
+            print(f"Debug: System methods: {[method for method in dir(self.system) if 'account' in method.lower()]}")
+            
+            # Start by verifying account doesn't already exist (only check active accounts)
+            existing_accounts = [acc['name'] for acc in self.system.get_chart_of_accounts(active_only=True)]
             if not self.form_card.edit_mode and data['name'] in existing_accounts:
                 msg = QMessageBox()
                 msg.setIcon(QMessageBox.Icon.Warning)
@@ -1226,66 +1429,239 @@ class AccountDetailsPanel(QStackedWidget):
                 msg.exec()
                 return
 
-            # Get the parent
+            # Get the parent_id if parent_code is provided (only from active accounts)
+            parent_id = None
             if data['parent_code']:
-                parent = self.parent()
-                if hasattr(parent, 'tree'):
-                    parent_item = None
-                    for i in range(parent.tree.topLevelItemCount()):
-                        item = parent.tree.topLevelItem(i)
-                        if item.data(0, Qt.ItemDataRole.UserRole)['code'] == data['parent_code']:
-                            parent_item = item
-                            break
-                            
-                    if parent_item is None:
-                        msg = QMessageBox()
-                        msg.setIcon(QMessageBox.Icon.Warning)
-                        msg.setText("Parent account not found")
-                        msg.setInformativeText("The selected parent account could not be found. Please select a different parent.")
-                        msg.setWindowTitle("Invalid Parent")
-                        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
-                        msg.exec()
-                        return
+                all_accounts = self.system.get_chart_of_accounts(active_only=True)
+                for account in all_accounts:
+                    if isinstance(account, dict) and account.get('code') == data['parent_code']:
+                        parent_id = account.get('id')
+                        break
 
             if self.form_card.edit_mode:
-                self.system.edit_account(
-                    data['old_name'],
-                    data['name'],
-                    data['type'],
-                    data['code'] or None,
-                    data['parent_code'],
-                    data['level'],
-                    data['is_postable'],
-                    ""  # No description in new design
-                )
+                # Use the unified system's update_account method directly
+                account_id = None
+                all_accounts = self.system.get_chart_of_accounts(active_only=False)
+                for account in all_accounts:
+                    if isinstance(account, dict) and account.get('name') == data['old_name']:
+                        account_id = account.get('id')
+                        break
+                
+                if account_id:
+                    updates = {
+                        'name': data['name'],
+                        'account_type': data['type'],
+                        'code': data['code'] or None,
+                        'parent_id': parent_id,
+                        'is_postable': data['is_postable'],
+                        'description': ""
+                    }
+                    
+                    # Access the base system for database operations
+                    if hasattr(self.system, 'base_system'):
+                        success = self.system.base_system.update_account(account_id, updates)
+                    else:
+                        success = self.system.update_account(account_id, updates)
+                        
+                    if not success:
+                        raise Exception("Failed to update account in database")
+                    
+                    # Force sync after account update
+                    print("Debug: Account updated, attempting immediate sync...")
+                    try:
+                        if hasattr(self.system, 'base_system'):
+                            sync_result = self.system.base_system.force_sync()
+                        else:
+                            sync_result = self.system.force_sync()
+                        
+                        print(f"Debug: Sync result after update: {sync_result}")
+                        
+                        if sync_result.get('success'):
+                            print(f"Debug: Successfully synced {sync_result.get('synced_operations', 0)} operations after update")
+                        else:
+                            print(f"Debug: Sync failed after update: {sync_result.get('error', 'Unknown error')}")
+                    except Exception as sync_error:
+                        print(f"Debug: Sync error after update: {sync_error}")
+                        # Don't fail the account update for sync errors
+                else:
+                    raise Exception(f"Account '{data['old_name']}' not found")
             else:
-                self.system.add_account(
-                    data['name'],
-                    data['type'],
-                    data['code'] or None,
-                    data['parent_code'],
-                    data['level'],
-                    data['is_postable'],
-                    ""  # No description in new design
-                )
+                # Create new account using the unified system's create_account method
+                print(f"Debug: Creating new account - Name: '{data['name']}', Type: '{data['type']}', Code: '{data.get('code')}', Parent ID: {parent_id}")
+                
+                account_data = {
+                    'name': data['name'],
+                    'account_type': data['type'],
+                    'code': data['code'] or None,
+                    'parent_id': parent_id,
+                    'is_postable': data['is_postable'],
+                    'description': ""
+                }
+                
+                print(f"Debug: Account data to create: {account_data}")
+                
+                # Access the base system for database operations
+                try:
+                    # Check connectivity status
+                    if hasattr(self.system, 'base_system'):
+                        is_online = getattr(self.system.base_system, 'is_online', False)
+                        print(f"Debug: System online status: {is_online}")
+                        
+                        print("Debug: Using base_system.create_account")
+                        result = self.system.base_system.create_account(account_data)
+                    else:
+                        is_online = getattr(self.system, 'is_online', False)
+                        print(f"Debug: System online status: {is_online}")
+                        
+                        print("Debug: Using system.create_account")
+                        result = self.system.create_account(account_data)
+                    
+                    print(f"Debug: Create account result: {result}")
+                    
+                    # Check if account creation was successful
+                    creation_successful = False
+                    
+                    if not result:
+                        raise Exception("Failed to create account in database - no result returned")
+                    elif isinstance(result, dict):
+                        # Check for explicit success indicators
+                        if result.get('id') or result.get('success', False):
+                            creation_successful = True
+                        elif result.get('error'):
+                            raise Exception(f"Account creation failed: {result.get('error')}")
+                        else:
+                            # If no clear success/error indicator, consider it successful if we got a result
+                            creation_successful = True
+                    else:
+                        # For non-dict results, assume success if we got something
+                        creation_successful = True
+                    
+                    if creation_successful:
+                        print(f"Debug: Account created successfully with ID: {result.get('id', 'No ID') if isinstance(result, dict) else 'No ID available'}")
+                        
+                        # Check if account was queued and force sync if online
+                        is_queued = isinstance(result, dict) and result.get('queued', False)
+                        if is_queued:
+                            print("Debug: Account was queued, attempting immediate sync...")
+                            try:
+                                print("Debug: About to call force_sync...")
+                                if hasattr(self.system, 'base_system'):
+                                    print("Debug: Calling base_system.force_sync()")
+                                    sync_result = self.system.base_system.force_sync()
+                                else:
+                                    print("Debug: Calling system.force_sync()")
+                                    sync_result = self.system.force_sync()
+                                
+                                print(f"Debug: Sync result: {sync_result}")
+                                
+                                if sync_result and sync_result.get('success'):
+                                    synced_ops = sync_result.get('synced_operations', 0)
+                                    print(f"Debug: Successfully synced {synced_ops} operations")
+                                    # If sync was successful and no operations were synced, 
+                                    # it might indicate the creation didn't work
+                                    if synced_ops == 0:
+                                        print("Warning: Sync successful but 0 operations synced - this might indicate creation failure")
+                                        # Verify the account actually exists by checking the system
+                                        try:
+                                            accounts = self.system.get_chart_of_accounts(active_only=True)
+                                            account_exists = any(acc.get('name') == data['name'] for acc in accounts)
+                                            if not account_exists:
+                                                raise Exception("Account creation failed - account not found in system after sync")
+                                        except Exception as verify_error:
+                                            print(f"Debug: Error verifying account existence: {verify_error}")
+                                            raise Exception("Account creation may have failed - unable to verify account exists")
+                                else:
+                                    print(f"Debug: Sync failed: {sync_result.get('error', 'Unknown error') if sync_result else 'No sync result'}")
+                            except Exception as sync_error:
+                                print(f"Debug: Sync error: {sync_error}")
+                                import traceback
+                                traceback.print_exc()
+                                # Don't fail the account creation for sync errors, but warn the user
+                                pass
+                        else:
+                            print("Debug: Account was not queued, should be immediately available")
+                    else:
+                        raise Exception("Account creation failed - invalid result received")
+                        
+                except Exception as create_error:
+                    print(f"Debug: Error during account creation: {create_error}")
+                    import traceback
+                    traceback.print_exc()
+                    raise Exception(f"Failed to create account in database: {create_error}")
             
             # Switch back to info view
             self.is_form_active = False
             self.show_info()
+
+            # Emit accounts changed event to refresh all UI components
+            accounting_events.accounts_changed.emit()
 
             # Refresh parent page
             parent = self.parent()
             if hasattr(parent, '_load_data'):
                 parent._load_data()
 
-        except Exception as e:
+            # Show success message with sync status
+            action = "updated" if self.form_card.edit_mode else "created"
+            success_msg = f"Account '{data['name']}' {action} successfully"
+            
+            # Add sync status to message if available
+            if not self.form_card.edit_mode and result and isinstance(result, dict):
+                is_queued = result.get('queued', False)
+                if is_queued:
+                    try:
+                        if hasattr(self.system, 'base_system'):
+                            sync_result = self.system.base_system.force_sync()
+                        else:
+                            sync_result = self.system.force_sync()
+                        
+                        if sync_result and sync_result.get('success'):
+                            synced_ops = sync_result.get('synced_operations', 0)
+                            if synced_ops > 0:
+                                success_msg += f"\n✅ Synced to database ({synced_ops} operations)"
+                            else:
+                                success_msg += "\n⚠️ Synced to database (0 operations - account may already exist)"
+                        else:
+                            success_msg += "\n⚠️ Queued for sync when online"
+                    except:
+                        success_msg += "\n⚠️ Queued for sync when online"
+                else:
+                    success_msg += "\n✅ Saved to database"
+            
             msg = QMessageBox()
-            msg.setIcon(QMessageBox.Icon.Critical)
-            msg.setText("Error saving account")
-            msg.setInformativeText(str(e))
-            msg.setWindowTitle("Error")
+            msg.setIcon(QMessageBox.Icon.Information)
+            msg.setText(success_msg)
+            msg.setWindowTitle("Success")
             msg.setStandardButtons(QMessageBox.StandardButton.Ok)
             msg.exec()
+
+        except Exception as e:
+            # Ensure the form remains active so user can retry
+            self.is_form_active = True
+            
+            # Create error message
+            error_msg = str(e)
+            action = "updating" if self.form_card.edit_mode else "creating"
+            
+            # Make error message more user-friendly
+            if "sync" in error_msg.lower() and "0 operations" in error_msg:
+                error_msg = f"Account creation failed: The account was not successfully saved to the database. This might be due to a duplicate name or invalid data."
+            elif "not found in system" in error_msg:
+                error_msg = f"Account creation failed: The account could not be verified in the system after creation."
+            elif "no result returned" in error_msg:
+                error_msg = f"Account creation failed: No response received from the database."
+            else:
+                error_msg = f"Error {action} account: {error_msg}"
+            
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Icon.Critical)
+            msg.setText(error_msg)
+            msg.setWindowTitle("Account Creation Failed" if not self.form_card.edit_mode else "Account Update Failed")
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.exec()
+            print(f"Form submission error: {e}")
+            import traceback
+            traceback.print_exc()
             
     def _on_form_cancelled(self):
         """Handle form cancellation."""
@@ -1377,7 +1753,7 @@ class AccountDetailsPanel(QStackedWidget):
             
             <div style="display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center;">
                 <div style="color: rgba(255,255,255,0.7); font-weight: 500;">Type</div>
-                <div style="color: white;">{account_data['account_type']}</div>
+                <div style="color: white;">{(account_data.get('account_type') or account_data.get('type', '')).capitalize()}</div>
                 
                 <div style="color: rgba(255,255,255,0.7); font-weight: 500;">Level</div>
                 <div style="color: white;">Level {account_data['level']}</div>

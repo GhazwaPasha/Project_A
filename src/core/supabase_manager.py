@@ -325,23 +325,55 @@ class SupabaseManager:
     def create_account(self, account_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Create a new account."""
         try:
-            account_data['created_by'] = self.current_user_id
-            result = self.supabase.table('accounts').insert(account_data).execute()
+            # Filter out fields that don't exist in the database schema
+            # The 'is_postable' field is calculated dynamically, not stored
+            filtered_data = {k: v for k, v in account_data.items() if k != 'is_postable'}
+            filtered_data['created_by'] = self.current_user_id
+            
+            # Convert account_type to lowercase to match database enum
+            if 'account_type' in filtered_data:
+                filtered_data['account_type'] = filtered_data['account_type'].lower()
+            
+            print(f"Debug: SupabaseManager.create_account attempting insert with filtered data: {filtered_data}")
+            result = self.supabase.table('accounts').insert(filtered_data).execute()
+            print(f"Debug: SupabaseManager.create_account result: {result}")
             return result.data[0] if result.data else None
         except Exception as e:
+            print(f"Debug: SupabaseManager.create_account ERROR: {e}")
             self.logger.error(f"Error creating account: {e}")
             return None
     
     def update_account(self, account_id: int, updates: Dict[str, Any]) -> bool:
         """Update account."""
         try:
-            updates['updated_at'] = datetime.now().isoformat()
-            result = self.supabase.table('accounts').update(updates).eq('id', account_id).execute()
+            # Filter out fields that don't exist in the database schema
+            filtered_updates = {k: v for k, v in updates.items() if k != 'is_postable'}
+            filtered_updates['updated_at'] = datetime.now().isoformat()
+            
+            # Convert account_type to lowercase to match database enum
+            if 'account_type' in filtered_updates:
+                filtered_updates['account_type'] = filtered_updates['account_type'].lower()
+            
+            result = self.supabase.table('accounts').update(filtered_updates).eq('id', account_id).execute()
             return len(result.data) > 0
         except Exception as e:
             self.logger.error(f"Error updating account: {e}")
             return False
     
+    def delete_account(self, account_id: int) -> bool:
+        """Delete account (soft delete by setting is_active to False)."""
+        try:
+            # Soft delete - set is_active to False instead of actual deletion
+            # This preserves referential integrity and audit trails
+            result = self.supabase.table('accounts')\
+                .update({'is_active': False, 'updated_at': datetime.now().isoformat()})\
+                .eq('id', account_id)\
+                .execute()
+            return len(result.data) > 0
+        except Exception as e:
+            self.logger.error(f"Error deleting account: {e}")
+            return False
+
     # ================================
     # JOURNAL ENTRY OPERATIONS
     # ================================
