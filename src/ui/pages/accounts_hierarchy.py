@@ -330,15 +330,13 @@ class AccountFormCard(QFrame):
     def _update_parent_options(self):
         """Update parent account suggestions based on selected level and type."""
         if not self.system:
-            print("Debug: No system available")
             return
             
         # Check if system has organization context
         if hasattr(self.system, 'current_organization_id'):
             org_id = getattr(self.system, 'current_organization_id', None)
-            print(f"Debug: System organization ID: {org_id}")
             if not org_id:
-                print("Debug: No organization set in system - this may cause empty results")
+                return
             
         level = self.level_combo.currentIndex() + 1
         
@@ -356,11 +354,7 @@ class AccountFormCard(QFrame):
                 all_accounts = self.system.get_chart_of_accounts(active_only=False)
                 current_type = self.type_combo.currentText()
                 
-                print(f"Debug: Level {level}, Type: {current_type}")
-                print(f"Debug: Found {len(all_accounts) if all_accounts else 0} total accounts")
-                
                 if not all_accounts:
-                    print("Debug: No accounts found - might need to check organization context")
                     # Update completer with empty list
                     model = QStringListModel([])
                     self.parent_completer.setModel(model)
@@ -395,7 +389,6 @@ class AccountFormCard(QFrame):
                             acc_level = account.get('level')
                             if acc_level is None:
                                 acc_level = calculate_account_level(account, all_accounts)
-                                print(f"Debug: Calculated level {acc_level} for account {code}")
                         else:
                             # Tuple format: (name, type, code, parent_code, level, is_postable, description)
                             if len(account) >= 5:
@@ -403,20 +396,14 @@ class AccountFormCard(QFrame):
                             else:
                                 continue
                         
-                        print(f"Debug: Account '{name}' - Type: {acc_type}, Level: {acc_level}, Code: {code}")
-                        
                         # Only show accounts of the same type and lower level (potential parents)
                         if (acc_type and acc_type.lower() == current_type.lower() and 
                             acc_level < level and name.strip() and code.strip()):
                             display_text = f"{code} - {name}"
                             eligible_parents.append(display_text)
-                            print(f"Debug: Added eligible parent: {display_text}")
                             
                     except Exception as acc_error:
-                        print(f"Debug: Error processing account {account}: {acc_error}")
                         continue
-                
-                print(f"Debug: Found {len(eligible_parents)} eligible parents")
                 
                 # Update completer with eligible parents
                 model = QStringListModel(eligible_parents)
@@ -1409,14 +1396,6 @@ class AccountDetailsPanel(QStackedWidget):
     def _on_form_submitted(self, data):
         """Handle form submission."""
         try:
-            # Debug: Check what system we have
-            print(f"Debug: System type: {type(self.system)}")
-            if hasattr(self.system, 'base_system'):
-                print(f"Debug: Base system type: {type(self.system.base_system)}")
-                print(f"Debug: Base system organization: {getattr(self.system.base_system, 'current_organization_id', 'None')}")
-            print(f"Debug: System organization: {getattr(self.system, 'current_organization_id', 'None')}")
-            print(f"Debug: System methods: {[method for method in dir(self.system) if 'account' in method.lower()]}")
-            
             # Start by verifying account doesn't already exist (only check active accounts)
             existing_accounts = [acc['name'] for acc in self.system.get_chart_of_accounts(active_only=True)]
             if not self.form_card.edit_mode and data['name'] in existing_accounts:
@@ -1467,28 +1446,23 @@ class AccountDetailsPanel(QStackedWidget):
                         raise Exception("Failed to update account in database")
                     
                     # Force sync after account update
-                    print("Debug: Account updated, attempting immediate sync...")
                     try:
                         if hasattr(self.system, 'base_system'):
                             sync_result = self.system.base_system.force_sync()
                         else:
                             sync_result = self.system.force_sync()
                         
-                        print(f"Debug: Sync result after update: {sync_result}")
-                        
                         if sync_result.get('success'):
-                            print(f"Debug: Successfully synced {sync_result.get('synced_operations', 0)} operations after update")
+                            pass  # Sync successful
                         else:
-                            print(f"Debug: Sync failed after update: {sync_result.get('error', 'Unknown error')}")
+                            pass  # Sync failed but don't fail the update
                     except Exception as sync_error:
-                        print(f"Debug: Sync error after update: {sync_error}")
                         # Don't fail the account update for sync errors
+                        pass
                 else:
                     raise Exception(f"Account '{data['old_name']}' not found")
             else:
                 # Create new account using the unified system's create_account method
-                print(f"Debug: Creating new account - Name: '{data['name']}', Type: '{data['type']}', Code: '{data.get('code')}', Parent ID: {parent_id}")
-                
                 account_data = {
                     'name': data['name'],
                     'account_type': data['type'],
@@ -1498,25 +1472,13 @@ class AccountDetailsPanel(QStackedWidget):
                     'description': ""
                 }
                 
-                print(f"Debug: Account data to create: {account_data}")
-                
                 # Access the base system for database operations
                 try:
                     # Check connectivity status
                     if hasattr(self.system, 'base_system'):
-                        is_online = getattr(self.system.base_system, 'is_online', False)
-                        print(f"Debug: System online status: {is_online}")
-                        
-                        print("Debug: Using base_system.create_account")
                         result = self.system.base_system.create_account(account_data)
                     else:
-                        is_online = getattr(self.system, 'is_online', False)
-                        print(f"Debug: System online status: {is_online}")
-                        
-                        print("Debug: Using system.create_account")
                         result = self.system.create_account(account_data)
-                    
-                    print(f"Debug: Create account result: {result}")
                     
                     # Check if account creation was successful
                     creation_successful = False
@@ -1537,30 +1499,20 @@ class AccountDetailsPanel(QStackedWidget):
                         creation_successful = True
                     
                     if creation_successful:
-                        print(f"Debug: Account created successfully with ID: {result.get('id', 'No ID') if isinstance(result, dict) else 'No ID available'}")
-                        
                         # Check if account was queued and force sync if online
                         is_queued = isinstance(result, dict) and result.get('queued', False)
                         if is_queued:
-                            print("Debug: Account was queued, attempting immediate sync...")
                             try:
-                                print("Debug: About to call force_sync...")
                                 if hasattr(self.system, 'base_system'):
-                                    print("Debug: Calling base_system.force_sync()")
                                     sync_result = self.system.base_system.force_sync()
                                 else:
-                                    print("Debug: Calling system.force_sync()")
                                     sync_result = self.system.force_sync()
-                                
-                                print(f"Debug: Sync result: {sync_result}")
                                 
                                 if sync_result and sync_result.get('success'):
                                     synced_ops = sync_result.get('synced_operations', 0)
-                                    print(f"Debug: Successfully synced {synced_ops} operations")
                                     # If sync was successful and no operations were synced, 
                                     # it might indicate the creation didn't work
                                     if synced_ops == 0:
-                                        print("Warning: Sync successful but 0 operations synced - this might indicate creation failure")
                                         # Verify the account actually exists by checking the system
                                         try:
                                             accounts = self.system.get_chart_of_accounts(active_only=True)
@@ -1568,23 +1520,20 @@ class AccountDetailsPanel(QStackedWidget):
                                             if not account_exists:
                                                 raise Exception("Account creation failed - account not found in system after sync")
                                         except Exception as verify_error:
-                                            print(f"Debug: Error verifying account existence: {verify_error}")
                                             raise Exception("Account creation may have failed - unable to verify account exists")
                                 else:
-                                    print(f"Debug: Sync failed: {sync_result.get('error', 'Unknown error') if sync_result else 'No sync result'}")
+                                    pass  # Sync failed but don't fail account creation
                             except Exception as sync_error:
-                                print(f"Debug: Sync error: {sync_error}")
                                 import traceback
                                 traceback.print_exc()
                                 # Don't fail the account creation for sync errors, but warn the user
                                 pass
                         else:
-                            print("Debug: Account was not queued, should be immediately available")
+                            pass  # Account was not queued, should be immediately available
                     else:
                         raise Exception("Account creation failed - invalid result received")
                         
                 except Exception as create_error:
-                    print(f"Debug: Error during account creation: {create_error}")
                     import traceback
                     traceback.print_exc()
                     raise Exception(f"Failed to create account in database: {create_error}")
@@ -1659,7 +1608,6 @@ class AccountDetailsPanel(QStackedWidget):
             msg.setWindowTitle("Account Creation Failed" if not self.form_card.edit_mode else "Account Update Failed")
             msg.setStandardButtons(QMessageBox.StandardButton.Ok)
             msg.exec()
-            print(f"Form submission error: {e}")
             import traceback
             traceback.print_exc()
             

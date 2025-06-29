@@ -855,29 +855,46 @@ class EditableAccountComboBox(QComboBox):
             
         text = line_edit.text().strip()
         if not text:
-            # Empty is allowed (placeholder)
+            # Empty is allowed (placeholder) - reset styling
+            self._reset_validation_styling(line_edit)
             return
             
         # Check if the text matches any valid account format
         if self._is_valid_account(text):
-            # Valid account - ensure proper formatting and set selection
+            # Valid account - ensure proper formatting and reset any error styling
+            self._reset_validation_styling(line_edit)
+            
             formatted_account = self._format_account_text(text)
-            if formatted_account:
+            if formatted_account and formatted_account != text:
                 # Find and select the properly formatted account
                 index = self.findText(formatted_account, Qt.MatchFlag.MatchExactly)
                 if index >= 0:
                     self.setCurrentIndex(index)
                 else:
-                    # Set the text directly if not found in combo
+                    # Set the formatted text directly
                     line_edit.setText(formatted_account)
-            else:
-                # Could not format - reject input
-                self._show_validation_error(line_edit)
-                line_edit.clear()
         else:
-            # Invalid account - clear the input and show error styling
-            self._show_validation_error(line_edit)
-            line_edit.clear()
+            # Invalid account - only show warning styling, don't clear text
+            if len(text) >= 2:  # Only validate if they've typed enough
+                self._show_validation_warning(line_edit)
+            # Note: Don't clear the text - let user continue typing
+    
+    def _show_validation_error_without_clearing(self, line_edit):
+        """Show visual feedback for validation error without clearing the text."""
+        # Temporarily change styling to indicate error
+        original_style = line_edit.styleSheet()
+        error_style = original_style + """
+            border: 2px solid rgba(255, 200, 0, 0.9) !important;
+            background: rgba(255, 200, 0, 0.15) !important;
+            color: rgba(255, 255, 255, 0.9) !important;
+        """
+        line_edit.setStyleSheet(error_style)
+        
+        # Show tooltip with error message
+        line_edit.setToolTip("⚠️ Account not found. Please select a valid account or continue typing.")
+        
+        # Don't automatically reset - let the user fix it
+        # The style will reset when they type a valid account
     
     def _is_valid_account(self, text):
         """Check if the text represents a valid account - strict validation."""
@@ -996,8 +1013,7 @@ class EditableAccountComboBox(QComboBox):
     def _show_validation_error(self, line_edit):
         """Show visual feedback for validation error."""
         # Temporarily change styling to indicate error
-        original_style = line_edit.styleSheet()
-        error_style = original_style + """
+        error_style = """
             border: 2px solid rgba(255, 100, 100, 0.9) !important;
             background: rgba(255, 100, 100, 0.15) !important;
             color: rgba(255, 255, 255, 0.9) !important;
@@ -1007,20 +1023,57 @@ class EditableAccountComboBox(QComboBox):
         # Show tooltip with error message
         line_edit.setToolTip("❌ Invalid account. Please select an account from the chart of accounts.")
         
-        # Reset styling after a delay
-        from PyQt6.QtCore import QTimer
-        def reset_style():
-            line_edit.setStyleSheet(original_style)
-            line_edit.setToolTip("")
-        
-        QTimer.singleShot(2000, reset_style)
+        # Don't automatically reset styling - let the user fix it
+        # The styling will reset when they type valid text
     
     def _on_text_changed_with_validation(self, text):
         """Handle text changes with validation feedback."""
-        # Call original text changed handler        self._on_text_changed(text)
+        # Call original text changed handler
+        self._on_text_changed(text)
         
-        # Prevent styling conflicts - don't apply validation styling while typing
-        # The bulk entry page handles validation styling externally
+        # Provide real-time validation feedback without clearing text
+        line_edit = self.lineEdit()
+        if not line_edit:
+            return
+            
+        text = text.strip()
+        if not text:
+            # Reset styling for empty text
+            self._reset_validation_styling(line_edit)
+            return
+            
+        # Check if the current text is valid
+        if self._is_valid_account(text):
+            # Valid account - reset any error styling
+            self._reset_validation_styling(line_edit)
+            
+            # Try to format and set properly if it's a complete match
+            formatted_account = self._format_account_text(text)
+            if formatted_account and formatted_account == text:
+                # Already properly formatted, find and select if exists
+                index = self.findText(formatted_account, Qt.MatchFlag.MatchExactly)
+                if index >= 0:
+                    self.setCurrentIndex(index)
+        else:
+            # Invalid account - show subtle warning but don't interfere with typing
+            if len(text) >= 2:  # Only show warning if they've typed enough
+                self._show_validation_warning(line_edit)
+    
+    def _reset_validation_styling(self, line_edit):
+        """Reset any validation styling to normal."""
+        # Reset to normal styling
+        line_edit.setStyleSheet("")  # This will use the default styling
+        line_edit.setToolTip("")
+    
+    def _show_validation_warning(self, line_edit):
+        """Show subtle warning styling for potentially invalid accounts."""
+        # Use a subtle orange border instead of bright yellow
+        warning_style = """
+            border: 1px solid rgba(255, 152, 0, 0.5) !important;
+            background: rgba(255, 152, 0, 0.08) !important;
+        """
+        line_edit.setStyleSheet(warning_style)
+        line_edit.setToolTip("Type more to find a matching account...")
     
     def setAccountList(self, accounts):
         """Set the list of valid accounts for validation and QCompleter only."""
@@ -1234,13 +1287,38 @@ class EditableAccountComboBox(QComboBox):
         return ""
 
     def isValidAccount(self):
-        """Check if the current account selection/input is valid."""
-        current_text = self.currentText()
-        if not current_text:
-            return True  # Empty is considered valid (will be caught by form validation)
+        """Check if the current text represents a valid account."""
+        line_edit = self.lineEdit()
+        if not line_edit:
+            return False
+            
+        text = line_edit.text().strip()
+        if not text:
+            return False  # Empty is not valid for this check
+            
+        # Use the internal validation logic
+        is_valid = self._is_valid_account(text)
         
-        return self._is_valid_account(current_text) and self._format_account_text(current_text) is not None
+        # If it's valid, also try to ensure it's properly formatted
+        if is_valid:
+            formatted = self._format_account_text(text)
+            # If we can format it to a complete account, it's definitely valid
+            if formatted and formatted in self.valid_accounts:
+                return True
+            # If it's a partial match that's still being typed, it's potentially valid
+            return True
+        
+        return False
     
+    def clear_selection(self):
+        """Clear the combo box selection and text."""
+        self.setCurrentIndex(-1)
+        line_edit = self.lineEdit()
+        if line_edit:
+            line_edit.clear()
+            # Reset any validation styling
+            self._reset_validation_styling(line_edit)
+
     def setTextWithValidation(self, text):
         """Set text and trigger validation to match against chart of accounts."""
         if not text:

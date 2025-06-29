@@ -308,28 +308,54 @@ class CardBasedTransactionEntry(QFrame):
             else:
                 self._clear_field_styling(self.desc_edit)
                 
-            # Improved debit account validation
+            # Improved debit account validation with better checking
             debit_text = data['debit_account'].strip()
             debit_invalid = (not debit_text or debit_text == '-- Select Account --')
-            if hasattr(self.debit_combo, 'isValidAccount'):
+            
+            # If we have text, validate it properly
+            if debit_text and hasattr(self.debit_combo, 'isValidAccount'):
                 try:
-                    debit_invalid = debit_invalid or not self.debit_combo.isValidAccount()
-                except:
-                    pass  # If validation fails, use basic check
+                    # Check if the combo box considers this valid
+                    is_valid = self.debit_combo.isValidAccount()
+                    print(f"🔍 Debit account '{debit_text}' validation: {is_valid}")
+                    if is_valid:
+                        debit_invalid = False
+                    else:
+                        # Additional check - if it's in our valid accounts list, it's valid
+                        if hasattr(self.debit_combo, 'valid_accounts'):
+                            debit_invalid = debit_text not in self.debit_combo.valid_accounts
+                            print(f"🔍 Checking against valid_accounts: {not debit_invalid}")
+                except Exception as e:
+                    # If validation fails, use basic text check
+                    print(f"❌ Debit validation error: {e}")
+                    debit_invalid = not debit_text or debit_text == '-- Select Account --'
+            elif debit_text:
+                print(f"🔍 Debit combo doesn't have isValidAccount method, text: '{debit_text}'")
             
             if debit_invalid:
+                print(f"🟡 Applying yellow border to debit account")
                 self._apply_yellow_border(self.debit_combo)
             else:
+                print(f"⚪ Clearing styling for debit account")
                 self._clear_field_styling(self.debit_combo)
                 
-            # Improved credit account validation
+            # Improved credit account validation with better checking
             credit_text = data['credit_account'].strip()
             credit_invalid = (not credit_text or credit_text == '-- Select Account --')
-            if hasattr(self.credit_combo, 'isValidAccount'):
+            
+            # If we have text, validate it properly
+            if credit_text and hasattr(self.credit_combo, 'isValidAccount'):
                 try:
-                    credit_invalid = credit_invalid or not self.credit_combo.isValidAccount()
-                except:
-                    pass  # If validation fails, use basic check
+                    # Check if the combo box considers this valid
+                    if self.credit_combo.isValidAccount():
+                        credit_invalid = False
+                    else:
+                        # Additional check - if it's in our valid accounts list, it's valid
+                        if hasattr(self.credit_combo, 'valid_accounts'):
+                            credit_invalid = credit_text not in self.credit_combo.valid_accounts
+                except Exception as e:
+                    # If validation fails, use basic text check
+                    credit_invalid = not credit_text or credit_text == '-- Select Account --'
             
             if credit_invalid:
                 self._apply_yellow_border(self.credit_combo)
@@ -498,20 +524,17 @@ class CardBasedTransactionEntry(QFrame):
         except:
             return False
     
-    def connect_validation_updates(self, validation_callback):
+    def connect_validation_updates(self, validation_callback=None):
         """Connect field changes to validation updates for immediate feedback."""
         try:
-            # Connect all field changes to validation callback
-            if hasattr(self, 'desc_edit') and self.desc_edit:
-                self.desc_edit.textChanged.connect(validation_callback)
-            if hasattr(self, 'debit_combo') and self.debit_combo:
-                self.debit_combo.currentTextChanged.connect(validation_callback)
-            if hasattr(self, 'credit_combo') and self.credit_combo:
-                self.credit_combo.currentTextChanged.connect(validation_callback)
-            if hasattr(self, 'amount_edit') and self.amount_edit:
-                self.amount_edit.textChanged.connect(validation_callback)
+            # Store the validation callback for later use if provided
+            if validation_callback:
+                self._validation_callback = validation_callback
             
-            # Also connect to immediate field clearing when valid
+            # Disconnect any existing connections first to avoid duplicates
+            self._disconnect_validation_signals()
+            
+            # Connect all field changes to our unified handler
             if hasattr(self, 'desc_edit') and self.desc_edit:
                 self.desc_edit.textChanged.connect(self._on_field_changed)
             if hasattr(self, 'debit_combo') and self.debit_combo:
@@ -523,28 +546,67 @@ class CardBasedTransactionEntry(QFrame):
         except Exception as e:
             print(f"❌ Error connecting validation updates: {e}")
     
+    def _disconnect_validation_signals(self):
+        """Safely disconnect validation signals to avoid duplicates."""
+        try:
+            if hasattr(self, 'desc_edit') and self.desc_edit:
+                self.desc_edit.textChanged.disconnect(self._on_field_changed)
+            if hasattr(self, 'debit_combo') and self.debit_combo:
+                self.debit_combo.currentTextChanged.disconnect(self._on_field_changed)
+            if hasattr(self, 'credit_combo') and self.credit_combo:
+                self.credit_combo.currentTextChanged.disconnect(self._on_field_changed)
+            if hasattr(self, 'amount_edit') and self.amount_edit:
+                self.amount_edit.textChanged.disconnect(self._on_field_changed)
+        except:
+            pass  # Ignore if signals weren't connected
+    
     def _on_field_changed(self):
-        """Handle immediate field change to clear validation styling if field becomes valid."""
+        """Handle immediate field change to clear validation styling if field becomes valid and trigger full validation."""
         try:
             sender = self.sender()
+            
+            # Debug: Print which field changed
+            field_name = "unknown"
             if sender == self.desc_edit:
-                if self.desc_edit.text().strip():
-                    self._clear_field_styling(self.desc_edit)
+                field_name = "description"
             elif sender == self.debit_combo:
-                if (self.debit_combo.currentText().strip() and 
-                    self.debit_combo.currentText() != '-- Select Account --' and 
-                    hasattr(self.debit_combo, 'isValidAccount') and 
-                    self.debit_combo.isValidAccount()):
-                    self._clear_field_styling(self.debit_combo)
+                field_name = "debit_account"
             elif sender == self.credit_combo:
-                if (self.credit_combo.currentText().strip() and 
-                    self.credit_combo.currentText() != '-- Select Account --' and 
-                    hasattr(self.credit_combo, 'isValidAccount') and 
-                    self.credit_combo.isValidAccount()):
-                    self._clear_field_styling(self.credit_combo)
+                field_name = "credit_account"
             elif sender == self.amount_edit:
-                amount_text = self.amount_edit.text().strip()
-                if amount_text and amount_text != '0' and amount_text != '0.00':
-                    self._clear_field_styling(self.amount_edit)
+                field_name = "amount"
+            
+            print(f"🔄 Field changed in card {self.card_number}: {field_name}")
+            
+            # Immediately apply validation styling to all fields
+            # This ensures that invalid fields (like manual deletions) show yellow immediately
+            self.apply_incomplete_styling()
+            
+            # Also trigger the parent validation callback if available
+            if hasattr(self, '_validation_callback') and self._validation_callback:
+                self._validation_callback()
+            
         except Exception as e:
             print(f"❌ Error in field change handler: {e}")
+    
+    def manual_validation_test(self):
+        """Manual test method to verify validation is working correctly."""
+        print(f"📋 Testing validation for card {self.card_number}:")
+        
+        data = self.get_entry_data()
+        print(f"   • Description: '{data['description']}' ({'✅ Valid' if data['description'].strip() else '❌ Empty'})")
+        print(f"   • Debit Account: '{data['debit_account']}' ({'✅ Valid' if data['debit_account'].strip() and data['debit_account'] != '-- Select Account --' else '❌ Invalid'})")
+        print(f"   • Credit Account: '{data['credit_account']}' ({'✅ Valid' if data['credit_account'].strip() and data['credit_account'] != '-- Select Account --' else '❌ Invalid'})")
+        print(f"   • Amount: '{data['amount']}' ({'✅ Valid' if data['amount'].strip() and data['amount'] not in ['0', '0.00'] else '❌ Invalid'})")
+        
+        has_any_data = self._has_any_data()
+        has_incomplete = self.has_incomplete_data()
+        print(f"   • Has any data: {has_any_data}")
+        print(f"   • Has incomplete data: {has_incomplete}")
+        
+        if has_incomplete:
+            print("   🟡 Applying yellow styling...")
+            self.apply_incomplete_styling()
+        else:
+            print("   ⚪ Clearing styling...")
+            self.clear_validation_styling()

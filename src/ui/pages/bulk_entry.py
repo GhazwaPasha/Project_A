@@ -12,7 +12,7 @@ from PyQt6.QtCore import Qt, QDate, pyqtSignal, QTimer
 import pandas as pd
 from ...core.utils import format_currency
 from ...core.events import accounting_events
-from ...core.account_matcher import AccountMatcher
+from ...core.account_matcher import EnhancedAccountMatcher
 from ..components.scrollbar_styles import ModernScrollbarStyles
 from ..components.widgets import PageHeader, EditableAccountComboBox
 from ..components.card_based_entry import CardBasedTransactionEntry
@@ -43,10 +43,10 @@ class BulkEntryPage(QWidget):
             # Use the working load_accounts_from_system function
             self.formatted_accounts = load_accounts_from_system(self.system)
             
-            # Simple AccountMatcher for import assistance
-            self.account_matcher = AccountMatcher(self.formatted_accounts) if self.formatted_accounts else None
+            # Enhanced AccountMatcher for intelligent import assistance with semantic understanding
+            self.account_matcher = EnhancedAccountMatcher(self.formatted_accounts) if self.formatted_accounts else None
             if self.account_matcher:
-                print(f"📊 AccountMatcher initialized with {len(self.formatted_accounts)} accounts")
+                print(f"📊 EnhancedAccountMatcher initialized with {len(self.formatted_accounts)} accounts")
         except Exception as e:
             print(f"❌ Error loading accounts in bulk entry: {e}")
             self.formatted_accounts = []
@@ -199,17 +199,11 @@ class BulkEntryPage(QWidget):
         card.debit_combo.currentTextChanged.connect(self._check_auto_add_card)
         card.credit_combo.currentTextChanged.connect(self._check_auto_add_card)
         card.amount_edit.textChanged.connect(self._check_auto_add_card)
-          # Connect validation styling updates with deferred validation for better performance
+        
+        # Connect validation styling updates with immediate field response
         if not self._bulk_import_mode:
-            # Use the improved connection method for better validation feedback
-            if hasattr(card, 'connect_validation_updates'):
-                card.connect_validation_updates(self._defer_validation_update)
-            else:
-                # Fallback to individual connections
-                card.desc_edit.textChanged.connect(self._defer_validation_update)
-                card.debit_combo.currentTextChanged.connect(self._defer_validation_update)
-                card.credit_combo.currentTextChanged.connect(self._defer_validation_update)
-                card.amount_edit.textChanged.connect(self._defer_validation_update)
+            # Connect validation updates during normal operation
+            card.connect_validation_updates(self._defer_validation_update)
         
         self.cards_layout.insertWidget(len(self.entry_cards), card)
         self.entry_cards.append(card)
@@ -606,16 +600,26 @@ class BulkEntryPage(QWidget):
                 batch_size = 50  # Process in batches for better performance
                 for i, row in df.iterrows():
                     if progress.was_cancelled():
-                        # Revert to initial state
+                        # Ensure UI updates are re-enabled immediately
+                        self.setUpdatesEnabled(True)
+                        self.scroll_area.setUpdatesEnabled(True)
                         self._bulk_import_mode = False
                         self._skip_validation_updates = False
+                        
+                        # Revert to initial state
                         self._clear_all_entries()
                         for initial_data in initial_cards:
                             self._add_new_card()
                             if len(self.entry_cards) > 0:
                                 card = self.entry_cards[-1]
                                 card.set_entry_data(initial_data)
+                        
+                        # Make sure we have at least one card if restoration failed
+                        if not self.entry_cards:
+                            self._add_new_card()
+                        
                         progress.close()
+                        self._cleanup_unused_resources()  # Ensure proper cleanup
                         return
                     
                     # Create a new card for this entry
@@ -625,11 +629,11 @@ class BulkEntryPage(QWidget):
                     if len(self.entry_cards) > 0:
                         card = self.entry_cards[-1]
                         
-                        # Use AccountMatcher for intelligent account matching
+                        # Use EnhancedAccountMatcher for intelligent account matching with semantic understanding
                         debit_account_raw = str(row.get('Debit Account', ''))
                         credit_account_raw = str(row.get('Credit Account', ''))
                         
-                        # Match accounts using AccountMatcher
+                        # Match accounts using EnhancedAccountMatcher
                         debit_account_matched = self._resolve_account_for_import(debit_account_raw)
                         credit_account_matched = self._resolve_account_for_import(credit_account_raw)
                         
@@ -657,6 +661,10 @@ class BulkEntryPage(QWidget):
                 self._skip_validation_updates = False
                 
                 if progress.was_cancelled():
+                    # Ensure UI updates are re-enabled before reverting state
+                    self.setUpdatesEnabled(True)
+                    self.scroll_area.setUpdatesEnabled(True)
+                    
                     # Revert to initial state
                     self._clear_all_entries()
                     for initial_data in initial_cards:
@@ -664,7 +672,13 @@ class BulkEntryPage(QWidget):
                         if len(self.entry_cards) > 0:
                             card = self.entry_cards[-1]
                             card.set_entry_data(initial_data)
+                    
+                    # Make sure we have at least one card if restoration failed
+                    if not self.entry_cards:
+                        self._add_new_card()
+                    
                     progress.close()
+                    self._cleanup_unused_resources()  # Ensure proper cleanup
                     return
                 
                 # Add one final empty card if we successfully imported all entries
@@ -673,21 +687,38 @@ class BulkEntryPage(QWidget):
                 progress.set_progress(100, "Import complete!")
                 QApplication.processEvents()
                 QTimer.singleShot(500, progress.close)  # Close after brief delay
-                  # Trigger validation and UI updates after import
-                self._update_validation_and_save_state()
+                  
+                # Show intelligent matching report
+                imported_data = []
+                for _, row in df.iterrows():
+                    imported_data.append({
+                        'debit_account': str(row.get('Debit Account', '')),
+                        'credit_account': str(row.get('Credit Account', ''))
+                    })
+                self._show_intelligent_matching_report(imported_data)
                 
                 # Re-enable widget updates and cleanup
                 self.setUpdatesEnabled(True)
                 self.scroll_area.setUpdatesEnabled(True)
                 self._cleanup_unused_cards()
+                
+                # Force immediate validation update after import
+                # This ensures all cards show proper styling based on their content
+                QTimer.singleShot(100, self._force_validation_update_after_import)
 
                 # Wait briefly to ensure all updates are processed
-                QTimer.singleShot(100, lambda: [
+                QTimer.singleShot(200, lambda: [
                     QMessageBox.information(self, "Import Successful", f"Imported {len(df)} entries from file."),
                     self._update_summary()
                 ])
                 
             except Exception as e:
+                # Ensure UI updates are re-enabled on error
+                self.setUpdatesEnabled(True)
+                self.scroll_area.setUpdatesEnabled(True)
+                self._bulk_import_mode = False
+                self._skip_validation_updates = False
+                
                 QMessageBox.critical(self, "Import Error", f"Failed to import file: {e}")
                 # Clean up on error - revert to initial state if we have it
                 self._clear_all_entries()
@@ -700,6 +731,9 @@ class BulkEntryPage(QWidget):
                 else:
                     # Fallback: just add one empty card
                     self._add_new_card()
+                
+                # Ensure proper cleanup
+                self._cleanup_unused_resources()
     
     def refresh_accounts_from_system(self):
         """Reload accounts from the system and refresh all entry cards."""
@@ -1043,8 +1077,8 @@ class BulkEntryPage(QWidget):
                 self.formatted_accounts = []
                 all_formatted_accounts = []
             
-            # Reinitialize AccountMatcher with ALL accounts (including non-postable)
-            self.account_matcher = AccountMatcher(all_formatted_accounts) if all_formatted_accounts else None
+            # Reinitialize EnhancedAccountMatcher with ALL accounts (including non-postable)
+            self.account_matcher = EnhancedAccountMatcher(all_formatted_accounts) if all_formatted_accounts else None
             
             # Update all existing cards with the new account list
             for card in self.entry_cards:
@@ -1061,7 +1095,7 @@ class BulkEntryPage(QWidget):
         try:
             # Use the same simple approach as initialization
             self.formatted_accounts = load_accounts_from_system(self.system)
-            self.account_matcher = AccountMatcher(self.formatted_accounts) if self.formatted_accounts else None
+            self.account_matcher = EnhancedAccountMatcher(self.formatted_accounts) if self.formatted_accounts else None
             
             # Refresh all cards
             self.refresh_accounts_from_system()
@@ -1071,12 +1105,178 @@ class BulkEntryPage(QWidget):
             self.account_matcher = None
     
     def _resolve_account_for_import(self, raw_account_name):
-        """Use AccountMatcher to resolve account name for import."""
+        """Use EnhancedAccountMatcher to resolve account name for import with semantic understanding."""
         if not raw_account_name or not raw_account_name.strip():
             return ""
         raw_account_name = str(raw_account_name).strip()
         if self.account_matcher:
-            matched, confidence = self.account_matcher.match_account(raw_account_name, confidence_threshold=0.5)
+            # Use enhanced matching with lower confidence threshold to catch more semantic matches
+            matched, confidence = self.account_matcher.match_account(raw_account_name, confidence_threshold=0.4)
             if matched:
+                # Log the smart matching for user feedback
+                if confidence >= 0.7:
+                    print(f"✅ Smart match: '{raw_account_name}' → '{matched}' (confidence: {confidence:.2f})")
+                elif confidence >= 0.5:
+                    print(f"🔍 Semantic match: '{raw_account_name}' → '{matched}' (confidence: {confidence:.2f})")
+                else:
+                    print(f"❓ Fuzzy match: '{raw_account_name}' → '{matched}' (confidence: {confidence:.2f})")
                 return matched
-        return raw_account_name
+            else:
+                # Show suggestions if no direct match
+                if hasattr(self.account_matcher, 'get_semantic_suggestions'):
+                    suggestions = self.account_matcher.get_semantic_suggestions(raw_account_name, max_suggestions=3)
+                    if suggestions:
+                        print(f"💡 No direct match for '{raw_account_name}', suggestions:")
+                        for account, score, reason in suggestions[:3]:
+                            print(f"   - {account} (score: {score:.2f}, {reason})")
+                else:
+                    print(f"❌ No match found for '{raw_account_name}'")
+        
+        # Instead of returning the raw account name (which will be rejected by validation),
+        # return empty string so the field is left empty for manual entry
+        return ""
+    
+    def _show_intelligent_matching_report(self, imported_data):
+        """Show a report of intelligent matching results."""
+        if not self.account_matcher or not imported_data:
+            return
+        
+        # Extract unique account names from imported data
+        account_names = set()
+        for entry in imported_data:
+            debit_account = str(entry.get('debit_account', '')).strip()
+            credit_account = str(entry.get('credit_account', '')).strip()
+            if debit_account:
+                account_names.add(debit_account)
+            if credit_account:
+                account_names.add(credit_account)
+        
+        if not account_names:
+            return
+        
+        print("\n" + "="*60)
+        print("🧠 INTELLIGENT ACCOUNT MATCHING REPORT")
+        print("="*60)
+        
+        matched_count = 0
+        semantic_count = 0
+        
+        for account_name in sorted(account_names):
+            matched, confidence = self.account_matcher.match_account(account_name, confidence_threshold=0.4)
+            
+            if matched:
+                matched_count += 1
+                match_type = "Exact" if confidence >= 0.9 else "Semantic" if confidence >= 0.6 else "Fuzzy"
+                if confidence >= 0.6:
+                    semantic_count += 1
+                
+                print(f"✅ {match_type}: '{account_name}' → '{matched}' ({confidence:.2f})")
+            else:
+                # Show suggestions for unmatched accounts
+                if hasattr(self.account_matcher, 'get_semantic_suggestions'):
+                    suggestions = self.account_matcher.get_semantic_suggestions(account_name, max_suggestions=2)
+                    if suggestions:
+                        print(f"❓ '{account_name}' → No match, suggestions:")
+                        for suggestion, score, reason in suggestions:
+                            print(f"   💡 {suggestion} ({score:.2f}) - {reason}")
+                    else:
+                        print(f"❌ '{account_name}' → No matches or suggestions")
+                else:
+                    print(f"❌ '{account_name}' → No match found")
+        
+        print(f"\n📊 Summary:")
+        print(f"   • Total unique accounts: {len(account_names)}")
+        print(f"   • Successfully matched: {matched_count}")
+        print(f"   • Semantic matches: {semantic_count}")
+        print(f"   • Match rate: {(matched_count/len(account_names)*100):.1f}%")
+        print("="*60 + "\n")
+        
+        # Show user-friendly summary dialog
+        self._show_matching_summary_dialog(len(account_names), matched_count, semantic_count)
+    
+    def _show_matching_summary_dialog(self, total_accounts, matched_count, semantic_count):
+        """Show a user-friendly dialog summarizing the intelligent matching results."""
+        if total_accounts == 0:
+            return
+        
+        match_rate = (matched_count / total_accounts) * 100
+        semantic_rate = (semantic_count / total_accounts) * 100
+        
+        title = "🧠 Smart Account Matching Results"
+        
+        if match_rate >= 80:
+            icon = QMessageBox.Icon.Information
+            msg_type = "Excellent matching!"
+        elif match_rate >= 60:
+            icon = QMessageBox.Icon.Information  
+            msg_type = "Good matching results"
+        elif match_rate >= 40:
+            icon = QMessageBox.Icon.Warning
+            msg_type = "Partial matching"
+        else:
+            icon = QMessageBox.Icon.Warning
+            msg_type = "Limited matching found"
+        
+        message = f"""{msg_type}
+
+📊 Matching Summary:
+• Total unique accounts: {total_accounts}
+• Successfully matched: {matched_count} ({match_rate:.1f}%)
+• Semantic matches: {semantic_count} ({semantic_rate:.1f}%)
+
+🧠 The Enhanced Account Matcher used semantic understanding to recognize that terms like:
+• "Sales" and "Revenue" mean the same thing
+• "A/R" refers to "Accounts Receivable" 
+• "Wages" and "Salary" are equivalent
+
+💡 Check the console output for detailed matching information."""
+
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(icon)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message)
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg_box.exec()
+    
+    def _force_validation_update_after_import(self):
+        """Force validation update after import to ensure proper styling and reconnect signals."""
+        try:
+            # Make sure we're no longer in bulk mode
+            self._bulk_import_mode = False
+            self._skip_validation_updates = False
+            
+            # Reconnect validation updates for all cards created during bulk import
+            for card in self.entry_cards:
+                if hasattr(card, 'connect_validation_updates'):
+                    # Connect both the deferred validation and immediate field change handlers
+                    card.connect_validation_updates(self._defer_validation_update)
+                    
+                    # Also ensure the individual field change handler is connected for immediate response
+                    if hasattr(card, '_on_field_changed'):
+                        try:
+                            # Disconnect first to avoid duplicates
+                            card.desc_edit.textChanged.disconnect(card._on_field_changed)
+                            card.debit_combo.currentTextChanged.disconnect(card._on_field_changed)
+                            card.credit_combo.currentTextChanged.disconnect(card._on_field_changed)
+                            card.amount_edit.textChanged.disconnect(card._on_field_changed)
+                        except:
+                            pass  # Ignore if not connected
+                        
+                        # Reconnect the immediate field change handler
+                        card.desc_edit.textChanged.connect(card._on_field_changed)
+                        card.debit_combo.currentTextChanged.connect(card._on_field_changed)
+                        card.credit_combo.currentTextChanged.connect(card._on_field_changed)
+                        card.amount_edit.textChanged.connect(card._on_field_changed)
+            
+            # Apply validation styling to all cards
+            for card in self.entry_cards:
+                if hasattr(card, 'apply_incomplete_styling'):
+                    card.apply_incomplete_styling()
+            
+            # Update the save button state
+            self._update_validation_and_save_state()
+            
+            print(f"✅ Validation signals reconnected for {len(self.entry_cards)} cards after import")
+            
+        except Exception as e:
+            print(f"❌ Error forcing validation update after import: {e}")
