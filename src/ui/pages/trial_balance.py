@@ -265,22 +265,25 @@ class TrialBalancePage(QWidget):
         self.table.setColumnCount(3)
         self.table.setHorizontalHeaderLabels(["Account Name", "Debit", "Credit"])
         
-        # Configure headers for natural column resizing
+        # Configure intelligent column sizing for better content display
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)  # Set all columns to interactive first
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)   # Then set first column to stretch
-        
-        # Enable proper drag behavior for column resizing
-        header.setStretchLastSection(False)
-        header.setCascadingSectionResizes(False)
+        if header:
+            header.setStretchLastSection(False)  # Don't auto-stretch last column
+            
+            # Set resize modes for each column
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)           # Account Name (main content)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Debit
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Credit
+            
+            # Set minimum widths to ensure content is always visible
+            header.setMinimumSectionSize(80)   # Minimum for any column
+            self.table.setColumnWidth(0, 300)  # Account Name - generous space for names
+            self.table.setColumnWidth(1, 150)  # Debit column
+            self.table.setColumnWidth(2, 150)  # Credit column
         
         # Hide the vertical header (row numbers) to remove the black box
         vertical_header = self.table.verticalHeader()
         vertical_header.setVisible(False)
-        
-        # Set initial column widths (now user-adjustable)
-        self.table.setColumnWidth(1, ResponsiveHelper.scale_size(150, 120, 180))  # Debit
-        self.table.setColumnWidth(2, ResponsiveHelper.scale_size(150, 120, 180))  # Credit
           # Dark theme table styling to match UI
         table_style = f"""
             QTableWidget {{
@@ -538,6 +541,36 @@ class TrialBalancePage(QWidget):
         total_credits_item.setBackground(QColor(245, 245, 245))
         total_credits_item.setForeground(QColor(51, 51, 51))
         self.table.setItem(totals_row, 2, total_credits_item)
+        
+        # Optimize column sizes after data is loaded
+        self._optimize_column_sizes()
+        
+    def _optimize_column_sizes(self):
+        """Intelligently resize columns for optimal content display."""
+        # First, auto-resize all columns to fit their content
+        for col in range(self.table.columnCount()):
+            self.table.resizeColumnToContents(col)
+        
+        # Get current column widths after auto-resize
+        current_widths = [self.table.columnWidth(i) for i in range(self.table.columnCount())]
+        
+        # Set intelligent minimums and adjustments for each column
+        min_widths = [200, 120, 120]  # Account Name, Debit, Credit
+        
+        # Ensure Account Name column has enough space for long account names
+        account_name_extra = 50  # Extra space for longer account names
+        current_widths[0] = max(current_widths[0], min_widths[0] + account_name_extra)
+        
+        # Ensure Debit/Credit columns have enough space for currency formatting
+        currency_extra = 30  # Extra space for currency symbols and formatting
+        current_widths[1] = max(current_widths[1], min_widths[1] + currency_extra)
+        current_widths[2] = max(current_widths[2], min_widths[2] + currency_extra)
+        
+        # Apply the optimized widths
+        for i, width in enumerate(current_widths):
+            # Ensure minimum width is respected
+            final_width = max(width, min_widths[i])
+            self.table.setColumnWidth(i, final_width)
         
     def _filter_accounts(self):
         """Filter accounts by search text."""

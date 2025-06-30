@@ -632,6 +632,26 @@ class HierarchicalAccountsPage(QWidget):
         self.tree.setRootIsDecorated(True)
         self.tree.setAnimated(True)
         self.tree.setIndentation(20)
+        
+        # Configure column sizing for better content display
+        header = self.tree.header()
+        if header:
+            header.setStretchLastSection(False)  # Don't auto-stretch last column
+            
+            # Set resize modes for each column
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Code
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)           # Account Name (main content)
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Type
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Level
+            header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Postable
+            
+            # Set minimum widths to ensure content is always visible
+            header.setMinimumSectionSize(60)   # Minimum for any column
+            self.tree.setColumnWidth(0, 80)    # Code column - fixed reasonable width
+            self.tree.setColumnWidth(1, 250)   # Account Name - larger for hierarchy display
+            self.tree.setColumnWidth(2, 80)    # Type column
+            self.tree.setColumnWidth(3, 80)    # Level column  
+            self.tree.setColumnWidth(4, 70)    # Postable column
           # Modern tree styling with shared scrollbar
         tree_style = """
             QTreeWidget {
@@ -1149,6 +1169,21 @@ class HierarchicalAccountsPage(QWidget):
             # Expand all if no previous state
             if not expanded_items:
                 self.tree.expandAll()
+
+            # --- Expand all items ---
+            def expand_all_items(item):
+                item.setExpanded(True)
+                for i in range(item.childCount()):
+                    expand_all_items(item.child(i))
+            for i in range(self.tree.topLevelItemCount()):
+                expand_all_items(self.tree.topLevelItem(i))
+
+            # --- Intelligent column sizing ---
+            self._optimize_column_sizes()
+
+            # --- Restore expanded state ---
+            for i in range(self.tree.topLevelItemCount()):
+                restore_expanded_state(self.tree.topLevelItem(i))
                 
         except Exception as e:
             msg = QMessageBox()
@@ -1158,6 +1193,29 @@ class HierarchicalAccountsPage(QWidget):
             msg.setWindowTitle("Error")
             msg.setStandardButtons(QMessageBox.StandardButton.Ok)
             msg.exec()
+    
+    def _optimize_column_sizes(self):
+        """Intelligently resize columns for optimal content display."""
+        # First, auto-resize all columns to fit their content
+        for col in range(self.tree.columnCount()):
+            self.tree.resizeColumnToContents(col)
+        
+        # Get current column widths after auto-resize
+        current_widths = [self.tree.columnWidth(i) for i in range(self.tree.columnCount())]
+        
+        # Set intelligent minimums and adjustments for each column
+        min_widths = [80, 200, 80, 80, 70]  # Code, Account Name, Type, Level, Postable
+        
+        # Ensure Account Name column has enough space for hierarchical content
+        # Add extra space for indentation (20px per level * 3 levels + padding)
+        account_name_extra = 80  # Extra space for hierarchy indentation
+        current_widths[1] = max(current_widths[1], min_widths[1] + account_name_extra)
+        
+        # Apply the optimized widths
+        for i, width in enumerate(current_widths):
+            # Ensure minimum width is respected
+            final_width = max(width, min_widths[i])
+            self.tree.setColumnWidth(i, final_width)
             
     def _style_tree(self):
         """Apply modern styling to the tree widget."""

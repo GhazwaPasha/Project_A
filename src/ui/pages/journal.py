@@ -817,7 +817,12 @@ class SingleEntryTab(QWidget):
         try:
             from ...core.utils import parse_transaction
             parsed = parse_transaction(nl_text, valid_accounts=self.accounts, system=self.system)
-            self.date_edit.setDate(QDate.fromString(parsed['date'], 'yyyy-MM-dd'))
+            
+            # Only update date if one was specifically parsed from the input
+            if parsed['date'] and parsed['date'].strip():
+                self.date_edit.setDate(QDate.fromString(parsed['date'], 'yyyy-MM-dd'))
+            # Otherwise preserve the current date selection
+            
             self.desc_edit.setText(parsed['description'])
             self.debit_combo.setCurrentText(parsed['debit_account'])
             self.credit_combo.setCurrentText(parsed['credit_account'])

@@ -218,7 +218,7 @@ STEP-BY-STEP PROCESS:
 
 JSON RESPONSE FORMAT:
 {{
-    "date": "YYYY-MM-DD" (today's date if not specified),
+    "date": "YYYY-MM-DD" (ONLY if a specific date is mentioned in the input, otherwise leave empty or null),
     "description": "Clear description of the transaction",
     "debit_account": "Account to be debited",
     "credit_account": "Account to be credited", 
@@ -269,16 +269,16 @@ Respond with ONLY the JSON object, no explanations.
         except Exception as e:
             raise ValueError(f"Invalid JSON from AI: {e}")
         
-        # Ensure required fields exist
-        required_fields = ['date', 'description', 'debit_account', 'credit_account', 'amount']
+        # Ensure required fields exist (date is optional)
+        required_fields = ['description', 'debit_account', 'credit_account', 'amount']
         for field in required_fields:
             if field not in parsed:
                 raise ValueError(f"Missing required field: {field}")
         
-        # Set today's date if not provided
-        if not parsed['date']:
-            from datetime import datetime
-            parsed['date'] = datetime.now().strftime('%Y-%m-%d')
+        # Don't auto-set date - let UI preserve existing date if not specified
+        # Only set empty string if date field is missing entirely
+        if 'date' not in parsed:
+            parsed['date'] = ''
           # Ensure amount is a number
         try:
             parsed['amount'] = float(str(parsed['amount']).replace(',', '').replace('$', '').strip())
