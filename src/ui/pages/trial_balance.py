@@ -69,6 +69,12 @@ class TrialBalancePage(QWidget):
         
         # Date range selector
         self.date_selector = DateRangeSelector(callback=self._on_date_range_changed)
+        # Select "All Time" quick filter by default (button index 4)
+        if hasattr(self.date_selector, "quick_buttons"):
+            btn = self.date_selector.quick_buttons.button(4)
+            if btn:
+                btn.setChecked(True)
+                self.date_selector._quick_filter_selected()
         main_layout.addWidget(self.date_selector)
           # Compact balance metrics - only 3 cards
         self._create_compact_balance_metrics(main_layout)

@@ -29,6 +29,7 @@ class BaseFinancialStatementView(QWidget):
         self.system = None
         self.from_date = None
         self.to_date = None
+        self.disable_date_selector = False  # Allow subclasses to disable date selector
         # Get font family from ModernStyles
         self.font_family = ModernStyles.get_font_family()
         self._setup_ui()
@@ -75,7 +76,18 @@ class BaseFinancialStatementView(QWidget):
         # Date range selector (following standard pattern)
         self.date_selector = DateRangeSelector()
         self.date_selector.dateRangeChanged.connect(self._on_date_range_changed)
+        # For Trial Balance and Balance Sheet, always set selector to "All Time" by default
+        if getattr(self, "set_date_selector_all_time_by_default", False):
+            if hasattr(self.date_selector, "quick_buttons"):
+                btn = self.date_selector.quick_buttons.button(4)
+                if btn:
+                    btn.setChecked(True)
+                    self.date_selector._quick_filter_selected()
         layout.addWidget(self.date_selector)
+        
+        # If this view disables the date selector, do so now
+        if getattr(self, "disable_date_selector", False):
+            self.date_selector.setDisabled(True)
         
         # Navigation and action buttons bar
         self._setup_navigation_bar(layout)
@@ -629,11 +641,19 @@ class IncomeStatementView(BaseFinancialStatementView):
         return html
 
 
+class TrialBalanceView(BaseFinancialStatementView):
+    """Trial Balance detailed view with professional table layout."""
+
+    def __init__(self, parent=None):
+        super().__init__("Trial Balance", "All Accounts")
+        self.set_date_selector_all_time_by_default = True  # Always set selector to "All Time" by default
+
 class BalanceSheetView(BaseFinancialStatementView):
     """Balance Sheet detailed view with professional table layout."""
     
     def __init__(self, parent=None):
         super().__init__("Balance Sheet", "Statement of Financial Position")
+        self.set_date_selector_all_time_by_default = True  # Always set selector to "All Time" by default
         
     def show_balance_sheet(self, system, as_of_date=None):
         """Display the balance sheet data in professional table format."""
