@@ -12,6 +12,7 @@ from ..common import (
 )
 from PyQt6.QtWidgets import QScrollArea, QSizePolicy, QGraphicsDropShadowEffect
 from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtCore import QTimer
 from ...core.utils import format_currency
 from ..components.scrollbar_styles import ModernScrollbarStyles
 from ..components.widgets import PageHeader, ActionCard, DateRangeSelector
@@ -35,32 +36,15 @@ class TrialBalancePage(QWidget):
         
         self._setup_ui()
         self._apply_styling()
-        self._load_data()
+        # Load data after UI is fully set up to ensure date selector is properly initialized
+        QTimer.singleShot(0, self._load_data)
         
     def _setup_ui(self):
-        """Setup clean professional trial balance UI with proper scrolling."""        # Create scroll area for better responsiveness with modern scrollbar
-        scroll_area = QScrollArea(self)
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        
-        # Apply modern scrollbar styling
-        scroll_area_style = """
-            QScrollArea {
-                border: none;
-                background: transparent;
-            }
-        """ + ModernScrollbarStyles.get_combined_scrollbar_style()
-        scroll_area.setStyleSheet(scroll_area_style)
-        
-        # Content widget
-        content_widget = QWidget()
-        scroll_area.setWidget(content_widget)
-          # Main layout for scroll content
-        main_layout = QVBoxLayout(content_widget)
+        """Setup clean professional trial balance UI without scrolling."""
+        # Main layout directly on the widget
+        main_layout = QVBoxLayout(self)
         responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
-        main_layout.setContentsMargins(responsive_margin, 0,  # Remove top margin for seamless flow
-                                     responsive_margin, responsive_margin)
+        main_layout.setContentsMargins(responsive_margin, 0, responsive_margin, 0)
         main_layout.setSpacing(16)  # Standardized spacing
         
         # Page header
@@ -76,18 +60,12 @@ class TrialBalancePage(QWidget):
                 btn.setChecked(True)
                 self.date_selector._quick_filter_selected()
         main_layout.addWidget(self.date_selector)
-          # Compact balance metrics - only 3 cards
+        
+        # Compact balance metrics - only 3 cards
         self._create_compact_balance_metrics(main_layout)
         
         # Professional trial balance table with date info
         self._create_trial_balance_table(main_layout)
-        
-        # Push content to top
-        main_layout.addStretch()
-          # Set up main widget layout
-        widget_layout = QVBoxLayout(self)
-        widget_layout.setContentsMargins(0, 0, 0, 0)
-        widget_layout.addWidget(scroll_area)
         
     def _create_compact_balance_metrics(self, main_layout):
         """Create compact balance status metrics - 4 essential cards."""
@@ -370,9 +348,10 @@ class TrialBalancePage(QWidget):
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSortingEnabled(True)
         self.table.setAlternatingRowColors(True)
-        self.table.setShowGrid(False)  # We'll use custom borders instead        # Set minimum height to show at least 11 rows plus header and totals
-        # Calculation: Header(40) + 11 rows(45×11=495) + totals(50) + padding(30) = ~615px
-        self.table.setMinimumHeight(ResponsiveHelper.scale_size(615, 560, 670))
+        self.table.setShowGrid(False)  # We'll use custom borders instead
+        
+        # Set size policy to allow the table to expand but respect max height
+        self.table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         main_layout.addWidget(self.table)
         
