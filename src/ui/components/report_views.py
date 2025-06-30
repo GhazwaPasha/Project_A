@@ -158,34 +158,33 @@ class BaseFinancialStatementView(QWidget):
         parent_layout.addLayout(nav_layout)
     
     def _setup_content_area(self, parent_layout):
-        """Setup the content area with a scrollable table."""
+        """Setup the content area to fill entire available space like ledger detailed view."""
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         
-        # Apply modern scrollbar styling matching ledger
+        # Remove border and styling to let table fill entire area
         content_scroll_style = """
             QScrollArea {
-                border: 1px solid rgba(0, 0, 0, 0.12);
-                background: white;
+                border: none;
+                background: transparent;
                 padding: 0px;
                 margin: 0px;
-                border-radius: 8px;
             }
         """ + ModernScrollbarStyles.get_vertical_scrollbar_style()
         scroll_area.setStyleSheet(content_scroll_style)
         
-        # Content widget
+        # Content widget - no margins or padding to fill entire space
         self.content_widget = QWidget()
         self.content_layout = QVBoxLayout(self.content_widget)
-        self.content_layout.setSpacing(30)
-        self.content_layout.setContentsMargins(20, 20, 20, 20)
+        self.content_layout.setSpacing(0)  # No spacing between elements
+        self.content_layout.setContentsMargins(0, 0, 0, 0)  # No margins to fill entire area
         
-        # Add some padding at the top
-        top_spacer = QSpacerItem(0, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
-        self.content_layout.addItem(top_spacer)
+        # Set size policy to expand and fill all available space
+        self.content_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        scroll_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         scroll_area.setWidget(self.content_widget)
-        parent_layout.addWidget(scroll_area)
+        parent_layout.addWidget(scroll_area)  # Add without any constraints
     
     def _setup_footer(self, parent_layout):
         """Setup the footer section with generation timestamp."""
@@ -204,179 +203,177 @@ class BaseFinancialStatementView(QWidget):
         parent_layout.addLayout(footer_layout)
     
     def _create_statement_table(self, headers):
-        """Create a professional statement table with fixed header."""
-        # Container widget
+        """Create a professional statement table exactly matching ledger detailed view structure."""
+        # Container widget - exactly matching ledger's _create_transactions_area
         container = QWidget()
-        container.setContentsMargins(0, 0, 0, 0)
         container_layout = QVBoxLayout(container)
         container_layout.setContentsMargins(0, 0, 0, 0)
         container_layout.setSpacing(0)
         
-        # Fixed header
-        header_widget = self._create_table_header(headers)
-        container_layout.addWidget(header_widget)
+        # Set size policy to expand and fill all available space
+        container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
-        # Scrollable content area
+        # Table header (stays fixed) - exactly matching ledger
+        header = QWidget()
+        header.setStyleSheet("""
+            background: #1976D2;
+            border-radius: 0px;
+        """)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(15, 12, 15, 12)
+        header_layout.setSpacing(0)
+        
+        # Create header labels exactly matching ledger style
+        for text, width in headers:
+            label = QLabel(text)
+            label.setStyleSheet("""
+                color: white;
+                font-weight: 700;
+                font-size: 13px;
+                background: transparent;
+            """)
+            if text in ["Amount", "Balance", "Total"] or "$" in text:
+                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            # Remove fixed width to allow expansion
+            if width > 0:
+                label.setMinimumWidth(width)
+            header_layout.addWidget(label)
+            
+        container_layout.addWidget(header)
+        
+        # Scrollable content area - exactly matching ledger
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll.setStyleSheet("""
-            QScrollArea {
-                border: 1px solid #E0E0E0;
-                border-top: none;
-                background: white;
-            }
-            QScrollBar:vertical {
-                background: #F5F5F5;
-                width: 12px;
-                margin: 0px;
-            }
-            QScrollBar::handle:vertical {
-                background: #BDBDBD;
-                min-height: 20px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #9E9E9E;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                border: none;
-                background: none;
-                height: 0px;
-            }
-        """)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         
-        # Content widget
+        # Set size policy to expand
+        scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
+        # Use exact same scroll style as ledger - no border, just scrollbar styles
+        from ..components.scrollbar_styles import ModernScrollbarStyles
+        scroll.setStyleSheet(ModernScrollbarStyles.get_vertical_scrollbar_style())
+        
+        # Container for table rows - exactly matching ledger's transactions_widget
         content = QWidget()
         content.setObjectName("tableContent")
+        content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.table_content_layout = QVBoxLayout(content)
         self.table_content_layout.setContentsMargins(0, 0, 0, 0)
         self.table_content_layout.setSpacing(0)
         self.table_content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         
         scroll.setWidget(content)
-        container_layout.addWidget(scroll)
+        container_layout.addWidget(scroll, 1)  # Give scroll area stretch factor like ledger
         
         return container
     
     def _create_table_header(self, headers):
-        """Create the fixed table header."""
-        header = QFrame()
-        header.setStyleSheet("""
-            QFrame {
-                background: #1976D2;
-                border: none;
-                border-radius: 4px 4px 0px 0px;
-            }
-        """)
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(15, 12, 15, 12)
-        header_layout.setSpacing(0)
-        
-        # Create header labels
-        for text, width in headers:
-            label = QLabel(text.upper())
-            label.setStyleSheet("""
-                color: white;
-                font-weight: 700;
-                font-size: 13px;
-                background: transparent;
-                border: none;
-                letter-spacing: 0.5px;
-            """)
-            if text in ["Amount", "Balance", "Total"] or "$" in text:
-                label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            else:
-                label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-            label.setFixedWidth(width)
-            header_layout.addWidget(label)
-        
-        return header
+        """This method is no longer used - header creation is now in _create_statement_table."""
+        pass
     
     def _add_table_row(self, items, is_total=False, is_subtotal=False, indent_level=0):
-        """Add a row to the statement table with proper alignment and styling."""
-        # Create row frame
+        """Add a row to the statement table exactly matching ledger detailed view styling."""
+        # Create row frame with fixed height like ledger
         row = QFrame()
+        row.setFixedHeight(40)  # Same fixed height as ledger
         
-        # Apply appropriate styling based on row type
+        # Get row index for alternating colors
+        row_index = self.table_content_layout.count()
+        row_color = "#FAFAFA" if row_index % 2 == 0 else "white"
+        
+        # Apply styling exactly matching ledger detailed view
         if is_total:
-            row.setStyleSheet("""
-                QFrame {
+            row.setStyleSheet(f"""
+                QFrame {{
                     background: #F8F9FA;
                     border-top: 2px solid #1976D2;
                     border-bottom: 1px solid #E0E0E0;
-                }
-                QLabel {
+                    border-radius: 0px;
+                    padding: 0px;
+                    margin: 0px;
+                }}
+                QLabel {{
                     color: #1976D2;
                     font-weight: 700;
                     font-size: 14px;
                     background: transparent;
                     border: none;
-                }
+                }}
             """)
         elif is_subtotal:
-            row.setStyleSheet("""
-                QFrame {
+            row.setStyleSheet(f"""
+                QFrame {{
                     background: #FAFAFA;
                     border-top: 1px solid #BDBDBD;
                     border-bottom: 1px solid #E0E0E0;
-                }
-                QLabel {
+                    border-radius: 0px;
+                    padding: 0px;
+                    margin: 0px;
+                }}
+                QLabel {{
                     color: #333;
                     font-weight: 600;
                     font-size: 13px;
                     background: transparent;
                     border: none;
-                }
+                }}
             """)
         else:
-            row.setStyleSheet("""
-                QFrame {
-                    background: white;
-                    border-bottom: 1px solid #F0F0F0;
-                }
-                QFrame:hover {
-                    background: #F8F9FA;
-                }
-                QLabel {
-                    color: #444;
-                    font-weight: 400;
-                    font-size: 13px;
-                    background: transparent;
+            # Regular row - exactly matching ledger style
+            row.setStyleSheet(f"""
+                QFrame {{
+                    background: {row_color};
                     border: none;
-                }
+                    border-bottom: 1px solid #F0F0F0;
+                    padding: 0px;
+                    margin: 0px;
+                }}
+                QFrame:hover {{
+                    background: #E3F2FD;
+                }}
             """)
         
-        # Create row layout
-        layout = QHBoxLayout(row)
-        layout.setContentsMargins(15, 8, 15, 8)
-        layout.setSpacing(0)
+        # Create row layout exactly matching ledger
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(15 + indent_level * 20, 10, 15, 10)  # Same margins as ledger
+        row_layout.setSpacing(0)
         
-        # Add indentation for hierarchy
-        if indent_level > 0:
-            indent = QSpacerItem(indent_level * 20, 1, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
-            layout.addItem(indent)
-        
-        # Add items
+        # Add items with same styling as ledger
         for i, (text, width) in enumerate(items):
             label = QLabel(str(text))
             
-            # Set alignment based on content type
-            if i > 0 or "Amount" in str(text) or "$" in str(text):
-                label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            # Apply same label styling as ledger
+            if is_total:
+                # Total row labels already styled by QFrame stylesheet
+                pass
+            elif is_subtotal:
+                # Subtotal row labels already styled by QFrame stylesheet
+                pass
+            else:
+                # Regular row labels - matching ledger font and color
+                label.setStyleSheet("color: #333; font-size: 12px; background: transparent; border: none;")
+                if i > 0:  # Amount columns get font-weight: 600 like ledger
+                    label.setStyleSheet("color: #333; font-size: 12px; font-weight: 600; background: transparent; border: none;")
+            
+            # Set alignment exactly matching ledger
+            if text in ["Amount", "Balance", "Total"] or "$" in str(text) or (i > 0 and not is_total):
+                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             else:
                 label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             
-            # Set fixed width for column
-            label.setFixedWidth(width - (indent_level * 20 if i == 0 else 0))
+            # Remove fixed width to allow expansion, but set minimum width for proportion
+            if width > 0:
+                label.setMinimumWidth(width - (indent_level * 20 if i == 0 else 0))
             
-            # Add cell to row
-            layout.addWidget(label)
+            # Set stretch factor for first column to take remaining space
+            if i == 0:
+                row_layout.addWidget(label, 1)  # Give stretch factor to first column
+            else:
+                row_layout.addWidget(label)
         
         # Add row to table
         self.table_content_layout.addWidget(row)
-        return row
         
     def clear_content(self):
         """Clear the content layout."""
@@ -483,13 +480,24 @@ class BaseFinancialStatementView(QWidget):
         pass
     
     def refresh_currency_display(self):
-        """Refresh currency display when currency symbol changes."""
-        # For report views, we need to regenerate the content with the new currency
-        # This is typically handled by re-calling the show_* method with the same parameters
-        if hasattr(self, 'system') and self.system:
-            # This is a placeholder - each subclass should override this method
-            # to call its specific show method
-            pass
+        """Refresh all currency displays when currency symbol changes."""
+        try:
+            # Re-generate the current statement with updated currency formatting
+            self._regenerate_with_new_dates()
+        except Exception as e:
+            print(f"Error refreshing currency display: {e}")
+
+    def _get_date_range_text(self):
+        """Get formatted date range text for display."""
+        if self.from_date and self.to_date:
+            from_str = self.from_date if isinstance(self.from_date, str) else self.from_date.toString("MMMM d, yyyy")
+            to_str = self.to_date if isinstance(self.to_date, str) else self.to_date.toString("MMMM d, yyyy")
+            return f"{from_str} to {to_str}"
+        elif self.to_date:
+            to_str = self.to_date if isinstance(self.to_date, str) else self.to_date.toString("MMMM d, yyyy")
+            return f"As of {to_str}"
+        else:
+            return "All Time"
 
 
 class IncomeStatementView(BaseFinancialStatementView):
@@ -591,7 +599,7 @@ class IncomeStatementView(BaseFinancialStatementView):
         <body>
             <h1>INCOME STATEMENT</h1>
             <h2>For the Period Ended</h2>
-            <div class="date">{self.date_label.text()}</div>
+            <div class="date">{self._get_date_range_text()}</div>
             
             <table>
                 <thead>
@@ -742,7 +750,7 @@ class BalanceSheetView(BaseFinancialStatementView):
         <body>
             <h1>BALANCE SHEET</h1>
             <h2>Statement of Financial Position</h2>
-            <div class="date">{self.date_label.text()}</div>
+            <div class="date">{self._get_date_range_text()}</div>
             
             <table>
                 <thead>
@@ -884,7 +892,7 @@ class CashFlowStatementView(BaseFinancialStatementView):
         <body>
             <h1>CASH FLOW STATEMENT</h1>
             <h2>Statement of Cash Flows</h2>
-            <div class="date">{self.date_label.text()}</div>
+            <div class="date">{self._get_date_range_text()}</div>
             
             <table>
                 <thead>
@@ -1025,7 +1033,7 @@ class StatementOfEquityView(BaseFinancialStatementView):
         <body>
             <h1>STATEMENT OF OWNER'S EQUITY</h1>
             <h2>Changes in Owner's Equity</h2>
-            <div class="date">{self.date_label.text()}</div>
+            <div class="date">{self._get_date_range_text()}</div>
             
             <table>
                 <thead>

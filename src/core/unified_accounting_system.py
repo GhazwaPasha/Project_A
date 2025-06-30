@@ -289,7 +289,57 @@ class UnifiedAccountingSystem:
     - Advanced financial features and reporting
     - Period closing and audit trails
     """
-    
+
+    def generate_cash_flow_breakdown(self, start_date: str, end_date: str) -> dict:
+        """
+        Generate a simple cash flow statement breakdown.
+        This is a basic direct method (indirect method would require more logic).
+        """
+        entries = self.get_journal_entries(start_date, end_date)
+        accounts = self.get_chart_of_accounts(active_only=False)
+        account_types = {acc['name']: acc['type'].lower() for acc in accounts}
+
+        # Categorize accounts for cash flow
+        cash_accounts = [acc['name'] for acc in accounts if acc['type'].lower() == 'asset' and 'cash' in acc['name'].lower()]
+        operating_activities = []
+        investing_activities = []
+        financing_activities = []
+
+        net_operating = 0.0
+        net_investing = 0.0
+        net_financing = 0.0
+
+        # Use normalized account names for type lookups
+        for entry in entries:
+            debit = self._normalize_account_name(entry.get('debit_account', ''))
+            credit = self._normalize_account_name(entry.get('credit_account', ''))
+            amount = float(entry.get('amount', 0))
+
+            # Operating: revenue/expense accounts
+            if account_types.get(debit) == 'expense' or account_types.get(credit) == 'revenue':
+                operating_activities.append((f"{debit} / {credit}", amount))
+                net_operating += amount if account_types.get(debit) == 'expense' else -amount
+            # Investing: fixed assets
+            elif account_types.get(debit) == 'asset' and any(x in debit.lower() for x in ['equipment', 'building', 'vehicle']):
+                investing_activities.append((debit, amount))
+                net_investing -= amount
+            # Financing: equity or liability
+            elif account_types.get(debit) == 'equity' or account_types.get(credit) == 'liability':
+                financing_activities.append((f"{debit} / {credit}", amount))
+                net_financing += amount if account_types.get(debit) == 'equity' else -amount
+
+        net_cash_flow = net_operating + net_investing + net_financing
+
+        return {
+            "operating activities": operating_activities,
+            "investing activities": investing_activities,
+            "financing activities": financing_activities,
+            "net_operating": net_operating,
+            "net_investing": net_investing,
+            "net_financing": net_financing,
+            "net_cash_flow": net_cash_flow
+        }
+
     def __init__(self, auth_manager: AuthManager):
         self.logger = logging.getLogger(__name__)
         
@@ -511,7 +561,7 @@ class UnifiedAccountingSystem:
             enhanced_acc['parent_code'] = get_parent_code(acc)
             
             # Add compatibility field mappings for UI
-            enhanced_acc['type'] = acc.get('account_type', '')  # Map account_type to type for UI compatibility
+            enhanced_acc['type'] = acc.get('account_type', acc.get('type', ''))  # Map account_type to type for UI compatibility
             
             enhanced_accounts.append(enhanced_acc)
         
@@ -992,78 +1042,97 @@ class UnifiedAccountingSystem:
     # FINANCIAL REPORTING
     # ================================
     
+    def _normalize_account_name(self, account_field: str) -> str:
+        """Strip code prefix if present: '1120 - Cash at Bank' -> 'Cash at Bank'"""
+        if not account_field:
+            return ""
+        if " - " in account_field:
+            return account_field.split(" - ", 1)[1].strip()
+        return account_field.strip()
+
     def generate_income_statement_breakdown(self, start_date: str, end_date: str) -> Dict:
         """Generate income statement with breakdown"""
         entries = self.get_journal_entries(start_date, end_date)
         accounts = self.get_chart_of_accounts(active_only=False)
-        
+
         # Create account type lookup
         account_types = {acc['name']: acc['type'].lower() for acc in accounts}
-        
+
         revenue_total = 0.0
         expense_total = 0.0
         revenue_breakdown = {}
         expense_breakdown = {}
-        
+
         for entry in entries:
-            debit_account = entry.get('debit_account', '')
-            credit_account = entry.get('credit_account', '')
+            debit_account = self._normalize_account_name(entry.get('debit_account', ''))
+            credit_account = self._normalize_account_name(entry.get('credit_account', ''))
             amount = float(entry.get('amount', 0))
-            
+
             # Process revenue (credits to revenue accounts)
             if account_types.get(credit_account) == 'revenue':
                 revenue_total += amount
                 if credit_account not in revenue_breakdown:
                     revenue_breakdown[credit_account] = 0.0
                 revenue_breakdown[credit_account] += amount
-            
+
             # Process expenses (debits to expense accounts)
             if account_types.get(debit_account) == 'expense':
                 expense_total += amount
                 if debit_account not in expense_breakdown:
                     expense_breakdown[debit_account] = 0.0
                 expense_breakdown[debit_account] += amount
-        
+
         net_income = revenue_total - expense_total
-        
+
+        # Convert breakdowns to sorted lists of tuples for UI compatibility
+        revenues = sorted(revenue_breakdown.items(), key=lambda x: x[0])
+        expenses = sorted(expense_breakdown.items(), key=lambda x: x[0])
+
         return {
-            'revenue_total': revenue_total,
-            'expense_total': expense_total,
-            'net_income': net_income,
-            'revenue_breakdown': revenue_breakdown,
-            'expense_breakdown': expense_breakdown
+            'revenues': revenues,
+            'expenses': expenses,
+            'total_revenue': revenue_total,
+            'total_expenses': expense_total,
+            'net_income': net_income
         }
 
     def generate_balance_sheet_breakdown(self, as_of_date: str) -> Dict:
         """Generate balance sheet as of a specific date"""
         trial_balance = self.get_trial_balance(None, as_of_date)
         accounts = self.get_chart_of_accounts(active_only=False)
-        
+
         # Create account type lookup
         account_types = {acc['name']: acc['type'].lower() for acc in accounts}
-        
+
         assets = {}
         liabilities = {}
         equity = {}
-        
-        for account_name, balance in trial_balance.items():
+
+        for entry in trial_balance:
+            account_name = entry['name']
+            balance = entry.get('debit_total', 0.0) - entry.get('credit_total', 0.0)
             account_type = account_types.get(account_name, '').lower()
-            
+
             if account_type == 'asset':
                 assets[account_name] = balance
             elif account_type == 'liability':
                 liabilities[account_name] = balance
             elif account_type == 'equity':
                 equity[account_name] = balance
-        
+
         total_assets = sum(assets.values())
         total_liabilities = sum(liabilities.values())
         total_equity = sum(equity.values())
-        
+
+        # Convert to sorted lists of tuples for UI compatibility
+        assets_list = sorted([(k, v) for k, v in assets.items()], key=lambda x: x[0])
+        liabilities_list = sorted([(k, v) for k, v in liabilities.items()], key=lambda x: x[0])
+        equity_list = sorted([(k, v) for k, v in equity.items()], key=lambda x: x[0])
+
         return {
-            'assets': assets,
-            'liabilities': liabilities,
-            'equity': equity,
+            'assets': assets_list,
+            'liabilities': liabilities_list,
+            'equity': equity_list,
             'total_assets': total_assets,
             'total_liabilities': total_liabilities,
             'total_equity': total_equity
@@ -1075,19 +1144,23 @@ class UnifiedAccountingSystem:
         beginning_balance = self.get_trial_balance(None, start_date)
         accounts = self.get_chart_of_accounts(active_only=False)
         account_types = {acc['name']: acc['type'].lower() for acc in accounts}
-        
-        beginning_equity = sum(
-            balance for account, balance in beginning_balance.items()
-            if account_types.get(account, '').lower() == 'equity'
-        )
-        
+
+        # Sum balances for equity accounts
+        beginning_equity = 0.0
+        for entry in beginning_balance:
+            account_name = entry.get('name', '')
+            account_type = account_types.get(account_name, '').lower()
+            if account_type == 'equity':
+                balance = entry.get('debit_total', 0.0) - entry.get('credit_total', 0.0)
+                beginning_equity += balance
+
         # Get net income for the period
         income_statement = self.generate_income_statement_breakdown(start_date, end_date)
         net_income = income_statement['net_income']
-        
+
         # Calculate ending equity
         ending_equity = beginning_equity + net_income
-        
+
         return {
             'beginning_equity': beginning_equity,
             'net_income': net_income,

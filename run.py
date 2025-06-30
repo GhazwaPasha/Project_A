@@ -84,51 +84,58 @@ class CleanApp:
                 success = session_manager.initialize_session(user_data)
                 if success:
                     current_org = session_manager.get_current_organization()
-                    print(f"✅ User logged in: {user_data.get('email', 'Unknown')} - Active org: {current_org.get('name', 'Unknown')}")
-                    print(f"   Role in org: {session_manager.get_current_user_role()}")
-                    print(f"   Is super admin: {session_manager.is_super_admin()}")
-                    print(f"   Organization type: {session_manager.get_current_organization_type()}")
+                    if current_org:
+                        print(f"✅ User logged in: {user_data.get('email', 'Unknown')} - Active org: {current_org.get('name', 'Unknown')}")
+                        print(f"   Role in org: {session_manager.get_current_user_role()}")
+                        print(f"   Is super admin: {session_manager.is_super_admin()}")
+                        print(f"   Organization type: {session_manager.get_current_organization_type()}")
+                    else:
+                        print(f"✅ User logged in: {user_data.get('email', 'Unknown')} - No active organization")
                 else:
                     print(f"❌ Failed to initialize session for {user_data.get('email', 'Unknown')}")
                     
                     # Check for existing personal workspace
                     if not organizations:
-                        print("� No organizations in initial fetch, checking for existing personal workspace...")
+                        print("⚠️ No organizations in initial fetch, checking for existing personal workspace...")
                         try:
                             # Try to find the user's personal workspace directly
-                            result = auth_manager.db_manager.supabase.table('organizations')\
-                                .select('*')\
-                                .eq('created_by', user_data.get('id'))\
-                                .eq('organization_type', 'personal')\
-                                .execute()
-
-                            if result.data:
-                                print("✅ Found existing personal workspace, reinitializing session...")
-                                success = session_manager.initialize_session(user_data)
-                                if not success:
-                                    print("❌ Failed to initialize session with existing workspace")
-                                    print("Debug info:")
-                                    print(f"  Found org: {result.data[0]}")
-                            else:
-                                print("❌ No personal workspace found for user!")
-                                print("Debug info:")
-                                print(f"  User ID: {user_data.get('id')}")
-                                print(f"  Email: {user_data.get('email')}")
-                                
-                                # Also check organization_members table
-                                members = auth_manager.db_manager.supabase.table('organization_members')\
-                                    .select('organization_id')\
-                                    .eq('user_id', user_data.get('id'))\
+                            if auth_manager.db_manager and auth_manager.db_manager.supabase:
+                                result = auth_manager.db_manager.supabase.table('organizations')\
+                                    .select('*')\
+                                    .eq('created_by', user_data.get('id'))\
+                                    .eq('organization_type', 'personal')\
                                     .execute()
+
+                                if result.data:
+                                    print("✅ Found existing personal workspace, reinitializing session...")
+                                    success = session_manager.initialize_session(user_data)
+                                    if not success:
+                                        print("❌ Failed to initialize session with existing workspace")
+                                        print("Debug info:")
+                                        print(f"  Found org: {result.data[0]}")
+                                else:
+                                    print("❌ No personal workspace found for user!")
+                                    print("Debug info:")
+                                    print(f"  User ID: {user_data.get('id')}")
+                                    print(f"  Email: {user_data.get('email')}")
                                     
-                                print(f"  Organization memberships found: {len(members.data) if members.data else 0}")
+                                    # Also check organization_members table
+                                    if auth_manager.db_manager and auth_manager.db_manager.supabase:
+                                        members = auth_manager.db_manager.supabase.table('organization_members')\
+                                            .select('organization_id')\
+                                            .eq('user_id', user_data.get('id'))\
+                                            .execute()
+                                            
+                                        print(f"  Organization memberships found: {len(members.data) if members.data else 0}")
+                            else:
+                                print("❌ Database manager or Supabase client not available")
                                 
                         except Exception as e:
                             print(f"❌ Error checking for personal workspace: {e}")
-                            if hasattr(e, 'code'):
-                                print(f"  Error code: {e.code}")
-                            if hasattr(e, 'details'):
-                                print(f"  Details: {e.details}")
+                            # Log additional error information if available
+                            error_str = str(e)
+                            if 'code' in error_str.lower() or 'details' in error_str.lower():
+                                print(f"  Full error: {error_str}")
             
             login_window.login_successful.connect(handle_login_success)
             

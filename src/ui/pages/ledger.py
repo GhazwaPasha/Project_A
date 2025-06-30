@@ -240,8 +240,9 @@ class LedgerDocumentView(QWidget):
         self.setStyleSheet(self._get_base_style())
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(40, 30, 40, 30)
-        layout.setSpacing(20)
+        responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
+        layout.setContentsMargins(responsive_margin, 0, responsive_margin, responsive_margin)
+        layout.setSpacing(16)
         
         # Page header (following standard pattern)
         self.page_header = PageHeader("General Ledger", "Detailed account transactions")
@@ -360,7 +361,7 @@ class LedgerDocumentView(QWidget):
             QFrame {
                 background: #1976D2;
                 border: none;
-                border-radius: 4px 4px 0px 0px;
+                border-radius: 0px;
             }
         """)
         header_layout = QHBoxLayout(header_frame)
@@ -1327,7 +1328,7 @@ class LedgerPage(QWidget):
         header = QWidget()
         header.setStyleSheet("""
             background: #1976D2;
-            border-radius: 4px 4px 0px 0px;
+            border-radius: 0px;
         """)
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(15, 12, 15, 12)

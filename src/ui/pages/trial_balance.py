@@ -284,23 +284,25 @@ class TrialBalancePage(QWidget):
         main_layout.addLayout(header_layout)
           # Professional table
         self.table = QTableWidget()
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["Account Name", "Account Code", "Debit", "Credit"])
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(["Account Name", "Debit", "Credit"])
         
-        # Configure headers
+        # Configure headers for natural column resizing
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)  # Set all columns to interactive first
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)   # Then set first column to stretch
+        
+        # Enable proper drag behavior for column resizing
+        header.setStretchLastSection(False)
+        header.setCascadingSectionResizes(False)
         
         # Hide the vertical header (row numbers) to remove the black box
         vertical_header = self.table.verticalHeader()
         vertical_header.setVisible(False)
         
-        # Set column widths
-        self.table.setColumnWidth(2, ResponsiveHelper.scale_size(120, 100, 140))
-        self.table.setColumnWidth(3, ResponsiveHelper.scale_size(120, 100, 140))
+        # Set initial column widths (now user-adjustable)
+        self.table.setColumnWidth(1, ResponsiveHelper.scale_size(150, 120, 180))  # Debit
+        self.table.setColumnWidth(2, ResponsiveHelper.scale_size(150, 120, 180))  # Credit
           # Dark theme table styling to match UI
         table_style = f"""
             QTableWidget {{
@@ -511,25 +513,19 @@ class TrialBalancePage(QWidget):
             name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 0, name_item)
             
-            # Account code
-            code_item = QTableWidgetItem(account['code'])
-            code_item.setFlags(code_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            code_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.table.setItem(row, 1, code_item)
-            
             # Debit
             debit_text = format_currency(account['debit']) if account['debit'] > 0 else ""
             debit_item = QTableWidgetItem(debit_text)
             debit_item.setFlags(debit_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             debit_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.table.setItem(row, 2, debit_item)
+            self.table.setItem(row, 1, debit_item)
             
             # Credit
             credit_text = format_currency(account['credit']) if account['credit'] > 0 else ""
             credit_item = QTableWidgetItem(credit_text)
             credit_item.setFlags(credit_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             credit_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.table.setItem(row, 3, credit_item)
+            self.table.setItem(row, 2, credit_item)
         
         # Totals row with professional styling
         totals_row = len(accounts)
@@ -546,12 +542,6 @@ class TrialBalancePage(QWidget):
         totals_label.setForeground(QColor(51, 51, 51))     # Dark text
         self.table.setItem(totals_row, 0, totals_label)
         
-        # Empty cell for account code in totals
-        empty_item = QTableWidgetItem("")
-        empty_item.setFlags(empty_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        empty_item.setBackground(QColor(245, 245, 245))
-        self.table.setItem(totals_row, 1, empty_item)
-        
         # Total debits with proper currency formatting
         total_debits_item = QTableWidgetItem(format_currency(trial_data['total_debits']))
         total_debits_item.setFlags(total_debits_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -559,7 +549,7 @@ class TrialBalancePage(QWidget):
         total_debits_item.setFont(font)
         total_debits_item.setBackground(QColor(245, 245, 245))
         total_debits_item.setForeground(QColor(51, 51, 51))
-        self.table.setItem(totals_row, 2, total_debits_item)
+        self.table.setItem(totals_row, 1, total_debits_item)
         
         # Total credits with proper currency formatting
         total_credits_item = QTableWidgetItem(format_currency(trial_data['total_credits']))
@@ -568,7 +558,7 @@ class TrialBalancePage(QWidget):
         total_credits_item.setFont(font)
         total_credits_item.setBackground(QColor(245, 245, 245))
         total_credits_item.setForeground(QColor(51, 51, 51))
-        self.table.setItem(totals_row, 3, total_credits_item)
+        self.table.setItem(totals_row, 2, total_credits_item)
         
     def _filter_accounts(self):
         """Filter accounts by search text."""
@@ -576,9 +566,8 @@ class TrialBalancePage(QWidget):
         
         for row in range(self.table.rowCount() - 1):  # Exclude totals row only (no separator)
             account_name = self.table.item(row, 0).text().lower() if self.table.item(row, 0) else ""
-            account_code = self.table.item(row, 1).text().lower() if self.table.item(row, 1) else ""
             
-            show_row = search_text in account_name or search_text in account_code
+            show_row = search_text in account_name
             self.table.setRowHidden(row, not show_row)
             
     def _get_currency_symbol(self):
@@ -679,7 +668,6 @@ class TrialBalancePage(QWidget):
             table_rows += f"""
             <tr>
                 <td>{account['name']}</td>
-                <td style="text-align: center;">{account['code']}</td>
                 <td style="text-align: right;">{debit_text}</td>
                 <td style="text-align: right;">{credit_text}</td>
             </tr>
@@ -817,7 +805,6 @@ class TrialBalancePage(QWidget):
                 <thead>
                     <tr>
                         <th>Account Name</th>
-                        <th class="center">Account Code</th>
                         <th class="right">Debit</th>
                         <th class="right">Credit</th>
                     </tr>
@@ -826,7 +813,6 @@ class TrialBalancePage(QWidget):
                     {table_rows}
                     <tr class="totals-row">
                         <td><strong>TOTALS</strong></td>
-                        <td></td>
                         <td style="text-align: right;"><strong>{format_currency(trial_data['total_debits'])}</strong></td>
                         <td style="text-align: right;"><strong>{format_currency(trial_data['total_credits'])}</strong></td>
                     </tr>
