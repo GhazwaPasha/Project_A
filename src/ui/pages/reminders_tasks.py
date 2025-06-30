@@ -201,8 +201,17 @@ class RemindersTasksPage(QWidget):
         super().__init__(parent)
         self.accounting_system = accounting_system
         self.notification_manager = notification_manager
-        self.reminders_file = "reminders_data.json"
+        
+        # Get user and organization context for proper data isolation
+        self.user_id = self._get_current_user_id()
+        self.organization_id = self._get_current_organization_id()
+        
+        # Create user-specific storage path
+        self.reminders_file = self._get_user_reminders_file()
         self.reminders_data = self._load_reminders()
+        
+        print(f"📁 Reminders storage: {self.reminders_file}")
+        print(f"👤 User: {self.user_id}, Organization: {self.organization_id}")
         
         self._setup_ui()
         self._apply_styling()
@@ -681,14 +690,55 @@ class RemindersTasksPage(QWidget):
         
         return tab
     
+    def _get_current_user_id(self):
+        """Get current user ID from parent window's session manager"""
+        try:
+            if hasattr(self.parent(), 'session_manager') and self.parent().session_manager:
+                user_id = self.parent().session_manager.get_current_user_id()
+                return user_id if user_id else "default_user"
+            return "default_user"
+        except Exception as e:
+            print(f"Error getting user ID: {e}")
+            return "default_user"
+    
+    def _get_current_organization_id(self):
+        """Get current organization ID from parent window's session manager"""
+        try:
+            if hasattr(self.parent(), 'session_manager') and self.parent().session_manager:
+                org_id = self.parent().session_manager.get_active_organization_id()
+                return org_id if org_id else "default_org"
+            return "default_org"
+        except Exception as e:
+            print(f"Error getting organization ID: {e}")
+            return "default_org"
+    
+    def _get_user_reminders_file(self):
+        """Get user-specific reminders file path"""
+        # Create data directory if it doesn't exist
+        data_dir = "user_data"
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+        
+        # Create user-organization specific subdirectory
+        user_org_dir = os.path.join(data_dir, f"user_{self.user_id}_org_{self.organization_id}")
+        if not os.path.exists(user_org_dir):
+            os.makedirs(user_org_dir)
+        
+        # Return user-specific reminders file path
+        return os.path.join(user_org_dir, "reminders.json")
+    
     def _load_reminders(self):
-        """Load reminders from file"""
+        """Load reminders from user-specific file"""
         try:
             if os.path.exists(self.reminders_file):
-                with open(self.reminders_file, 'r') as f:
-                    return json.load(f)
+                with open(self.reminders_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                print(f"📋 Loaded {len(data)} reminders from {self.reminders_file}")
+                return data
+            print(f"📋 No existing reminders file, starting fresh")
             return []
-        except Exception:
+        except Exception as e:
+            print(f"Error loading reminders: {e}")
             return []
     
     def _save_reminders(self):

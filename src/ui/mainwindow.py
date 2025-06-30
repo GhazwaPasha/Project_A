@@ -211,10 +211,10 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
 
     def _connect_ai_signals(self):
         """Connect signals from the Enhanced AI processor to the main window slots."""
-        self.ai_processor.response_ready.connect(self.simple_ai_bar.set_ai_response)
-        self.ai_processor.error_occurred.connect(self.simple_ai_bar.set_error_message)
-        self.ai_processor.processing_started.connect(self.simple_ai_bar.show_processing_indicator)
-        self.ai_processor.processing_finished.connect(self.simple_ai_bar.hide_processing_indicator)
+        self.ai_processor.response_ready.connect(self.simple_ai_bar.handle_ai_response)
+        self.ai_processor.error_occurred.connect(self.simple_ai_bar.handle_ai_error)
+        self.ai_processor.processing_started.connect(self.simple_ai_bar.handle_processing_started)
+        self.ai_processor.processing_finished.connect(self.simple_ai_bar.handle_processing_finished)
         
         # Connect enhanced command execution signals
         self.ai_processor.navigation_requested.connect(self._handle_ai_navigation)
@@ -223,7 +223,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         self.ai_processor.action_executed.connect(self._handle_ai_action)
         self.ai_processor.context_updated.connect(self._handle_ai_context_update)
         
-        # Connect the AI bar's command submission to the processor
+        # Connect the AI bar's command submission to the enhanced processor
         if hasattr(self, 'simple_ai_bar'):
             self.simple_ai_bar.ai_command_submitted.connect(self.ai_processor.process_command)
 
@@ -1756,6 +1756,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
     
     def _handle_ai_navigation(self, page_name: str, parameters: dict):
         """Enhanced navigation handler with parameter application and context updates"""
+        print(f"🎯 MainWindow received navigation request: page='{page_name}', params={parameters}")
         self.logger.info(f"Enhanced AI navigation: page='{page_name}', params={parameters}")
         
         # Update AI context before navigation
@@ -1770,59 +1771,376 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         
         if page_name in page_mapping:
             target_index = page_mapping[page_name]
+            print(f"📍 Navigating to index {target_index} for page {page_name}")
             if target_index >= 0:
                 self.stack.setCurrentIndex(target_index)
+                print(f"✅ Stack index set to {target_index}")
                 if target_index < len(self.sidebar_buttons):
                     # Update sidebar selection
                     for btn in self.sidebar_buttons:
                         btn.setChecked(False)
                     self.sidebar_buttons[target_index].setChecked(True)
+                    print(f"✅ Sidebar button {target_index} checked")
             
             # Apply parameters to the target page
             self._apply_navigation_parameters(page_name, parameters)
             
             # Update AI context with new page state
             self._update_ai_page_context(page_name)
+        else:
+            print(f"❌ Page '{page_name}' not found in mapping")
     
     def _handle_ai_report_request(self, report_type: str, parameters: dict):
-        """Handle AI-requested report generation with smart parameter handling"""
+        """Handle AI-requested report generation using NL dialogue intelligence with main window integration"""
         self.logger.info(f"AI report request: type='{report_type}', params={parameters}")
+        print(f"🚀 Processing AI report request: {report_type} with params: {parameters}")
         
-        # Navigate to reports page first if not already there
-        if self.stack.currentIndex() != 4:  # Reports page index
-            self._handle_ai_navigation('reports', {})
+        try:
+            # Use NL dialogue intelligence to parse the request
+            raw_prompt = parameters.get('original_prompt', '')
+            parsed_request = self._parse_nl_report_request(raw_prompt or report_type, parameters)
+            
+            report_type = parsed_request['report_type']
+            start_date = parsed_request.get('start_date')
+            end_date = parsed_request.get('end_date')
+            as_of_date = parsed_request.get('as_of_date')
+            
+            print(f"🧠 Parsed request: type={report_type}, dates={start_date} to {end_date}, as_of={as_of_date}")
+            
+            # Route to appropriate page using the parsed information
+            if report_type in ['trial_balance', 'trial']:
+                self._navigate_to_trial_balance(start_date, end_date)
+                
+            elif report_type in ['general_ledger', 'ledger']:
+                self._navigate_to_ledger(start_date, end_date)
+                
+            elif report_type == 'income_statement':
+                self._navigate_to_income_statement(start_date, end_date)
+                
+            elif report_type == 'balance_sheet':
+                self._navigate_to_balance_sheet(as_of_date or end_date)
+                
+            elif report_type == 'cash_flow':
+                self._navigate_to_cash_flow(start_date, end_date)
+                
+            else:
+                # For unrecognized reports, show intelligent guidance using real data
+                self._show_intelligent_report_guidance(raw_prompt, parsed_request)
+                
+            print(f"🎉 Successfully processed {report_type} report request!")
+            self.logger.info(f"Successfully processed {report_type} report request")
+                
+        except Exception as e:
+            print(f"❌ Error in report generation: {e}")
+            self.logger.error(f"Failed to process report request: {e}")
+            # Show error message to user
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self,
+                "Report Error", 
+                f"Could not process report request.\nError: {str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
+    
+    def _parse_nl_report_request(self, prompt: str, parameters: dict):
+        """Parse natural language report request using NL dialogue intelligence"""
+        import re
+        import calendar
+        import dateutil.parser
+        from PyQt6.QtCore import QDate
         
-        # Get current reports page and apply parameters
-        current_widget = self.stack.currentWidget()
-        if hasattr(current_widget, 'generate_report'):
-            # Try to call the report generation method with AI parameters
-            try:
-                current_widget.generate_report(report_type, parameters)
-                self.logger.info(f"Successfully generated {report_type} report")
-            except Exception as e:
-                self.logger.error(f"Failed to generate report: {e}")
+        prompt_lc = prompt.lower()
+        result = {
+            'report_type': None,
+            'start_date': None,
+            'end_date': None,
+            'as_of_date': None
+        }
+        
+        # Extract report type using NL dialogue patterns
+        if any(term in prompt_lc for term in ["income statement", "profit loss", "p&l", "pnl"]):
+            result['report_type'] = "income_statement"
+        elif any(term in prompt_lc for term in ["balance sheet", "financial position"]):
+            result['report_type'] = "balance_sheet"
+        elif any(term in prompt_lc for term in ["cash flow", "cashflow"]):
+            result['report_type'] = "cash_flow"
+        elif any(term in prompt_lc for term in ["trial balance", "trial"]):
+            result['report_type'] = "trial_balance"
+        elif any(term in prompt_lc for term in ["general ledger", "ledger"]):
+            result['report_type'] = "general_ledger"
         else:
-            self.logger.warning("Current page doesn't support report generation")
+            # Fallback to parameters if no clear type found
+            result['report_type'] = parameters.get('report_type', 'unknown')
+        
+        # Extract dates using NL dialogue patterns
+        today = QDate.currentDate().toString("yyyy-MM-dd")
+        
+        # Look for specific month/year patterns
+        month_year = re.search(r'(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})', prompt_lc)
+        year_only = re.search(r'\b(20\d{2})\b', prompt_lc)
+        as_of = re.search(r'as of (\w+ \d{1,2},? \d{4})', prompt_lc)
+        
+        # Check for relative dates
+        if "last month" in prompt_lc:
+            last_month_date = QDate.currentDate().addMonths(-1)
+            result['start_date'] = last_month_date.toString("yyyy-MM-01")
+            result['end_date'] = QDate(last_month_date.year(), last_month_date.month(), 
+                                     calendar.monthrange(last_month_date.year(), last_month_date.month())[1]).toString("yyyy-MM-dd")
+        elif "this month" in prompt_lc or "current month" in prompt_lc:
+            current_date = QDate.currentDate()
+            result['start_date'] = current_date.toString("yyyy-MM-01")
+            result['end_date'] = today
+        elif "last year" in prompt_lc:
+            last_year = QDate.currentDate().year() - 1
+            result['start_date'] = f"{last_year}-01-01"
+            result['end_date'] = f"{last_year}-12-31"
+        elif "this year" in prompt_lc or "current year" in prompt_lc:
+            current_year = QDate.currentDate().year()
+            result['start_date'] = f"{current_year}-01-01"
+            result['end_date'] = today
+        elif month_year:
+            # Specific month and year
+            month = list(calendar.month_name).index(month_year.group(1).capitalize())
+            year_val = int(month_year.group(2))
+            result['start_date'] = f"{year_val}-{month:02d}-01"
+            result['end_date'] = f"{year_val}-{month:02d}-{calendar.monthrange(year_val, month)[1]:02d}"
+        elif as_of:
+            # As of date for balance sheet
+            try:
+                result['as_of_date'] = dateutil.parser.parse(as_of.group(1)).strftime("%Y-%m-%d")
+            except:
+                result['as_of_date'] = today
+        elif year_only:
+            # Full year
+            year_val = int(year_only.group(1))
+            result['start_date'] = f"{year_val}-01-01"
+            result['end_date'] = f"{year_val}-12-31"
+        else:
+            # Use parameters or default to current month
+            date_range = parameters.get('date_range', {})
+            if date_range:
+                result['start_date'] = date_range.get('start')
+                result['end_date'] = date_range.get('end')
+            else:
+                # Default to current month
+                current_date = QDate.currentDate()
+                result['start_date'] = current_date.toString("yyyy-MM-01")
+                result['end_date'] = today
+        
+        return result
+    
+    def _navigate_to_trial_balance(self, start_date: str, end_date: str):
+        """Navigate to Trial Balance page with date range"""
+        print(f"📍 Navigating to Trial Balance page")
+        self.stack.setCurrentIndex(3)
+        for btn in self.sidebar_buttons:
+            btn.setChecked(False)
+        self.sidebar_buttons[3].setChecked(True)
+        
+        # Apply date range if available
+        trial_balance_page = self.stack.currentWidget()
+        if hasattr(trial_balance_page, 'set_date_range') and start_date and end_date:
+            trial_balance_page.set_date_range(start_date, end_date)
+        
+        print(f"✅ Successfully navigated to Trial Balance page")
+    
+    def _navigate_to_ledger(self, start_date: str, end_date: str):
+        """Navigate to Ledger page with date range"""
+        print(f"📍 Navigating to General Ledger page")
+        self.stack.setCurrentIndex(2)
+        for btn in self.sidebar_buttons:
+            btn.setChecked(False)
+        self.sidebar_buttons[2].setChecked(True)
+        
+        # Apply date range if available
+        ledger_page = self.stack.currentWidget()
+        if hasattr(ledger_page, 'set_date_range') and start_date and end_date:
+            ledger_page.set_date_range(start_date, end_date)
+        
+        print(f"✅ Successfully navigated to Ledger page")
+    
+    def _navigate_to_income_statement(self, start_date: str, end_date: str):
+        """Navigate to Reports page and trigger Income Statement view"""
+        print(f"📍 Navigating to Reports page for Income Statement")
+        self.stack.setCurrentIndex(4)
+        for btn in self.sidebar_buttons:
+            btn.setChecked(False)
+        self.sidebar_buttons[4].setChecked(True)
+        
+        # Wait for page to load then trigger Income Statement
+        QTimer.singleShot(100, lambda: self._trigger_income_statement(start_date, end_date))
+    
+    def _navigate_to_balance_sheet(self, as_of_date: str):
+        """Navigate to Reports page and trigger Balance Sheet view"""
+        print(f"📍 Navigating to Reports page for Balance Sheet")
+        self.stack.setCurrentIndex(4)
+        for btn in self.sidebar_buttons:
+            btn.setChecked(False)
+        self.sidebar_buttons[4].setChecked(True)
+        
+        # Wait for page to load then trigger Balance Sheet
+        QTimer.singleShot(100, lambda: self._trigger_balance_sheet(as_of_date))
+    
+    def _navigate_to_cash_flow(self, start_date: str, end_date: str):
+        """Navigate to Reports page and trigger Cash Flow view"""
+        print(f"📍 Navigating to Reports page for Cash Flow Statement")
+        self.stack.setCurrentIndex(4)
+        for btn in self.sidebar_buttons:
+            btn.setChecked(False)
+        self.sidebar_buttons[4].setChecked(True)
+        
+        # Wait for page to load then trigger Cash Flow
+        QTimer.singleShot(100, lambda: self._trigger_cash_flow(start_date, end_date))
+    
+    def _show_intelligent_report_guidance(self, original_prompt: str, parsed_request: dict):
+        """Show intelligent guidance using real accounting data like NL dialogue"""
+        try:
+            # Navigate to Reports page first
+            self.stack.setCurrentIndex(4)
+            for btn in self.sidebar_buttons:
+                btn.setChecked(False)
+            self.sidebar_buttons[4].setChecked(True)
+            
+            # Get real data summary like NL dialogue does
+            data_summary = self._get_accounting_data_summary(parsed_request)
+            
+            # Show intelligent guidance with real data
+            from PyQt6.QtWidgets import QMessageBox
+            
+            message = f"🤖 AI Assistant - Report Analysis\n\n"
+            message += f"Your request: \"{original_prompt}\"\n\n"
+            message += f"I've analyzed your accounting data:\n"
+            message += f"{data_summary}\n\n"
+            message += f"Available reports in this page:\n"
+            message += f"• Income Statement - Click to view P&L\n"
+            message += f"• Balance Sheet - Click to view financial position\n"
+            message += f"• Cash Flow Statement - Click to view cash analysis\n"
+            message += f"• Trial Balance - Navigate to Trial Balance page\n"
+            message += f"• General Ledger - Navigate to Ledger page\n\n"
+            message += f"Please click on the appropriate report card or ask me more specifically!"
+            
+            QMessageBox.information(
+                self,
+                "AI Assistant - Smart Report Guide",
+                message,
+                QMessageBox.StandardButton.Ok
+            )
+            
+        except Exception as e:
+            print(f"❌ Error showing intelligent guidance: {e}")
+            # Fallback to basic guidance
+            self._show_reports_help(original_prompt)
+    
+    def _get_accounting_data_summary(self, parsed_request: dict):
+        """Get a summary of accounting data like NL dialogue does"""
+        try:
+            start_date = parsed_request.get('start_date')
+            end_date = parsed_request.get('end_date')
+            as_of_date = parsed_request.get('as_of_date')
+            
+            summary = []
+            
+            # Get trial balance summary
+            if hasattr(self.system, 'get_trial_balance'):
+                try:
+                    trial_balance = self.system.get_trial_balance(start_date, end_date)
+                    if trial_balance:
+                        total_debits = sum(acc.get('debit', 0) for acc in trial_balance)
+                        total_credits = sum(acc.get('credit', 0) for acc in trial_balance)
+                        summary.append(f"Trial Balance: {len(trial_balance)} accounts, Total Debits: ${total_debits:,.2f}, Total Credits: ${total_credits:,.2f}")
+                except:
+                    pass
+            
+            # Get accounts summary
+            if hasattr(self.system, 'get_accounts'):
+                try:
+                    accounts = self.system.get_accounts()
+                    if accounts:
+                        account_types = {}
+                        for acc in accounts:
+                            acc_type = acc.get('type', 'Unknown')
+                            account_types[acc_type] = account_types.get(acc_type, 0) + 1
+                        summary.append(f"Chart of Accounts: {len(accounts)} accounts ({', '.join([f'{count} {type_}' for type_, count in account_types.items()])})")
+                except:
+                    pass
+            
+            # Get recent transactions
+            if hasattr(self.system, 'get_journal_entries'):
+                try:
+                    entries = self.system.get_journal_entries(limit=10)
+                    if entries:
+                        summary.append(f"Recent Activity: {len(entries)} recent transactions")
+                except:
+                    pass
+            
+            return '\n'.join(summary) if summary else "Accounting data available for analysis."
+            
+        except Exception as e:
+            return f"Data analysis in progress..."
     
     def _handle_ai_reminder_creation(self, reminder_data: dict):
         """Handle AI-created reminders with rich data structure"""
         self.logger.info(f"AI reminder creation: {reminder_data}")
+        print(f"🔔 Processing AI reminder: {reminder_data}")
         
         try:
-            # Save reminder to the reminders system
-            if hasattr(self, 'notification_manager'):
-                # Add to notification manager if available
-                self.notification_manager.add_reminder(reminder_data)
+            # Get the reminders page from the stack (index 6)
+            reminders_page = self.stack.widget(6)  # Reminders page is at index 6
             
-            # If not on reminders page, optionally navigate there
-            # For now, just log the successful creation
-            self.logger.info(f"Successfully created reminder: {reminder_data.get('title', 'Untitled')}")
-            
-            # Update AI context with new reminder data
-            self._update_ai_reminders_context()
-            
+            if reminders_page and hasattr(reminders_page, 'add_reminder_from_ai'):
+                print(f"📝 Adding reminder to reminders page...")
+                
+                # Extract data and call the reminders page method
+                title = reminder_data.get('title', 'AI Reminder')
+                description = reminder_data.get('description', '')
+                due_datetime = reminder_data.get('due_datetime', '')
+                recurring = reminder_data.get('recurring', 'none')
+                
+                # Add reminder to the reminders page
+                reminder_id = reminders_page.add_reminder_from_ai(
+                    title=title,
+                    description=description,
+                    due_datetime=due_datetime,
+                    recurring=recurring
+                )
+                
+                print(f"✅ Successfully created reminder with ID: {reminder_id}")
+                self.logger.info(f"Successfully created reminder: {title} (ID: {reminder_id})")
+                
+                # Also add to notification manager if available for immediate alerts
+                if hasattr(self, 'notification_manager'):
+                    self.notification_manager.add_notification(
+                        title="Reminder Created",
+                        message=f"New reminder: {title}",
+                        notification_type="success"
+                    )
+                
+                # Update AI context with new reminder data
+                self._update_ai_reminders_context()
+                
+            else:
+                print(f"❌ Reminders page not available or doesn't support AI reminders")
+                self.logger.error("Reminders page not available for AI reminder creation")
+                
+                # Fallback: just save to notification manager
+                if hasattr(self, 'notification_manager'):
+                    self.notification_manager.add_notification(
+                        title="Reminder Created",
+                        message=f"New reminder: {reminder_data.get('title', 'Untitled')}",
+                        notification_type="info"
+                    )
+                
         except Exception as e:
+            print(f"❌ Error creating AI reminder: {e}")
             self.logger.error(f"Failed to create reminder: {e}")
+            
+            # Show error notification
+            if hasattr(self, 'notification_manager'):
+                self.notification_manager.add_notification(
+                    title="Reminder Error",
+                    message=f"Failed to create reminder: {str(e)}",
+                    notification_type="error"
+                )
     
     def _handle_ai_action(self, action_type: str, results: dict):
         """Handle various AI-executed actions"""
@@ -2015,6 +2333,111 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             self.logger.debug("Updated AI context with fresh accounting data")
         except Exception as e:
             self.logger.warning(f"Could not update AI with fresh data: {e}")
+
+    # AI Report Integration Helper Methods
+    def _trigger_income_statement(self, start_date: str, end_date: str):
+        """Trigger Income Statement view within Reports page"""
+        try:
+            reports_page = self.stack.currentWidget()
+            if hasattr(reports_page, '_handle_statement_click'):
+                print(f"🎯 Triggering Income Statement with dates: {start_date} to {end_date}")
+                # Set date range first if possible
+                if hasattr(reports_page, 'date_selector') and start_date and end_date:
+                    from PyQt6.QtCore import QDate
+                    start_qdate = QDate.fromString(start_date, "yyyy-MM-dd")
+                    end_qdate = QDate.fromString(end_date, "yyyy-MM-dd")
+                    if start_qdate.isValid() and end_qdate.isValid():
+                        reports_page.date_selector.set_date_range(start_qdate, end_qdate)
+                
+                # Trigger Income Statement
+                reports_page._handle_statement_click("Income Statement")
+                print(f"✅ Successfully triggered Income Statement")
+            else:
+                print(f"❌ Reports page doesn't support statement clicks")
+        except Exception as e:
+            print(f"❌ Error triggering Income Statement: {e}")
+            self.logger.error(f"Failed to trigger Income Statement: {e}")
+
+    def _trigger_balance_sheet(self, end_date: str):
+        """Trigger Balance Sheet view within Reports page"""
+        try:
+            reports_page = self.stack.currentWidget()
+            if hasattr(reports_page, '_handle_statement_click'):
+                print(f"🎯 Triggering Balance Sheet as of: {end_date}")
+                # Set date range first if possible
+                if hasattr(reports_page, 'date_selector') and end_date:
+                    from PyQt6.QtCore import QDate
+                    end_qdate = QDate.fromString(end_date, "yyyy-MM-dd")
+                    if end_qdate.isValid():
+                        # For balance sheet, set both dates to the same (as of date)
+                        reports_page.date_selector.set_date_range(end_qdate, end_qdate)
+                
+                # Trigger Balance Sheet
+                reports_page._handle_statement_click("Balance Sheet")
+                print(f"✅ Successfully triggered Balance Sheet")
+            else:
+                print(f"❌ Reports page doesn't support statement clicks")
+        except Exception as e:
+            print(f"❌ Error triggering Balance Sheet: {e}")
+            self.logger.error(f"Failed to trigger Balance Sheet: {e}")
+
+    def _trigger_cash_flow(self, start_date: str, end_date: str):
+        """Trigger Cash Flow Statement view within Reports page"""
+        try:
+            reports_page = self.stack.currentWidget()
+            if hasattr(reports_page, '_handle_statement_click'):
+                print(f"🎯 Triggering Cash Flow Statement with dates: {start_date} to {end_date}")
+                # Set date range first if possible
+                if hasattr(reports_page, 'date_selector') and start_date and end_date:
+                    from PyQt6.QtCore import QDate
+                    start_qdate = QDate.fromString(start_date, "yyyy-MM-dd")
+                    end_qdate = QDate.fromString(end_date, "yyyy-MM-dd")
+                    if start_qdate.isValid() and end_qdate.isValid():
+                        reports_page.date_selector.set_date_range(start_qdate, end_qdate)
+                
+                # Trigger Cash Flow Statement
+                reports_page._handle_statement_click("Cash Flow Statement")
+                print(f"✅ Successfully triggered Cash Flow Statement")
+            else:
+                print(f"❌ Reports page doesn't support statement clicks")
+        except Exception as e:
+            print(f"❌ Error triggering Cash Flow Statement: {e}")
+            self.logger.error(f"Failed to trigger Cash Flow Statement: {e}")
+
+    def _show_reports_help(self, report_type: str):
+        """Show helpful information about available reports"""
+        try:
+            from PyQt6.QtWidgets import QMessageBox
+            
+            # Create a helpful message about the reports available
+            available_reports = [
+                "• Trial Balance - Navigate to Trial Balance page",
+                "• General Ledger - Navigate to Ledger page", 
+                "• Income Statement - Available in Reports page",
+                "• Balance Sheet - Available in Reports page",
+                "• Cash Flow Statement - Available in Reports page",
+                "• Financial Ratios - Available in Reports page",
+                "• Budget Analysis - Available in Reports page"
+            ]
+            
+            message = f"🤖 AI Assistant - Report Generation\n\n"
+            message += f"I've navigated you to the Reports page. Here are the available reports:\n\n"
+            message += "\n".join(available_reports)
+            message += f"\n\nYou can click on any report card to generate it, or use the date selector to set a specific time period."
+            
+            if report_type not in ['trial_balance', 'ledger', 'income_statement', 'balance_sheet', 'cash_flow']:
+                message += f"\n\nNote: '{report_type.replace('_', ' ').title()}' isn't directly available, but you can find similar reports above."
+            
+            QMessageBox.information(
+                self,
+                "AI Assistant - Reports Guide",
+                message,
+                QMessageBox.StandardButton.Ok
+            )
+            
+        except Exception as e:
+            print(f"❌ Error showing reports help: {e}")
+            self.logger.error(f"Failed to show reports help: {e}")
 
     def _create_bottom_bar(self, main_layout):
         """Create the bottom bar with workspace switcher and status info"""

@@ -21,38 +21,97 @@ class SimpleAIStatusBar(QLineEdit):
         self.parent_window = parent
         self.is_expanded = False
         self.is_processing = False
-        self.placeholder_text = "Ask AI anything..."
+        self.placeholder_text = "🤖 AI Assistant - Ask me anything!"
+        
+        # Initialize enhanced AI processor directly
+        from .enhanced_ai_processor import ContextAwareAI
+        self.ai_processor = ContextAwareAI(parent)
+        self._setup_ai_connections()
         
         # Dynamic status management
         self.current_state = "idle"  # idle, processing, notification, background_task
         self.last_activity_time = datetime.now()
-        self.last_motivational_message_time = datetime.now() - timedelta(hours=1)
+        self.last_interaction_time = datetime.now() - timedelta(hours=1)
         self.current_page_context = None
         self.unread_notifications_count = 0
         self.background_processes = []
         
-        # Message preferences (will be loaded from user settings later)
-        self.motivational_enabled = True
-        self.wellness_enabled = True
-        self.break_reminder_interval = 2  # hours
-        self.last_break_reminder = datetime.now() - timedelta(hours=2)
-          # Setup UI
+        # Enhanced features
+        self.smart_suggestions_enabled = True
+        self.contextual_help_enabled = True
+        self.last_suggestion_time = datetime.now() - timedelta(hours=1)
+        
+        # Conversation memory
+        self.recent_commands = []
+        self.user_preferences = {
+            'helpful_tips': True,
+            'quick_actions': True,
+            'contextual_suggestions': True
+        }
+        
+        # Setup UI
         self._setup_ui()
         self._setup_animations()
         self._apply_styling()
         self._setup_dynamic_status()
+    
+    def _setup_ai_connections(self):
+        """Setup AI processor signal connections"""
+        self.ai_processor.response_ready.connect(self.handle_ai_response)
+        self.ai_processor.navigation_requested.connect(self._handle_navigation)
+        self.ai_processor.report_requested.connect(self._handle_report_request)
+        self.ai_processor.reminder_created.connect(self._handle_reminder_created)
+        self.ai_processor.processing_started.connect(self.handle_processing_started)
+        self.ai_processor.processing_finished.connect(self.handle_processing_finished)
+        self.ai_processor.error_occurred.connect(self.handle_ai_error)
+    
+    def _handle_navigation(self, page: str, params: dict):
+        """Handle navigation requests"""
+        self.setText(f"📍 Navigating to {page.replace('_', ' ').title()}...")
+        
+        # Forward to parent window
+        if hasattr(self.parent_window, 'navigate_to_page'):
+            self.parent_window.navigate_to_page(page, params)
+        elif hasattr(self.parent_window, '_handle_ai_navigation'):
+            self.parent_window._handle_ai_navigation(page, params)
+    
+    def _handle_report_request(self, report_type: str, params: dict):
+        """Handle report generation requests"""
+        self.setText(f"📊 Generating {report_type.replace('_', ' ').title()}...")
+        
+        # Forward to parent window
+        if hasattr(self.parent_window, 'generate_report'):
+            self.parent_window.generate_report(report_type, params)
+        elif hasattr(self.parent_window, '_handle_ai_report_request'):
+            self.parent_window._handle_ai_report_request(report_type, params)
+    
+    def _handle_reminder_created(self, reminder_data: dict):
+        """Handle reminder creation"""
+        title = reminder_data.get('title', 'Reminder')
+        self.setText(f"✅ Created: {title}")
+        
+        # Forward to parent window
+        if hasattr(self.parent_window, 'add_reminder'):
+            self.parent_window.add_reminder(reminder_data)
+        elif hasattr(self.parent_window, '_handle_ai_reminder_creation'):
+            self.parent_window._handle_ai_reminder_creation(reminder_data)
         
     def _setup_dynamic_status(self):
         """Setup timers and monitoring for dynamic status display"""
-        # Main status update timer - checks every 2 minutes for better performance
+        # Main status update timer - more frequent for better responsiveness
         self.status_timer = QTimer()
         self.status_timer.timeout.connect(self._update_dynamic_status)
-        self.status_timer.start(120000)  # 2 minutes instead of 30 seconds
+        self.status_timer.start(60000)  # 1 minute for responsive updates
         
-        # Notification checker - checks every 30 seconds for responsive notifications
+        # Notification checker - checks every 15 seconds for timely notifications
         self.notification_timer = QTimer()
         self.notification_timer.timeout.connect(self._check_notifications)
-        self.notification_timer.start(30000)  # 30 seconds instead of 10 seconds
+        self.notification_timer.start(15000)  # 15 seconds for responsive notifications
+        
+        # Smart suggestions timer - provides contextual help
+        self.suggestion_timer = QTimer()
+        self.suggestion_timer.timeout.connect(self._show_smart_suggestion)
+        self.suggestion_timer.start(300000)  # 5 minutes for helpful suggestions
         
         # Initial status set
         self._update_dynamic_status()
@@ -167,12 +226,58 @@ class SimpleAIStatusBar(QLineEdit):
         # Update fixed width after animation
         QTimer.singleShot(300, lambda: self.setFixedWidth(500))        
     def _process_input(self):
-        """Process user input by emitting a signal."""
+        """Process user input using enhanced AI processor directly."""
         user_input = self.text().strip()
         if not user_input or self.is_processing:
             return
-            
+        
+        # Store command in recent history
+        self.recent_commands.append({
+            'command': user_input,
+            'timestamp': datetime.now(),
+            'page_context': self.current_page_context
+        })
+        
+        # Keep only last 10 commands
+        if len(self.recent_commands) > 10:
+            self.recent_commands.pop(0)
+        
+        # Update interaction time
+        self.last_interaction_time = datetime.now()
+        
+        # Set processing state
+        self.is_processing = True
+        self.setText("🤖 AI is thinking...")
+        self.setReadOnly(True)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+        
+        # Get current context and process with enhanced AI
+        context = self._get_current_context()
+        self.ai_processor.update_context("application", context)
+        self.ai_processor.process_command(user_input)
+        
+        # Also emit signal for backward compatibility
         self.ai_command_submitted.emit(user_input)
+    
+    def _get_current_context(self) -> dict:
+        """Get current application context for AI processing"""
+        context = {
+            'current_page': self.current_page_context or 'dashboard',
+            'user_role': 'accountant',  # Default role
+            'timestamp': datetime.now().isoformat(),
+            'recent_commands': self.recent_commands[-5:] if self.recent_commands else []
+        }
+        
+        # Add parent window context if available
+        if hasattr(self.parent_window, 'get_current_context'):
+            parent_context = self.parent_window.get_current_context()
+            context.update(parent_context)
+        elif hasattr(self.parent_window, '_get_current_context'):
+            parent_context = self.parent_window._get_current_context()
+            context.update(parent_context)
+        
+        return context
 
     def show_processing_indicator(self):
         """Display a processing message."""
@@ -242,194 +347,253 @@ class SimpleAIStatusBar(QLineEdit):
         """Update last activity time - call this when user interacts with the app"""
         self.last_activity_time = datetime.now()
     
-    def _get_motivational_messages(self):
-        """Get categorized motivational messages"""
+    def _get_intelligent_status_messages(self):
+        """Get intelligent status messages that provide real value"""
         return {
-            "work_motivation": [
-                "Great job staying on top of your finances! 📊",
-                "Every transaction recorded is a step toward better financial control 💪",
-                "Your attention to detail makes all the difference in accounting ✨",
-                "Consistent bookkeeping today = stress-free reporting tomorrow 🎯",
-                "You're building a solid financial foundation! 🏗️",
-                "Each entry brings clarity to your business performance 📈",
-                "Your systematic approach to bookkeeping is paying off 💼"
+            "productivity_tips": [
+                "💡 Pro tip: Use keyboard shortcuts - Ctrl+N for new entries",
+                "⚡ Speed up work: Try voice commands like 'create expense entry'",
+                "🔍 Quick search: Press Ctrl+F to find any transaction instantly",
+                "📊 Save time: Ask me to 'generate standard reports' automatically"
             ],
-            "wellness": [
-                "Remember to take a short break and stretch your eyes 👀",
-                "You've been working hard - time for a 5-minute breather? ☕",
-                "Stay hydrated while crunching those numbers! 💧",
-                "Good posture = better focus. Adjust your seat and carry on! 🪑",
-                "Deep breath in, numbers out - you've got this! 🧘‍♀️",
-                "Take time to appreciate how much you've accomplished 🙏",
-                "Progress over perfection - you're doing great 🌱"
+            "accounting_insights": [
+                "📚 Did you know? I can explain any accounting principle instantly",
+                "⚖️ Remember: Assets = Liabilities + Equity (fundamental equation)",
+                "💡 Tip: Regular reconciliation prevents month-end surprises",
+                "📈 Insight: Trend analysis reveals business patterns over time"
             ],
-            "achievement": [
-                "You've completed several entries today - excellent progress! 🏆",
-                "Your books are looking organized and professional 📈",
-                "Month-end tasks completed efficiently - well done! 🎉",
-                "Your financial records show real attention to detail 🔍",
-                "Another productive session in the books! 📚"
-            ],
-            "time_based": {
-                "morning": [
-                    "Good morning! Ready to tackle today's accounting tasks? ☀️",
-                    "Fresh start, fresh books - let's make it a productive day! 🌅",
-                    "Morning focus = accurate entries. You've got this! ⭐"
-                ],
-                "afternoon": [
-                    "Afternoon productivity boost coming right up! ⚡",
-                    "Halfway through the day - maintaining that accuracy! 🎯",
-                    "Steady progress through the afternoon 📊"
-                ],
-                "evening": [
-                    "Wrapping up another productive day of bookkeeping 🌙",
-                    "End of day approaching - great work today! 🌅",
-                    "Time to review today's accomplishments ✨"
-                ]
-            }
+            "feature_highlights": [
+                "🆕 Try the new AI features: 'explain this transaction'",
+                "🔧 Power user tip: Ask me to 'automate recurring entries'",
+                "📋 Organization tip: I can help categorize and clean up accounts",
+                "🔄 Sync tip: I can monitor and explain sync status issues"
+            ]
         }
     
     def _get_context_messages(self):
-        """Get context-aware messages based on current page"""
+        """Get intelligent, actionable context-aware messages based on current page"""
         return {
             "dashboard": [
-                "Your financial overview looks comprehensive 📊",
-                "Dashboard showing healthy business metrics 📈",
-                "Quick insights available - ask me anything! 🤖"
+                "🤖 I can explain these metrics or help you navigate anywhere",
+                "💡 Ask me: 'What do these numbers mean?' or 'Show trial balance'",
+                "📊 Try: 'Generate this month's report' or 'Explain cash flow'",
+                "⚡ Quick navigation: 'Open accounts' or 'Show journal'"
             ],
             "journal": [
-                "Journal entries are the heart of good bookkeeping 📝",
-                "Every transaction tells a story about your business 📖",
-                "Accurate journal entries = reliable reports 🎯"
+                "📝 I can help create entries, explain rules, or find transactions",
+                "💡 Try: 'How to reverse this entry?' or 'Create expense entry'",
+                "⚖️ Ask: 'Why don't debits equal credits?' or 'Explain posting'",
+                "🔍 Search: 'Find entry for [vendor]' or 'Show last week entries'"
             ],
             "accounts": [
-                "Well-organized chart of accounts = clear reporting 🗂️",
-                "Your account structure looks professional 💼",
-                "Account balances reflecting business health 📊"
-            ],            "reports": [
-                "Reports transform data into business insights 📈",
-                "Financial reports are your business compass 🧭",
-                "Numbers tell the story - you're the author ✍️"
+                "🗂️ I can explain account types, help organize, or check balances",
+                "💡 Try: 'What type of account is this?' or 'Show account history'",
+                "🔍 Ask: 'How to reconcile accounts?' or 'Find duplicate accounts'",
+                "⚡ Quick: 'Create new account' or 'Merge similar accounts'"
+            ],
+            "trial_balance": [
+                "⚖️ I can troubleshoot balance issues or explain discrepancies",
+                "💡 Try: 'Why doesn't this balance?' or 'Explain trial balance'",
+                "🔍 Ask: 'Find the error' or 'Show largest differences'",
+                "📊 Quick: 'Export data' or 'Compare to last month'"
+            ],
+            "reports": [
+                "📈 I can help generate reports, explain ratios, or customize formats",
+                "💡 Try: 'Create P&L report' or 'Explain gross profit margin'",
+                "🔍 Ask: 'Compare years' or 'Show trends'",
+                "⚡ Quick: 'Email report' or 'Save as PDF'"
+            ],
+            "ledger": [
+                "📚 I can help navigate entries, explain postings, or find transactions",
+                "💡 Try: 'Explain this posting' or 'Show account activity'",
+                "🔍 Ask: 'Find transaction by amount' or 'Show adjustments'",
+                "⚡ Quick: 'Filter by date' or 'Sort by amount'"
+            ],
+            "reminders": [
+                "🔔 I can help manage tasks, set deadlines, or explain priorities",
+                "💡 Try: 'Create month-end reminder' or 'Show overdue tasks'",
+                "🔍 Ask: 'What's due this week?' or 'Explain task types'",
+                "⚡ Quick: 'Mark complete' or 'Snooze reminder'"
+            ],
+            "period_closing": [
+                "📅 I can guide through closing steps or troubleshoot issues",
+                "💡 Try: 'Help me close the month' or 'Check closing requirements'",
+                "🔍 Ask: 'What's blocking closure?' or 'Show closing checklist'",
+                "⚡ Quick: 'Run close reports' or 'Verify all entries'"
             ]
         }
     
     def _update_dynamic_status(self):
-        """Update the status bar with dynamic content when idle"""
+        """Update the status bar with intelligent, context-aware content"""
         try:
             if self.is_expanded or self.is_processing:
                 return
                 
             current_time = datetime.now()
             
-            # Check for background processes first
+            # Priority 1: Background processes
             if self.background_processes:
                 self._show_background_process_status()
                 return
                 
-            # Check for unread notifications
+            # Priority 2: Unread notifications
             if self.unread_notifications_count > 0:
                 self._show_notification_reminder()
                 return
-                
-            # Check if it's time for a motivational message
-            time_since_last_message = current_time - self.last_motivational_message_time
-            if time_since_last_message.total_seconds() > 3600:  # 1 hour
-                self._show_motivational_message()
+            
+            # Priority 3: Context-based suggestions (smart help)
+            context_suggestion = self._get_recent_context_suggestions()
+            if context_suggestion:
+                self.setText(context_suggestion)
+                self.placeholder_text = context_suggestion
                 return
-                
-            # Check for break reminders
-            time_since_last_break = current_time - self.last_break_reminder
-            if (self.wellness_enabled and 
-                time_since_last_break.total_seconds() > self.break_reminder_interval * 3600):
-                self._show_break_reminder()
-                return
-                
-            # Default context-aware message
+            
+            # Priority 4: Time-based helpful tips
+            time_since_interaction = current_time - self.last_interaction_time
+            if time_since_interaction.total_seconds() > 1800:  # 30 minutes since last interaction
+                helpful_tip = self._get_helpful_tip()
+                if helpful_tip:
+                    self.setText(helpful_tip)
+                    self.placeholder_text = helpful_tip
+                    return
+            
+            # Default: Context-aware status
             self._show_context_message()
+                
         except Exception as e:
-            # Silent fail - don't disrupt the UI
+            # Silent fail - don't disrupt the UI, but log for debugging
             print(f"AI Status Bar update error: {e}")
+            self.setText("🤖 AI Assistant - Ask me anything!")
+            self.placeholder_text = "🤖 AI Assistant - Ask me anything!"
+
+    def _get_helpful_tip(self) -> str:
+        """Get helpful tips based on time and context"""
+        tips = {
+            'general': [
+                "💡 Tip: Try asking 'help me with journal entries'",
+                "🔍 Did you know? I can explain any accounting concept",
+                "⚡ Quick tip: Say 'show accounts' to navigate instantly",
+                "📊 Pro tip: Ask 'how do I...' for step-by-step guidance"
+            ],
+            'dashboard': [
+                "💡 From here, try: 'show me key metrics'",
+                "📈 Ask me: 'how to read these charts?'",
+                "🔍 Try: 'explain cash flow trends'"
+            ],
+            'journal': [
+                "💡 Need help? Try: 'how to create journal entry'",
+                "⚖️ Ask: 'explain debit and credit rules'",
+                "🔍 Try: 'find entry from last month'"
+            ],
+            'reports': [
+                "💡 Try: 'generate profit and loss report'",
+                "📊 Ask: 'explain this financial ratio'",
+                "🔍 Try: 'compare periods'"
+            ]
+        }
+        
+        # Get context-specific tips if available
+        context_tips = tips.get(self.current_page_context, tips['general'])
+        return random.choice(context_tips)
     
-    def _show_motivational_message(self):
-        """Display a motivational message"""
-        if not self.motivational_enabled:
+    def _show_intelligent_insight(self):
+        """Display intelligent insights based on context and usage patterns"""
+        if not self.smart_suggestions_enabled:
             return
             
-        messages = self._get_motivational_messages()
+        insights = self._get_intelligent_status_messages()
         current_hour = datetime.now().hour
         
-        # Choose message category based on time and activity
-        if 6 <= current_hour < 12:
-            category = random.choice(["work_motivation", "time_based"])
-            if category == "time_based":
-                message = random.choice(messages["time_based"]["morning"])
-            else:
-                message = random.choice(messages["work_motivation"])
-        elif 12 <= current_hour < 18:
-            category = random.choice(["work_motivation", "achievement", "time_based"])
-            if category == "time_based":
-                message = random.choice(messages["time_based"]["afternoon"])
-            else:
-                message = random.choice(messages[category])
-        else:
-            category = random.choice(["achievement", "time_based"])
-            if category == "time_based":
-                message = random.choice(messages["time_based"]["evening"])
-            else:
-                message = random.choice(messages["achievement"])
+        # Choose insight category based on time and context
+        if self.current_page_context in ['journal', 'accounts']:
+            category = random.choice(["accounting_insights", "productivity_tips"])
+        elif 9 <= current_hour < 12:  # Morning
+            category = "productivity_tips"
+        elif 12 <= current_hour < 17:  # Afternoon
+            category = random.choice(["feature_highlights", "accounting_insights"])
+        else:  # Evening
+            category = "accounting_insights"
         
-        self.setText(message)
-        self.placeholder_text = message
-        self.last_motivational_message_time = datetime.now()
-        
-        # Reset to normal after 10 seconds
-        QTimer.singleShot(10000, self._reset_to_default_message)
+        if category in insights:
+            message = random.choice(insights[category])
+            self.setText(message)
+            self.placeholder_text = message
+            self.last_suggestion_time = datetime.now()
+            
+            # Reset to normal after 15 seconds (longer for educational content)
+            QTimer.singleShot(15000, self._reset_to_default_message)
     
-    def _show_break_reminder(self):
-        """Show wellness break reminder"""
-        if not self.wellness_enabled:
+    def _show_feature_highlight(self):
+        """Show helpful feature highlights and tips"""
+        if not self.contextual_help_enabled:
             return
             
-        messages = self._get_motivational_messages()["wellness"]
-        message = random.choice(messages)
+        feature_highlights = [
+            "💡 New: Ask me 'explain this account type' for instant definitions",
+            "⚡ Tip: Try 'compare this month to last month' for quick analysis",
+            "🔍 Feature: Say 'find transactions over $1000' for smart filtering",
+            "📊 Pro tip: I can generate and email reports with 'send P&L to [email]'",
+            "🤖 Advanced: Ask complex questions like 'why is my gross margin low?'"
+        ]
         
+        message = random.choice(feature_highlights)
         self.setText(message)
         self.placeholder_text = message
-        self.last_break_reminder = datetime.now()
         
-        # Reset to normal after 15 seconds (longer for wellness messages)
-        QTimer.singleShot(15000, self._reset_to_default_message)
+        # Reset to normal after 12 seconds
+        QTimer.singleShot(12000, self._reset_to_default_message)
     
     def _show_notification_reminder(self):
-        """Show notification reminder"""
+        """Show intelligent notification reminder with context"""
         if self.unread_notifications_count == 1:
-            message = f"You have 1 unread notification 🔔"
+            message = f"🔔 1 unread notification - I can help you review it"
+        elif self.unread_notifications_count <= 5:
+            message = f"🔔 {self.unread_notifications_count} notifications waiting - ask me to 'show notifications'"
         else:
-            message = f"You have {self.unread_notifications_count} unread notifications 🔔"
+            message = f"🔔 {self.unread_notifications_count} notifications - try 'prioritize my notifications'"
             
         self.setText(message)
         self.placeholder_text = message
     
     def _show_background_process_status(self):
-        """Show background process status"""
+        """Show intelligent background process status with helpful context"""
         if not self.background_processes:
             return
             
-        # Show the most recent/important process
+        # Show the most important/recent process
         process = self.background_processes[-1]
-        message = f"{process.get('message', 'Background process running')} {process.get('progress', '')}"
+        process_message = process.get('message', 'Background process running')
+        progress = process.get('progress', '')
+        
+        # Add helpful context based on process type
+        if 'sync' in process_message.lower():
+            message = f"🔄 {process_message} {progress} - Ask me about sync issues"
+        elif 'backup' in process_message.lower():
+            message = f"💾 {process_message} {progress} - Your data is being protected"
+        elif 'report' in process_message.lower():
+            message = f"📊 {process_message} {progress} - I can explain the results"
+        else:
+            message = f"⚙️ {process_message} {progress} - Ask me for details"
         
         self.setText(message)
         self.placeholder_text = message
     
     def _show_context_message(self):
-        """Show context-aware message based on current page"""
+        """Show intelligent context-aware message based on current page"""
         messages = self._get_context_messages()
         
         if self.current_page_context and self.current_page_context in messages:
             message = random.choice(messages[self.current_page_context])
         else:
-            message = "🤖 AI Assistant - Ask me anything!"
+            # Enhanced default messages with actionable suggestions
+            default_messages = [
+                "🤖 AI Assistant ready! Try: 'help me with...' or 'show me...'",
+                "💡 I understand accounting - ask about debits, credits, or reports",
+                "⚡ Quick navigation: 'open journal', 'show accounts', 'run trial balance'",
+                "🔍 Need help? Try: 'explain [concept]' or 'how do I [task]?'",
+                "📊 I can generate reports, explain metrics, or guide you through tasks"
+            ]
+            message = random.choice(default_messages)
             
         self.setText(message)
         self.placeholder_text = message
@@ -467,21 +631,27 @@ class SimpleAIStatusBar(QLineEdit):
             pass
     
     def _show_new_notification_alert(self):
-        """Show alert for new notification"""
-        alert_message = "New notification arrived! 🔔✨"
+        """Show intelligent alert for new notification with actionable suggestions"""
+        alert_messages = [
+            "🔔 New notification! Ask me to 'read notifications' or 'show important ones'",
+            "✨ Something new arrived! Try 'what's the notification about?' for details",
+            "🔔 Fresh update! I can help you 'prioritize notifications' or 'mark as read'"
+        ]
+        
+        alert_message = random.choice(alert_messages)
         self.setText(alert_message)
         self.placeholder_text = alert_message
         
-        # Flash effect - brief highlight
+        # Enhanced visual feedback with more professional highlighting
         original_style = self.styleSheet()
         highlight_style = original_style.replace(
             "border: 1px solid rgba(0, 0, 0, 0.3)",
-            "border: 2px solid rgba(100, 181, 246, 0.8)"
+            "border: 2px solid rgba(100, 181, 246, 0.8); background: rgba(100, 181, 246, 0.1)"
         )
         self.setStyleSheet(highlight_style)
         
-        # Reset style and message after 3 seconds
-        QTimer.singleShot(3000, lambda: [
+        # Reset style and message after 4 seconds (longer to read the helpful text)
+        QTimer.singleShot(4000, lambda: [
             self.setStyleSheet(original_style),
             self._reset_to_default_message()
         ])
@@ -548,3 +718,113 @@ class SimpleAIStatusBar(QLineEdit):
         """Reset to default dynamic message"""
         if not self.is_expanded and not self.is_processing:
             self._update_dynamic_status()
+    
+    def _show_smart_suggestion(self):
+        """Show intelligent suggestions based on context and user behavior"""
+        if not self.smart_suggestions_enabled or self.is_expanded or self.is_processing:
+            return
+        
+        current_time = datetime.now()
+        time_since_last_suggestion = current_time - self.last_suggestion_time
+        
+        # Don't show suggestions too frequently
+        if time_since_last_suggestion.total_seconds() < 1800:  # 30 minutes
+            return
+        
+        suggestion = self._get_contextual_suggestion()
+        if suggestion:
+            self.setText(suggestion)
+            self.placeholder_text = suggestion
+            self.last_suggestion_time = current_time
+            
+            # Reset after 12 seconds
+            QTimer.singleShot(12000, self._reset_to_default_message)
+
+    def _get_contextual_suggestion(self) -> str:
+        """Get intelligent suggestion based on current context"""
+        page_suggestions = {
+            'dashboard': [
+                "💡 Try: 'show me this month's summary'",
+                "🔍 Ask: 'how is my cash flow looking?'",
+                "📊 Try: 'generate income statement'",
+                "⚡ Quick: 'open trial balance'"
+            ],
+            'journal': [
+                "💡 Try: 'help me create a journal entry'",
+                "🔍 Ask: 'explain debit and credit rules'",
+                "📝 Try: 'show recent transactions'",
+                "⚡ Quick: 'how to reverse an entry?'"
+            ],
+            'accounts': [
+                "💡 Try: 'explain this account type'",
+                "🔍 Ask: 'show account balance history'",
+                "📋 Try: 'help me organize accounts'",
+                "⚡ Quick: 'create new account'"
+            ],
+            'trial_balance': [
+                "💡 Try: 'why doesn't my trial balance balance?'",
+                "🔍 Ask: 'explain trial balance purpose'",
+                "📊 Try: 'show me the largest variances'",
+                "⚡ Quick: 'export to Excel'"
+            ],
+            'reports': [
+                "💡 Try: 'generate custom report'",
+                "🔍 Ask: 'explain financial ratios'",
+                "📈 Try: 'compare this year vs last year'",
+                "⚡ Quick: 'email this report'"
+            ],
+            'ledger': [
+                "💡 Try: 'explain general ledger entries'",
+                "🔍 Ask: 'find specific transaction'",
+                "📚 Try: 'show account activity'",
+                "⚡ Quick: 'filter by date range'"
+            ]
+        }
+        
+        # Context-based suggestions
+        if self.current_page_context in page_suggestions:
+            suggestions = page_suggestions[self.current_page_context]
+            return random.choice(suggestions)
+        
+        # Time-based suggestions
+        current_hour = datetime.now().hour
+        if 9 <= current_hour < 12:  # Morning
+            return random.choice([
+                "🌅 Good morning! Try: 'show yesterday's entries'",
+                "☀️ Start your day: 'open dashboard overview'",
+                "📊 Morning check: 'run trial balance'"
+            ])
+        elif 12 <= current_hour < 17:  # Afternoon
+            return random.choice([
+                "⚡ Need help? Try: 'explain account reconciliation'",
+                "📈 Afternoon task: 'generate P&L statement'",
+                "🔍 Quick check: 'show overdue items'"
+            ])
+        else:  # Evening
+            return random.choice([
+                "🌙 End of day: 'review today's transactions'",
+                "📋 Wrap up: 'show pending approvals'",
+                "✅ Daily close: 'run cash position report'"
+            ])
+
+    def _get_recent_context_suggestions(self) -> str:
+        """Get suggestions based on recent user commands"""
+        if not self.recent_commands:
+            return None
+        
+        recent_command = self.recent_commands[-1]['command'].lower()
+        
+        # Suggest follow-up actions based on recent commands
+        follow_ups = {
+            'journal': "Try: 'show journal entry templates'",
+            'balance': "Try: 'explain why accounts don't balance'",
+            'report': "Try: 'customize report format'",
+            'account': "Try: 'show account reconciliation'",
+            'transaction': "Try: 'find duplicate transactions'"
+        }
+        
+        for keyword, suggestion in follow_ups.items():
+            if keyword in recent_command:
+                return f"💭 Based on your last query: {suggestion}"
+        
+        return None
