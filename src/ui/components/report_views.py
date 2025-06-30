@@ -12,6 +12,9 @@ from PyQt6.QtGui import QFont
 from datetime import datetime
 from ...core.utils import format_currency
 from .styles import ModernStyles
+from .widgets import PageHeader, DateRangeSelector
+from ..common import ResponsiveHelper
+from .scrollbar_styles import ModernScrollbarStyles
 
 
 class BaseFinancialStatementView(QWidget):
@@ -37,24 +40,44 @@ class BaseFinancialStatementView(QWidget):
         return f"{clean_font}, Arial, sans-serif"
     
     def _setup_ui(self):
-        """Setup the professional document-style UI."""        # Base styling for the entire view
+        """Setup the professional document-style UI with modern components."""
+        # Base styling for the entire view
         self.setStyleSheet(f"""
             QWidget {{
                 background: white;
-                color: black;
+                color: #1A1A1A;
                 font-family: {self.font_family};
+            }}
+            QPushButton {{
+                font-family: {self.font_family};
+                font-weight: 600;
+                border-radius: 8px;
+                padding: 10px 20px;
+                border: none;
+                font-size: 14px;
+                min-height: 20px;
+            }}
+            QFrame {{
+                border-radius: 8px;
             }}
         """)
         
         # Main layout
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(40, 30, 40, 30)
-        layout.setSpacing(20)
+        responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
+        layout.setContentsMargins(responsive_margin, 0, responsive_margin, responsive_margin)
+        layout.setSpacing(16)
         
-        # Header section
-        self._setup_header(layout)
+        # Page header (following standard pattern)
+        self.page_header = PageHeader(self.statement_title, self.statement_subtitle)
+        layout.addWidget(self.page_header)
         
-        # Navigation bar
+        # Date range selector (following standard pattern)
+        self.date_selector = DateRangeSelector()
+        self.date_selector.dateRangeChanged.connect(self._on_date_range_changed)
+        layout.addWidget(self.date_selector)
+        
+        # Navigation and action buttons bar
         self._setup_navigation_bar(layout)
         
         # Content scroll area with fixed width table
@@ -63,74 +86,31 @@ class BaseFinancialStatementView(QWidget):
         # Footer with generation timestamp
         self._setup_footer(layout)
     
-    def _setup_header(self, parent_layout):
-        """Setup the header section with title and date."""
-        header_layout = QVBoxLayout()
-        header_layout.setSpacing(8)
-        
-        # Title
-        title = QLabel(self.statement_title.upper())
-        title.setStyleSheet("""
-            color: #1976D2;
-            font-size: 24px;
-            font-weight: 700;
-            text-align: center;
-            background: transparent;
-            border: none;
-        """)
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header_layout.addWidget(title)
-        
-        # Subtitle if provided
-        if self.statement_subtitle:
-            subtitle = QLabel(self.statement_subtitle)
-            subtitle.setStyleSheet("""
-                color: #333;
-                font-size: 16px;
-                font-weight: 500;
-                text-align: center;
-                background: transparent;
-                border: none;
-                margin: 5px 0px;
-            """)
-            subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            header_layout.addWidget(subtitle)
-        
-        # Date range label
-        self.date_label = QLabel("Period: All Time")
-        self.date_label.setStyleSheet("""
-            color: #666;
-            font-size: 14px;
-            text-align: center;
-            background: transparent;
-            border: none;
-        """)
-        self.date_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header_layout.addWidget(self.date_label)
-        
-        parent_layout.addLayout(header_layout)
-        
+    # Removed _setup_header and all date_label logic as it's obsolete with DateRangeSelector and PageHeader.
     def _setup_navigation_bar(self, parent_layout):
         """Setup the navigation bar with back and print buttons."""
         nav_layout = QHBoxLayout()
         
-        # Back button
-        back_btn = QPushButton("← Back to Reports")
+        # Back button with matching ledger styling
+        back_btn = QPushButton("◀ Reports")
+        back_btn.setFixedSize(140, 36)  # Same size as ledger buttons
         back_btn.setStyleSheet("""
             QPushButton {
-                background: #1976D2;
-                color: white;
-                border: none;
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.05);
                 border-radius: 6px;
-                padding: 8px 16px;
-                font-weight: 600;
-                font-size: 14px;
+                padding: 4px 16px;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 13px;
+                font-weight: 500;
             }
             QPushButton:hover {
-                background: #1565C0;
+                background: rgba(255, 255, 255, 0.08);
+                color: white;
             }
             QPushButton:pressed {
-                background: #0D47A1;
+                background: rgba(0, 120, 215, 0.3);
+                color: white;
             }
         """)
         back_btn.clicked.connect(self.backToReports.emit)
@@ -138,23 +118,26 @@ class BaseFinancialStatementView(QWidget):
         
         nav_layout.addStretch()
         
-        # Print button
-        print_btn = QPushButton("🖨 Print Statement")
+        # Print button with matching ledger styling
+        print_btn = QPushButton("Print Report")
+        print_btn.setFixedSize(140, 36)  # Same size as ledger buttons
         print_btn.setStyleSheet("""
             QPushButton {
-                background: #4CAF50;
-                color: white;
-                border: none;
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.05);
                 border-radius: 6px;
-                padding: 8px 16px;
-                font-weight: 600;
-                font-size: 14px;
+                padding: 4px 16px;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 13px;
+                font-weight: 500;
             }
             QPushButton:hover {
-                background: #45A049;
+                background: rgba(255, 255, 255, 0.08);
+                color: white;
             }
             QPushButton:pressed {
-                background: #388E3C;
+                background: rgba(0, 120, 215, 0.3);
+                color: white;
             }
         """)
         print_btn.clicked.connect(self._print_statement)
@@ -166,25 +149,18 @@ class BaseFinancialStatementView(QWidget):
         """Setup the content area with a scrollable table."""
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        scroll_area.setStyleSheet("""
+        
+        # Apply modern scrollbar styling matching ledger
+        content_scroll_style = """
             QScrollArea {
-                border: 1px solid #E0E0E0;
+                border: 1px solid rgba(0, 0, 0, 0.12);
                 background: white;
+                padding: 0px;
+                margin: 0px;
+                border-radius: 8px;
             }
-            QScrollBar:vertical {
-                background: #F5F5F5;
-                width: 12px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:vertical {
-                background: #BDBDBD;
-                border-radius: 6px;
-                min-height: 20px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #9E9E9E;
-            }
-        """)
+        """ + ModernScrollbarStyles.get_vertical_scrollbar_style()
+        scroll_area.setStyleSheet(content_scroll_style)
         
         # Content widget
         self.content_widget = QWidget()
@@ -397,20 +373,7 @@ class BaseFinancialStatementView(QWidget):
             if child.widget():
                 child.widget().deleteLater()
         
-    def update_date_range(self, from_date=None, to_date=None):
-        """Update the date range display."""
-        self.from_date = from_date
-        self.to_date = to_date
-        
-        if from_date and to_date:
-            date_range = f"Period: {from_date} to {to_date}"
-        elif to_date:
-            date_range = f"As of: {to_date}"
-        else:
-            date_range = "Period: All Time"
-            
-        self.date_label.setText(date_range)
-        
+    # Removed update_date_range and all date_label logic as it's obsolete with DateRangeSelector and PageHeader.
     def _print_statement(self):
         """Print the financial statement using Windows native print function."""
         try:
@@ -493,6 +456,20 @@ class BaseFinancialStatementView(QWidget):
         </html>
         """
 
+    def _on_date_range_changed(self, from_date, to_date):
+        """Handle date range changes from the DateRangeSelector."""
+        self.from_date = from_date
+        self.to_date = to_date
+        
+        # Regenerate the report with new date range if system is available
+        if hasattr(self, 'system') and self.system:
+            # This will be overridden by subclasses to call their specific show method
+            self._regenerate_with_new_dates()
+    
+    def _regenerate_with_new_dates(self):
+        """Regenerate the report with current date range. Override in subclasses."""
+        pass
+    
     def refresh_currency_display(self):
         """Refresh currency display when currency symbol changes."""
         # For report views, we need to regenerate the content with the new currency
@@ -513,7 +490,16 @@ class IncomeStatementView(BaseFinancialStatementView):
         """Display the income statement data in professional table format."""
         self.clear_content()
         self.system = system
-        self.update_date_range(from_date, to_date)
+        self.from_date = from_date
+        self.to_date = to_date
+        
+        # Optionally update the subtitle with the period
+        if from_date and to_date:
+            self.page_header.update_subtitle(f"For the Period: {from_date} to {to_date}")
+        elif to_date:
+            self.page_header.update_subtitle(f"As of: {to_date}")
+        else:
+            self.page_header.update_subtitle("All Time")
         
         # Get data from accounting system
         try:
@@ -553,6 +539,14 @@ class IncomeStatementView(BaseFinancialStatementView):
         self._add_table_row([("NET INCOME", 400), (format_currency(data.get('net_income', 0)), 200)], is_total=True)
         
         self.content_layout.addWidget(table)
+    
+    def _regenerate_with_new_dates(self):
+        """Regenerate the income statement with current date range."""
+        if self.system:
+            # Convert QDate to string if needed
+            from_date_str = self.from_date.toString("yyyy-MM-dd") if self.from_date else None
+            to_date_str = self.to_date.toString("yyyy-MM-dd") if self.to_date else None
+            self.show_income_statement(self.system, from_date_str, to_date_str)
         
     def _generate_html_content(self):
         """Generate HTML content for Income Statement printing."""
@@ -645,7 +639,14 @@ class BalanceSheetView(BaseFinancialStatementView):
         """Display the balance sheet data in professional table format."""
         self.clear_content()
         self.system = system
-        self.update_date_range(to_date=as_of_date)
+        self.from_date = None
+        self.to_date = as_of_date
+        
+        # Optionally update the subtitle with the period
+        if as_of_date:
+            self.page_header.update_subtitle(f"As of: {as_of_date}")
+        else:
+            self.page_header.update_subtitle("All Time")
         
         # Get data from accounting system
         try:
@@ -682,6 +683,13 @@ class BalanceSheetView(BaseFinancialStatementView):
             self._add_table_row([("Total Equity", 400), (format_currency(data.get('total_equity', 0)), 200)], is_total=True)
             
         self.content_layout.addWidget(table)
+    
+    def _regenerate_with_new_dates(self):
+        """Regenerate the balance sheet with current date range."""
+        if self.system:
+            # For balance sheet, we only use the "to_date" (as of date)
+            as_of_date_str = self.to_date.toString("yyyy-MM-dd") if self.to_date else None
+            self.show_balance_sheet(self.system, as_of_date_str)
         
     def _generate_html_content(self):
         """Generate HTML content for Balance Sheet printing."""
@@ -771,7 +779,16 @@ class CashFlowStatementView(BaseFinancialStatementView):
         """Display the cash flow statement data in professional table format."""
         self.clear_content()
         self.system = system
-        self.update_date_range(from_date, to_date)
+        self.from_date = from_date
+        self.to_date = to_date
+        
+        # Optionally update the subtitle with the period
+        if from_date and to_date:
+            self.page_header.update_subtitle(f"For the Period: {from_date} to {to_date}")
+        elif to_date:
+            self.page_header.update_subtitle(f"As of: {to_date}")
+        else:
+            self.page_header.update_subtitle("All Time")
         
         # Get data from accounting system
         try:
@@ -808,6 +825,13 @@ class CashFlowStatementView(BaseFinancialStatementView):
         self._add_table_row([("NET CHANGE IN CASH", 400), (format_currency(data.get('net_cash_flow', 0)), 200)], is_total=True)
         
         self.content_layout.addWidget(table)
+    
+    def _regenerate_with_new_dates(self):
+        """Regenerate the cash flow statement with current date range."""
+        if self.system:
+            from_date_str = self.from_date.toString("yyyy-MM-dd") if self.from_date else None
+            to_date_str = self.to_date.toString("yyyy-MM-dd") if self.to_date else None
+            self.show_cash_flow_statement(self.system, from_date_str, to_date_str)
         
     def _generate_html_content(self):
         """Generate HTML content for Cash Flow Statement printing."""
@@ -897,7 +921,16 @@ class StatementOfEquityView(BaseFinancialStatementView):
         """Display the statement of equity data in professional table format."""
         self.clear_content()
         self.system = system
-        self.update_date_range(from_date, to_date)
+        self.from_date = from_date
+        self.to_date = to_date
+        
+        # Optionally update the subtitle with the period
+        if from_date and to_date:
+            self.page_header.update_subtitle(f"For the Period: {from_date} to {to_date}")
+        elif to_date:
+            self.page_header.update_subtitle(f"As of: {to_date}")
+        else:
+            self.page_header.update_subtitle("All Time")
         
         # Get data from accounting system
         try:
@@ -933,6 +966,13 @@ class StatementOfEquityView(BaseFinancialStatementView):
         self._add_table_row([("Owner's Equity - End of Period", 400), (format_currency(data.get('ending_equity', 0)), 200)], is_total=True)
         
         self.content_layout.addWidget(table)
+    
+    def _regenerate_with_new_dates(self):
+        """Regenerate the statement of equity with current date range."""
+        if self.system:
+            from_date_str = self.from_date.toString("yyyy-MM-dd") if self.from_date else None
+            to_date_str = self.to_date.toString("yyyy-MM-dd") if self.to_date else None
+            self.show_statement_of_equity(self.system, from_date_str, to_date_str)
         
     def _generate_html_content(self):
         """Generate HTML content for Statement of Equity printing."""
