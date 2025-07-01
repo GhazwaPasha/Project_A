@@ -20,7 +20,7 @@ class SimpleAIStatusBar(QLineEdit):
         self.parent_window = parent
         self.is_expanded = False
         self.is_processing = False
-        self.placeholder_text = "🤖 AI Assistant - Navigate, reports, reminders"
+        self.placeholder_text = "Your AI Sidekick - Ready"
         
         # Initialize AI processor
         from .enhanced_ai_processor import ContextAwareAI
@@ -137,7 +137,7 @@ class SimpleAIStatusBar(QLineEdit):
                 text-align: center;
                 box-shadow: 
                     inset 0 1px 0 rgba(255, 255, 255, 0.2),
-                    0 0 20px rgba(100, 181, 246, 0.15),
+                    0 0 20px rgba(255, 255, 255, 0.1),
                     0 2px 8px rgba(0, 0, 0, 0.1);
             }
             
@@ -147,12 +147,11 @@ class SimpleAIStatusBar(QLineEdit):
                     stop: 0.3 rgba(255, 255, 255, 0.12),
                     stop: 0.7 rgba(255, 255, 255, 0.12),
                     stop: 1 rgba(255, 255, 255, 0.08));
-                border: 1px solid rgba(100, 181, 246, 0.3);
+                border: 1px solid rgba(0, 0, 0, 0.3);
                 outline: none;
                 box-shadow: 
-                    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-                    0 0 25px rgba(100, 181, 246, 0.25),
-                    0 2px 12px rgba(0, 0, 0, 0.15);
+                    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                    0 2px 8px rgba(0, 0, 0, 0.1);
             }
             
             QLineEdit:focus {
@@ -161,14 +160,13 @@ class SimpleAIStatusBar(QLineEdit):
                     stop: 0.3 rgba(255, 255, 255, 0.12),
                     stop: 0.7 rgba(255, 255, 255, 0.12),
                     stop: 1 rgba(255, 255, 255, 0.08));
-                border: 1px solid rgba(100, 181, 246, 0.5);
+                border: 1px solid rgba(0, 0, 0, 0.3);
                 color: white;
                 outline: none;
                 text-align: left;
                 box-shadow: 
-                    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-                    0 0 30px rgba(100, 181, 246, 0.35),
-                    0 2px 16px rgba(0, 0, 0, 0.2);
+                    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                    0 2px 8px rgba(0, 0, 0, 0.1);
             }
             
             QLineEdit::placeholder {
@@ -196,7 +194,7 @@ class SimpleAIStatusBar(QLineEdit):
         self.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.setCursor(Qt.CursorShape.IBeamCursor)
         self.setText("")
-        self.setPlaceholderText("Ask AI anything...")
+        self.setPlaceholderText("You Say, I do - Search, Reports and Reminders")
         
         # Animate width expansion
         self.width_animation.setStartValue(380)
