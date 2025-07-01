@@ -51,7 +51,7 @@ class TrialBalancePage(QWidget):
         header = PageHeader("Trial Balance", "Verify that total debits equal total credits")
         main_layout.addWidget(header)
         
-        # Date range selector
+        # Date range selector - disabled and set to "All Time" for trial balance
         self.date_selector = DateRangeSelector(callback=self._on_date_range_changed)
         # Select "All Time" quick filter by default (button index 4)
         if hasattr(self.date_selector, "quick_buttons"):
@@ -59,6 +59,10 @@ class TrialBalancePage(QWidget):
             if btn:
                 btn.setChecked(True)
                 self.date_selector._quick_filter_selected()
+        
+        # Disable the date selector for trial balance (as of date concept)
+        self._disable_date_selector()
+        
         main_layout.addWidget(self.date_selector)
         
         # Compact balance metrics - only 3 cards
@@ -66,6 +70,27 @@ class TrialBalancePage(QWidget):
         
         # Professional trial balance table with date info
         self._create_trial_balance_table(main_layout)
+        
+    def _disable_date_selector(self):
+        """Disable the date range selector for trial balance (as of date concept)."""
+        # Disable all quick filter buttons
+        if hasattr(self.date_selector, "quick_buttons"):
+            for button in self.date_selector.quick_buttons.buttons():
+                if button:
+                    button.setEnabled(False)
+        
+        # Disable date pickers
+        if hasattr(self.date_selector, "from_date"):
+            self.date_selector.from_date.setEnabled(False)
+        if hasattr(self.date_selector, "to_date"):
+            self.date_selector.to_date.setEnabled(False)
+        
+        # Apply disabled styling
+        self.date_selector.setStyleSheet("""
+            QWidget {
+                opacity: 0.6;
+            }
+        """)
         
     def _create_compact_balance_metrics(self, main_layout):
         """Create compact balance status metrics - 4 essential cards."""
@@ -385,13 +410,9 @@ class TrialBalancePage(QWidget):
     def _calculate_trial_balance(self, from_date, to_date):
         """Calculate trial balance using the accounting system method."""
         try:
-            # Use the accounting system's get_trial_balance method
-            if from_date and to_date:
-                from_str = from_date.toString("yyyy-MM-dd")
-                to_str = to_date.toString("yyyy-MM-dd")
-                account_balances = self.system.get_trial_balance(from_str, to_str)
-            else:
-                account_balances = self.system.get_trial_balance()
+            # For trial balance, always use "as of date" concept (all time data)
+            # This ensures trial balance shows cumulative balances regardless of date filter
+            account_balances = self.system.get_trial_balance()
               # Get account metadata for codes and types
             accounts = self.system.get_all_accounts()
             account_info = {}
@@ -446,7 +467,7 @@ class TrialBalancePage(QWidget):
                 'total_credits': total_credits,
                 'difference': difference,
                 'is_balanced': is_balanced,
-                'as_of_date': to_date.toString("MMM d, yyyy") if to_date else "Current"
+                'as_of_date': "Current"  # Always show as current date for trial balance
             }
             
         except Exception as e:
@@ -477,7 +498,7 @@ class TrialBalancePage(QWidget):
         
         # Update date info near the table (not in a card)
         account_count = len(trial_data['accounts'])
-        date_text = f"As of {trial_data['as_of_date']} • {account_count} accounts with balances"
+        date_text = f"Trial Balance as of {trial_data['as_of_date']} • {account_count} accounts with balances"
         self.date_info_label.setText(date_text)
         
     def _update_trial_balance_table(self, trial_data):
