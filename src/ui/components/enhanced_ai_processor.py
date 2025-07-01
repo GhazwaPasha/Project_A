@@ -13,6 +13,8 @@ from abc import ABC, abstractmethod
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 import requests
 import re
+import calendar
+import dateutil.parser
 
 
 # ============================================================================
@@ -668,8 +670,6 @@ class UnifiedNavigationPlugin(AIPlugin):
         
         return ""
     
-
-    
     def _extract_report_type(self, input_lower: str) -> str:
         """Extract report type from user input"""
         report_mapping = {
@@ -688,10 +688,9 @@ class UnifiedNavigationPlugin(AIPlugin):
     
     def _extract_dates(self, input_lower: str) -> dict:
         """Extract date parameters from user input"""
-        from datetime import datetime, timedelta
-        
         today = datetime.now()
         
+        # Handle relative date patterns (existing functionality)
         if 'last month' in input_lower:
             last_month = today.replace(day=1) - timedelta(days=1)
             start_of_last_month = last_month.replace(day=1)
@@ -717,4 +716,177 @@ class UnifiedNavigationPlugin(AIPlugin):
                 'end_date': today.strftime('%Y-%m-%d')
             }
         
+        # NEW: Handle specific date ranges like "15 june to 15 june 2025"
+        # Pattern 1: "15 june to 15 june 2025" or "15 june 2025 to 15 june 2025"
+        date_range_pattern1 = re.search(
+            r'(\d{1,2})\s+(january|february|march|april|may|june|july|august|september|october|november|december)(?:\s+(\d{4}))?\s+to\s+(\d{1,2})\s+(january|february|march|april|may|june|july|august|september|october|november|december)(?:\s+(\d{4}))?',
+            input_lower
+        )
+        
+        if date_range_pattern1:
+            try:
+                start_day = int(date_range_pattern1.group(1))
+                start_month = date_range_pattern1.group(2)
+                start_year = date_range_pattern1.group(3) or str(today.year)
+                end_day = int(date_range_pattern1.group(4))
+                end_month = date_range_pattern1.group(5)
+                end_year = date_range_pattern1.group(6) or start_year
+                
+                # Convert month names to numbers
+                month_names = ['january', 'february', 'march', 'april', 'may', 'june', 
+                              'july', 'august', 'september', 'october', 'november', 'december']
+                start_month_num = month_names.index(start_month) + 1
+                end_month_num = month_names.index(end_month) + 1
+                
+                # Create date strings
+                start_date = f"{start_year}-{start_month_num:02d}-{start_day:02d}"
+                end_date = f"{end_year}-{end_month_num:02d}-{end_day:02d}"
+                
+                return {
+                    'start_date': start_date,
+                    'end_date': end_date
+                }
+            except (ValueError, IndexError) as e:
+                print(f"⚠️ Error parsing date range pattern 1: {e}")
+        
+        # Pattern 2: "june 15 to june 15 2025" or "june 15 2025 to june 15 2025"
+        date_range_pattern2 = re.search(
+            r'(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:\s+(\d{4}))?\s+to\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:\s+(\d{4}))?',
+            input_lower
+        )
+        
+        if date_range_pattern2:
+            try:
+                start_month = date_range_pattern2.group(1)
+                start_day = int(date_range_pattern2.group(2))
+                start_year = date_range_pattern2.group(3) or str(today.year)
+                end_month = date_range_pattern2.group(4)
+                end_day = int(date_range_pattern2.group(5))
+                end_year = date_range_pattern2.group(6) or start_year
+                
+                # Convert month names to numbers
+                month_names = ['january', 'february', 'march', 'april', 'may', 'june', 
+                              'july', 'august', 'september', 'october', 'november', 'december']
+                start_month_num = month_names.index(start_month) + 1
+                end_month_num = month_names.index(end_month) + 1
+                
+                # Create date strings
+                start_date = f"{start_year}-{start_month_num:02d}-{start_day:02d}"
+                end_date = f"{end_year}-{end_month_num:02d}-{end_day:02d}"
+                
+                return {
+                    'start_date': start_date,
+                    'end_date': end_date
+                }
+            except (ValueError, IndexError) as e:
+                print(f"⚠️ Error parsing date range pattern 2: {e}")
+        
+        # Pattern 3: "15/06/2025 to 15/06/2025" or "15-06-2025 to 15-06-2025"
+        date_range_pattern3 = re.search(
+            r'(\d{1,2})[/-](\d{1,2})[/-](\d{4})\s+to\s+(\d{1,2})[/-](\d{1,2})[/-](\d{4})',
+            input_lower
+        )
+        
+        if date_range_pattern3:
+            try:
+                start_day = int(date_range_pattern3.group(1))
+                start_month = int(date_range_pattern3.group(2))
+                start_year = int(date_range_pattern3.group(3))
+                end_day = int(date_range_pattern3.group(4))
+                end_month = int(date_range_pattern3.group(5))
+                end_year = int(date_range_pattern3.group(6))
+                
+                start_date = f"{start_year}-{start_month:02d}-{start_day:02d}"
+                end_date = f"{end_year}-{end_month:02d}-{end_day:02d}"
+                
+                return {
+                    'start_date': start_date,
+                    'end_date': end_date
+                }
+            except (ValueError, IndexError) as e:
+                print(f"⚠️ Error parsing date range pattern 3: {e}")
+        
+        # Pattern 4: Single specific date like "15 june 2025" or "june 15 2025"
+        # For single dates, use as both start and end date
+        single_date_pattern1 = re.search(
+            r'(\d{1,2})\s+(january|february|march|april|may|june|july|august|september|october|november|december)(?:\s+(\d{4}))?',
+            input_lower
+        )
+        
+        if single_date_pattern1:
+            try:
+                day = int(single_date_pattern1.group(1))
+                month = single_date_pattern1.group(2)
+                year = single_date_pattern1.group(3) or str(today.year)
+                
+                month_names = ['january', 'february', 'march', 'april', 'may', 'june', 
+                              'july', 'august', 'september', 'october', 'november', 'december']
+                month_num = month_names.index(month) + 1
+                
+                date_str = f"{year}-{month_num:02d}-{day:02d}"
+                
+                return {
+                    'start_date': date_str,
+                    'end_date': date_str
+                }
+            except (ValueError, IndexError) as e:
+                print(f"⚠️ Error parsing single date pattern 1: {e}")
+        
+        single_date_pattern2 = re.search(
+            r'(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:\s+(\d{4}))?',
+            input_lower
+        )
+        
+        if single_date_pattern2:
+            try:
+                month = single_date_pattern2.group(1)
+                day = int(single_date_pattern2.group(2))
+                year = single_date_pattern2.group(3) or str(today.year)
+                
+                month_names = ['january', 'february', 'march', 'april', 'may', 'june', 
+                              'july', 'august', 'september', 'october', 'november', 'december']
+                month_num = month_names.index(month) + 1
+                
+                date_str = f"{year}-{month_num:02d}-{day:02d}"
+                
+                return {
+                    'start_date': date_str,
+                    'end_date': date_str
+                }
+            except (ValueError, IndexError) as e:
+                print(f"⚠️ Error parsing single date pattern 2: {e}")
+        
+        # Pattern 5: Try dateutil.parser for any other date formats
+        # Look for any date-like patterns that might be parseable
+        date_like_patterns = [
+            r'\b\d{1,2}[/-]\d{1,2}[/-]\d{4}\b',  # DD/MM/YYYY or DD-MM-YYYY
+            r'\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b',  # YYYY/MM/DD or YYYY-MM-DD
+            r'\b\d{1,2}\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}\b',
+            r'\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s+\d{4}\b'
+        ]
+        
+        for pattern in date_like_patterns:
+            matches = re.findall(pattern, input_lower)
+            if len(matches) >= 2:  # At least 2 dates for a range
+                try:
+                    # Try to parse the first two dates found
+                    start_date_str = matches[0]
+                    end_date_str = matches[1]
+                    
+                    # Clean up the date strings
+                    start_date_str = re.sub(r'[^\w\s/-]', '', start_date_str).strip()
+                    end_date_str = re.sub(r'[^\w\s/-]', '', end_date_str).strip()
+                    
+                    start_date = dateutil.parser.parse(start_date_str, dayfirst=True).strftime('%Y-%m-%d')
+                    end_date = dateutil.parser.parse(end_date_str, dayfirst=True).strftime('%Y-%m-%d')
+                    
+                    return {
+                        'start_date': start_date,
+                        'end_date': end_date
+                    }
+                except Exception as e:
+                    print(f"⚠️ Error parsing with dateutil: {e}")
+                    continue
+        
+        # If no specific patterns match, return empty dict (fallback to default behavior)
         return {}

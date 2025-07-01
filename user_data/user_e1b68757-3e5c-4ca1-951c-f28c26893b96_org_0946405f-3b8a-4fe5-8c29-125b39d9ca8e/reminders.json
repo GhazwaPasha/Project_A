@@ -34,47 +34,5 @@
     "recurring": "monthly",
     "completed": true,
     "created_at": "2025-07-01T07:49:04.475899"
-  },
-  {
-    "id": "reminder_20250701_153549",
-    "title": "General Reminder",
-    "description": "Reminder created from: set a reminder for reporting every monday",
-    "due_datetime": "2025-07-02 16:00",
-    "recurring": "none",
-    "priority": "medium",
-    "created_datetime": "2025-07-01T15:35:49.827126",
-    "completed": false,
-    "created_at": "2025-07-01T15:35:49.827126"
-  },
-  {
-    "id": "reminder_20250701_153549",
-    "title": "General Reminder",
-    "description": "Reminder created from: set a reminder for reporting every monday",
-    "due_datetime": "2025-07-02 16:00",
-    "recurring": "none",
-    "priority": "medium",
-    "created_datetime": "2025-07-01T15:35:49.907625",
-    "completed": false,
-    "created_at": "2025-07-01T15:35:49.907625"
-  },
-  {
-    "id": "reminder_6_1751366995",
-    "title": "asd",
-    "description": "asd",
-    "due_datetime": "2025-07-02 15:47",
-    "recurring": "weekly",
-    "completed": false,
-    "created_at": "2025-07-01T15:49:55.297141"
-  },
-  {
-    "id": "reminder_20250701_160044",
-    "title": "General Reminder",
-    "description": "Reminder created from: set a weekly reminder for drawing report",
-    "due_datetime": "2025-07-02 16:00",
-    "recurring": "weekly",
-    "priority": "medium",
-    "created_datetime": "2025-07-01T16:00:44.533947",
-    "completed": false,
-    "created_at": "2025-07-01T16:00:44.533947"
   }
 ]
