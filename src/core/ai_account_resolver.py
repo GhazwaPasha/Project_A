@@ -57,7 +57,7 @@ class AIAccountResolver:
         }
     
     def find_matches(self, query: str, min_confidence: float = 0.4) -> List[AccountMatch]:
-        """Find account matches for a query string"""
+        """Find account matches for a query string - now using REAL data instead of mock data"""
         if not query or len(query.strip()) < 2:
             return []
         
@@ -107,7 +107,7 @@ class AIAccountResolver:
         contextual_matches = self._find_contextual_matches(query, accounts)
         matches.extend(contextual_matches)
         
-        # Remove duplicates and sort by confidence
+        # Remove duplicates and sort by confidence (BEST match first)
         unique_matches = {}
         for match in matches:
             key = match.account_id
@@ -116,6 +116,12 @@ class AIAccountResolver:
         
         sorted_matches = sorted(unique_matches.values(), 
                               key=lambda x: x.confidence, reverse=True)
+        
+        # Debug output for transparency
+        if sorted_matches:
+            print(f"🔍 Account matching results for '{query}' (using REAL accounts):")
+            for i, match in enumerate(sorted_matches[:5]):  # Show top 5
+                print(f"  {i+1}. {match.account_name} (confidence: {match.confidence:.3f}, type: {match.match_type})")
         
         return sorted_matches[:10]  # Top 10 matches
     
@@ -127,28 +133,50 @@ class AIAccountResolver:
         return None
     
     def _get_accounts(self) -> List[Dict]:
-        """Get all accounts from the accounting system"""
+        """Get all accounts from the accounting system using the same method as CSV import"""
         if not self.accounting_system:
+            print("⚠️ No accounting system provided to AIAccountResolver, using mock data")
             return self._get_mock_accounts()
         
         try:
-            # Try to get accounts from the accounting system
+            # Use the same logic as load_accounts_from_system for consistency
             if hasattr(self.accounting_system, 'get_chart_of_accounts'):
-                accounts = self.accounting_system.get_chart_of_accounts()
-                return [
-                    {
-                        'id': str(account.get('id', '')),
-                        'name': account.get('name', ''),
-                        'code': account.get('code', ''),
-                        'type': account.get('account_type', ''),
-                        'parent_id': account.get('parent_id', '')
-                    }
-                    for account in accounts
-                ]
+                accounts_data = self.accounting_system.get_chart_of_accounts(active_only=True)
+                formatted_accounts = []
+                
+                if accounts_data and len(accounts_data) > 0:
+                    for account in accounts_data:
+                        if isinstance(account, dict):
+                            # Dict format - convert to our format
+                            formatted_accounts.append({
+                                'id': str(account.get('id', '')),
+                                'name': account.get('name', ''),
+                                'code': account.get('code', ''),
+                                'type': account.get('account_type', account.get('type', '')),
+                                'parent_id': str(account.get('parent_id', ''))
+                            })
+                        elif isinstance(account, tuple) and len(account) >= 3:
+                            # Tuple format: (name, type, code, parent_code, level, is_postable, description)
+                            name, acc_type, code = account[0], account[1], account[2]
+                            formatted_accounts.append({
+                                'id': code or str(len(formatted_accounts)),  # Use code as ID or fallback
+                                'name': name,
+                                'code': code,
+                                'type': acc_type,
+                                'parent_id': account[3] if len(account) > 3 else ''
+                            })
+                
+                if formatted_accounts:
+                    print(f"✅ AIAccountResolver loaded {len(formatted_accounts)} real accounts from system")
+                    return formatted_accounts
+                    
+            print("⚠️ No accounts found in system, using mock data")
+            return self._get_mock_accounts()
+            
         except Exception as e:
-            print(f"Error getting accounts: {e}")
-        
-        return self._get_mock_accounts()
+            print(f"❌ Error getting real accounts from system: {e}")
+            print("   Falling back to mock data")
+            return self._get_mock_accounts()
     
     def _get_mock_accounts(self) -> List[Dict]:
         """Mock accounts for testing when no accounting system is available"""

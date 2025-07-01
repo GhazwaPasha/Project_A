@@ -2189,19 +2189,9 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             if reminders_page and hasattr(reminders_page, 'add_reminder_from_ai'):
                 print(f"📝 Adding reminder to reminders page...")
                 
-                # Extract data and call the reminders page method
-                title = reminder_data.get('title', 'AI Reminder')
-                description = reminder_data.get('description', '')
-                due_datetime = reminder_data.get('due_datetime', '')
-                recurring = reminder_data.get('recurring', 'none')
-                
-                # Add reminder to the reminders page
-                reminder_id = reminders_page.add_reminder_from_ai(
-                    title=title,
-                    description=description,
-                    due_datetime=due_datetime,
-                    recurring=recurring
-                )
+                # Pass the complete reminder data instead of extracting individual fields
+                # This prevents duplicate reminder creation by reusing the AI plugin's data
+                reminder_id = reminders_page.add_reminder_from_ai(reminder_data=reminder_data)
                 
                 print(f"✅ Successfully created reminder with ID: {reminder_id}")
                 self.logger.info(f"Successfully created reminder: {title} (ID: {reminder_id})")

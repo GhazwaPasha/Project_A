@@ -7,12 +7,13 @@ Built for efficiency and clarity in professional accounting workflows
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QLineEdit, QComboBox, QFrame, QScrollArea,
-    QSpacerItem, QSizePolicy, QGridLayout, QStackedWidget
+    QSpacerItem, QSizePolicy, QGridLayout, QStackedWidget, QMessageBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFont, QColor, QPalette
 from datetime import datetime, timedelta
 from ...core.utils import format_currency
+from ...core.events import accounting_events
 
 from ..components.scrollbar_styles import ModernScrollbarStyles
 from ..components.widgets import DateRangeSelector, PageHeader
@@ -654,7 +655,6 @@ class LedgerDocumentView(QWidget):
             webbrowser.open('file://' + temp_file.replace('\\', '/'))
             
             # Show a message to the user
-            from PyQt6.QtWidgets import QMessageBox
             QMessageBox.information(self, "Print", 
                 "The ledger has been opened in your web browser.\n"
                 "Use Ctrl+P or the browser's print menu to print the document.\n"
@@ -674,7 +674,6 @@ class LedgerDocumentView(QWidget):
                 
         except Exception as e:
             print(f"Print error: {e}")
-            from PyQt6.QtWidgets import QMessageBox
             QMessageBox.information(self, "Print", 
                 f"Unable to open print preview: {str(e)}\n"
                 "You can manually copy the ledger content or take a screenshot to print.")
@@ -965,6 +964,9 @@ class LedgerPage(QWidget):
         self._setup_ui()
         self._apply_styling()
         self._load_accounts()
+        
+        # Connect to account change events to refresh when accounts are created/updated/deleted
+        accounting_events.accounts_changed.connect(self._on_accounts_changed)
     
     def _apply_styling(self):
         """Apply modern glassmorphism styling to the ledger page."""
@@ -1175,12 +1177,21 @@ class LedgerPage(QWidget):
     def _load_accounts(self):
         """Load all accounts and create cards."""
         try:
-            accounts = self.system.get_chart_of_accounts(active_only=False)
+            # Only load active accounts - this will automatically exclude deleted accounts
+            accounts = self.system.get_chart_of_accounts(active_only=True)
             self.all_accounts = accounts
             self._display_accounts(accounts)
             self._refresh_balances()
         except Exception as e:
             print(f"Error loading accounts: {e}")
+    
+    def _on_accounts_changed(self):
+        """Handle account changes by refreshing the account list."""
+        try:
+            print("🔄 Ledger page: Refreshing accounts due to account changes...")
+            self._load_accounts()
+        except Exception as e:
+            print(f"❌ Error refreshing accounts in ledger: {e}")
             
     def _display_accounts(self, accounts):
         """Display account cards in a grid."""
@@ -1356,7 +1367,50 @@ class LedgerPage(QWidget):
             if not hasattr(self, 'all_accounts') or not self.all_accounts:
                 self._load_accounts()
             
-            # Find the account (case-insensitive partial matching)
+            # Use AI Account Resolver for intelligent matching
+            from ...core.ai_account_resolver import AIAccountResolver
+            resolver = AIAccountResolver(self.system)
+            
+            print(f"🔍 AI resolver searching for account: '{account_name}'")
+            
+            # Find the best match using AI resolver
+            best_match = resolver.find_best_match(account_name, min_confidence=0.5)
+            
+            if best_match:
+                print(f"✅ AI resolver found account: '{best_match.account_name}' (confidence: {best_match.confidence:.2f}, type: {best_match.match_type})")
+                # Navigate directly to account details
+                self._show_account_details(best_match.account_name)
+                return True
+            else:
+                # Fallback: try to find accounts with lower confidence for filtering
+                all_matches = resolver.find_matches(account_name, min_confidence=0.3)
+                
+                if all_matches:
+                    print(f"⚠️ No high-confidence match found, showing {len(all_matches)} potential matches in search")
+                    # Show the search results by filtering
+                    if hasattr(self, 'search_box'):
+                        # Use the best partial match for search filtering
+                        best_partial = all_matches[0]
+                        search_term = best_partial.account_name.split(' ')[0]  # Use first word for broader search
+                        self.search_box.setText(search_term)
+                        self._filter_accounts()
+                    return False
+                else:
+                    print(f"❌ No accounts found matching: '{account_name}'")
+                    # Clear search to show all accounts
+                    if hasattr(self, 'search_box'):
+                        self.search_box.clear()
+                        self._filter_accounts()
+                    return False
+                
+        except Exception as e:
+            print(f"❌ Error in AI account navigation: {e}")
+            # Fallback to original basic matching
+            return self._show_specific_account_fallback(account_name)
+    
+    def _show_specific_account_fallback(self, account_name):
+        """Fallback method using basic string matching if AI resolver fails"""
+        try:
             target_account = None
             account_name_lower = account_name.lower()
             
@@ -1375,20 +1429,18 @@ class LedgerPage(QWidget):
                     break
             
             if target_account:
-                print(f"✅ Found account: {target_account['name']}")
-                # Navigate directly to account details
+                print(f"✅ Fallback found account: {target_account['name']}")
                 self._show_account_details(target_account['name'])
                 return True
             else:
-                print(f"❌ Account not found: {account_name}")
-                # Stay on overview page but filter to show matching accounts
+                print(f"❌ Fallback: Account not found: {account_name}")
                 if hasattr(self, 'search_box'):
                     self.search_box.setText(account_name)
                     self._filter_accounts()
                 return False
                 
         except Exception as e:
-            print(f"❌ Error showing specific account: {e}")
+            print(f"❌ Error in fallback account search: {e}")
             return False
 
     def _create_transactions_area(self):

@@ -638,7 +638,7 @@ class UnifiedNavigationPlugin(AIPlugin):
         return params
     
     def _extract_account_name(self, input_lower: str) -> str:
-        """Extract account name using smart matching patterns and AccountMatcher"""
+        """Extract raw account query from user input - let ledger page do the smart matching"""
         patterns = [
             # Direct account references
             r'show (?:me )?(.+?)(?:\s+account|\s+ledger|$)',
@@ -657,31 +657,18 @@ class UnifiedNavigationPlugin(AIPlugin):
             match = re.search(pattern, input_lower)
             if match:
                 raw_account_name = match.group(1).strip()
-                # Clean up common words
+                # Clean up common words but preserve the original query
                 raw_account_name = re.sub(r'\b(the|a|an|show|open|me)\b', '', raw_account_name)
                 raw_account_name = raw_account_name.strip()
                 
                 if raw_account_name and len(raw_account_name) > 1:
-                    # Use AccountMatcher to find the best match
-                    account_match = self._find_best_account_match(raw_account_name)
-                    if account_match:
-                        print(f"🎯 Smart account match: '{raw_account_name}' → '{account_match.account_name}' (confidence: {account_match.confidence:.2f})")
-                        return account_match.account_name
-                    else:
-                        # Fallback to original extraction
-                        return raw_account_name.title()
+                    print(f"🎯 Extracted raw account query: '{raw_account_name}' (will be matched against real accounts in ledger)")
+                    # Return the raw query - let the ledger page do intelligent matching with real data
+                    return raw_account_name
         
         return ""
     
-    def _find_best_account_match(self, query: str):
-        """Find best account match using AIAccountResolver"""
-        try:
-            from src.core.ai_account_resolver import AIAccountResolver
-            resolver = AIAccountResolver()  # Use without accounting system for now (mock data)
-            return resolver.find_best_match(query, min_confidence=0.6)
-        except Exception as e:
-            print(f"⚠️ AIAccountResolver error: {e}")
-            return None
+
     
     def _extract_report_type(self, input_lower: str) -> str:
         """Extract report type from user input"""

@@ -862,17 +862,30 @@ class RemindersTasksPage(QWidget):
         elif hasattr(self.parent(), 'add_notification'):
             self.parent().add_notification(title, description, "warning")
     
-    def add_reminder_from_ai(self, title: str, description: str = "", due_datetime: str = "", recurring: str = "none"):
-        """Add reminder from AI command"""
-        reminder = {
-            'id': f"ai_reminder_{int(datetime.now().timestamp())}",
-            'title': title,
-            'description': description,
-            'due_datetime': due_datetime,
-            'recurring': recurring.lower(),
-            'completed': False,
-            'created_at': datetime.now().isoformat()
-        }
+    def add_reminder_from_ai(self, reminder_data: dict = None, title: str = "", description: str = "", due_datetime: str = "", recurring: str = "none"):
+        """Add reminder from AI command - supports both complete reminder data and individual fields"""
+        
+        if reminder_data:
+            # Use complete reminder data from AI plugin (preferred method)
+            reminder = reminder_data.copy()
+            # Ensure required fields are present
+            if 'completed' not in reminder:
+                reminder['completed'] = False
+            if 'created_at' not in reminder and 'created_datetime' in reminder:
+                reminder['created_at'] = reminder['created_datetime']
+            elif 'created_at' not in reminder:
+                reminder['created_at'] = datetime.now().isoformat()
+        else:
+            # Fallback: create reminder from individual fields (legacy support)
+            reminder = {
+                'id': f"ai_reminder_{int(datetime.now().timestamp())}",
+                'title': title,
+                'description': description,
+                'due_datetime': due_datetime,
+                'recurring': recurring.lower(),
+                'completed': False,
+                'created_at': datetime.now().isoformat()
+            }
         
         self.reminders_data.append(reminder)
         self._save_reminders()

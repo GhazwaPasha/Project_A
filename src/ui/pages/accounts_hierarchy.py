@@ -985,6 +985,10 @@ class HierarchicalAccountsPage(QWidget):
                 result = self.system.delete_account(account_data['name'])
                 self._load_data()  # Refresh tree
                 self.details_panel.show_info(None)  # Clear details panel
+                
+                # Emit accounts changed event to refresh all UI components
+                accounting_events.accounts_changed.emit()
+                
             except Exception as e:
                 error_msg = QMessageBox()
                 error_msg.setIcon(QMessageBox.Icon.Critical)
