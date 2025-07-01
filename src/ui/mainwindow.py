@@ -19,8 +19,7 @@ from .pages.dashboard import ResponsiveHelper
 # Import AI components
 from .components.enhanced_ai_processor import ContextAwareAI
 
-# Import the frameless window mixin for complete window management
-from .components.frameless_window_mixin import FramelessWindowMixin
+# Frameless window functionality is now handled by MicaWindowWithBorders
 
 # Import the border solution for Mica windows
 from .components.mica_border_solution import MicaWindowWithBorders
