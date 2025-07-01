@@ -52,33 +52,36 @@ class SimpleAIStatusBar(QLineEdit):
         """Handle navigation requests"""
         self.setText(f"📍 Navigating to {page.replace('_', ' ').title()}...")
         
-        # Forward to parent window
-        if hasattr(self.parent_window, 'navigate_to_page'):
-            self.parent_window.navigate_to_page(page, params)
-        elif hasattr(self.parent_window, '_handle_ai_navigation'):
+        # Forward to parent window - prioritize advanced AI navigation
+        if self.parent_window and hasattr(self.parent_window, '_handle_ai_navigation'):
             self.parent_window._handle_ai_navigation(page, params)
+        elif self.parent_window and hasattr(self.parent_window, 'navigate_to_page'):
+            self.parent_window.navigate_to_page(page, params)
     
     def _handle_report_request(self, report_type: str, params: dict):
         """Handle report generation requests"""
         self.setText(f"📊 Generating {report_type.replace('_', ' ').title()}...")
         
-        # Forward to parent window
-        if hasattr(self.parent_window, 'generate_report'):
-            self.parent_window.generate_report(report_type, params)
-        elif hasattr(self.parent_window, '_handle_ai_report_request'):
+        # Forward to parent window - prioritize advanced AI report handling
+        if self.parent_window and hasattr(self.parent_window, '_handle_ai_report_request'):
             self.parent_window._handle_ai_report_request(report_type, params)
+        elif self.parent_window and hasattr(self.parent_window, 'generate_report'):
+            self.parent_window.generate_report(report_type, params)
     
     def _handle_reminder_created(self, reminder_data: dict):
         """Handle reminder creation"""
         title = reminder_data.get('title', 'Reminder')
         self.setText(f"✅ Created: {title}")
         
-        # Forward to parent window
-        if hasattr(self.parent_window, 'add_reminder'):
-            self.parent_window.add_reminder(reminder_data)
-        elif hasattr(self.parent_window, '_handle_ai_reminder_creation'):
+        # Forward to parent window for actual reminder creation
+        if self.parent_window and hasattr(self.parent_window, '_handle_ai_reminder_creation'):
             self.parent_window._handle_ai_reminder_creation(reminder_data)
+        elif self.parent_window and hasattr(self.parent_window, 'add_reminder'):
+            self.parent_window.add_reminder(reminder_data)
         
+        # Update AI context with new reminder data
+        self._update_ai_reminders_context()
+    
     def _setup_status_timers(self):
         """Setup essential timers for status updates"""
         # Status update timer
@@ -235,7 +238,7 @@ class SimpleAIStatusBar(QLineEdit):
         }
         
         # Get additional context from parent if available
-        if hasattr(self.parent_window, 'get_current_context'):
+        if self.parent_window and hasattr(self.parent_window, 'get_current_context'):
             try:
                 parent_context = self.parent_window.get_current_context()
                 context.update(parent_context)
@@ -428,3 +431,20 @@ class SimpleAIStatusBar(QLineEdit):
     def handle_processing_finished(self):
         """Handle processing finished"""
         pass  # Handled by other methods
+    
+    def _update_ai_reminders_context(self):
+        """Update AI context with current reminders data"""
+        try:
+            # Get reminders from the parent window if available
+            reminders_data = {}
+            if (self.parent_window and 
+                hasattr(self.parent_window, 'notification_manager') and 
+                self.parent_window.notification_manager):
+                reminders_data = {
+                    'active_reminders': self.parent_window.notification_manager.get_active_reminders(),
+                    'upcoming_deadlines': self.parent_window.notification_manager.get_upcoming_deadlines()
+                }
+            
+            self.ai_processor.update_context('reminders', reminders_data)
+        except Exception as e:
+            print(f"Could not update reminders context: {e}")

@@ -143,9 +143,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         from .components.notifications.notification_manager import NotificationManager
         self.notification_manager = NotificationManager()
         
-        # Initialize Enhanced AI command processor
-        from .components.enhanced_ai_processor import ContextAwareAI
-        self.ai_processor = ContextAwareAI(self)
+        # AI processor removed - now handled by SimpleAIStatusBar
         
         self.sidebar_expanded = False  # Start collapsed for a cleaner look
         self.dark_mode = True  # Default to dark mode for better Mica effect
@@ -163,8 +161,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         from .components.seamless_border_layout import apply_seamless_borders
         apply_seamless_borders(self)
         
-        # Connect AI processor signals after UI is created
-        self._connect_ai_signals()
+        # AI signal connections removed - now handled by SimpleAIStatusBar
         
         # Apply global styling first
         self._apply_global_consistent_styling()
@@ -173,8 +170,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         # Setup sync status updates - always enabled in new architecture
         self._setup_sync_updates()
         
-        # Initialize AI context with startup data
-        self._initialize_ai_context()
+        # AI context initialization removed - now handled by SimpleAIStatusBar
         
         # Install event filter for handling clicks outside notification drawer
         self.installEventFilter(self)
@@ -190,9 +186,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         
     def closeEvent(self, event):
         """Handle window close event."""
-        # Clean up AI processor thread
-        if self.ai_processor and self.ai_processor.processing_thread:
-            self.ai_processor.stop_processing()
+        # AI processor cleanup removed - now handled by SimpleAIStatusBar
           # Clean up any other resources
         if hasattr(self.accounting_system, 'close'):
             self.accounting_system.close()
@@ -208,22 +202,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         
         super().closeEvent(event)
 
-    def _connect_ai_signals(self):
-        """Connect signals from the Enhanced AI processor to the main window slots."""
-        self.ai_processor.response_ready.connect(self.simple_ai_bar.handle_ai_response)
-        self.ai_processor.error_occurred.connect(self.simple_ai_bar.handle_ai_error)
-        self.ai_processor.processing_started.connect(self.simple_ai_bar.handle_processing_started)
-        self.ai_processor.processing_finished.connect(self.simple_ai_bar.handle_processing_finished)
-        
-        # Connect enhanced command execution signals
-        self.ai_processor.navigation_requested.connect(self._handle_ai_navigation)
-        self.ai_processor.reminder_created.connect(self._handle_ai_reminder_creation)
-        self.ai_processor.action_executed.connect(self._handle_ai_action)
-        self.ai_processor.context_updated.connect(self._handle_ai_context_update)
-        
-        # Connect the AI bar's command submission to the enhanced processor
-        if hasattr(self, 'simple_ai_bar'):
-            self.simple_ai_bar.ai_command_submitted.connect(self.ai_processor.process_command)
+    # AI signal connections removed - now handled by SimpleAIStatusBar
 
     def navigate_to_page(self, page_name: str, parameters: dict):
         """Navigate to a specific page based on its identifier, requested by the AI."""
@@ -1738,14 +1717,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             "success"
         )
     
-    def _process_ai_command(self):
-        """Process command from AI status bar"""
-        if hasattr(self, 'simple_ai_bar') and hasattr(self, 'ai_processor'):
-            user_input = self.simple_ai_bar.text().strip()
-            if user_input and user_input != self.simple_ai_bar.placeholder_text:
-                # Get current context
-                context = self._get_current_context()                # Process the command
-                self.ai_processor.process_command(user_input)
+    # AI command processing removed - now handled by SimpleAIStatusBar
     
     def _handle_ai_response(self, response_text: str):
         """Handle AI response text"""
@@ -2250,49 +2222,18 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
     
     def _update_ai_context_for_navigation(self, target_page: str, parameters: dict):
         """Update AI context before navigation to help with parameter application"""
-        context = {
-            'navigation_intent': {
-                'target_page': target_page,
-                'parameters': parameters,
-                'timestamp': datetime.now().isoformat()
-            }
-        }
-        self.ai_processor.update_context('application', context)
+        # AI context updates now handled by SimpleAIStatusBar
+        pass
     
     def _update_ai_page_context(self, page_name: str):
         """Update AI context with current page state and available data"""
-        current_widget = self.stack.currentWidget()
-        page_data = {}
-        
-        # Extract relevant data from current page
-        if hasattr(current_widget, 'get_current_data'):
-            try:
-                page_data = current_widget.get_current_data()
-            except Exception as e:
-                self.logger.warning(f"Could not get page data: {e}")
-        
-        # Update AI context
-        context = {
-            'page': page_name,
-            'data': page_data,
-            'timestamp': datetime.now().isoformat()
-        }
-        self.ai_processor.update_context('page', context)
+        # AI context updates now handled by SimpleAIStatusBar
+        pass
     
     def _update_ai_reminders_context(self):
         """Update AI context with current reminders data"""
-        try:
-            # Get reminders from the reminders page or notification manager
-            reminders_data = {}
-            if hasattr(self, 'notification_manager'):
-                reminders_data = {
-                    'active_reminders': self.notification_manager.get_active_reminders(),
-                    'upcoming_deadlines': self.notification_manager.get_upcoming_deadlines()
-                }
-            
-            self.ai_processor.update_context('reminders', reminders_data)
-        except Exception as e:
-            self.logger.warning(f"Could not update reminders context: {e}")
+        # AI context updates now handled by SimpleAIStatusBar
+        pass
     
     def _apply_navigation_parameters(self, page_name: str, parameters: dict):
         """Apply AI-provided parameters to the target page"""
@@ -2340,32 +2281,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         # Placeholder for calculation results handling
         self.logger.info(f"Calculation results: {results}")
 
-    def _initialize_ai_context(self):
-        """Initialize AI context with application startup data"""
-        try:
-            # Initialize with basic application state
-            app_context = {
-                'startup_time': datetime.now().isoformat(),
-                'application_mode': 'multi_tenant' if hasattr(self, 'auth_manager') else 'single_tenant',
-                'current_user': getattr(self.auth_manager, 'current_user', None) if hasattr(self, 'auth_manager') else None
-            }
-            self.ai_processor.update_context('application', app_context)
-            
-            # Initialize with fresh accounting data
-            fresh_accounting_data = self._gather_current_accounting_data()
-            fresh_accounting_data.update({
-                'database_connected': True,  # If we got this far, DB is connected
-                'currency_symbol': self.currency_symbol
-            })
-            self.ai_processor.update_context('accounting', fresh_accounting_data)
-            
-            # Initialize with current page (dashboard by default)
-            self._update_ai_page_context('dashboard')
-            
-            self.logger.info("AI context initialized successfully")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to initialize AI context: {e}")
+    # AI context initialization removed - now handled by SimpleAIStatusBar
     
     def _gather_current_accounting_data(self):
         """Gather current accounting data for AI context"""
@@ -2412,15 +2328,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             self.logger.error(f"Error gathering accounting data: {e}")
             return {}
     
-    def _update_ai_with_fresh_data(self):
-        """Update AI context with fresh accounting data"""
-        try:
-            fresh_data = self._gather_current_accounting_data()
-           
-            self.ai_processor.update_context('accounting', fresh_data)
-            self.logger.debug("Updated AI context with fresh accounting data")
-        except Exception as e:
-            self.logger.warning(f"Could not update AI with fresh data: {e}")
+    # AI data update removed - now handled by SimpleAIStatusBar
 
     # AI Report Integration Helper Methods
     def _trigger_income_statement(self, start_date: str, end_date: str):

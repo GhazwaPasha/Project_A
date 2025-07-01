@@ -65,5 +65,16 @@
     "recurring": "weekly",
     "completed": false,
     "created_at": "2025-07-01T15:49:55.297141"
+  },
+  {
+    "id": "reminder_20250701_160044",
+    "title": "General Reminder",
+    "description": "Reminder created from: set a weekly reminder for drawing report",
+    "due_datetime": "2025-07-02 16:00",
+    "recurring": "weekly",
+    "priority": "medium",
+    "created_datetime": "2025-07-01T16:00:44.533947",
+    "completed": false,
+    "created_at": "2025-07-01T16:00:44.533947"
   }
 ]
