@@ -194,11 +194,24 @@ class LedgerDocumentView(QWidget):
         self.from_date = from_date
         self.to_date = to_date
         
-        # Update the page header subtitle
-        self.page_header.update_subtitle(f"Account: {account_name}")
+        # Update the page header subtitle with account name and dynamic date display
+        date_text = self._get_date_range_text()
+        self.page_header.update_subtitle(f"Account: {account_name} • {date_text}")
         
         self._load_ledger_data()
-        
+    
+    def _get_date_range_text(self):
+        """Get formatted date range text for display."""
+        if self.from_date and self.to_date:
+            from_str = self.from_date if isinstance(self.from_date, str) else self.from_date.toString("MMMM d, yyyy")
+            to_str = self.to_date if isinstance(self.to_date, str) else self.to_date.toString("MMMM d, yyyy")
+            return f"{from_str} to {to_str}"
+        elif self.to_date:
+            to_str = self.to_date if isinstance(self.to_date, str) else self.to_date.toString("MMMM d, yyyy")
+            return f"As of {to_str}"
+        else:
+            return "All Time"
+    
     def _get_base_style(self):
         """Get the base style for the document view."""
         return f"""
@@ -866,6 +879,11 @@ class LedgerDocumentView(QWidget):
         self.from_date = from_date
         self.to_date = to_date
         
+        # Update the page header subtitle with the new date range
+        if self.account_name:
+            date_text = self._get_date_range_text()
+            self.page_header.update_subtitle(f"Account: {self.account_name} • {date_text}")
+        
         # Reload ledger data with new date range
         self._load_ledger_data()
 
@@ -1317,6 +1335,62 @@ class LedgerPage(QWidget):
         except Exception as e:
             print(f"Error refreshing currency display: {e}")
     
+    def set_date_range(self, start_date, end_date):
+        """Set the date range programmatically (for AI navigation)."""
+        if hasattr(self, 'date_selector') and self.date_selector:
+            success = self.date_selector.set_date_range(start_date, end_date)
+            if success:
+                print(f"✅ Ledger date range set to: {start_date} to {end_date}")
+                # Refresh the current view with new date range
+                self._refresh_balances()
+                return True
+            else:
+                print(f"❌ Failed to set ledger date range: {start_date} to {end_date}")
+                return False
+        return False
+    
+    def show_specific_account(self, account_name):
+        """Navigate directly to a specific account's ledger (for AI navigation)."""
+        try:
+            # First, ensure we have accounts loaded
+            if not hasattr(self, 'all_accounts') or not self.all_accounts:
+                self._load_accounts()
+            
+            # Find the account (case-insensitive partial matching)
+            target_account = None
+            account_name_lower = account_name.lower()
+            
+            for account in self.all_accounts:
+                # Try exact match first
+                if account['name'].lower() == account_name_lower:
+                    target_account = account
+                    break
+                # Try partial match
+                elif account_name_lower in account['name'].lower():
+                    target_account = account
+                    break
+                # Try matching by code if provided
+                elif account.get('code') and account_name_lower in account.get('code', '').lower():
+                    target_account = account
+                    break
+            
+            if target_account:
+                print(f"✅ Found account: {target_account['name']}")
+                # Navigate directly to account details
+                self._show_account_details(target_account['name'])
+                return True
+            else:
+                print(f"❌ Account not found: {account_name}")
+                # Stay on overview page but filter to show matching accounts
+                if hasattr(self, 'search_box'):
+                    self.search_box.setText(account_name)
+                    self._filter_accounts()
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error showing specific account: {e}")
+            return False
+
     def _create_transactions_area(self):
         """Create the scrollable transactions area with proper layout."""
         container = QWidget()

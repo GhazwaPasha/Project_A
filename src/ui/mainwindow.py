@@ -218,7 +218,6 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         
         # Connect enhanced command execution signals
         self.ai_processor.navigation_requested.connect(self._handle_ai_navigation)
-        self.ai_processor.report_requested.connect(self._handle_ai_report_request)
         self.ai_processor.reminder_created.connect(self._handle_ai_reminder_creation)
         self.ai_processor.action_executed.connect(self._handle_ai_action)
         self.ai_processor.context_updated.connect(self._handle_ai_context_update)
@@ -1755,14 +1754,53 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         pass
     
     def _handle_ai_navigation(self, page_name: str, parameters: dict):
-        """Enhanced navigation handler with parameter application and context updates"""
+        """Unified navigation handler for all pages, reports, and account-specific views"""
         print(f"🎯 MainWindow received navigation request: page='{page_name}', params={parameters}")
         self.logger.info(f"Enhanced AI navigation: page='{page_name}', params={parameters}")
         
         # Update AI context before navigation
         self._update_ai_context_for_navigation(page_name, parameters)
         
-        # Perform navigation
+        # Handle specific account navigation
+        if page_name == 'ledger' and parameters.get('specific_account'):
+            account_name = parameters.get('account_name')
+            if account_name:
+                print(f"🎯 Handling specific account navigation: {account_name}")
+                success = self.navigate_to_specific_account_ledger(
+                    account_name, 
+                    parameters.get('start_date'), 
+                    parameters.get('end_date')
+                )
+                if success:
+                    print(f"✅ Successfully navigated to {account_name} ledger")
+                else:
+                    print(f"⚠️ Could not find account: {account_name}")
+                return
+        
+        # Handle reports with specific report types and date ranges
+        if page_name == 'reports' and parameters.get('report_type'):
+            report_type = parameters.get('report_type')
+            start_date = parameters.get('start_date')
+            end_date = parameters.get('end_date')
+            
+            print(f"🎯 Handling report generation: {report_type}")
+            
+            if report_type == 'trial_balance':
+                self._navigate_to_trial_balance(start_date, end_date)
+            elif report_type == 'general_ledger':
+                self._navigate_to_ledger(start_date, end_date)  
+            elif report_type == 'income_statement':
+                self._navigate_to_income_statement(start_date, end_date)
+            elif report_type == 'balance_sheet':
+                self._navigate_to_balance_sheet(end_date)
+            elif report_type == 'cash_flow':
+                self._navigate_to_cash_flow(start_date, end_date)
+            else:
+                # Default to reports page with parameters
+                self._navigate_to_reports_page_with_params(parameters)
+            return
+        
+        # Perform standard navigation
         page_mapping = {
             'dashboard': 0, 'journal': 1, 'ledger': 2, 'trial_balance': 3,
             'reports': 4, 'accounts': 5, 'reminders': 6, 'period_closing': 7,
@@ -1789,6 +1827,25 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             self._update_ai_page_context(page_name)
         else:
             print(f"❌ Page '{page_name}' not found in mapping")
+            
+    def _navigate_to_reports_page_with_params(self, parameters: dict):
+        """Navigate to reports page and apply parameters"""
+        print(f"🎯 Navigating to Reports page with parameters: {parameters}")
+        self.stack.setCurrentIndex(4)  # Reports page index
+        for btn in self.sidebar_buttons:
+            btn.setChecked(False)
+        self.sidebar_buttons[4].setChecked(True)
+        
+        # Apply parameters to reports page
+        reports_page = self.stack.currentWidget()
+        if hasattr(reports_page, 'set_date_range'):
+            start_date = parameters.get('start_date')
+            end_date = parameters.get('end_date')
+            if start_date and end_date:
+                reports_page.set_date_range(start_date, end_date)
+                print(f"✅ Applied date range to Reports page: {start_date} to {end_date}")
+        
+        print(f"✅ Successfully navigated to Reports page")
     
     def _handle_ai_report_request(self, report_type: str, parameters: dict):
         """Handle AI-requested report generation using NL dialogue intelligence with main window integration"""
@@ -1937,10 +1994,16 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             btn.setChecked(False)
         self.sidebar_buttons[3].setChecked(True)
         
-        # Apply date range if available
+        # Apply date range using the new method
         trial_balance_page = self.stack.currentWidget()
         if hasattr(trial_balance_page, 'set_date_range') and start_date and end_date:
-            trial_balance_page.set_date_range(start_date, end_date)
+            success = trial_balance_page.set_date_range(start_date, end_date)
+            if success:
+                print(f"✅ Successfully set Trial Balance date range: {start_date} to {end_date}")
+            else:
+                print(f"⚠️ Could not set date range on Trial Balance page")
+        else:
+            print(f"⚠️ Trial Balance page doesn't support date range setting")
         
         print(f"✅ Successfully navigated to Trial Balance page")
     
@@ -1952,12 +2015,48 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             btn.setChecked(False)
         self.sidebar_buttons[2].setChecked(True)
         
-        # Apply date range if available
+        # Apply date range using the new method
         ledger_page = self.stack.currentWidget()
         if hasattr(ledger_page, 'set_date_range') and start_date and end_date:
-            ledger_page.set_date_range(start_date, end_date)
+            success = ledger_page.set_date_range(start_date, end_date)
+            if success:
+                print(f"✅ Successfully set Ledger date range: {start_date} to {end_date}")
+            else:
+                print(f"⚠️ Could not set date range on Ledger page")
+        else:
+            print(f"⚠️ Ledger page doesn't support date range setting")
         
         print(f"✅ Successfully navigated to Ledger page")
+    
+    def navigate_to_specific_account_ledger(self, account_name: str, start_date: str = None, end_date: str = None):
+        """Navigate to specific account ledger (for AI navigation)"""
+        print(f"📍 Navigating to specific account ledger: {account_name}")
+        
+        # Navigate to ledger page first
+        self.stack.setCurrentIndex(2)
+        for btn in self.sidebar_buttons:
+            btn.setChecked(False)
+        self.sidebar_buttons[2].setChecked(True)
+        
+        # Get the ledger page
+        ledger_page = self.stack.currentWidget()
+        
+        # Set date range if provided
+        if start_date and end_date and hasattr(ledger_page, 'set_date_range'):
+            ledger_page.set_date_range(start_date, end_date)
+        
+        # Show specific account
+        if hasattr(ledger_page, 'show_specific_account'):
+            success = ledger_page.show_specific_account(account_name)
+            if success:
+                print(f"✅ Successfully navigated to account: {account_name}")
+                return True
+            else:
+                print(f"⚠️ Account not found, showing filtered results for: {account_name}")
+                return False
+        else:
+            print(f"⚠️ Ledger page doesn't support specific account navigation")
+            return False
     
     def _navigate_to_income_statement(self, start_date: str, end_date: str):
         """Navigate to Reports page and trigger Income Statement view"""

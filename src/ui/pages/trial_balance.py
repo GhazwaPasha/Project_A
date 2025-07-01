@@ -608,11 +608,25 @@ class TrialBalancePage(QWidget):
     def refresh_currency_display(self):
         """Refresh all currency displays when currency symbol changes."""
         try:
-            # Refresh the trial balance with current date range
+            # Get current date range and recalculate trial balance
             from_date, to_date = self.date_selector.get_date_range()
-            self._refresh_trial_balance(from_date, to_date)
+            self._refresh_data()
         except Exception as e:
-            print(f"Error refreshing currency display in trial balance: {e}")
+            print(f"Error refreshing currency display: {e}")
+    
+    def set_date_range(self, start_date, end_date):
+        """Set the date range programmatically (for AI navigation)."""
+        if hasattr(self, 'date_selector') and self.date_selector:
+            success = self.date_selector.set_date_range(start_date, end_date)
+            if success:
+                print(f"✅ Trial Balance date range set to: {start_date} to {end_date}")
+                # Refresh the trial balance with new date range
+                self._refresh_data()
+                return True
+            else:
+                print(f"❌ Failed to set Trial Balance date range: {start_date} to {end_date}")
+                return False
+        return False
 
     def _print_trial_balance(self):
         """Print or export the trial balance using Windows native print function."""

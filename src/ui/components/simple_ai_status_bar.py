@@ -151,40 +151,82 @@ class SimpleAIStatusBar(QLineEdit):
                 color: white;
                 font-size: 12px;
                 font-family: 'Segoe UI', system-ui, sans-serif;
-                font-weight: 500;
+                font-weight: 600;
                 padding: 4px 12px;
                 selection-background-color: rgba(100, 181, 246, 0.3);
                 outline: none;
                 text-align: center;
+                /* Spotlight effect */
+                background: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 rgba(255, 255, 255, 0.12),
+                    stop: 0.3 rgba(255, 255, 255, 0.08),
+                    stop: 0.7 rgba(255, 255, 255, 0.08),
+                    stop: 1 rgba(255, 255, 255, 0.04));
+                box-shadow: 
+                    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                    0 0 20px rgba(100, 181, 246, 0.15),
+                    0 2px 8px rgba(0, 0, 0, 0.1);
             }
             
             QLineEdit:hover {
-                background: rgba(255, 255, 255, 0.12);
+                background: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 rgba(255, 255, 255, 0.16),
+                    stop: 0.3 rgba(255, 255, 255, 0.12),
+                    stop: 0.7 rgba(255, 255, 255, 0.12),
+                    stop: 1 rgba(255, 255, 255, 0.08));
                 border: 1px solid rgba(100, 181, 246, 0.3);
                 outline: none;
+                box-shadow: 
+                    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                    0 0 25px rgba(100, 181, 246, 0.25),
+                    0 2px 12px rgba(0, 0, 0, 0.15);
             }
             
             QLineEdit:focus {
-                background: rgba(255, 255, 255, 0.12);
+                background: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 rgba(255, 255, 255, 0.16),
+                    stop: 0.3 rgba(255, 255, 255, 0.12),
+                    stop: 0.7 rgba(255, 255, 255, 0.12),
+                    stop: 1 rgba(255, 255, 255, 0.08));
                 border: 1px solid rgba(100, 181, 246, 0.5);
                 color: white;
                 outline: none;
                 text-align: left;
+                box-shadow: 
+                    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                    0 0 30px rgba(100, 181, 246, 0.35),
+                    0 2px 16px rgba(0, 0, 0, 0.2);
             }
             
             QLineEdit[readOnly="true"] {
-                background: rgba(255, 255, 255, 0.08);
+                background: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 rgba(255, 255, 255, 0.12),
+                    stop: 0.3 rgba(255, 255, 255, 0.08),
+                    stop: 0.7 rgba(255, 255, 255, 0.08),
+                    stop: 1 rgba(255, 255, 255, 0.04));
                 border: 1px solid rgba(0, 0, 0, 0.3);
                 color: white;
                 outline: none;
                 text-align: center;
+                box-shadow: 
+                    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                    0 0 20px rgba(100, 181, 246, 0.15),
+                    0 2px 8px rgba(0, 0, 0, 0.1);
             }
             
             QLineEdit[readOnly="true"]:hover {
-                background: rgba(255, 255, 255, 0.12);
+                background: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 rgba(255, 255, 255, 0.16),
+                    stop: 0.3 rgba(255, 255, 255, 0.12),
+                    stop: 0.7 rgba(255, 255, 255, 0.12),
+                    stop: 1 rgba(255, 255, 255, 0.08));
                 border: 1px solid rgba(100, 181, 246, 0.3);
                 outline: none;
                 text-align: center;
+                box-shadow: 
+                    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                    0 0 25px rgba(100, 181, 246, 0.25),
+                    0 2px 12px rgba(0, 0, 0, 0.15);
             }
         """)
         
@@ -493,7 +535,7 @@ class SimpleAIStatusBar(QLineEdit):
         }
         
         # Get context-specific tips if available
-        context_tips = tips.get(self.current_page_context, tips['general'])
+        context_tips = tips.get(self.current_page_context or 'general', tips['general'])
         return random.choice(context_tips)
     
     def _show_intelligent_insight(self):
@@ -714,11 +756,6 @@ class SimpleAIStatusBar(QLineEdit):
         # Processing status will be updated by other handlers
         pass
     
-    def _reset_to_default_message(self):
-        """Reset to default dynamic message"""
-        if not self.is_expanded and not self.is_processing:
-            self._update_dynamic_status()
-    
     def _show_smart_suggestion(self):
         """Show intelligent suggestions based on context and user behavior"""
         if not self.smart_suggestions_enabled or self.is_expanded or self.is_processing:
@@ -807,7 +844,7 @@ class SimpleAIStatusBar(QLineEdit):
                 "✅ Daily close: 'run cash position report'"
             ])
 
-    def _get_recent_context_suggestions(self) -> str:
+    def _get_recent_context_suggestions(self) -> str | None:
         """Get suggestions based on recent user commands"""
         if not self.recent_commands:
             return None

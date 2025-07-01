@@ -519,6 +519,41 @@ class DateRangeSelector(QWidget):
     def get_date_range(self):
         """Get the selected date range."""
         return self.from_date.date(), self.to_date.date()
+    
+    def set_date_range(self, start_date, end_date):
+        """Set the date range programmatically (for AI navigation)."""
+        from ..common import QDate
+        
+        # Convert to QDate if needed
+        if isinstance(start_date, str):
+            start_qdate = QDate.fromString(start_date, "yyyy-MM-dd")
+        else:
+            start_qdate = start_date
+            
+        if isinstance(end_date, str):
+            end_qdate = QDate.fromString(end_date, "yyyy-MM-dd")
+        else:
+            end_qdate = end_date
+        
+        # Validate dates
+        if not start_qdate.isValid() or not end_qdate.isValid():
+            print(f"❌ Invalid dates provided: {start_date} to {end_date}")
+            return False
+            
+        # Set the dates
+        self.from_date.setDate(start_qdate)
+        self.to_date.setDate(end_qdate)
+        
+        # Clear any quick filter selection since this is a custom range
+        for button in self.quick_buttons.buttons():
+            if button:
+                button.setChecked(False)
+        
+        # Trigger the date change callback
+        self._on_date_changed()
+        
+        print(f"✅ Date range set to: {start_qdate.toString('yyyy-MM-dd')} to {end_qdate.toString('yyyy-MM-dd')}")
+        return True
 
 
 class ReportCard(QFrame):
@@ -870,9 +905,6 @@ class EditableAccountComboBox(QComboBox):
                 index = self.findText(formatted_account, Qt.MatchFlag.MatchExactly)
                 if index >= 0:
                     self.setCurrentIndex(index)
-                else:
-                    # Set the formatted text directly
-                    line_edit.setText(formatted_account)
         else:
             # Invalid account - only show warning styling, don't clear text
             if len(text) >= 2:  # Only validate if they've typed enough
@@ -1202,12 +1234,6 @@ class EditableAccountComboBox(QComboBox):
             index = self.findText(text, Qt.MatchFlag.MatchExactly)
             if index >= 0:
                 self.setCurrentIndex(index)
-            else:
-                # Set custom text and clear index to show it's custom
-                self.setCurrentIndex(-1)
-                line_edit = self.lineEdit()
-                if line_edit:
-                    line_edit.setText(text)
     
     def clear_selection(self):
         """Clear the selection and show placeholder text."""

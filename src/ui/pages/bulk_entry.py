@@ -45,7 +45,7 @@ class BulkEntryPage(QWidget):
             
             # Enhanced AccountMatcher for intelligent import assistance with semantic understanding
             self.account_matcher = EnhancedAccountMatcher(self.formatted_accounts) if self.formatted_accounts else None
-            if self.account_matcher:
+            if self.account_matcher and self.formatted_accounts:
                 print(f"📊 EnhancedAccountMatcher initialized with {len(self.formatted_accounts)} accounts")
         except Exception as e:
             print(f"❌ Error loading accounts in bulk entry: {e}")

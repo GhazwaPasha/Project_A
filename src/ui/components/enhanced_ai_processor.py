@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Any, Union
 from abc import ABC, abstractmethod
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 import requests
+import re
 
 
 # ============================================================================
@@ -51,183 +52,10 @@ class AIPlugin(ABC):
         pass
 
 
-class ReportsPlugin(AIPlugin):
-    """Handles all report generation commands"""
-    
-    @property
-    def name(self) -> str:
-        return "ReportsPlugin"
-    
-    def can_handle(self, user_input: str, context: dict) -> float:
-        input_lower = user_input.lower()
-        
-        # CRITICAL: If this is a reminder request, DON'T handle it
-        reminder_indicators = ['remind', 'reminder', 'set reminder', 'create reminder', 'schedule', 'recurring', 'every month', 'every week', 'every day']
-        if any(indicator in input_lower for indicator in reminder_indicators):
-            print(f"🚫 ReportsPlugin: Detected reminder request, skipping (confidence: 0.0)")
-            return 0.0
-        
-        # Check for action words + report keywords
-        action_words = ['generate', 'create', 'show', 'run', 'produce', 'make']
-        report_words = ['report', 'statement', 'balance', 'income', 'trial', 'cash flow', 'ledger']
-        
-        has_action = any(word in input_lower for word in action_words)
-        has_report = any(word in input_lower for word in report_words)
-        
-        if has_action and has_report:
-            return 0.9
-        elif has_report:
-            return 0.7
-        return 0.0
-    
-    def execute(self, user_input: str, context: dict) -> AIResponse:
-        input_lower = user_input.lower()
-        
-        # Clean input for better matching
-        cleaned_input = input_lower.replace(' or ', ' for ').replace(' of ', ' for ')
-        
-        # Report patterns with typo tolerance
-        report_patterns = {
-            'income_statement': {
-                'keywords': ['income statement', 'income statment', 'profit loss', 'p&l', 'pnl', 'profit and loss'],
-                'message': 'Generating Income Statement...',
-                'requires_dates': True
-            },
-            'balance_sheet': {
-                'keywords': ['balance sheet', 'balance shet', 'financial position'],
-                'message': 'Generating Balance Sheet...',
-                'requires_dates': False
-            },
-            'cash_flow': {
-                'keywords': ['cash flow', 'cashflow', 'cash flow statement'],
-                'message': 'Generating Cash Flow Statement...',
-                'requires_dates': True
-            },
-            'trial_balance': {
-                'keywords': ['trial balance', 'trial bal', 'trial', 'trial balence'],
-                'message': 'Generating Trial Balance...',
-                'requires_dates': True
-            },
-            'general_ledger': {
-                'keywords': ['general ledger', 'ledger', 'gl'],
-                'message': 'Opening General Ledger...',
-                'requires_dates': True
-            }
-        }
-        
-        # Find matching report type
-        for report_id, config in report_patterns.items():
-            if any(keyword in cleaned_input for keyword in config['keywords']):
-                date_params = self._parse_dates(cleaned_input)
-                
-                return AIResponse(
-                    response_type='report_generation',
-                    data={
-                        'report_type': report_id,
-                        'date_params': date_params,
-                        'original_prompt': cleaned_input,
-                        'parameters': {'date_range': date_params}
-                    },
-                    message=config['message']
-                )
-        
-        # Generic report request
-        return AIResponse(
-            response_type='help',
-            data={},
-            message="I can generate: income statement, balance sheet, cash flow, trial balance, or general ledger reports."
-        )
-    
-    def _parse_dates(self, input_lower: str) -> dict:
-        """Parse date information from command"""
-        today = datetime.now()
-        
-        if 'last month' in input_lower:
-            last_month = today.replace(day=1) - timedelta(days=1)
-            start_of_last_month = last_month.replace(day=1)
-            return {
-                'start': start_of_last_month.strftime('%Y-%m-%d'),
-                'end': last_month.strftime('%Y-%m-%d')
-            }
-        elif 'this month' in input_lower or 'current month' in input_lower:
-            start_of_month = today.replace(day=1)
-            return {
-                'start': start_of_month.strftime('%Y-%m-%d'),
-                'end': today.strftime('%Y-%m-%d')
-            }
-        elif 'last year' in input_lower:
-            last_year = today.year - 1
-            return {
-                'start': f'{last_year}-01-01',
-                'end': f'{last_year}-12-31'
-            }
-        elif 'this year' in input_lower or 'current year' in input_lower:
-            return {
-                'start': f'{today.year}-01-01',
-                'end': today.strftime('%Y-%m-%d')
-            }
-        else:
-            # Default to current month
-            start_of_month = today.replace(day=1)
-            return {
-                'start': start_of_month.strftime('%Y-%m-%d'),
-                'end': today.strftime('%Y-%m-%d')
-            }
+# ReportsPlugin removed - functionality merged into UnifiedNavigationPlugin
 
 
-class NavigationPlugin(AIPlugin):
-    """Handles navigation commands"""
-    
-    @property
-    def name(self) -> str:
-        return "NavigationPlugin"
-    
-    def can_handle(self, user_input: str, context: dict) -> float:
-        input_lower = user_input.lower()
-        
-        nav_words = ['show', 'open', 'go to', 'navigate', 'take me to', 'switch to', 'display']
-        page_words = ['dashboard', 'journal', 'accounts', 'ledger', 'reports', 'reminders', 'page']
-        
-        has_nav = any(word in input_lower for word in nav_words)
-        has_page = any(word in input_lower for word in page_words)
-        
-        # Don't handle if it's a report (let ReportsPlugin handle it)
-        report_words = ['statement', 'balance sheet', 'income', 'trial balance']
-        has_report = any(word in input_lower for word in report_words)
-        
-        if has_nav and has_page and not has_report:
-            return 0.9
-        elif has_page and not has_report:
-            return 0.6
-        return 0.0
-    
-    def execute(self, user_input: str, context: dict) -> AIResponse:
-        input_lower = user_input.lower()
-        
-        page_keywords = {
-            'dashboard': ['dashboard', 'home', 'overview', 'main page'],
-            'journal': ['journal', 'entries', 'transactions'],
-            'accounts': ['accounts', 'chart of accounts', 'account list'],
-            'trial_balance': ['trial balance page'],  # Only page navigation, not report
-            'reports': ['reports page', 'financial reports page'],
-            'ledger': ['ledger page'],  # Only page navigation, not report
-            'reminders': ['reminders', 'tasks', 'notifications'],
-            'period_closing': ['period closing', 'month end', 'year end']
-        }
-        
-        for page, keywords in page_keywords.items():
-            if any(keyword in input_lower for keyword in keywords):
-                return AIResponse(
-                    response_type='navigation',
-                    data={'page': page, 'parameters': {}},
-                    message=f"Navigating to {page.replace('_', ' ').title()}..."
-                )
-        
-        return AIResponse(
-            response_type='help',
-            data={},
-            message="Available pages: Dashboard, Journal, Accounts, Trial Balance, Reports, Ledger, Reminders, Period Closing"
-        )
+# NavigationPlugin removed - functionality merged into UnifiedNavigationPlugin
 
 
 class RemindersPlugin(AIPlugin):
@@ -408,209 +236,14 @@ class RemindersPlugin(AIPlugin):
                 return tomorrow.strftime('%Y-%m-%d 16:00')
 
 
-class ExplanationPlugin(AIPlugin):
-    """Handles explanation requests"""
-    
-    @property
-    def name(self) -> str:
-        return "ExplanationPlugin"
-    
-    def can_handle(self, user_input: str, context: dict) -> float:
-        input_lower = user_input.lower()
-        
-        # Question words that indicate explanation requests
-        explain_words = ['explain', 'what is', 'what are', 'how does', 'how do', 'tell me about', 'define', 'meaning of']
-        
-        # Expanded accounting concepts
-        concept_words = [
-            'debit', 'credit', 'ledger', 'journal', 'balance sheet', 'income statement', 
-            'accounting', 'trial balance', 'cash flow', 'assets', 'liabilities', 'equity',
-            'revenue', 'expenses', 'depreciation', 'accrual', 'accounts payable', 
-            'accounts receivable', 'general ledger', 'chart of accounts'
-        ]
-        
-        has_explain = any(word in input_lower for word in explain_words)
-        has_concept = any(word in input_lower for word in concept_words)
-        
-        # High confidence for direct questions about accounting concepts
-        if has_explain and has_concept:
-            print(f"🔍 ExplanationPlugin: Detected explanation request (confidence: 0.95)")
-            return 0.95  # Very high confidence for explanations
-        elif has_explain:
-            return 0.7   # Still high for any explanation request
-        elif any(word in input_lower for word in ['what', 'how', 'why', 'define']) and has_concept:
-            return 0.8   # High confidence for question words + concepts
-        return 0.0
-    
-    def execute(self, user_input: str, context: dict) -> AIResponse:
-        input_lower = user_input.lower()
-        
-        explanations = {
-            'ledger': {
-                'triggers': ['ledger', 'general ledger'],
-                'content': """📚 General Ledger:
-A general ledger is the master record of all financial transactions in your business. It contains all the accounts from your Chart of Accounts and shows the complete history of debits and credits for each account.
-
-Key features:
-• Complete transaction history for each account
-• Running balance for every account
-• Source of data for financial statements
-• Essential for audit trails and compliance
-
-Think of it as the "master book" where all your journal entries are permanently recorded and organized by account."""
-            },
-            'journal': {
-                'triggers': ['journal', 'journal entry', 'journal entries'],
-                'content': """📝 Journal & Journal Entries:
-A journal is where business transactions are first recorded in chronological order. Each transaction is recorded as a journal entry with debits and credits.
-
-Key components:
-• Date of transaction
-• Accounts affected (debit and credit)
-• Description of the transaction
-• Reference numbers for tracking
-
-Example: When you pay rent of $1,000:
-- Debit: Rent Expense $1,000
-- Credit: Cash $1,000"""
-            },
-            'debit_credit': {
-                'triggers': ['debit', 'credit', 'debits and credits'],
-                'content': """⚖️ Debits and Credits:
-The fundamental rule of double-entry bookkeeping. Every transaction affects at least two accounts.
-
-Basic rules:
-• Assets: Debit increases, Credit decreases
-• Liabilities: Credit increases, Debit decreases  
-• Equity: Credit increases, Debit decreases
-• Revenue: Credit increases, Debit decreases
-• Expenses: Debit increases, Credit decreases
-
-Remember: Debits must always equal Credits in every transaction!"""
-            },
-            'balance_sheet': {
-                'triggers': ['balance sheet', 'statement of financial position'],
-                'content': """📊 Balance Sheet:
-A snapshot of your company's financial position at a specific point in time. It shows what you own (assets), what you owe (liabilities), and what's left over (equity).
-
-Structure:
-Assets = Liabilities + Equity
-
-• Assets: Cash, inventory, equipment, etc.
-• Liabilities: Loans, accounts payable, etc.  
-• Equity: Owner's investment + retained earnings
-
-The balance sheet must always balance!"""
-            },
-            'income_statement': {
-                'triggers': ['income statement', 'profit and loss', 'p&l', 'pnl'],
-                'content': """💰 Income Statement (P&L):
-Shows your company's profitability over a specific period (month, quarter, year).
-
-Structure:
-Revenue - Expenses = Net Income
-
-• Revenue: Money earned from sales/services
-• Cost of Goods Sold: Direct costs to produce products
-• Gross Profit: Revenue - COGS
-• Operating Expenses: Rent, salaries, utilities, etc.
-• Net Income: What's left after all expenses
-
-This tells you if your business is profitable!"""
-            },
-            'trial_balance': {
-                'triggers': ['trial balance'],
-                'content': """📋 Trial Balance:
-A list of all accounts in your general ledger with their debit or credit balances at a specific point in time.
-
-Purpose:
-• Verify that total debits = total credits
-• Check for mathematical errors in posting
-• Basis for preparing financial statements
-• Internal control and accuracy check
-
-If the trial balance doesn't balance, there's an error that needs to be found and corrected."""
-            },
-            'cash_flow': {
-                'triggers': ['cash flow', 'cash flow statement'],
-                'content': """💸 Cash Flow Statement:
-Shows how cash moved in and out of your business during a specific period.
-
-Three categories:
-• Operating Activities: Cash from day-to-day operations
-• Investing Activities: Cash from buying/selling assets  
-• Financing Activities: Cash from loans, investments, etc.
-
-Important: A profitable company can still have cash flow problems! This statement shows actual cash movement, not just profits."""
-            },
-            'accounts_payable': {
-                'triggers': ['accounts payable', 'payables'],
-                'content': """📤 Accounts Payable:
-Money your business owes to suppliers, vendors, or creditors for goods/services received but not yet paid for.
-
-Examples:
-• Unpaid supplier invoices
-• Utility bills not yet paid
-• Professional services invoices pending
-
-This is a liability on your balance sheet. Managing A/P well helps with cash flow."""
-            },
-            'accounts_receivable': {
-                'triggers': ['accounts receivable', 'receivables'],
-                'content': """📥 Accounts Receivable:
-Money owed to your business by customers for goods/services delivered but not yet paid for.
-
-Examples:
-• Customer invoices sent but unpaid
-• Services completed, payment pending
-• Sales made on credit terms
-
-This is an asset on your balance sheet. Good A/R management is crucial for cash flow."""
-            }
-        }
-        
-        for concept, config in explanations.items():
-            if any(trigger in input_lower for trigger in config['triggers']):
-                return AIResponse(
-                    response_type='explanation',
-                    data={'concept': concept},
-                    message=config['content']
-                )
-        
-        return AIResponse(
-            response_type='help',
-            data={},
-            message="I can explain accounting concepts like: ledger, journal entries, debits & credits, balance sheet, income statement, trial balance, cash flow, accounts payable/receivable, and more. What would you like to learn about?"
-        )
+# ExplanationPlugin removed - no help functionality needed
 
 
 # ============================================================================
 # COMMAND REGISTRY
 # ============================================================================
 
-class AICommandRegistry:
-    """Fast command registry for instant responses"""
-    
-    def __init__(self):
-        self.quick_commands = {
-            'help': "I can help with navigation, reports, reminders, and explanations. Try: 'show accounts', 'generate income statement', or 'explain debits'.",
-            'what can you do': "I can navigate pages, generate reports, create reminders, and explain accounting concepts.",
-            'commands': "Available commands: show [page], generate [report], create reminder, explain [concept]"
-        }
-    
-    def try_handle(self, user_input: str) -> Optional[AIResponse]:
-        """Try to handle with quick command registry"""
-        input_lower = user_input.lower().strip()
-        
-        for command, response in self.quick_commands.items():
-            if command in input_lower:
-                return AIResponse(
-                    response_type='quick_response',
-                    data={'command': command},
-                    message=response
-                )
-        
-        return None
+# AICommandRegistry removed - no help commands needed
 
 
 # ============================================================================
@@ -656,10 +289,8 @@ class AIPluginManager:
     
     def __init__(self):
         self.plugins = [
-            ReportsPlugin(),
-            NavigationPlugin(),
-            RemindersPlugin(),
-            ExplanationPlugin()
+            UnifiedNavigationPlugin(),
+            RemindersPlugin()
         ]
     
     def try_handle(self, user_input: str, context: dict) -> Optional[AIResponse]:
@@ -711,7 +342,6 @@ class ContextAwareAI(QObject):
         self.application_state = {}
         
         # Hybrid architecture components
-        self.command_registry = AICommandRegistry()
         self.plugin_manager = AIPluginManager()
         self.state_machine = AIStateMachine()
         
@@ -741,13 +371,7 @@ class ContextAwareAI(QObject):
             return
         
         try:
-            # Step 1: Command registry (fastest)
-            if response := self.command_registry.try_handle(user_input):
-                print(f"⚡ Quick command: {response.message}")
-                self.response_ready.emit(response.message)
-                return
-            
-            # Step 2: State machine (for conversations)
+            # Step 1: State machine (for conversations)
             if self.state_machine.has_active_state():
                 response = self.state_machine.process_input(user_input)
                 self.response_ready.emit(response.message)
@@ -780,11 +404,7 @@ class ContextAwareAI(QObject):
             self.navigation_requested.emit(page, params)
             self.response_ready.emit(response.message)
         
-        elif response.type == 'report_generation':
-            report_type = response.data['report_type']
-            params = response.data.get('parameters', {})
-            self.report_requested.emit(report_type, params)
-            self.response_ready.emit(response.message)
+        # report_generation handling removed - merged into navigation
         
         elif response.type == 'reminder_creation':
             self.reminder_created.emit(response.data)
@@ -806,6 +426,10 @@ class ContextAwareAI(QObject):
         """Fallback API processing for complex queries"""
         if self.processing_thread and self.processing_thread.isRunning():
             self.error_occurred.emit("Please wait for current request to complete.")
+            return
+        
+        if not self.api_key:
+            self.error_occurred.emit("API key not configured for advanced processing.")
             return
         
         print("🌐 Using API fallback...")
@@ -899,3 +523,211 @@ class APIFallbackThread(QThread):
             
         except Exception as e:
             self.error_occurred.emit(f"AI service error: {str(e)}")
+
+
+class UnifiedNavigationPlugin(AIPlugin):
+    """Unified plugin for all navigation - pages, reports, and account-specific views"""
+    
+    @property
+    def name(self) -> str:
+        return "UnifiedNavigationPlugin"
+    
+    def can_handle(self, user_input: str, context: dict) -> float:
+        input_lower = user_input.lower()
+        
+        # Skip if it's a reminder request
+        reminder_indicators = ['remind', 'reminder', 'set reminder', 'create reminder', 'schedule', 'recurring']
+        if any(indicator in input_lower for indicator in reminder_indicators):
+            return 0.0
+        
+        # Navigation indicators
+        nav_words = ['show', 'open', 'go to', 'navigate', 'take me to', 'switch to', 'display', 'generate', 'create', 'run', 'produce']
+        target_words = ['dashboard', 'journal', 'accounts', 'ledger', 'reports', 'reminders', 'page', 'statement', 'balance', 'trial', 'account', 'cash flow']
+        
+        has_nav = any(word in input_lower for word in nav_words)
+        has_target = any(word in input_lower for word in target_words)
+        
+        # High confidence for specific account requests
+        account_indicators = ['account', 'ledger for', 'show me', 'cash', 'bank', 'sales']
+        has_account = any(indicator in input_lower for indicator in account_indicators)
+        
+        if has_nav and has_target:
+            return 0.95
+        elif has_account:
+            return 0.9
+        elif has_target:
+            return 0.8
+        return 0.0
+    
+    def execute(self, user_input: str, context: dict) -> AIResponse:
+        input_lower = user_input.lower()
+        
+        # Extract navigation target and parameters
+        target_page = self._extract_target_page(input_lower)
+        parameters = self._extract_parameters(input_lower, target_page)
+        
+        return AIResponse(
+            response_type='navigation',
+            data={
+                'page': target_page,
+                'parameters': parameters
+            },
+            message=f"Opening {target_page.replace('_', ' ').title()}..."
+        )
+    
+    def _extract_target_page(self, input_lower: str) -> str:
+        """Extract the target page from user input"""
+        
+        # Page patterns with priority
+        page_patterns = {
+            # Reports (specific report types)
+            'reports': [
+                'income statement', 'profit loss', 'p&l', 'pnl',
+                'balance sheet', 'financial position',
+                'cash flow', 'cashflow',
+                'trial balance', 'trial',
+                'report', 'statement'
+            ],
+            
+            # Account-specific navigation
+            'ledger': [
+                'ledger', 'account ledger', 'show account', 'open account',
+                'cash', 'bank', 'sales', 'expense', 'revenue'
+            ],
+            
+            # Direct page navigation
+            'dashboard': ['dashboard', 'home', 'overview', 'main'],
+            'journal': ['journal', 'entries', 'transactions'],
+            'accounts': ['chart of accounts', 'accounts', 'account list'],
+            'trial_balance': ['trial balance page'],
+            'reminders': ['reminders', 'tasks', 'notifications'],
+            'period_closing': ['period closing', 'month end', 'year end'],
+            'settings': ['settings', 'preferences', 'config']
+        }
+        
+        # Find best match
+        for page, keywords in page_patterns.items():
+            if any(keyword in input_lower for keyword in keywords):
+                return page
+        
+        return 'dashboard'  # Default fallback
+    
+    def _extract_parameters(self, input_lower: str, target_page: str) -> dict:
+        """Extract parameters based on target page and user input"""
+        params = {}
+        
+        # Extract account name for ledger navigation
+        if target_page == 'ledger':
+            account_name = self._extract_account_name(input_lower)
+            if account_name:
+                params['account_name'] = account_name
+                params['specific_account'] = True
+        
+        # Extract report type for reports page
+        if target_page == 'reports':
+            report_type = self._extract_report_type(input_lower)
+            if report_type:
+                params['report_type'] = report_type
+        
+        # Extract date range for applicable pages
+        if target_page in ['reports', 'ledger', 'trial_balance']:
+            date_params = self._extract_dates(input_lower)
+            if date_params:
+                params.update(date_params)
+        
+        return params
+    
+    def _extract_account_name(self, input_lower: str) -> str:
+        """Extract account name using smart matching patterns and AccountMatcher"""
+        patterns = [
+            # Direct account references
+            r'show (?:me )?(.+?)(?:\s+account|\s+ledger|$)',
+            r'open (?:the )?(.+?)(?:\s+account|\s+ledger|$)', 
+            r'(?:account|ledger) (?:for )?(.+?)(?:\s|$)',
+            r'(.+?)(?:\s+account|\s+ledger)(?:\s|$)',
+            
+            # Specific account types
+            r'(cash (?:in hand|in bank|at bank|on hand))',
+            r'(accounts (?:receivable|payable))',
+            r'(bank (?:account|checking|savings))',
+            r'(sales (?:account|revenue))'
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, input_lower)
+            if match:
+                raw_account_name = match.group(1).strip()
+                # Clean up common words
+                raw_account_name = re.sub(r'\b(the|a|an|show|open|me)\b', '', raw_account_name)
+                raw_account_name = raw_account_name.strip()
+                
+                if raw_account_name and len(raw_account_name) > 1:
+                    # Use AccountMatcher to find the best match
+                    account_match = self._find_best_account_match(raw_account_name)
+                    if account_match:
+                        print(f"🎯 Smart account match: '{raw_account_name}' → '{account_match.account_name}' (confidence: {account_match.confidence:.2f})")
+                        return account_match.account_name
+                    else:
+                        # Fallback to original extraction
+                        return raw_account_name.title()
+        
+        return ""
+    
+    def _find_best_account_match(self, query: str):
+        """Find best account match using AIAccountResolver"""
+        try:
+            from src.core.ai_account_resolver import AIAccountResolver
+            resolver = AIAccountResolver()  # Use without accounting system for now (mock data)
+            return resolver.find_best_match(query, min_confidence=0.6)
+        except Exception as e:
+            print(f"⚠️ AIAccountResolver error: {e}")
+            return None
+    
+    def _extract_report_type(self, input_lower: str) -> str:
+        """Extract report type from user input"""
+        report_mapping = {
+            'income_statement': ['income statement', 'profit loss', 'p&l', 'pnl'],
+            'balance_sheet': ['balance sheet', 'financial position'],
+            'cash_flow': ['cash flow', 'cashflow'],
+            'trial_balance': ['trial balance', 'trial'],
+            'general_ledger': ['general ledger', 'gl']
+        }
+        
+        for report_id, keywords in report_mapping.items():
+            if any(keyword in input_lower for keyword in keywords):
+                return report_id
+        
+        return 'income_statement'  # Default
+    
+    def _extract_dates(self, input_lower: str) -> dict:
+        """Extract date parameters from user input"""
+        from datetime import datetime, timedelta
+        
+        today = datetime.now()
+        
+        if 'last month' in input_lower:
+            last_month = today.replace(day=1) - timedelta(days=1)
+            start_of_last_month = last_month.replace(day=1)
+            return {
+                'start_date': start_of_last_month.strftime('%Y-%m-%d'),
+                'end_date': last_month.strftime('%Y-%m-%d')
+            }
+        elif 'this month' in input_lower or 'current month' in input_lower:
+            start_of_month = today.replace(day=1)
+            return {
+                'start_date': start_of_month.strftime('%Y-%m-%d'),
+                'end_date': today.strftime('%Y-%m-%d')
+            }
+        elif 'last year' in input_lower:
+            last_year = today.year - 1
+            return {
+                'start_date': f'{last_year}-01-01',
+                'end_date': f'{last_year}-12-31'
+            }
+        elif 'this year' in input_lower or 'current year' in input_lower:
+            return {
+                'start_date': f'{today.year}-01-01',
+                'end_date': today.strftime('%Y-%m-%d')
+            }
+        
+        return {}
