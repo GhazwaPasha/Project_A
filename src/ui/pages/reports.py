@@ -270,14 +270,13 @@ class ExpandableSection(QWidget):
         header_style = """
             QFrame {
                 background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                border-radius: 8px;
-                border-color: rgba(0, 0, 0, 0.3);
-                padding: 0px;
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                border-bottom: none;
             }
             QFrame:hover {
                 background: rgba(255, 255, 255, 0.12);
-                border-color: rgba(255, 255, 255, 0.25);
             }
         """
         self.header_frame.setStyleSheet(header_style)
@@ -286,68 +285,33 @@ class ExpandableSection(QWidget):
         self.header_frame.mousePressEvent = self._on_header_click
         
         header_layout = QHBoxLayout(self.header_frame)
-        header_layout.setContentsMargins(16, 12, 16, 12)  # Match card margins
-        header_layout.setSpacing(12)
+        header_layout.setContentsMargins(18, 12, 18, 12)  # Match journal header margins
+        header_layout.setSpacing(8)  # Match journal header spacing
         
-        # Icon with background (like ledger tags)
-        icon_label = QLabel(self.icon)
-        icon_label.setStyleSheet("""
-            font-size: 16px;
-            color: #64B5F6;
-            background: rgba(100, 181, 246, 0.2);
-            padding: 4px 6px;
-            border-radius: 4px;
-            border: none;
-        """)
-        icon_label.setFixedWidth(32)
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header_layout.addWidget(icon_label)
-        
-        # Title and subtitle container
-        title_container = QVBoxLayout()
-        title_container.setSpacing(2)
-        
+        # Title (matching journal form styling)
         title_label = QLabel(self.title)
         title_label.setStyleSheet("""
+            color: rgba(255, 255, 255, 0.9);
             font-size: 14px;
-            font-weight: 600;
-            color: white;
+            font-weight: 500;
             background: transparent;
             border: none;
         """)
-        
-        if self.subtitle:
-            subtitle_label = QLabel(self.subtitle)
-            subtitle_label.setStyleSheet("""
-                font-size: 12px;
-                color: rgba(255, 255, 255, 0.7);
-                background: transparent;
-                border: none;
-            """)
-            title_container.addWidget(title_label)
-            title_container.addWidget(subtitle_label)
-        else:
-            title_container.addWidget(title_label)
-        
-        header_layout.addLayout(title_container)
+        header_layout.addWidget(title_label)
         header_layout.addStretch()
         
-        # Toggle indicator (Windows 11 style)
+        # Toggle indicator (matching journal form styling)
         self.toggle_indicator = QLabel("▶")
         self.toggle_indicator.setStyleSheet("""
             QLabel {
-                background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(255, 255, 255, 0.12);
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
                 border-radius: 4px;
                 padding: 4px;
                 min-width: 24px;
                 min-height: 24px;
-                font-size: 10px;
+                font-size: 12px;
                 color: rgba(255, 255, 255, 0.9);
-            }
-            QLabel:hover {
-                background: rgba(255, 255, 255, 0.12);
-                border-color: rgba(255, 255, 255, 0.25);
             }
         """)
         self.toggle_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -534,9 +498,22 @@ class ReportsPage(QWidget):
         
         # KPI section removed - no hardcoded cards
         
-        # Financial Statements section (expandable)
-        self.statements_section = ExpandableSection("Financial Statements", "Core financial documents and statements", "📋")
-        scroll_layout.addWidget(self.statements_section)
+        # Financial Statements section
+        statements_title = QLabel("Financial Statements")
+        statements_title.setStyleSheet(f"""
+            QLabel {{
+                color: white;
+                font-size: {ResponsiveHelper.scale_size(20, 16, 24)}px;
+                font-weight: 600;
+                background: transparent;
+            }}
+        """)
+        scroll_layout.addWidget(statements_title)
+        self.statements_grid_widget = QWidget()
+        self.statements_grid = QGridLayout(self.statements_grid_widget)
+        self.statements_grid.setSpacing(ResponsiveHelper.scale_size(12, 10, 16))
+        self.statements_grid.setContentsMargins(0, 0, 0, 0)
+        scroll_layout.addWidget(self.statements_grid_widget)
         
         # Analysis Reports section (expandable)
         analysis_title = QLabel("Analysis & Insights")
@@ -591,7 +568,7 @@ class ReportsPage(QWidget):
             card.cardClicked.connect(self._handle_statement_click)
             row = i // 3  # 3 cards per row
             col = i % 3
-            self.statements_section.add_card(card, row, col)
+            self.statements_grid.addWidget(card, row, col)
         
         # Analysis Reports
         analysis_data = [
