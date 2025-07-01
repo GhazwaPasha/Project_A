@@ -34,5 +34,16 @@
     "recurring": "monthly",
     "completed": true,
     "created_at": "2025-07-01T07:49:04.475899"
+  },
+  {
+    "id": "reminder_20250701_184644",
+    "title": "General Reminder",
+    "description": "Reminder created from: set a monthly reminder for incomestatement",
+    "due_datetime": "2025-08-01 09:00",
+    "recurring": "monthly",
+    "priority": "medium",
+    "created_datetime": "2025-07-01T18:46:44.159913",
+    "completed": false,
+    "created_at": "2025-07-01T18:46:44.159913"
   }
 ]

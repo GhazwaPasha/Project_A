@@ -21,7 +21,7 @@ from ...core.utils import format_currency
 from ..components.scrollbar_styles import ModernScrollbarStyles
 from ..components.widgets import PageHeader, DateRangeSelector
 from ..components.report_views import (
-    IncomeStatementView, BalanceSheetView, CashFlowStatementView, StatementOfEquityView
+    IncomeStatementView, BalanceSheetView, CashFlowStatementView, StatementOfEquityView, RatioAnalysisView
 )
 from PyQt6.QtCore import QPropertyAnimation, QEasingCurve, pyqtSignal
 from PyQt6.QtGui import QFont, QCursor
@@ -453,6 +453,11 @@ class ReportsPage(QWidget):
         self.equity_statement_view.backToReports.connect(self._show_overview)
         self.stacked_widget.addWidget(self.equity_statement_view)
         
+        # Add ratio analysis view
+        self.ratio_analysis_view = RatioAnalysisView()
+        self.ratio_analysis_view.backToReports.connect(self._show_overview)
+        self.stacked_widget.addWidget(self.ratio_analysis_view)
+        
         layout.addWidget(self.stacked_widget)
     
     def _create_overview_page(self):
@@ -673,13 +678,17 @@ class ReportsPage(QWidget):
         try:
             # Handle Ratio Analysis
             if "Ratio Analysis" in analysis_name:
+                # Switch to ratio analysis view
+                self.stacked_widget.setCurrentWidget(self.ratio_analysis_view)
+                
+                # Load ratio data if system has ratio calculator
                 if hasattr(self.system, 'ratio_calculator'):
-                    # Calculate all ratios
-                    all_ratios = self.system.ratio_calculator.calculate_all_ratios()
-                    self._show_ratio_results("Financial Ratio Analysis", all_ratios)
-                else:
-                    QMessageBox.information(self, "Ratio Analysis", 
-                                          "Calculating financial ratios...\nThis feature is available with enhanced system features!")
+                    try:
+                        ratio_data = self.system.ratio_calculator.create_ratio_dashboard_data()
+                        self.ratio_analysis_view.load_ratio_data(ratio_data)
+                    except Exception as e:
+                        print(f"Error loading ratio data: {e}")
+                        # Continue with placeholder data
             # Check if system has enhanced budget manager
             elif hasattr(self.system, 'budget_manager') and "Budget" in analysis_name:
                 if "Budget vs Actual" in analysis_name:
