@@ -144,73 +144,108 @@ class ReportCard(QFrame):
         super().mousePressEvent(event)
 
 
-class KPICard(QFrame):
-    """KPI card for the top section using Windows 11 styling."""
-    
-    def __init__(self, title, value, subtitle="", color="#4CAF50", parent=None):
+class AnalysisCard(QFrame):
+    """Analysis card widget matching ActionCard design from dashboard."""
+    cardClicked = pyqtSignal(str)  # Report name
+    def __init__(self, title, subtitle="", value="", color="#64B5F6", parent=None):
         super().__init__(parent)
         self.title = title
-        self.value = value
         self.subtitle = subtitle
-        self.color = color
+        self.value = value
+        self.accent_color = color
         self._setup_ui()
-        
+        self._apply_styling()
     def _setup_ui(self):
-        """Setup the KPI card UI with Windows 11 styling."""
-        self.setFixedHeight(140)  # Increased height to match ReportCard and prevent clipping
-        self.setStyleSheet("""
-            QFrame {
-                background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                border-radius: 8px;
-                border-color: rgba(0, 0, 0, 0.3);
-                margin: 4px;
-            }            QFrame:hover {
-                background: rgba(255, 255, 255, 0.12);
-                border-color: rgba(255, 255, 255, 0.25);
-            }
-        """)
-        
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 10, 16, 10)  # Reduced top/bottom margins for more text space
-        layout.setSpacing(6)  # Reduced spacing for better text fit
-        
-        # Title
+        margins = ResponsiveHelper.scale_size(24, 20, 32)
+        layout.setContentsMargins(margins, margins, margins, margins)
+        layout.setSpacing(ResponsiveHelper.scale_size(12, 8, 16))
         title_label = QLabel(self.title)
-        title_label.setStyleSheet("""
-            color: rgba(255, 255, 255, 0.8);
-            font-weight: 500;
-            font-size: 12px;
-            background: transparent;
-            border: none;
-        """)
-        layout.addWidget(title_label)
-        
-        # Add stretch to space elements better
-        layout.addStretch()
-        
-        # Value
-        value_label = QLabel(self.value)
-        value_label.setStyleSheet("""
-            color: white;
-            font-weight: 700;
-            font-size: 18px;
-            background: transparent;
-            border: none;
-        """)
-        layout.addWidget(value_label)
-        
-        # Subtitle
-        if self.subtitle:
-            subtitle_label = QLabel(self.subtitle)
-            subtitle_label.setStyleSheet(f"""
-                color: {self.color};
-                font-size: 10px;
-                font-weight: 500;
+        title_label.setStyleSheet(f"""
+            QLabel {{
+                color: white;
+                font-size: {ResponsiveHelper.scale_size(16, 14, 18)}px;
+                font-weight: 600;
                 background: transparent;
                 border: none;
+                outline: none;
+                margin: 0px;
+                padding: 0px;
+            }}
+        """)
+        title_label.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        layout.addWidget(title_label)
+        if self.subtitle:
+            desc_label = QLabel(self.subtitle)
+            desc_label.setStyleSheet(f"""
+                QLabel {{
+                    color: rgba(255, 255, 255, 0.7);
+                    font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
+                    font-weight: 400;
+                    background: transparent;
+                    border: none;
+                    outline: none;
+                    margin: 0px;
+                    padding: 0px;
+                    margin-top: {ResponsiveHelper.scale_size(4, 2, 6)}px;
+                }}
             """)
-            layout.addWidget(subtitle_label)
+            desc_label.setWordWrap(True)
+            desc_label.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            layout.addWidget(desc_label)
+        if self.value:
+            value_label = QLabel(self.value)
+            value_label.setStyleSheet(f"""
+                QLabel {{
+                    color: {self.accent_color};
+                    font-size: {ResponsiveHelper.scale_size(12, 10, 14)}px;
+                    font-weight: 500;
+                    background: transparent;
+                    border: none;
+                    outline: none;
+                    margin: 0px;
+                    padding: 0px;
+                }}
+            """)
+            value_label.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            layout.addWidget(value_label)
+        layout.addStretch()
+    def _apply_styling(self):
+        border_radius = ResponsiveHelper.scale_size(8, 6, 10)
+        accent_rgb = self._hex_to_rgb(self.accent_color)
+        self.setStyleSheet(f"""
+            QFrame {{
+                background: rgba({accent_rgb[0]}, {accent_rgb[1]}, {accent_rgb[2]}, 0.1);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: {border_radius}px;
+                margin: 4px;
+            }}
+            QFrame:hover {{
+                background: rgba({accent_rgb[0]}, {accent_rgb[1]}, {accent_rgb[2]}, 0.15);
+                border: 1px solid rgba({accent_rgb[0]}, {accent_rgb[1]}, {accent_rgb[2]}, 0.4);
+            }}
+            QFrame:pressed {{
+                background: rgba({accent_rgb[0]}, {accent_rgb[1]}, {accent_rgb[2]}, 0.2);
+                border: 1px solid rgba({accent_rgb[0]}, {accent_rgb[1]}, {accent_rgb[2]}, 0.5);
+            }}
+        """)
+        self.setMinimumHeight(ResponsiveHelper.scale_size(140, 120, 160))
+        self.setMaximumHeight(ResponsiveHelper.scale_size(200, 180, 220))
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(ResponsiveHelper.scale_size(20, 15, 30))
+        shadow.setXOffset(0)
+        shadow.setYOffset(ResponsiveHelper.scale_size(4, 2, 6))
+        shadow.setColor(QColor(0, 0, 0, 80))
+        self.setGraphicsEffect(shadow)
+    def _hex_to_rgb(self, hex_color):
+        hex_color = hex_color.lstrip('#')
+        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.cardClicked.emit(self.title)
+        super().mousePressEvent(event)
 
 
 class ExpandableSection(QWidget):
@@ -497,20 +532,28 @@ class ReportsPage(QWidget):
         scroll_layout.setContentsMargins(0, 0, 0, 0)
         scroll_layout.setSpacing(16)  # Standardized spacing
         
-        # KPI section (now inside scroll area)
-        self._create_kpi_section(scroll_layout)
+        # KPI section removed - no hardcoded cards
         
         # Financial Statements section (expandable)
         self.statements_section = ExpandableSection("Financial Statements", "Core financial documents and statements", "📋")
         scroll_layout.addWidget(self.statements_section)
         
-        # Ratios section (expandable)
-        self.ratios_section = ExpandableSection("Financial Ratios", "Calculate and analyze key financial ratios", "📊")
-        scroll_layout.addWidget(self.ratios_section)
-        
         # Analysis Reports section (expandable)
-        self.analysis_section = ExpandableSection("Analysis Reports", "Advanced financial analysis and insights", "📈")
-        scroll_layout.addWidget(self.analysis_section)
+        analysis_title = QLabel("Analysis & Insights")
+        analysis_title.setStyleSheet(f"""
+            QLabel {{
+                color: white;
+                font-size: {ResponsiveHelper.scale_size(20, 16, 24)}px;
+                font-weight: 600;
+                background: transparent;
+            }}
+        """)
+        scroll_layout.addWidget(analysis_title)
+        self.analysis_grid_widget = QWidget()
+        self.analysis_grid = QGridLayout(self.analysis_grid_widget)
+        self.analysis_grid.setSpacing(ResponsiveHelper.scale_size(12, 10, 16))
+        self.analysis_grid.setContentsMargins(0, 0, 0, 0)
+        scroll_layout.addWidget(self.analysis_grid_widget)
         
         # Add stretch to push content to top
         scroll_layout.addStretch()
@@ -528,26 +571,8 @@ class ReportsPage(QWidget):
         
     def _create_kpi_section(self, main_layout):
         """Create the top KPI section (non-expandable, max 2 rows)."""
-        # KPI cards grid (max 2 rows) - no heading needed
-        kpi_grid = QGridLayout()
-        kpi_grid.setSpacing(ResponsiveHelper.scale_size(12, 10, 16))
-          # Sample KPI data (8 cards = 2 rows of 4) - using dynamic currency formatting
-        kpi_data = [
-            ("Total Revenue", format_currency(128900), "Monthly: +8.2%", "#2196F3"),
-            ("Net Income", format_currency(45230), "vs Last Month: +12.5%", "#4CAF50"),
-            ("Cash Flow", format_currency(32150), "Operating Activities", "#FF9800"),
-            ("ROE", "15.8%", "vs Last Quarter: +2.1%", "#00BCD4"),            ("A/R Days", "28 days", "Industry Avg: 31", "#9C27B0"),
-            ("Debt Ratio", "0.45", "Healthy Range: <0.5", "#4CAF50"),
-            ("Quick Ratio", "1.8", "Liquid Assets", "#4CAF50"),
-            ("Gross Margin", "69.6%", "Profit Efficiency", "#FF5722"),        ]
-        
-        for i, (title, value, subtitle, color) in enumerate(kpi_data):
-            card = KPICard(title, value, subtitle, color)
-            row = i // 4  # 4 cards per row (back to original)
-            col = i % 4
-            kpi_grid.addWidget(card, row, col)
-        
-        main_layout.addLayout(kpi_grid)
+        # KPI section removed - no hardcoded cards
+        pass
         
     def _populate_sections(self):
         """Populate the expandable sections with cards."""
@@ -568,40 +593,23 @@ class ReportsPage(QWidget):
             col = i % 3
             self.statements_section.add_card(card, row, col)
         
-        # Financial Ratios
-        ratios_data = [
-            ("Liquidity Ratios", "Current, Quick, Cash", "Calculate", "#4CAF50"),
-            ("Profitability Ratios", "ROE, ROA, Margins", "Calculate", "#2196F3"),
-            ("Leverage Ratios", "Debt, Coverage", "Calculate", "#FF9800"),
-            ("Efficiency Ratios", "Turnover, Days", "Calculate", "#9C27B0"),
-            ("Market Ratios", "P/E, Book Value", "Calculate", "#00BCD4"),
-            ("Growth Ratios", "Revenue, Earnings", "Calculate", "#F44336"),
-        ]
-        
-        for i, (title, subtitle, value, color) in enumerate(ratios_data):
-            card = ReportCard(title, subtitle, value, color)
-            card.cardClicked.connect(self._handle_ratio_click)
-            row = i // 3  # 3 cards per row
-            col = i % 3
-            self.ratios_section.add_card(card, row, col)
-        
         # Analysis Reports
         analysis_data = [
-            ("Trend Analysis", "Multi-period Trends", "Analyze", "#4CAF50"),
-            ("Budget vs Actual", "Performance Analysis", "Compare", "#2196F3"),
-            ("Variance Analysis", "Budget Deviations", "Analyze", "#FF9800"),
-            ("Accounts Aging", "A/R & A/P Aging", "Review", "#9C27B0"),
-            ("Cost Analysis", "Expense Breakdown", "Analyze", "#00BCD4"),
-            ("Revenue Analysis", "Income Sources", "Analyze", "#F44336"),
-            ("Seasonal Analysis", "Periodic Patterns", "Analyze", "#795548"),
-            ("Competitive Analysis", "Benchmarking", "Compare", "#607D8B"),        ]
+            ("Ratio Analysis", "Financial Ratios & Metrics", "Calculate", "#4CAF50"),
+            ("Trend Analysis", "Multi-period Trends", "Analyze", "#2196F3"),
+            ("Budget vs Actual", "Performance Analysis", "Compare", "#FF9800"),
+            ("Variance Analysis", "Budget Deviations", "Analyze", "#9C27B0"),
+            ("Accounts Aging", "A/R & A/P Aging", "Review", "#00BCD4"),
+            ("Cost Analysis", "Expense Breakdown", "Analyze", "#F44336"),
+            ("Revenue Analysis", "Income Sources", "Analyze", "#795548"),
+            ("Competitive Analysis", "Benchmarking", "Compare", "#E91E63"),        ]
         
         for i, (title, subtitle, value, color) in enumerate(analysis_data):
-            card = ReportCard(title, subtitle, value, color)
+            card = AnalysisCard(title, subtitle, value, color)
             card.cardClicked.connect(self._handle_analysis_click)
-            row = i // 3  # 3 cards per row
-            col = i % 3
-            self.analysis_section.add_card(card, row, col)
+            row = i // 4  # 4 cards per row
+            col = i % 4
+            self.analysis_grid.addWidget(card, row, col)
     
     def _on_date_range_changed(self, start_date, end_date):
         """Handle date range changes."""
@@ -611,9 +619,8 @@ class ReportsPage(QWidget):
     def refresh_currency_display(self):
         """Refresh all currency displays when currency symbol changes."""
         try:
-            # Refresh the KPI section which contains currency values
-            # Re-create the main layout to update currency formatting
-            self._setup_ui()
+            # Currency display refresh - KPI section removed
+            pass
         except Exception as e:
             print(f"Error refreshing currency display in reports: {e}")
     
@@ -687,8 +694,17 @@ class ReportsPage(QWidget):
     def _handle_analysis_click(self, analysis_name):
         """Handle analysis report card clicks."""
         try:
+            # Handle Ratio Analysis
+            if "Ratio Analysis" in analysis_name:
+                if hasattr(self.system, 'ratio_calculator'):
+                    # Calculate all ratios
+                    all_ratios = self.system.ratio_calculator.calculate_all_ratios()
+                    self._show_ratio_results("Financial Ratio Analysis", all_ratios)
+                else:
+                    QMessageBox.information(self, "Ratio Analysis", 
+                                          "Calculating financial ratios...\nThis feature is available with enhanced system features!")
             # Check if system has enhanced budget manager
-            if hasattr(self.system, 'budget_manager') and "Budget" in analysis_name:
+            elif hasattr(self.system, 'budget_manager') and "Budget" in analysis_name:
                 if "Budget vs Actual" in analysis_name:
                     analysis = self.system.budget_manager.generate_budget_vs_actual_report()
                     self._show_budget_analysis("Budget vs Actual Analysis", analysis)
