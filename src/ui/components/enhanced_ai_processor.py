@@ -388,7 +388,7 @@ class ContextAwareAI(QObject):
             if self.api_key:
                 self._process_with_api(user_input)
             else:
-                self.response_ready.emit("I didn't understand that command. Try 'help' for available commands.")
+                self.response_ready.emit("I didn't understand that command. Try asking me to show a specific page or create a reminder.")
         
         except Exception as e:
             print(f"❌ Processing error: {e}")
@@ -499,7 +499,7 @@ class APIFallbackThread(QThread):
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are an AI assistant for an accounting application. Provide helpful, concise responses."
+                        "content": "You are an AI assistant for an accounting application. Focus on navigation, reports, and reminders. Avoid generic help responses."
                     },
                     {
                         "role": "user",
