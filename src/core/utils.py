@@ -216,9 +216,14 @@ STEP-BY-STEP PROCESS:
 3. Apply the rule: Use the exact DEBIT/CREDIT combination from the pattern
 4. Verify: Check that expenses are debited and revenues are credited
 
+🚫 **CRITICAL DATE RULE**: 
+- ONLY include a date if the user explicitly mentions a specific date (like "on January 15", "yesterday", "last Monday", etc.)
+- If the user just says "paid rent", "bought supplies", etc. WITHOUT mentioning when, then set "date" to null or empty string
+- DO NOT assume or generate dates that aren't explicitly mentioned in the input
+
 JSON RESPONSE FORMAT:
 {{
-    "date": "YYYY-MM-DD" (ONLY if a specific date is mentioned in the input, otherwise leave empty or null),
+    "date": null (ONLY set this to "YYYY-MM-DD" if user explicitly mentions a specific date, otherwise use null),
     "description": "Clear description of the transaction",
     "debit_account": "Account to be debited",
     "credit_account": "Account to be credited", 
@@ -227,6 +232,7 @@ JSON RESPONSE FORMAT:
 
 ⛔ CRITICAL: If this is an expense payment, the expense account MUST be debited, never credited.
 ⛔ CRITICAL: If this is revenue receipt, the revenue account MUST be credited, never debited.
+⛔ CRITICAL: Only include a date if the user explicitly mentions one - do NOT generate dates!
 
 Respond with ONLY the JSON object, no explanations.
 """
@@ -275,11 +281,22 @@ Respond with ONLY the JSON object, no explanations.
             if field not in parsed:
                 raise ValueError(f"Missing required field: {field}")
         
-        # Don't auto-set date - let UI preserve existing date if not specified
-        # Only set empty string if date field is missing entirely
-        if 'date' not in parsed:
+        # Handle date field properly - convert null to empty string, validate actual dates
+        date_value = parsed.get('date')
+        if date_value is None or date_value == "null" or date_value == "":
+            parsed['date'] = ''  # Empty string means no date specified
+        elif isinstance(date_value, str) and date_value.strip():
+            # Validate date format if a date was provided
+            try:
+                datetime.strptime(date_value.strip(), '%Y-%m-%d')
+                parsed['date'] = date_value.strip()
+            except ValueError:
+                # Invalid date format, treat as no date specified
+                parsed['date'] = ''
+        else:
             parsed['date'] = ''
-          # Ensure amount is a number
+        
+        # Ensure amount is a number
         try:
             parsed['amount'] = float(str(parsed['amount']).replace(',', '').replace('$', '').strip())
         except:

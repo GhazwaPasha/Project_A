@@ -1230,10 +1230,31 @@ class EditableAccountComboBox(QComboBox):
             if line_edit:
                 line_edit.clear()
                 line_edit.setText("")  # Ensure completely empty
-        else:            # Try to find the text in the list first
+        else:
+            # Try to find the text in the list first
             index = self.findText(text, Qt.MatchFlag.MatchExactly)
             if index >= 0:
                 self.setCurrentIndex(index)
+            else:
+                # If exact match not found, try to set the text directly and let validation handle it
+                line_edit = self.lineEdit()
+                if line_edit:
+                    line_edit.setText(text)
+                    # Trigger validation to find best match
+                    self._validate_input()
+                    
+                    # Try to find a formatted/matched version
+                    formatted_text = self._format_account_text(text)
+                    if formatted_text and formatted_text != text:
+                        # Found a better match, use it
+                        index = self.findText(formatted_text, Qt.MatchFlag.MatchExactly)
+                        if index >= 0:
+                            self.setCurrentIndex(index)
+                        else:
+                            # Double-check line_edit still exists before setting text
+                            current_line_edit = self.lineEdit()
+                            if current_line_edit:
+                                current_line_edit.setText(formatted_text)
     
     def clear_selection(self):
         """Clear the selection and show placeholder text."""
