@@ -407,16 +407,18 @@ class EnhancedSupabaseOnlyManager:
         if self.is_online:
             try:
                 self._set_database_context()
-                query = self.supabase.table('journal_entries').select('*')
+                query = self.supabase.table('journal_entries').select('*, journal_entry_lines(*, accounts(code, name))')
                 if start_date:
-                    query = query.gte('date', start_date)
+                    query = query.gte('entry_date', start_date)
                 if end_date:
-                    query = query.lte('date', end_date)
+                    query = query.lte('entry_date', end_date)
                 
                 result = query.execute()
                 if result.data:
                     self.offline_manager.cache_data('journal_entries', result.data, self.organization_id)
-                    return result.data
+                    # Transform to application format before returning
+                    from .data_transformer import data_transformer
+                    return data_transformer.transform_journal_entries_list(result.data)
             except Exception as e:
                 self.logger.error(f"Online journal entries fetch failed: {e}")
         
@@ -438,23 +440,8 @@ class EnhancedSupabaseOnlyManager:
         
         return cached_entries
 
-    def add_journal_entry(self, entry_data: Dict) -> Dict:
-        """Add journal entry with offline support"""
-        if self.is_online:
-            try:
-                self._set_database_context()
-                result = self.supabase.table('journal_entries').insert(entry_data).execute()
-                if result.data:
-                    return {"success": True, "data": result.data[0]}
-            except Exception as e:
-                self.logger.error(f"Online journal entry creation failed: {e}")
-                self.is_online = False
-        
-        # Queue for later sync
-        self.offline_manager.queue_operation(
-            'INSERT', 'journal_entries', entry_data, self.organization_id, self.user_id
-        )
-        return {"success": True, "data": entry_data, "queued": True}
+    # REMOVED: Duplicate add_journal_entry method - now handled by UnifiedAccountingSystem
+    # The old method didn't properly transform data (account names to IDs, create lines, etc.)
 
     def get_trial_balance(self, start_date=None, end_date=None) -> Dict[str, float]:
         """Calculate trial balance from journal entries"""
@@ -714,29 +701,8 @@ class EnhancedSupabaseOnlyManager:
             self.logger.warning("Cannot clear journal entries while offline")
             return 0
 
-    def add_journal_entries_batch(self, entries: List[Dict]) -> int:
-        """Add multiple journal entries"""
-        successful = 0
-        for entry in entries:
-            result = self.add_journal_entry(entry)
-            if result.get('success'):
-                successful += 1
-        return successful
-
-    def add_journal_entries_with_progress(self, entries: List[Dict], progress_callback=None) -> int:
-        """Add journal entries with progress callback"""
-        successful = 0
-        total = len(entries)
-        
-        for i, entry in enumerate(entries):
-            result = self.add_journal_entry(entry)
-            if result.get('success'):
-                successful += 1
-            
-            if progress_callback:
-                progress_callback(i + 1, total)
-        
-        return successful
+    # REMOVED: Duplicate batch methods - now handled by UnifiedAccountingSystem
+    # These methods relied on the old add_journal_entry method that didn't properly transform data
 
     def get_journal_entries_by_date_range(self, start_date: str, end_date: str) -> List[Dict]:
         """Get journal entries by date range - alias for compatibility"""

@@ -378,18 +378,46 @@ class SupabaseManager:
     # JOURNAL ENTRY OPERATIONS
     # ================================
     
-    def get_journal_entries(self, org_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-        """Get journal entries for an organization."""
+    def get_journal_entries(self, org_id: str, start_date: Optional[str] = None, 
+                           end_date: Optional[str] = None, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get journal entries for an organization with optional date filtering."""
         try:
+            # Query with proper joins to include account information
             query = self.supabase.table('journal_entries')\
                 .select('*, journal_entry_lines(*, accounts(code, name))')\
                 .eq('organization_id', org_id)\
                 .order('entry_date', desc=True)
             
+            # Apply date filtering if provided
+            if start_date:
+                query = query.gte('entry_date', start_date)
+            if end_date:
+                query = query.lte('entry_date', end_date)
+            
             if limit:
                 query = query.limit(limit)
                 
             result = query.execute()
+            
+            # Debug: Log what we got
+            self.logger.info(f"Journal entries query returned {len(result.data)} entries")
+            
+            if result.data:
+                # Check if journal_entry_lines are populated
+                first_entry = result.data[0]
+                lines = first_entry.get('journal_entry_lines', [])
+                self.logger.info(f"First entry has {len(lines)} lines")
+                
+                if lines:
+                    # Check if accounts data is present
+                    first_line = lines[0]
+                    accounts = first_line.get('accounts', {})
+                    self.logger.info(f"First line accounts data: {accounts}")
+                    if not accounts:
+                        self.logger.warning("No accounts data in journal entry lines - check RLS policies")
+                else:
+                    self.logger.warning("No journal_entry_lines found - possible RLS policy issue")
+            
             return result.data
         except Exception as e:
             self.logger.error(f"Error getting journal entries: {e}")

@@ -863,11 +863,25 @@ class SingleEntryTab(QWidget):
                     'credit_account': credit_account,
                     'amount': amount
                 }
-                entry_id = self.system.add_journal_entry(entry_data)
+                print(f"🔥 FRONTEND DEBUG: About to call add_journal_entry with: {entry_data}")
+                result = self.system.add_journal_entry(entry_data)
+                print(f"🔥 FRONTEND DEBUG: add_journal_entry returned: {result}")
+                print(f"🔥 FRONTEND DEBUG: Result type: {type(result)}")
+                
+                if result:
+                    entry_number = result.get('entry_number', 'N/A')
+                    success_msg = f"Journal Entry {entry_number} saved successfully!\n"
+                    success_msg += f"• Description: {description}\n"
+                    success_msg += f"• Debit: {debit_account} (${amount})\n"
+                    success_msg += f"• Credit: {credit_account} (${amount})"
+                    
+                    print(f"✅ Journal entry created: {entry_number} - {description}")
+                else:
+                    success_msg = "Transaction saved locally (queued for sync)"
+                    print("⚠️ Journal entry queued for sync")
                 
                 # Force immediate sync after journal entry creation
                 print("Debug: Journal entry created, attempting immediate sync...")
-                success_msg = "Transaction saved successfully!"
                 try:
                     if hasattr(self.system, 'base_system'):
                         sync_result = self.system.base_system.force_sync()

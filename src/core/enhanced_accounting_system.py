@@ -500,7 +500,12 @@ class EnhancedAccountingSystem:
     
     def add_journal_entry(self, *args, **kwargs):
         """Add journal entry to base system."""
-        return self.base_system.add_journal_entry(*args, **kwargs)
+        print("🔥 CRITICAL DEBUG: EnhancedAccountingSystem.add_journal_entry() called!")
+        print(f"🔥 Args: {args}")
+        print(f"🔥 Delegating to base_system: {type(self.base_system).__name__}")
+        result = self.base_system.add_journal_entry(*args, **kwargs)
+        print(f"🔥 Base system returned: {result}")
+        return result
     
     def get_accounts(self, *args, **kwargs):
         """Get accounts (alias for get_all_accounts with enhanced formatting)."""

@@ -106,17 +106,20 @@ class OfflineCache:
                         0
                     ))
                 elif table_name == 'journal_entries':
+                    from .data_transformer import data_transformer
+                    # Transform database format for caching
+                    cache_entry = data_transformer.db_to_cache_journal_entry(item)
                     cursor.execute('''
                         INSERT OR REPLACE INTO cached_journal_entries 
                         (id, organization_id, date, description, amount, data, last_synced, is_dirty)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
-                        item.get('id', str(uuid.uuid4())),
+                        cache_entry.get('id', str(uuid.uuid4())),
                         organization_id,
-                        item.get('date'),
-                        item.get('description'),
-                        item.get('amount'),
-                        json.dumps(item),
+                        cache_entry.get('date'),
+                        cache_entry.get('description'), 
+                        cache_entry.get('amount'),
+                        json.dumps(cache_entry),
                         datetime.now().isoformat(),
                         0
                     ))
@@ -149,7 +152,18 @@ class OfflineCache:
                 )
             
             rows = cursor.fetchall()
-            return [json.loads(row['data']) for row in rows]
+            cached_data = [json.loads(row['data']) for row in rows]
+            
+            # Transform cached journal entries to application format
+            if table_name == 'journal_entries':
+                from .data_transformer import data_transformer
+                transformed_data = []
+                for item in cached_data:
+                    app_entry = data_transformer.cache_to_app_journal_entry(item)
+                    transformed_data.append(app_entry)
+                return transformed_data
+            
+            return cached_data
             
         except Exception as e:
             self.logger.error(f"Failed to get cached {table_name}: {e}")
@@ -160,11 +174,20 @@ class OfflineCache:
     def queue_operation(self, operation_type: str, table_name: str, data: Dict, 
                        organization_id: str, user_id: str):
         """Queue an operation for later sync when online"""
+        print(f"🔄 DEBUG: queue_operation called")
+        print(f"   operation_type: {operation_type}")
+        print(f"   table_name: {table_name}")
+        print(f"   organization_id: {organization_id}")
+        print(f"   user_id: {user_id}")
+        print(f"   data keys: {list(data.keys()) if data else 'None'}")
+        
         conn = sqlite3.connect(self.cache_db_path)
         cursor = conn.cursor()
         
         try:
             operation_id = str(uuid.uuid4())
+            print(f"   Generated operation_id: {operation_id}")
+            
             cursor.execute('''
                 INSERT INTO pending_operations 
                 (id, operation_type, table_name, data, organization_id, user_id, created_at)
@@ -180,12 +203,19 @@ class OfflineCache:
             ))
             
             conn.commit()
+            print(f"✅ DEBUG: Operation queued successfully with ID: {operation_id}")
             self.logger.info(f"Queued {operation_type} operation for {table_name}")
             
             # Also update local cache immediately for better UX
+            print(f"🔄 DEBUG: Updating local cache...")
             self._update_local_cache(operation_type, table_name, data, organization_id)
+            print(f"✅ DEBUG: Local cache updated")
             
         except Exception as e:
+            print(f"❌ DEBUG: Failed to queue operation: {e}")
+            print(f"   Exception type: {type(e).__name__}")
+            import traceback
+            print(f"   Traceback: {traceback.format_exc()}")
             self.logger.error(f"Failed to queue operation: {e}")
             conn.rollback()
         finally:
@@ -211,13 +241,16 @@ class OfflineCache:
                         datetime.now().isoformat(), 1
                     ))
                 elif table_name == 'journal_entries':
+                    from .data_transformer import data_transformer
+                    # Transform for caching (data is already in app format here)
+                    cache_entry = data_transformer.app_to_cache_journal_entry(data)
                     cursor.execute('''
                         INSERT OR REPLACE INTO cached_journal_entries 
                         (id, organization_id, date, description, amount, data, last_synced, is_dirty)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
-                        data['id'], organization_id, data.get('date'),
-                        data.get('description'), data.get('amount'), json.dumps(data),
+                        data['id'], organization_id, cache_entry.get('date'),
+                        cache_entry.get('description'), cache_entry.get('amount'), json.dumps(cache_entry),
                         datetime.now().isoformat(), 1
                     ))
             
@@ -250,7 +283,23 @@ class OfflineCache:
                         data['account_type'] = data['account_type'].lower()
                     
                     if op['operation_type'] == 'INSERT':
-                        supabase_client.table(op['table_name']).insert(data).execute()
+                        # Special handling for journal entries with new format
+                        if op['table_name'] == 'journal_entries' and isinstance(data, dict) and 'header' in data and 'lines' in data:
+                            # Use proper journal entry creation with header and lines
+                            entry_result = supabase_client.table('journal_entries').insert(data['header']).execute()
+                            if entry_result.data:
+                                entry_id = entry_result.data[0]['id']
+                                # Add entry_id to each line and insert
+                                for line in data['lines']:
+                                    line['journal_entry_id'] = entry_id
+                                lines_result = supabase_client.table('journal_entry_lines').insert(data['lines']).execute()
+                                if not lines_result.data:
+                                    # Rollback entry if lines failed
+                                    supabase_client.table('journal_entries').delete().eq('id', entry_id).execute()
+                                    raise Exception("Failed to insert journal entry lines")
+                        else:
+                            # Standard table insert
+                            supabase_client.table(op['table_name']).insert(data).execute()
                     elif op['operation_type'] == 'UPDATE':
                         supabase_client.table(op['table_name']).update(data).eq('id', data['id']).execute()
                     elif op['operation_type'] == 'DELETE':
@@ -816,7 +865,7 @@ class UnifiedAccountingSystem:
     
     def get_journal_entries(self, start_date: Optional[str] = None, 
                           end_date: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Get journal entries for current organization."""
+        """Get journal entries for current organization in application format."""
         if not self.current_organization_id:
             return []
         
@@ -824,17 +873,23 @@ class UnifiedAccountingSystem:
         if self.is_online:
             try:
                 self._set_database_context()
-                result = self.db_manager.get_journal_entries(
+                raw_result = self.db_manager.get_journal_entries(
                     self.current_organization_id, start_date, end_date
                 )
-                if result:
-                    # Update cache
-                    self.offline_cache.cache_data('journal_entries', result, self.current_organization_id)
-                    return result
+                if raw_result:
+                    # Transform raw database format to application format
+                    from .data_transformer import data_transformer
+                    app_entries = data_transformer.transform_journal_entries_list(raw_result)
+                    
+                    # Update cache with raw data (cache handles its own transformation)
+                    self.offline_cache.cache_data('journal_entries', raw_result, self.current_organization_id)
+                    
+                    # Return application format for consistent usage
+                    return app_entries
             except Exception as e:
                 self.logger.error(f"Online journal entries fetch failed: {e}")
         
-        # Fallback to cached data
+        # Fallback to cached data (already in application format)
         self.logger.info("📱 Using cached journal entries")
         cached_entries = self.offline_cache.get_cached_data('journal_entries', self.current_organization_id)
         
@@ -853,45 +908,341 @@ class UnifiedAccountingSystem:
         return cached_entries
     
     def get_recent_journal_entries(self, limit: int = 20) -> List[Dict]:
-        """Get recent journal entries"""
+        """Get recent journal entries in UI-friendly format"""
         entries = self.get_journal_entries()
-        # Sort by date descending and limit
+        
+        # Entries are already in application format, just sort and limit
         sorted_entries = sorted(entries, key=lambda x: x.get('date', ''), reverse=True)
         return sorted_entries[:limit]
     
     def add_journal_entry(self, entry_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Add journal entry."""
-        if not self.current_organization_id:
-            raise ValueError("No organization context set")
-        
-        if not self.auth_manager.can_create_journal_entries(self.current_organization_id):
-            raise PermissionError("Insufficient permissions to create journal entries")
-        
-        # Add organization context
-        entry_data['organization_id'] = self.current_organization_id
-        entry_data['created_by'] = self.current_user_id
-        
-        # Try online first
-        if self.is_online:
+        """Add journal entry with proper data transformation."""
+        print("🔥 CRITICAL DEBUG: UnifiedAccountingSystem.add_journal_entry() called!")
+        print(f"🔥 Entry data received: {entry_data}")
+        try:
+            self.logger.info(f"🔄 Starting journal entry creation: {entry_data}")
+            
+            # Check organization context
+            if not self.current_organization_id:
+                self.logger.error("❌ No organization context set")
+                raise ValueError("No organization context set")
+            
+            self.logger.info(f"✅ Organization context: {self.current_organization_id}")
+            
+            # Check permissions
+            if not self.auth_manager.can_create_journal_entries(self.current_organization_id):
+                self.logger.error("❌ Insufficient permissions")
+                raise PermissionError("Insufficient permissions to create journal entries")
+            
+            self.logger.info("✅ Permissions validated")
+            
+            # Transform frontend data to proper database format
             try:
-                self._set_database_context()
-                result = self.db_manager.create_journal_entry(entry_data)
-                if result:
-                    return result
+                self.logger.info("🔄 Starting data transformation...")
+                journal_entry_data, journal_lines = self._transform_journal_entry_data(entry_data)
+                self.logger.info(f"✅ Data transformation successful")
+                self.logger.debug(f"Transformed data: {journal_entry_data}")
+                self.logger.debug(f"Transformed lines: {journal_lines}")
             except Exception as e:
-                self.logger.error(f"Online journal entry creation failed: {e}")
-                self.is_online = False
+                self.logger.error(f"❌ Data transformation failed: {e}")
+                raise ValueError(f"Invalid journal entry data: {e}")
+            
+            # Try online first
+            if self.is_online:
+                try:
+                    self.logger.info("🌐 Attempting online creation...")
+                    self._set_database_context()
+                    self.logger.info(f"🔄 Creating journal entry online: {journal_entry_data.get('entry_number', 'N/A')}")
+                    
+                    result = self.db_manager.create_journal_entry(journal_entry_data, journal_lines)
+                    if result:
+                        self.logger.info(f"✅ Journal entry created successfully online: {result.get('entry_number', 'N/A')}")
+                        return result
+                    else:
+                        self.logger.error("❌ Online creation returned None - falling back to offline")
+                        
+                except Exception as e:
+                    self.logger.error(f"❌ Online journal entry creation failed: {e}")
+                    # Log more details for debugging
+                    self.logger.error(f"Organization ID: {self.current_organization_id}")
+                    self.logger.error(f"User ID: {self.current_user_id}")
+                    self.is_online = False
+                    self.logger.info("📱 Switching to offline mode")
+            else:
+                self.logger.info("📱 System is offline, queueing entry")
+            
+            # Queue for later sync if offline
+            try:
+                self.logger.info("🔄 Preparing offline entry...")
+                print(f"🔄 DEBUG: Preparing offline entry...")
+                
+                offline_entry = {
+                    'header': journal_entry_data,
+                    'lines': journal_lines
+                }
+                
+                self.logger.info(f"🔄 Queueing operation for offline sync...")
+                print(f"🔄 DEBUG: About to queue operation...")
+                print(f"   Organization ID: {self.current_organization_id}")
+                print(f"   User ID: {self.current_user_id}")
+                print(f"   Offline entry keys: {list(offline_entry.keys())}")
+                
+                self.offline_cache.queue_operation(
+                    'INSERT', 'journal_entries', offline_entry,
+                    self.current_organization_id, self.current_user_id
+                )
+                
+                print(f"✅ DEBUG: Operation queued successfully!")
+                self.logger.info("✅ Entry queued for sync")
+                
+                # Return the entry data for immediate UI update
+                journal_entry_data['id'] = str(uuid.uuid4())
+                journal_entry_data['queued'] = True
+                journal_entry_data['journal_entry_lines'] = journal_lines
+                
+                print(f"✅ DEBUG: Returning offline entry with ID: {journal_entry_data.get('id')}")
+                self.logger.info(f"✅ Returning offline entry: {journal_entry_data.get('entry_number', 'N/A')}")
+                return journal_entry_data
+                
+            except Exception as e:
+                print(f"❌ DEBUG: Failed to queue offline entry: {e}")
+                print(f"   Exception type: {type(e).__name__}")
+                import traceback
+                print(f"   Traceback: {traceback.format_exc()}")
+                self.logger.error(f"❌ Failed to queue offline entry: {e}")
+                raise ValueError(f"Failed to queue journal entry: {e}")
+                
+        except Exception as e:
+            self.logger.error(f"❌ Complete journal entry creation failed: {e}")
+            self.logger.error(f"Exception type: {type(e).__name__}")
+            self.logger.error(f"Exception args: {e.args}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
+            raise
+    
+    def _transform_journal_entry_data(self, entry_data: Dict[str, Any]) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+        """Transform frontend journal entry data to database format."""
+        # Extract frontend data
+        entry_date = entry_data.get('date', '')
+        description = entry_data.get('description', '').strip()
+        debit_account_name = entry_data.get('debit_account', '').strip()
+        credit_account_name = entry_data.get('credit_account', '').strip()
+        amount = entry_data.get('amount', '')
         
-        # Queue for later sync if offline
-        self.offline_cache.queue_operation(
-            'INSERT', 'journal_entries', entry_data,
-            self.current_organization_id, self.current_user_id
-        )
+        # Validation
+        if not all([entry_date, description, debit_account_name, credit_account_name, amount]):
+            raise ValueError("Missing required fields: date, description, debit_account, credit_account, amount")
         
-        # Return the entry data for immediate UI update
-        entry_data['id'] = str(uuid.uuid4())
-        entry_data['queued'] = True
-        return entry_data
+        # Parse and validate amount
+        try:
+            amount_decimal = float(amount)
+            if amount_decimal <= 0:
+                raise ValueError("Amount must be positive")
+        except (ValueError, TypeError):
+            raise ValueError(f"Invalid amount: {amount}")
+        
+        # Resolve account names to IDs
+        debit_account_id = self._resolve_account_name_to_id(debit_account_name)
+        credit_account_id = self._resolve_account_name_to_id(credit_account_name)
+        
+        if not debit_account_id:
+            raise ValueError(f"Debit account not found: {debit_account_name}")
+        if not credit_account_id:
+            raise ValueError(f"Credit account not found: {credit_account_name}")
+        
+        if debit_account_id == credit_account_id:
+            raise ValueError("Debit and credit accounts cannot be the same")
+        
+        # Generate entry number
+        entry_number = self._generate_journal_entry_number()
+        
+        # Create journal entry header
+        journal_entry_data = {
+            'organization_id': self.current_organization_id,
+            'entry_number': entry_number,
+            'entry_date': entry_date,
+            'description': description,
+            'reference': entry_data.get('reference', ''),
+            'total_amount': amount_decimal,
+            'created_by': self.current_user_id
+        }
+        
+        # Create journal entry lines (double-entry bookkeeping)
+        journal_lines = [
+            {
+                'account_id': debit_account_id,
+                'description': f"Debit: {description}",
+                'debit_amount': amount_decimal,
+                'credit_amount': 0,
+                'line_order': 1
+            },
+            {
+                'account_id': credit_account_id,
+                'description': f"Credit: {description}",
+                'debit_amount': 0,
+                'credit_amount': amount_decimal,
+                'line_order': 2
+            }
+        ]
+        
+        self.logger.info(f"🔄 Transformed journal entry: {entry_number} - {description} (${amount_decimal})")
+        return journal_entry_data, journal_lines
+    
+    def _resolve_account_name_to_id(self, account_name: str) -> Optional[int]:
+        """Resolve account name to database ID."""
+        try:
+            self.logger.info(f"🔍 Resolving account name: '{account_name}'")
+            
+            # Get accounts from cache or database
+            self.logger.info("🔄 Fetching chart of accounts...")
+            accounts = self.get_chart_of_accounts(active_only=False)
+            self.logger.info(f"✅ Retrieved {len(accounts)} accounts from chart of accounts")
+            
+            if not accounts:
+                self.logger.warning("⚠️ No accounts found in chart of accounts!")
+                return None
+            
+            # Log first few accounts for debugging
+            self.logger.debug("📋 Available accounts:")
+            for i, account in enumerate(accounts[:5]):  # Show first 5 accounts
+                self.logger.debug(f"  {i+1}. ID: {account.get('id')}, Name: '{account.get('name', 'N/A')}', Code: '{account.get('code', 'N/A')}'")
+            if len(accounts) > 5:
+                self.logger.debug(f"  ... and {len(accounts) - 5} more accounts")
+            
+            # Try exact name match first
+            self.logger.info(f"🔍 Trying exact name match for: '{account_name}'")
+            for account in accounts:
+                if account.get('name', '').strip() == account_name.strip():
+                    account_id = account.get('id')
+                    self.logger.info(f"✅ Exact match found: '{account_name}' → ID: {account_id}")
+                    return account_id
+            
+            self.logger.info(f"❌ No exact match found for: '{account_name}'")
+            
+            # Try partial match (handle "code - name" format)
+            self.logger.info(f"🔍 Trying partial/code-name match for: '{account_name}'")
+            for account in accounts:
+                account_full_name = account.get('name', '')
+                if ' - ' in account_full_name:
+                    _, name_part = account_full_name.split(' - ', 1)
+                    if name_part.strip() == account_name.strip():
+                        account_id = account.get('id')
+                        self.logger.info(f"✅ Code-name match found: '{account_name}' → '{account_full_name}' → ID: {account_id}")
+                        return account_id
+                
+                # Check if account name is in "code - name" format and match name part
+                if ' - ' in account_name:
+                    _, input_name_part = account_name.split(' - ', 1)
+                    if input_name_part.strip() == account_full_name.strip():
+                        account_id = account.get('id')
+                        self.logger.info(f"✅ Reverse code-name match found: '{account_name}' → '{account_full_name}' → ID: {account_id}")
+                        return account_id
+            
+            self.logger.info(f"❌ No partial match found for: '{account_name}'")
+            
+            # Try fuzzy matching as last resort
+            self.logger.info(f"🔍 Trying fuzzy match for: '{account_name}'")
+            account_name_lower = account_name.lower()
+            for account in accounts:
+                account_full_name = account.get('name', '').lower()
+                if account_name_lower in account_full_name or account_full_name in account_name_lower:
+                    account_id = account.get('id')
+                    self.logger.warning(f"⚠️ Using fuzzy match for account: '{account_name}' → '{account.get('name')}' → ID: {account_id}")
+                    return account_id
+            
+            self.logger.error(f"❌ No match found for account: '{account_name}' (tried exact, partial, and fuzzy matching)")
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error resolving account name '{account_name}': {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
+            return None
+    
+    def _generate_journal_entry_number(self) -> str:
+        """Generate unique journal entry number."""
+        try:
+            print(f"🔢 DEBUG: Generating entry number for org {self.current_organization_id}")
+            
+            # First try to get the latest entry number directly from database
+            if self.is_online and self.db_manager:
+                try:
+                    print(f"🔢 DEBUG: Querying database for latest entry number...")
+                    # Query database directly for latest entry number
+                    result = self.db_manager.supabase.table('journal_entries')\
+                        .select('entry_number')\
+                        .eq('organization_id', self.current_organization_id)\
+                        .order('entry_number', desc=True)\
+                        .limit(1)\
+                        .execute()
+                    
+                    print(f"🔢 DEBUG: Database query result: {result.data}")
+                    
+                    if result.data and len(result.data) > 0:
+                        last_number = result.data[0].get('entry_number', 'JE-0000')
+                        print(f"🔢 DEBUG: Found latest entry number: {last_number}")
+                        
+                        try:
+                            # Extract numeric part from format like "JE-0001"
+                            if '-' in last_number:
+                                number_part = int(last_number.split('-')[-1])
+                                next_number = number_part + 1
+                            else:
+                                next_number = 1
+                        except (ValueError, IndexError):
+                            next_number = 1
+                    else:
+                        print(f"🔢 DEBUG: No existing entries found, starting with 1")
+                        next_number = 1
+                        
+                except Exception as db_error:
+                    print(f"🔢 DEBUG: Database query failed: {db_error}")
+                    # Fallback to checking cached entries
+                    recent_entries = self.get_journal_entries()
+                    if recent_entries:
+                        last_entry = recent_entries[0]
+                        last_number = last_entry.get('entry_number', 'JE-0000')
+                        try:
+                            if '-' in last_number:
+                                number_part = int(last_number.split('-')[-1])
+                                next_number = number_part + 1
+                            else:
+                                next_number = 1
+                        except (ValueError, IndexError):
+                            next_number = 1
+                    else:
+                        next_number = 1
+            else:
+                print(f"🔢 DEBUG: Offline mode, checking cached entries...")
+                # Fallback to cached entries when offline
+                recent_entries = self.get_journal_entries()
+                if recent_entries:
+                    last_entry = recent_entries[0]
+                    last_number = last_entry.get('entry_number', 'JE-0000')
+                    try:
+                        if '-' in last_number:
+                            number_part = int(last_number.split('-')[-1])
+                            next_number = number_part + 1
+                        else:
+                            next_number = 1
+                    except (ValueError, IndexError):
+                        next_number = 1
+                else:
+                    next_number = 1
+            
+            generated_number = f"JE-{next_number:04d}"
+            print(f"🔢 DEBUG: Generated entry number: {generated_number}")
+            return generated_number
+            
+        except Exception as e:
+            self.logger.error(f"Error generating entry number: {e}")
+            print(f"🔢 DEBUG: Error generating entry number: {e}")
+            # Fallback to timestamp-based number
+            import time
+            timestamp = int(time.time())
+            fallback_number = f"JE-{timestamp % 10000:04d}"
+            print(f"🔢 DEBUG: Using fallback timestamp-based number: {fallback_number}")
+            return fallback_number
     
     def add_journal_entries_batch(self, entries: List[Dict]) -> int:
         """Add multiple journal entries"""

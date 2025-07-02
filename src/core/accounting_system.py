@@ -314,7 +314,7 @@ class AccountingSystem:
         if not self.current_organization_id:
             return []
         
-        return self.db_manager.get_journal_entries(self.current_organization_id, limit)
+        return self.db_manager.get_journal_entries(self.current_organization_id, limit=limit)
     
     def get_journal_entry(self, entry_id: int) -> Optional[Dict[str, Any]]:
         """Get journal entry by ID with lines."""

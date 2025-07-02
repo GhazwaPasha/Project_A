@@ -219,6 +219,7 @@ class CleanApp:
                            f"Failed to start application: {error_message}\n\n"
                            f"Please check your configuration and try again.")
 
+
 def main():
     """Main entry point"""
     print("🚀 AI Accountant - Clean Multi-Tenant SaaS")
