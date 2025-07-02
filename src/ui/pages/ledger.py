@@ -94,6 +94,44 @@ class AccountCard(QFrame):
         level_label.setToolTip(f"Account Level {self.account_level}")
         header_layout.addWidget(level_label)
         
+        # Add R/P tags based on account properties
+        # R = Reporting account (L1, L2, some L3)
+        # P = Postable account (some L2, most L3)
+        is_reporting = self.account_level in [1, 2] or self.account_data.get('has_children', False)
+        is_postable = self.account_data.get('is_postable', True)
+        
+        # Reporting tag (R)
+        if is_reporting:
+            reporting_label = QLabel("R")
+            reporting_label.setStyleSheet("""
+                color: #FF6B6B;
+                font-weight: 700;
+                font-size: 11px;
+                background: rgba(255, 107, 107, 0.2);
+                padding: 2px 6px;
+                border-radius: 4px;
+                border: none;
+            """)
+            reporting_label.setFixedWidth(30)
+            reporting_label.setToolTip("Reporting Account")
+            header_layout.addWidget(reporting_label)
+        
+        # Postable tag (P)
+        if is_postable:
+            postable_label = QLabel("P")
+            postable_label.setStyleSheet("""
+                color: #4ECDC4;
+                font-weight: 700;
+                font-size: 11px;
+                background: rgba(78, 205, 196, 0.2);
+                padding: 2px 6px;
+                border-radius: 4px;
+                border: none;
+            """)
+            postable_label.setFixedWidth(30)
+            postable_label.setToolTip("Postable Account")
+            header_layout.addWidget(postable_label)
+        
         header_layout.addStretch()
           # Account type
         type_label = QLabel(self.account_data['type'].title())
@@ -1247,9 +1285,49 @@ class LedgerPage(QWidget):
         self._refresh_balances()
         
     def _refresh_balances(self):
-        """Refresh account balances for the selected date range."""
+        """Refresh account balances for the selected date range with hierarchical aggregation."""
         from_date, to_date = self.date_selector.get_date_range()
         
+        try:
+            # Use the new hierarchical balance calculation
+            if hasattr(self.system, 'get_hierarchical_account_balances'):
+                # Get hierarchical balances (includes parent account aggregation)
+                from_date_str = from_date.toString("yyyy-MM-dd")
+                to_date_str = to_date.toString("yyyy-MM-dd")
+                hierarchical_balances = self.system.get_hierarchical_account_balances(from_date_str, to_date_str)
+                
+                # Update each account card with hierarchical balance
+                for card in self.account_cards:
+                    account_name = card.account_data['name']
+                    balance_info = hierarchical_balances.get(account_name, {})
+                    
+                    # Get net balance and transaction count
+                    net_balance = balance_info.get('net_balance', 0.0)
+                    debit_total = balance_info.get('debit_total', 0.0)
+                    credit_total = balance_info.get('credit_total', 0.0)
+                    transaction_count = int(debit_total + credit_total)  # Simplified count
+                    
+                    # Update card with hierarchical balance
+                    card.update_balance(net_balance, transaction_count)
+                    
+                    # Add visual indicator for parent accounts with aggregated balances
+                    if balance_info.get('has_children', False):
+                        card.setToolTip(f"Parent account with {balance_info.get('child_count', 0)} child accounts\n"
+                                      f"Aggregated balance: {net_balance:,.2f}")
+                    else:
+                        card.setToolTip(f"Direct balance: {net_balance:,.2f}")
+                        
+            else:
+                # Fallback to original method if hierarchical method not available
+                self._refresh_balances_fallback(from_date, to_date)
+                
+        except Exception as e:
+            print(f"Error refreshing hierarchical balances: {e}")
+            # Fallback to original method
+            self._refresh_balances_fallback(from_date, to_date)
+    
+    def _refresh_balances_fallback(self, from_date, to_date):
+        """Fallback method using original balance calculation."""
         try:
             # Get transactions for the date range
             from_date_str = from_date.toString("yyyy-MM-dd")
@@ -1321,7 +1399,7 @@ class LedgerPage(QWidget):
                             account_balances[account_name] -= amount
                             account_counts[account_name] += 1
             
-            # Update card balances
+            # Update cards with calculated balances
             for card in self.account_cards:
                 account_name = card.account_data['name']
                 balance = account_balances.get(account_name, 0.0)
@@ -1329,7 +1407,7 @@ class LedgerPage(QWidget):
                 card.update_balance(balance, count)
                 
         except Exception as e:
-            print(f"Error refreshing balances: {e}")
+            print(f"Error in fallback balance calculation: {e}")
 
     def refresh_currency_display(self):
         """Refresh all currency displays when currency symbol changes."""

@@ -377,6 +377,72 @@ class BaseFinancialStatementView(QWidget):
         
         # Add row to table
         self.table_content_layout.addWidget(row)
+    
+    def _add_hierarchical_accounts(self, accounts, indent_level=0):
+        """Add hierarchical account nodes to the table."""
+        for account in accounts:
+            # Handle both old tuple format and new hierarchical format
+            if isinstance(account, tuple):
+                # Old format: (account_name, amount)
+                account_name, amount = account
+                self._add_table_row([(account_name, 400), (format_currency(amount), 200)], indent_level=indent_level)
+            else:
+                # New hierarchical format: account object
+                account_name = account.get('name', '')
+                balance = account.get('balance', 0.0)
+                children = account.get('children', [])
+                level = account.get('level', 3)
+                
+                # For hierarchical display:
+                # - Parent accounts (level 1-2) should be shown as headers without amounts
+                # - Leaf accounts (level 3) should show amounts
+                if level < 3 and children:
+                    # Parent account - show as header without amount
+                    self._add_table_row([(account_name, 400), ("", 200)], indent_level=indent_level, is_subtotal=True)
+                    # Add children recursively
+                    self._add_hierarchical_accounts(children, indent_level + 1)
+                else:
+                    # Leaf account or account without children - show with amount
+                    self._add_table_row([(account_name, 400), (format_currency(balance), 200)], indent_level=indent_level)
+                    # If it has children, add them too (shouldn't happen for level 3, but just in case)
+                    if children:
+                        self._add_hierarchical_accounts(children, indent_level + 1)
+    
+    def _generate_hierarchical_html(self, accounts, indent_level=0):
+        """Generate HTML for hierarchical account nodes."""
+        html = ""
+        for account in accounts:
+            # Handle both old tuple format and new hierarchical format
+            if isinstance(account, tuple):
+                # Old format: (account_name, amount)
+                account_name, amount = account
+                indent_style = f"padding-left: {indent_level * 20}px;" if indent_level > 0 else ""
+                html += f'<tr class="account"><td style="{indent_style}">{account_name}</td><td class="amount">{format_currency(amount)}</td></tr>'
+            else:
+                # New hierarchical format: account object
+                account_name = account.get('name', '')
+                balance = account.get('balance', 0.0)
+                children = account.get('children', [])
+                level = account.get('level', 3)
+                
+                # For hierarchical display:
+                # - Parent accounts (level 1-2) should be shown as headers without amounts
+                # - Leaf accounts (level 3) should show amounts
+                indent_style = f"padding-left: {indent_level * 20}px;" if indent_level > 0 else ""
+                
+                if level < 3 and children:
+                    # Parent account - show as header without amount
+                    html += f'<tr class="section-header"><td style="{indent_style}">{account_name}</td><td></td></tr>'
+                    # Add children recursively
+                    html += self._generate_hierarchical_html(children, indent_level + 1)
+                else:
+                    # Leaf account or account without children - show with amount
+                    html += f'<tr class="account"><td style="{indent_style}">{account_name}</td><td class="amount">{format_currency(balance)}</td></tr>'
+                    # If it has children, add them too (shouldn't happen for level 3, but just in case)
+                    if children:
+                        html += self._generate_hierarchical_html(children, indent_level + 1)
+        
+        return html
         
     def clear_content(self):
         """Clear the content layout."""
@@ -529,6 +595,10 @@ class IncomeStatementView(BaseFinancialStatementView):
         # Get data from accounting system
         try:
             data = system.generate_income_statement_breakdown(from_date, to_date)
+            print(f"Income statement data: {data}")
+            print(f"Revenues: {data.get('revenues', [])}")
+            print(f"COGS: {data.get('cogs', [])}")
+            print(f"Expenses: {data.get('expenses', [])}")
         except Exception as e:
             print(f"Error generating income statement: {e}")
             return
@@ -539,16 +609,24 @@ class IncomeStatementView(BaseFinancialStatementView):
           # Revenue section
         if data.get('revenues'):
             self._add_table_row([("REVENUE", 400), ("", 200)], is_subtotal=True)
-            for account, amount in data.get('revenues', []):
-                self._add_table_row([(account, 400), (format_currency(amount), 200)], indent_level=1)
+            self._add_hierarchical_accounts(data.get('revenues', []), indent_level=1)
             self._add_table_row([("Total Revenue", 400), (format_currency(data.get('total_revenue', 0)), 200)], is_total=True)
+        else:
+            # Add placeholder if no revenue data
+            self._add_table_row([("REVENUE", 400), ("", 200)], is_subtotal=True)
+            self._add_table_row([("No revenue data available", 400), ("", 200)], indent_level=1)
+            self._add_table_row([("Total Revenue", 400), (format_currency(0), 200)], is_total=True)
             
         # Cost of Goods Sold
         if data.get('cogs'):
             self._add_table_row([("COST OF GOODS SOLD", 400), ("", 200)], is_subtotal=True)
-            for account, amount in data.get('cogs', []):
-                self._add_table_row([(account, 400), (format_currency(amount), 200)], indent_level=1)
+            self._add_hierarchical_accounts(data.get('cogs', []), indent_level=1)
             self._add_table_row([("Total Cost of Goods Sold", 400), (format_currency(data.get('total_cogs', 0)), 200)], is_total=True)
+        else:
+            # Add placeholder if no COGS data
+            self._add_table_row([("COST OF GOODS SOLD", 400), ("", 200)], is_subtotal=True)
+            self._add_table_row([("No COGS data available", 400), ("", 200)], indent_level=1)
+            self._add_table_row([("Total Cost of Goods Sold", 400), (format_currency(0), 200)], is_total=True)
             
         # Gross Profit
         self._add_table_row([("Gross Profit", 400), (format_currency(data.get('gross_profit', 0)), 200)], is_total=True)
@@ -556,9 +634,13 @@ class IncomeStatementView(BaseFinancialStatementView):
         # Operating Expenses
         if data.get('expenses'):
             self._add_table_row([("OPERATING EXPENSES", 400), ("", 200)], is_subtotal=True)
-            for account, amount in data.get('expenses', []):
-                self._add_table_row([(account, 400), (format_currency(amount), 200)], indent_level=1)
+            self._add_hierarchical_accounts(data.get('expenses', []), indent_level=1)
             self._add_table_row([("Total Operating Expenses", 400), (format_currency(data.get('total_expenses', 0)), 200)], is_total=True)
+        else:
+            # Add placeholder if no expenses data
+            self._add_table_row([("OPERATING EXPENSES", 400), ("", 200)], is_subtotal=True)
+            self._add_table_row([("No expenses data available", 400), ("", 200)], indent_level=1)
+            self._add_table_row([("Total Operating Expenses", 400), (format_currency(0), 200)], is_total=True)
             
         # Net Income
         self._add_table_row([("NET INCOME", 400), (format_currency(data.get('net_income', 0)), 200)], is_total=True)
@@ -616,15 +698,13 @@ class IncomeStatementView(BaseFinancialStatementView):
         # Revenue section
         if data.get('revenues'):
             html += '<tr class="section-header"><td>REVENUE</td><td></td></tr>'
-            for account, amount in data.get('revenues', []):
-                html += f'<tr class="account"><td>{account}</td><td class="amount">{format_currency(amount)}</td></tr>'
+            html += self._generate_hierarchical_html(data.get('revenues', []), indent_level=1)
             html += f'<tr class="total"><td>Total Revenue</td><td class="amount">{format_currency(data.get("total_revenue", 0))}</td></tr>'
             
         # COGS section
         if data.get('cogs'):
             html += '<tr class="section-header"><td>COST OF GOODS SOLD</td><td></td></tr>'
-            for account, amount in data.get('cogs', []):
-                html += f'<tr class="account"><td>{account}</td><td class="amount">{format_currency(amount)}</td></tr>'
+            html += self._generate_hierarchical_html(data.get('cogs', []), indent_level=1)
             html += f'<tr class="total"><td>Total Cost of Goods Sold</td><td class="amount">{format_currency(data.get("total_cogs", 0))}</td></tr>'
             
         # Gross Profit
@@ -633,8 +713,7 @@ class IncomeStatementView(BaseFinancialStatementView):
         # Expenses section
         if data.get('expenses'):
             html += '<tr class="section-header"><td>OPERATING EXPENSES</td><td></td></tr>'
-            for account, amount in data.get('expenses', []):
-                html += f'<tr class="account"><td>{account}</td><td class="amount">{format_currency(amount)}</td></tr>'
+            html += self._generate_hierarchical_html(data.get('expenses', []), indent_level=1)
             html += f'<tr class="total"><td>Total Operating Expenses</td><td class="amount">{format_currency(data.get("total_expenses", 0))}</td></tr>'
             
         # Net Income
@@ -694,25 +773,19 @@ class BalanceSheetView(BaseFinancialStatementView):
           # Assets section
         if data.get('assets'):
             self._add_table_row([("ASSETS", 400), ("", 200)], is_subtotal=True)
-            for account, amount in data.get('assets', []):
-                if amount != 0:
-                    self._add_table_row([(account, 400), (format_currency(amount), 200)], indent_level=1)
+            self._add_hierarchical_accounts(data.get('assets', []), indent_level=1)
             self._add_table_row([("Total Assets", 400), (format_currency(data.get('total_assets', 0)), 200)], is_total=True)
             
         # Liabilities section
         if data.get('liabilities'):
             self._add_table_row([("LIABILITIES", 400), ("", 200)], is_subtotal=True)
-            for account, amount in data.get('liabilities', []):
-                if amount != 0:
-                    self._add_table_row([(account, 400), (format_currency(amount), 200)], indent_level=1)
+            self._add_hierarchical_accounts(data.get('liabilities', []), indent_level=1)
             self._add_table_row([("Total Liabilities", 400), (format_currency(data.get('total_liabilities', 0)), 200)], is_total=True)
             
         # Equity section
         if data.get('equity'):
             self._add_table_row([("EQUITY", 400), ("", 200)], is_subtotal=True)
-            for account, amount in data.get('equity', []):
-                if amount != 0:
-                    self._add_table_row([(account, 400), (format_currency(amount), 200)], indent_level=1)
+            self._add_hierarchical_accounts(data.get('equity', []), indent_level=1)
             self._add_table_row([("Total Equity", 400), (format_currency(data.get('total_equity', 0)), 200)], is_total=True)
             
         self.content_layout.addWidget(table)
@@ -767,25 +840,19 @@ class BalanceSheetView(BaseFinancialStatementView):
         # Assets section
         if data.get('assets'):
             html += '<tr class="section-header"><td>ASSETS</td><td></td></tr>'
-            for account, amount in data.get('assets', []):
-                if amount != 0:
-                    html += f'<tr class="account"><td>{account}</td><td class="amount">{format_currency(amount)}</td></tr>'
+            html += self._generate_hierarchical_html(data.get('assets', []), indent_level=1)
             html += f'<tr class="total"><td>Total Assets</td><td class="amount">{format_currency(data.get("total_assets", 0))}</td></tr>'
             
         # Liabilities section
         if data.get('liabilities'):
             html += '<tr class="section-header"><td>LIABILITIES</td><td></td></tr>'
-            for account, amount in data.get('liabilities', []):
-                if amount != 0:
-                    html += f'<tr class="account"><td>{account}</td><td class="amount">{format_currency(amount)}</td></tr>'
+            html += self._generate_hierarchical_html(data.get('liabilities', []), indent_level=1)
             html += f'<tr class="total"><td>Total Liabilities</td><td class="amount">{format_currency(data.get("total_liabilities", 0))}</td></tr>'
             
         # Equity section
         if data.get('equity'):
             html += '<tr class="section-header"><td>EQUITY</td><td></td></tr>'
-            for account, amount in data.get('equity', []):
-                if amount != 0:
-                    html += f'<tr class="account"><td>{account}</td><td class="amount">{format_currency(amount)}</td></tr>'
+            html += self._generate_hierarchical_html(data.get('equity', []), indent_level=1)
             html += f'<tr class="total"><td>Total Equity</td><td class="amount">{format_currency(data.get("total_equity", 0))}</td></tr>'
             
         html += f"""
@@ -1236,14 +1303,14 @@ class RatioAnalysisView(BaseFinancialStatementView):
         self.content_layout.addWidget(self.cards_container)
         
         # Add summary section
-        self._create_summary_section()
+        self._setup_summary_ui()
         
         self.content_layout.addStretch()
         
         # Load initial ratio cards for Liquidity tab
         self._load_ratio_cards_for_category("Liquidity")
     
-    def _create_summary_section(self):
+    def _setup_summary_ui(self):
         """Create the summary section with financial insights."""
         from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel
         
@@ -1284,8 +1351,8 @@ class RatioAnalysisView(BaseFinancialStatementView):
         layout.addWidget(title_label)
         
         # Summary description
-        desc_label = QLabel("The financial ratios indicate a strong and healthy financial position. The company demonstrates:")
-        desc_label.setStyleSheet(f"""
+        self.summary_desc_label = QLabel("The financial ratios indicate a strong and healthy financial position. The company demonstrates:")
+        self.summary_desc_label.setStyleSheet(f"""
             QLabel {{
                 color: rgba(255, 255, 255, 0.8);
                 font-size: {ResponsiveHelper.scale_size(14, 12, 16)}px;
@@ -1298,40 +1365,19 @@ class RatioAnalysisView(BaseFinancialStatementView):
                 line-height: 1.5;
             }}
         """)
-        desc_label.setWordWrap(True)
-        layout.addWidget(desc_label)
+        self.summary_desc_label.setWordWrap(True)
+        layout.addWidget(self.summary_desc_label)
         
-        # Key points
-        points = [
-            "Strong liquidity with current ratio of 2.4",
-            "Healthy profitability with 12.5% net margin", 
-            "Conservative debt levels",
-            "Efficient asset utilization"
-        ]
-        
-        for point in points:
-            point_label = QLabel(f"• {point}")
-            point_label.setStyleSheet(f"""
-                QLabel {{
-                    color: rgba(255, 255, 255, 0.9);
-                    font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
-                    font-weight: 400;
-                    background: transparent;
-                    border: none;
-                    outline: none;
-                    margin: 0px;
-                    padding: {ResponsiveHelper.scale_size(4, 3, 6)}px 0px;
-                    margin-left: {ResponsiveHelper.scale_size(16, 12, 20)}px;
-                }}
-            """)
-            point_label.setWordWrap(True)
-            layout.addWidget(point_label)
+        # Layout for key points
+        self.summary_points_layout = QVBoxLayout()
+        layout.addLayout(self.summary_points_layout)
         
         # Add to main content layout
         self.content_layout.addWidget(summary_container)
     
     def _load_ratio_cards_for_category(self, category):
         """Load ratio cards for the specified category."""
+        self.current_category = category
         # Clear existing cards
         for i in reversed(range(self.cards_layout.count())):
             item = self.cards_layout.itemAt(i)
@@ -1340,42 +1386,18 @@ class RatioAnalysisView(BaseFinancialStatementView):
                 if widget:
                     widget.setParent(None)
         
-        # Define ratio data for each category
-        ratio_data = {
-            "Liquidity": [
-                {"name": "Current Ratio", "value": "2.40", "target": "1.5-3.0", "status": "Good", "trend": "↗️", "interpretation": "Strong short-term liquidity"},
-                {"name": "Quick Ratio", "value": "1.80", "target": "1.0-2.0", "status": "Good", "trend": "↗️", "interpretation": "Good ability to meet short-term obligations"},
-                {"name": "Cash Ratio", "value": "0.60", "target": "0.2-0.5", "status": "Warning", "trend": "→", "interpretation": "Adequate cash reserves"},
-                {"name": "Working Capital", "value": "$150,000", "target": ">$0", "status": "Good", "trend": "↗️", "interpretation": "Positive working capital"}
-            ],
-            "Profitability": [
-                {"name": "Gross Profit Margin", "value": "35.2%", "target": ">30%", "status": "Good", "trend": "↗️", "interpretation": "Strong pricing power"},
-                {"name": "Net Profit Margin", "value": "12.5%", "target": ">10%", "status": "Good", "trend": "↗️", "interpretation": "Healthy profitability"},
-                {"name": "Return on Assets", "value": "8.3%", "target": ">5%", "status": "Good", "trend": "↗️", "interpretation": "Efficient asset utilization"},
-                {"name": "Return on Equity", "value": "15.7%", "target": ">12%", "status": "Good", "trend": "↗️", "interpretation": "Strong shareholder returns"}
-            ],
-            "Leverage": [
-                {"name": "Debt-to-Equity Ratio", "value": "0.45", "target": "<0.5", "status": "Good", "trend": "↘️", "interpretation": "Conservative debt levels"},
-                {"name": "Debt Ratio", "value": "0.31", "target": "<0.4", "status": "Good", "trend": "↘️", "interpretation": "Low debt burden"},
-                {"name": "Equity Ratio", "value": "0.69", "target": ">0.6", "status": "Good", "trend": "↗️", "interpretation": "Strong equity position"},
-                {"name": "Interest Coverage", "value": "12.5", "target": ">2.5", "status": "Good", "trend": "↗️", "interpretation": "Strong ability to service debt"}
-            ],
-            "Efficiency": [
-                {"name": "Asset Turnover", "value": "1.20", "target": ">1.0", "status": "Good", "trend": "↗️", "interpretation": "Efficient asset utilization"},
-                {"name": "Inventory Turnover", "value": "8.5", "target": ">6.0", "status": "Good", "trend": "↗️", "interpretation": "Good inventory management"},
-                {"name": "Receivables Turnover", "value": "12.3", "target": ">10.0", "status": "Good", "trend": "↗️", "interpretation": "Efficient collections"},
-                {"name": "Days Sales Outstanding", "value": "30 days", "target": "<45 days", "status": "Good", "trend": "↘️", "interpretation": "Quick collection cycle"}
-            ],
-            "Market": [
-                {"name": "Price-to-Earnings", "value": "18.5", "target": "15-25", "status": "Good", "trend": "→", "interpretation": "Reasonable valuation"},
-                {"name": "Book Value per Share", "value": "$25.40", "target": ">$0", "status": "Good", "trend": "↗️", "interpretation": "Strong book value"},
-                {"name": "Market Capitalization", "value": "$1.5M", "target": "N/A", "status": "Info", "trend": "↗️", "interpretation": "Market valuation"},
-                {"name": "Dividend Yield", "value": "2.8%", "target": "2-4%", "status": "Good", "trend": "→", "interpretation": "Reasonable dividend return"}
-            ]
-        }
+        # Get ratios for the selected category from the stored data
+        ratios = self.ratio_data.get(category, []) if self.ratio_data else []
         
         # Create cards for the selected category
-        ratios = ratio_data.get(category, [])
+        if not ratios:
+            # Display a message if no data is available
+            no_data_label = QLabel(f"No {category.lower()} ratios available to display.")
+            no_data_label.setStyleSheet("color: white; font-size: 14px;")
+            no_data_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.cards_layout.addWidget(no_data_label, 0, 0, 1, 2) # Span across 2 columns
+            return
+
         for i, ratio in enumerate(ratios):
             card = self._create_ratio_card(ratio)
             row = i // 2  # 2 cards per row
@@ -1544,7 +1566,8 @@ class RatioAnalysisView(BaseFinancialStatementView):
             # Load cards for the selected category
             categories = ["Liquidity", "Profitability", "Leverage", "Efficiency", "Market"]
             if tab_index < len(categories):
-                self._load_ratio_cards_for_category(categories[tab_index])
+                self.current_category = categories[tab_index]
+                self._load_ratio_cards_for_category(self.current_category)
                 
 
                 
@@ -1558,14 +1581,41 @@ class RatioAnalysisView(BaseFinancialStatementView):
         }
         return status_colors.get(status, "#757575")
         
-    def load_ratio_data(self, ratio_data):
-        """Load actual ratio data from the system."""
+    def show_ratio_analysis(self, ratio_data: dict, summary_points: list):
+        """Load actual ratio data and update the view."""
         self.ratio_data = ratio_data
+        self.summary_points = summary_points
         
-        # Update ratio cards with real data
-        # This would be implemented to update the cards with actual data
-        # For now, using placeholder data
-        pass
+        # Reload the currently selected tab with new data
+        self._load_ratio_cards_for_category(self.current_category)
+        self._update_summary_section()
+
+    def _update_summary_section(self):
+        """Update the summary section with dynamic points."""
+        # Clear existing points
+        for i in reversed(range(self.summary_points_layout.count())):
+            item = self.summary_points_layout.itemAt(i)
+            if item and item.widget():
+                item.widget().deleteLater()
+
+        # Add new points
+        for point in self.summary_points:
+            point_label = QLabel(f"• {point}")
+            point_label.setStyleSheet(f"""
+                QLabel {{
+                    color: rgba(255, 255, 255, 0.9);
+                    font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
+                    font-weight: 400;
+                    background: transparent;
+                    border: none;
+                    outline: none;
+                    margin: 0px;
+                    padding: {ResponsiveHelper.scale_size(4, 3, 6)}px 0px;
+                    margin-left: {ResponsiveHelper.scale_size(16, 12, 20)}px;
+                }}
+            """)
+            point_label.setWordWrap(True)
+            self.summary_points_layout.addWidget(point_label)
         
     def _generate_html_content(self):
         """Generate HTML content for printing/export."""
@@ -1579,11 +1629,11 @@ class RatioAnalysisView(BaseFinancialStatementView):
                     background: white;
                     color: #333;
                 }}
-                h1 {{ color: #1976D2; border-bottom: 2px solid #1976D2; }}
-                h2 {{ color: #1976D2; margin-top: 30px; }}
+                h1 {{ color: #1976D2; border-bottom: 2px solid #1976D2; padding-bottom: 10px; }}
+                h2 {{ color: #1976D2; margin-top: 30px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }}
                 .ratio-grid {{ 
                     display: grid;
-                    grid-template-columns: repeat(2, 1fr);
+                    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
                     gap: 20px;
                     margin: 20px 0;
                 }}
@@ -1592,6 +1642,7 @@ class RatioAnalysisView(BaseFinancialStatementView):
                     padding: 20px; 
                     border-radius: 8px;
                     background: #f9f9f9;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
                 }}
                 .ratio-name {{ 
                     font-size: 18px;
@@ -1615,89 +1666,60 @@ class RatioAnalysisView(BaseFinancialStatementView):
                     font-size: 13px;
                     line-height: 1.4;
                 }}
-                .status-good {{ color: #4CAF50; font-weight: 600; }}
-                .status-warning {{ color: #FF9800; font-weight: 600; }}
-                .status-critical {{ color: #F44336; font-weight: 600; }}
-                .status-info {{ color: #2196F3; font-weight: 600; }}
+                .status-Good {{ color: #4CAF50; font-weight: 600; }}
+                .status-Warning {{ color: #FF9800; font-weight: 600; }}
+                .status-Critical {{ color: #F44336; font-weight: 600; }}
+                .status-Info {{ color: #2196F3; font-weight: 600; }}
                 .category-section {{ margin-bottom: 40px; }}
+                .summary-section {{ 
+                    margin-top: 40px; 
+                    padding: 20px; 
+                    background: #f0f8ff; 
+                    border-radius: 8px; 
+                    border-left: 4px solid #1976D2; 
+                }}
+                .summary-section h3 {{ margin-top: 0; color: #1976D2; }}
+                .summary-section ul {{ padding-left: 20px; margin: 0; }}
+                .summary-section li {{ margin-bottom: 8px; }}
             </style>
         </head>
         <body>
             <h1>Financial Ratio Analysis Report</h1>
             <p><strong>Generated on:</strong> {datetime.now().strftime('%B %d, %Y at %I:%M %p')}</p>
-            
-            <div class="category-section">
-                <h2>Liquidity Ratios</h2>
-                <div class="ratio-grid">
-                    <div class="ratio-card">
-                        <div class="ratio-name">Current Ratio</div>
-                        <div class="ratio-value">2.40</div>
-                        <div class="ratio-target">Target: 1.5-3.0 | <span class="status-good">Good</span> | ↗️</div>
-                        <div class="ratio-interpretation">Strong short-term liquidity</div>
-                    </div>
-                    <div class="ratio-card">
-                        <div class="ratio-name">Quick Ratio</div>
-                        <div class="ratio-value">1.80</div>
-                        <div class="ratio-target">Target: 1.0-2.0 | <span class="status-good">Good</span> | ↗️</div>
-                        <div class="ratio-interpretation">Good ability to meet short-term obligations</div>
-                    </div>
-                    <div class="ratio-card">
-                        <div class="ratio-name">Cash Ratio</div>
-                        <div class="ratio-value">0.60</div>
-                        <div class="ratio-target">Target: 0.2-0.5 | <span class="status-warning">Warning</span> | →</div>
-                        <div class="ratio-interpretation">Adequate cash reserves</div>
-                    </div>
-                    <div class="ratio-card">
-                        <div class="ratio-name">Working Capital</div>
-                        <div class="ratio-value">$150,000</div>
-                        <div class="ratio-target">Target: >$0 | <span class="status-good">Good</span> | ↗️</div>
-                        <div class="ratio-interpretation">Positive working capital</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="category-section">
-                <h2>Profitability Ratios</h2>
-                <div class="ratio-grid">
-                    <div class="ratio-card">
-                        <div class="ratio-name">Gross Profit Margin</div>
-                        <div class="ratio-value">35.2%</div>
-                        <div class="ratio-target">Target: >30% | <span class="status-good">Good</span> | ↗️</div>
-                        <div class="ratio-interpretation">Strong pricing power</div>
-                    </div>
-                    <div class="ratio-card">
-                        <div class="ratio-name">Net Profit Margin</div>
-                        <div class="ratio-value">12.5%</div>
-                        <div class="ratio-target">Target: >10% | <span class="status-good">Good</span> | ↗️</div>
-                        <div class="ratio-interpretation">Healthy profitability</div>
-                    </div>
-                    <div class="ratio-card">
-                        <div class="ratio-name">Return on Assets</div>
-                        <div class="ratio-value">8.3%</div>
-                        <div class="ratio-target">Target: >5% | <span class="status-good">Good</span> | ↗️</div>
-                        <div class="ratio-interpretation">Efficient asset utilization</div>
-                    </div>
-                    <div class="ratio-card">
-                        <div class="ratio-name">Return on Equity</div>
-                        <div class="ratio-value">15.7%</div>
-                        <div class="ratio-target">Target: >12% | <span class="status-good">Good</span> | ↗️</div>
-                        <div class="ratio-interpretation">Strong shareholder returns</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div style="margin-top: 40px; padding: 20px; background: #f0f8ff; border-radius: 8px; border-left: 4px solid #1976D2;">
-                <h3>Summary</h3>
-                <p>The financial ratios indicate a strong and healthy financial position. The company demonstrates:</p>
-                <ul>
-                    <li>Strong liquidity with current ratio of 2.4</li>
-                    <li>Healthy profitability with 12.5% net margin</li>
-                    <li>Conservative debt levels</li>
-                    <li>Efficient asset utilization</li>
-                </ul>
-            </div>
-        </body>
-        </html>
         """
-        
+
+        if not self.ratio_data:
+            html += "<p>No financial ratio data available to generate a report.</p>"
+        else:
+            for category, ratios in self.ratio_data.items():
+                if not ratios:
+                    continue
+                
+                html += f"""
+                <div class="category-section">
+                    <h2>{category} Ratios</h2>
+                    <div class="ratio-grid">
+                """
+                for ratio in ratios:
+                    html += f"""
+                        <div class="ratio-card">
+                            <div class="ratio-name">{ratio['name']}</div>
+                            <div class="ratio-value">{ratio['value']}</div>
+                            <div class="ratio-target">Target: {ratio['target']} | <span class="status-{ratio['status']}">{ratio['status']}</span> | {ratio['trend']}</div>
+                            <div class="ratio-interpretation">{ratio['interpretation']}</div>
+                        </div>
+                    """
+                html += "</div></div>"
+
+        if self.summary_points:
+            html += """
+            <div class="summary-section">
+                <h3>Summary</h3>
+                <ul>
+            """
+            for point in self.summary_points:
+                html += f"<li>{point}</li>"
+            html += "</ul></div>"
+
+        html += "</body></html>"
         return html

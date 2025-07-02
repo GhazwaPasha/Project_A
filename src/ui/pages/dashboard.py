@@ -178,8 +178,90 @@ class DashboardPage(QWidget):
         
         return 0.0
         
+    def _get_total_assets(self, from_date=None, to_date=None):
+        """Calculate total assets using hierarchical balance calculation."""
+        try:
+            # Use hierarchical balance calculation if available
+            if hasattr(self.system, 'get_hierarchical_account_balances'):
+                from_date_str = from_date.toString("yyyy-MM-dd") if from_date else None
+                to_date_str = to_date.toString("yyyy-MM-dd") if to_date else None
+                hierarchical_balances = self.system.get_hierarchical_account_balances(from_date_str, to_date_str)
+                
+                total = 0.0
+                for account_name, balance_info in hierarchical_balances.items():
+                    # Get account type from system
+                    accounts = self.system.get_all_accounts()
+                    account_type = None
+                    for acc in accounts:
+                        if acc[0] == account_name:  # acc[0] is name in tuple format
+                            account_type = acc[1]  # acc[1] is type
+                            break
+                    
+                    if account_type and account_type.lower() == 'asset':
+                        net_balance = balance_info.get('net_balance', 0.0)
+                        total += max(0, net_balance)  # Assets should be positive
+                
+                return total
+            else:
+                # Fallback to original method
+                return self._get_total_assets_fallback(from_date, to_date)
+                
+        except Exception as e:
+            print(f"Error calculating hierarchical assets: {e}")
+            return self._get_total_assets_fallback(from_date, to_date)
+    
+    def _get_total_assets_fallback(self, from_date=None, to_date=None):
+        """Fallback method for asset calculation."""
+        accounts = self.system.get_all_accounts()
+        trial_balance = self.system.get_trial_balance(from_date, to_date)
+        total = 0.0
+        
+        for name, acc_type, code, parent_code, level, is_postable, description in accounts:
+            if acc_type == 'Asset':
+                # Find balance for this account in trial balance
+                for tb_account in trial_balance:
+                    if tb_account['name'] == name:
+                        debit_total = float(tb_account['debit_total'])
+                        credit_total = float(tb_account['credit_total'])
+                        # For assets, debit increases balance
+                        total += debit_total - credit_total
+                        break
+        return total
+        
     def _get_total_liabilities(self, from_date=None, to_date=None):
-        """Calculate total liabilities."""
+        """Calculate total liabilities using hierarchical balance calculation."""
+        try:
+            # Use hierarchical balance calculation if available
+            if hasattr(self.system, 'get_hierarchical_account_balances'):
+                from_date_str = from_date.toString("yyyy-MM-dd") if from_date else None
+                to_date_str = to_date.toString("yyyy-MM-dd") if to_date else None
+                hierarchical_balances = self.system.get_hierarchical_account_balances(from_date_str, to_date_str)
+                
+                total = 0.0
+                for account_name, balance_info in hierarchical_balances.items():
+                    # Get account type from system
+                    accounts = self.system.get_all_accounts()
+                    account_type = None
+                    for acc in accounts:
+                        if acc[0] == account_name:  # acc[0] is name in tuple format
+                            account_type = acc[1]  # acc[1] is type
+                            break
+                    
+                    if account_type and account_type.lower() == 'liability':
+                        net_balance = balance_info.get('net_balance', 0.0)
+                        total += max(0, net_balance)  # Liabilities should be positive
+                
+                return total
+            else:
+                # Fallback to original method
+                return self._get_total_liabilities_fallback(from_date, to_date)
+                
+        except Exception as e:
+            print(f"Error calculating hierarchical liabilities: {e}")
+            return self._get_total_liabilities_fallback(from_date, to_date)
+    
+    def _get_total_liabilities_fallback(self, from_date=None, to_date=None):
+        """Fallback method for liability calculation."""
         accounts = self.system.get_all_accounts()
         trial_balance = self.system.get_trial_balance(from_date, to_date)
         total = 0.0
@@ -197,7 +279,39 @@ class DashboardPage(QWidget):
         return total
         
     def _get_total_revenue(self, from_date=None, to_date=None, abs_value=True):
-        """Calculate total revenue."""
+        """Calculate total revenue using hierarchical balance calculation."""
+        try:
+            # Use hierarchical balance calculation if available
+            if hasattr(self.system, 'get_hierarchical_account_balances'):
+                from_date_str = from_date.toString("yyyy-MM-dd") if from_date else None
+                to_date_str = to_date.toString("yyyy-MM-dd") if to_date else None
+                hierarchical_balances = self.system.get_hierarchical_account_balances(from_date_str, to_date_str)
+                
+                total = 0.0
+                for account_name, balance_info in hierarchical_balances.items():
+                    # Get account type from system
+                    accounts = self.system.get_all_accounts()
+                    account_type = None
+                    for acc in accounts:
+                        if acc[0] == account_name:  # acc[0] is name in tuple format
+                            account_type = acc[1]  # acc[1] is type
+                            break
+                    
+                    if account_type and account_type.lower() in ['revenue', 'income']:
+                        net_balance = balance_info.get('net_balance', 0.0)
+                        total += abs(net_balance) if abs_value else net_balance
+                
+                return total
+            else:
+                # Fallback to original method
+                return self._get_total_revenue_fallback(from_date, to_date, abs_value)
+                
+        except Exception as e:
+            print(f"Error calculating hierarchical revenue: {e}")
+            return self._get_total_revenue_fallback(from_date, to_date, abs_value)
+    
+    def _get_total_revenue_fallback(self, from_date=None, to_date=None, abs_value=True):
+        """Fallback method for revenue calculation."""
         accounts = self.system.get_all_accounts()
         balance = self.system.get_trial_balance(from_date, to_date)
         total = 0.0
@@ -208,7 +322,39 @@ class DashboardPage(QWidget):
         return total
         
     def _get_total_expenses(self, from_date=None, to_date=None, abs_value=True):
-        """Calculate total expenses."""
+        """Calculate total expenses using hierarchical balance calculation."""
+        try:
+            # Use hierarchical balance calculation if available
+            if hasattr(self.system, 'get_hierarchical_account_balances'):
+                from_date_str = from_date.toString("yyyy-MM-dd") if from_date else None
+                to_date_str = to_date.toString("yyyy-MM-dd") if to_date else None
+                hierarchical_balances = self.system.get_hierarchical_account_balances(from_date_str, to_date_str)
+                
+                total = 0.0
+                for account_name, balance_info in hierarchical_balances.items():
+                    # Get account type from system
+                    accounts = self.system.get_all_accounts()
+                    account_type = None
+                    for acc in accounts:
+                        if acc[0] == account_name:  # acc[0] is name in tuple format
+                            account_type = acc[1]  # acc[1] is type
+                            break
+                    
+                    if account_type and account_type.lower() == 'expense':
+                        net_balance = balance_info.get('net_balance', 0.0)
+                        total += abs(net_balance) if abs_value and net_balance < 0 else net_balance
+                
+                return total
+            else:
+                # Fallback to original method
+                return self._get_total_expenses_fallback(from_date, to_date, abs_value)
+                
+        except Exception as e:
+            print(f"Error calculating hierarchical expenses: {e}")
+            return self._get_total_expenses_fallback(from_date, to_date, abs_value)
+    
+    def _get_total_expenses_fallback(self, from_date=None, to_date=None, abs_value=True):
+        """Fallback method for expense calculation."""
         accounts = self.system.get_all_accounts()
         balance = self.system.get_trial_balance(from_date, to_date)
         total = 0.0

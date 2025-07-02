@@ -575,6 +575,11 @@ class FinancialRatioCalculator:
         # Implementation for saving alerts
         pass
     
+    def _calculate_ratio_summary(self, ratios: Dict) -> Dict[str, Any]:
+        """Calculate a summary from the ratios."""
+        # Placeholder implementation
+        return {}
+    
     def _calculate_kpi_summary(self, ratios: Dict) -> Dict[str, Any]:
         """Calculate key performance indicators summary."""
         return {

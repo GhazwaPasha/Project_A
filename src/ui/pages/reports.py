@@ -23,6 +23,7 @@ from ..components.widgets import PageHeader, DateRangeSelector
 from ..components.report_views import (
     IncomeStatementView, BalanceSheetView, CashFlowStatementView, StatementOfEquityView, RatioAnalysisView
 )
+from ...core.financial_ratios import FinancialRatioCalculator
 from PyQt6.QtCore import QPropertyAnimation, QEasingCurve, pyqtSignal
 from PyQt6.QtGui import QFont, QCursor
 
@@ -682,13 +683,30 @@ class ReportsPage(QWidget):
                 self.stacked_widget.setCurrentWidget(self.ratio_analysis_view)
                 
                 # Load ratio data if system has ratio calculator
-                if hasattr(self.system, 'ratio_calculator'):
+                if hasattr(self.system, 'db_manager'):
                     try:
-                        ratio_data = self.system.ratio_calculator.create_ratio_dashboard_data()
-                        self.ratio_analysis_view.load_ratio_data(ratio_data)
+                        from_date_obj, to_date_obj = self.date_selector.get_date_range()
+                        
+                        # Instantiate the calculator
+                        ratio_calculator = FinancialRatioCalculator(self.system.db_manager, self.system)
+                        
+                        # Calculate ratios
+                        ratio_data = ratio_calculator.calculate_all_ratios(to_date_obj.toPyDate())
+                        
+                        # Transform data for the view
+                        transformed_data, summary_points = self._transform_ratio_data_for_view(ratio_data)
+                        
+                        # Load data into the view
+                        self.ratio_analysis_view.show_ratio_analysis(transformed_data, summary_points)
+                        
                     except Exception as e:
                         print(f"Error loading ratio data: {e}")
-                        # Continue with placeholder data
+                        # Fallback to placeholder data if calculation fails
+                        self.ratio_analysis_view.show_ratio_analysis({}, ["Failed to calculate financial ratios."])
+                else:
+                    # Fallback for systems without a db_manager or ratio calculator
+                    self.ratio_analysis_view.show_ratio_analysis({}, ["Ratio calculator not available."])
+
             # Check if system has enhanced budget manager
             elif hasattr(self.system, 'budget_manager') and "Budget" in analysis_name:
                 if "Budget vs Actual" in analysis_name:
@@ -709,6 +727,89 @@ class ReportsPage(QWidget):
                                       f"Generating {analysis_name}...\nThis feature is available with enhanced system features!")
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to generate analysis: {str(e)}")
+            
+    def _transform_ratio_data_for_view(self, calculator_output):
+        """Transform financial ratio data for the UI view."""
+        
+        if 'error' in calculator_output:
+            return {}, [calculator_output['error']]
+
+        transformed_data = {
+            "Liquidity": [],
+            "Profitability": [],
+            "Leverage": [],
+            "Efficiency": [],
+            "Market": [] # Market is not calculated, so it will be empty
+        }
+        
+        summary_points = []
+
+        # Mapping from calculator keys to UI display names and targets
+        ratio_definitions = {
+            'current_ratio': {'name': 'Current Ratio', 'target': '1.5-3.0'},
+            'quick_ratio': {'name': 'Quick Ratio', 'target': '1.0-2.0'},
+            'cash_ratio': {'name': 'Cash Ratio', 'target': '0.2-0.5'},
+            'working_capital': {'name': 'Working Capital', 'target': '>$0'},
+            'gross_profit_margin': {'name': 'Gross Profit Margin', 'target': '>30%'},
+            'net_profit_margin': {'name': 'Net Profit Margin', 'target': '>10%'},
+            'return_on_assets': {'name': 'Return on Assets', 'target': '>5%'},
+            'return_on_equity': {'name': 'Return on Equity', 'target': '>12%'},
+            'debt_to_equity': {'name': 'Debt-to-Equity Ratio', 'target': '<0.5'},
+            'debt_ratio': {'name': 'Debt Ratio', 'target': '<0.4'},
+            'equity_ratio': {'name': 'Equity Ratio', 'target': '>0.6'},
+            'asset_turnover': {'name': 'Asset Turnover', 'target': '>1.0'},
+            'inventory_turnover': {'name': 'Inventory Turnover', 'target': '>6.0'},
+            'receivables_turnover': {'name': 'Receivables Turnover', 'target': '>10.0'},
+            'days_sales_outstanding': {'name': 'Days Sales Outstanding', 'target': '<45 days'},
+        }
+
+        # Process alerts to determine status and summary
+        alerts = calculator_output.get('alerts', [])
+        alert_map = {alert['ratio']: alert['type'] for alert in alerts}
+        
+        for alert in alerts:
+            summary_points.append(alert['message'])
+
+        if not summary_points:
+            summary_points.append("Financial ratios indicate a strong and healthy financial position.")
+
+        # Transform each ratio
+        for category, ratios in calculator_output.get('ratios', {}).items():
+            ui_category = category.capitalize()
+            if ui_category in transformed_data:
+                for key, data in ratios.items():
+                    if key in ratio_definitions:
+                        definition = ratio_definitions[key]
+                        status_from_alert = alert_map.get(key)
+                        
+                        if status_from_alert == 'CRITICAL':
+                            status = 'Critical'
+                        elif status_from_alert == 'WARNING':
+                            status = 'Warning'
+                        else:
+                            status = 'Good'
+                            
+                        # Format value based on unit
+                        value_str = ""
+                        if data['unit'] == 'percentage':
+                            value_str = f"{data['value']:.2f}%"
+                        elif data['unit'] == 'currency':
+                            value_str = format_currency(data['value'])
+                        elif data['unit'] == 'days':
+                            value_str = f"{data['value']:.0f} days"
+                        else:
+                            value_str = f"{data['value']:.2f}"
+
+                        transformed_data[ui_category].append({
+                            'name': definition['name'],
+                            'value': value_str,
+                            'target': definition['target'],
+                            'status': status,
+                            'trend': '→',  # Placeholder for trend
+                            'interpretation': data.get('interpretation', '')
+                        })
+
+        return transformed_data, summary_points
             
     def _show_ratio_results(self, title, ratios):
         """Show ratio calculation results in a formatted dialog."""

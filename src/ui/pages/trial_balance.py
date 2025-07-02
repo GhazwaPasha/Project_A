@@ -408,7 +408,74 @@ class TrialBalancePage(QWidget):
             print(f"Error refreshing trial balance: {e}")
             
     def _calculate_trial_balance(self, from_date, to_date):
-        """Calculate trial balance using the accounting system method."""
+        """Calculate trial balance using the hierarchical accounting system method."""
+        try:
+            # Use the new hierarchical trial balance method
+            if hasattr(self.system, 'get_trial_balance'):
+                # Get hierarchical trial balance (includes parent account aggregation)
+                trial_balance_data = self.system.get_trial_balance()
+                
+                # Build trial balance data in the format expected by the UI
+                trial_accounts = []
+                total_debits = 0.0
+                total_credits = 0.0
+                
+                # Process hierarchical trial balance data
+                for balance_record in trial_balance_data:
+                    account_name = balance_record['name']
+                    debit_balance = float(balance_record.get('debit_balance', 0))
+                    credit_balance = float(balance_record.get('credit_balance', 0))
+                    net_balance = float(balance_record.get('net_balance', 0))
+                    has_children = balance_record.get('has_children', False)
+                    child_count = balance_record.get('child_count', 0)
+                    level = balance_record.get('level', 1)
+                    
+                    # Only include accounts with activity or significant aggregated balances
+                    if (debit_balance > 0 or credit_balance > 0 or 
+                        abs(net_balance) >= 0.01 or has_children):
+                        
+                        # Use the pre-calculated debit and credit balances
+                        debit_amount = debit_balance
+                        credit_amount = credit_balance
+                        total_debits += debit_balance
+                        total_credits += credit_balance
+                        
+                        trial_accounts.append({
+                            'name': account_name,
+                            'code': balance_record.get('code', ''),
+                            'debit': debit_amount,
+                            'credit': credit_amount,
+                            'level': level,
+                            'has_children': has_children,
+                            'child_count': child_count,
+                            'is_postable': balance_record.get('is_postable', True)
+                        })
+                
+                # Sort by account code for consistent display
+                trial_accounts.sort(key=lambda x: x.get('code', '') or x['name'])
+                
+                difference = abs(total_debits - total_credits)
+                is_balanced = difference < 0.01
+                
+                return {
+                    'accounts': trial_accounts,
+                    'total_debits': total_debits,
+                    'total_credits': total_credits,
+                    'difference': difference,
+                    'is_balanced': is_balanced,
+                    'as_of_date': "Current (Hierarchical)"
+                }
+            else:
+                # Fallback to original method
+                return self._calculate_trial_balance_fallback(from_date, to_date)
+                
+        except Exception as e:
+            print(f"Error calculating hierarchical trial balance: {e}")
+            # Fallback to original method
+            return self._calculate_trial_balance_fallback(from_date, to_date)
+    
+    def _calculate_trial_balance_fallback(self, from_date, to_date):
+        """Fallback method using original trial balance calculation."""
         try:
             # For trial balance, always use "as of date" concept (all time data)
             # This ensures trial balance shows cumulative balances regardless of date filter
@@ -432,21 +499,18 @@ class TrialBalancePage(QWidget):
             # Convert trial balance list to account balances
             for balance_record in account_balances:
                 account_name = balance_record['name']
-                debit_total = float(balance_record['debit_total'])
-                credit_total = float(balance_record['credit_total'])
-                net_balance = debit_total - credit_total
+                debit_balance = float(balance_record.get('debit_balance', 0))
+                credit_balance = float(balance_record.get('credit_balance', 0))
+                net_balance = float(balance_record.get('net_balance', 0))
                 
                 if abs(net_balance) >= 0.01:  # Only non-zero balances
                     info = account_info.get(account_name, {'type': 'Unknown', 'code': ''})
                     
-                    if net_balance > 0:
-                        debit_amount = net_balance
-                        credit_amount = 0.0
-                        total_debits += net_balance
-                    else:
-                        debit_amount = 0.0
-                        credit_amount = abs(net_balance)
-                        total_credits += abs(net_balance)
+                    # Use the pre-calculated debit and credit balances
+                    debit_amount = debit_balance
+                    credit_amount = credit_balance
+                    total_debits += debit_balance
+                    total_credits += credit_balance
                     
                     trial_accounts.append({
                         'name': account_name,
@@ -467,18 +531,19 @@ class TrialBalancePage(QWidget):
                 'total_credits': total_credits,
                 'difference': difference,
                 'is_balanced': is_balanced,
-                'as_of_date': "Current"  # Always show as current date for trial balance
+                'as_of_date': "Current"
             }
             
         except Exception as e:
-            print(f"Error calculating trial balance: {e}")
+            print(f"Error calculating fallback trial balance: {e}")
             return {
                 'accounts': [],
                 'total_debits': 0.0,
                 'total_credits': 0.0,
                 'difference': 0.0,
                 'is_balanced': True,
-                'as_of_date': "Error"            }
+                'as_of_date': "Error"
+            }
             
     def _update_balance_metrics(self, trial_data):
         """Update compact metrics cards and date info."""

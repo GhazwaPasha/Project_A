@@ -1300,16 +1300,98 @@ class UnifiedAccountingSystem:
     # FINANCIAL CALCULATIONS
     # ================================
     
-    def get_trial_balance(self, start_date: Optional[str] = None, 
-                         end_date: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Calculate trial balance from journal entries"""
-        entries = self.get_journal_entries(start_date, end_date)
+    def get_hierarchical_account_balances(self, start_date: Optional[str] = None, 
+                                        end_date: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+        """
+        Calculate account balances with hierarchical aggregation.
+        Returns balances for ALL accounts (including parent accounts with aggregated child balances).
+        """
+        if not self.current_organization_id:
+            print("No organization ID set")
+            return {}
+        
+        # Get all accounts with hierarchy information
         accounts = self.get_chart_of_accounts(active_only=False)
+        if not accounts:
+            return {}
         
-        # Create account lookup
-        account_lookup = {acc['name']: acc for acc in accounts}
+        # Build hierarchy mapping
+        account_by_id = {acc['id']: acc for acc in accounts}
+        children_by_parent = {}
         
-        # Track debit and credit totals separately for each account
+        for acc in accounts:
+            parent_id = acc.get('parent_id')
+            if parent_id:
+                if parent_id not in children_by_parent:
+                    children_by_parent[parent_id] = []
+                children_by_parent[parent_id].append(acc)
+        
+        # Get direct transaction balances for postable accounts
+        direct_balances = self._get_direct_account_balances(start_date, end_date)
+        
+        # Calculate hierarchical balances (bottom-up aggregation)
+        hierarchical_balances = {}
+        
+        def calculate_account_balance(account_id: int) -> Dict[str, Any]:
+            """Recursively calculate account balance including child aggregation."""
+            account = account_by_id.get(account_id)
+            if not account:
+                return {'debit_total': 0.0, 'credit_total': 0.0, 'net_balance': 0.0}
+            
+            account_name = account['name']
+            
+            # Start with direct balance for this account
+            # Try to match by account name, and also by code + name format
+            direct_balance = direct_balances.get(account_name, {'debit_total': 0.0, 'credit_total': 0.0})
+            
+            # If not found by name, try to find by code + name format
+            if direct_balance['debit_total'] == 0.0 and direct_balance['credit_total'] == 0.0:
+                account_code = account.get('code', '')
+                if account_code:
+                    code_name_format = f"{account_code} - {account_name}"
+                    if code_name_format in direct_balances:
+                        direct_balance = direct_balances[code_name_format]
+            
+            total_debit = direct_balance['debit_total']
+            total_credit = direct_balance['credit_total']
+            
+            # Add aggregated balances from children
+            children = children_by_parent.get(account_id, [])
+            for child in children:
+                child_balance = calculate_account_balance(child['id'])
+                total_debit += child_balance['debit_total']
+                total_credit += child_balance['credit_total']
+            
+            # Calculate net balance based on account type
+            account_type = account.get('account_type', '').lower()
+            net_balance = self._calculate_net_balance(total_debit, total_credit, account_type)
+            
+            balance_info = {
+                'debit_total': total_debit,
+                'credit_total': total_credit,
+                'net_balance': net_balance,
+                'has_children': bool(children),
+                'child_count': len(children),
+                'is_postable': account.get('is_postable', True),
+                'level': account.get('level', 1)
+            }
+            
+            hierarchical_balances[account_name] = balance_info
+            return balance_info
+        
+        # Calculate balances for all accounts
+        # First, process all accounts to ensure we get balances for leaf accounts with transactions
+        for account in accounts:
+            calculate_account_balance(account['id'])
+        
+        return hierarchical_balances
+    
+    def _get_direct_account_balances(self, start_date: Optional[str] = None, 
+                                   end_date: Optional[str] = None) -> Dict[str, Dict[str, float]]:
+        """Get direct transaction balances for accounts (no aggregation)."""
+        entries = self.get_journal_entries(start_date, end_date)
+        
+        # Track debit and credit totals for each account
         account_debits = {}
         account_credits = {}
         
@@ -1330,21 +1412,86 @@ class UnifiedAccountingSystem:
             account_debits[debit_account] += amount
             account_credits[credit_account] += amount
         
-        # Build trial balance result in expected format
-        trial_balance = []
+        # Convert to expected format
+        balances = {}
         all_accounts = set(account_debits.keys()) | set(account_credits.keys())
         
         for account_name in all_accounts:
-            debit_total = account_debits.get(account_name, 0.0)
-            credit_total = account_credits.get(account_name, 0.0)
+            balances[account_name] = {
+                'debit_total': account_debits.get(account_name, 0.0),
+                'credit_total': account_credits.get(account_name, 0.0)
+            }
+        
+        return balances
+    
+    def _calculate_net_balance(self, debit_total: float, credit_total: float, account_type: str) -> float:
+        """Calculate net balance based on account type and normal balance."""
+        if account_type in ['asset', 'expense']:
+            # Assets and expenses have normal debit balance
+            return debit_total - credit_total
+        else:
+            # Liabilities, equity, and revenue have normal credit balance
+            return credit_total - debit_total
+
+    def get_trial_balance(self, start_date: Optional[str] = None, 
+                         end_date: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Calculate trial balance with hierarchical aggregation."""
+        hierarchical_balances = self.get_hierarchical_account_balances(start_date, end_date)
+        accounts = self.get_chart_of_accounts(active_only=False)
+        
+        # Create account lookup for metadata
+        account_lookup = {acc['name']: acc for acc in accounts}
+        
+        # Build trial balance result
+        trial_balance = []
+        total_debits = 0.0
+        total_credits = 0.0
+        
+        for account_name, balance_info in hierarchical_balances.items():
+            debit_total = balance_info['debit_total']
+            credit_total = balance_info['credit_total']
+            net_balance = balance_info['net_balance']
             
-            # Only include accounts with activity
-            if debit_total > 0 or credit_total > 0:
+            # Only include POSTABLE accounts with non-zero balances
+            if (balance_info['is_postable'] and 
+                (debit_total > 0 or credit_total > 0 or abs(net_balance) >= 0.01)):
+                
+                account_info = account_lookup.get(account_name, {})
+                
+                # Calculate proper trial balance columns based on account type
+                account_type = account_info.get('account_type', '').lower()
+                
+                # For trial balance, we need to show the balance in the correct column
+                # Assets and Expenses have normal debit balance
+                # Liabilities, Equity, and Revenue have normal credit balance
+                if account_type in ['asset', 'expense']:
+                    # Normal debit balance accounts
+                    debit_balance = max(0, net_balance) if net_balance > 0 else 0
+                    credit_balance = max(0, -net_balance) if net_balance < 0 else 0
+                else:
+                    # Normal credit balance accounts (liability, equity, revenue)
+                    debit_balance = max(0, -net_balance) if net_balance < 0 else 0
+                    credit_balance = max(0, net_balance) if net_balance > 0 else 0
+                
                 trial_balance.append({
                     'name': account_name,
-                    'debit_total': debit_total,
-                    'credit_total': credit_total
+                    'debit_balance': debit_balance,
+                    'credit_balance': credit_balance,
+                    'net_balance': net_balance,
+                    'account_type': account_info.get('account_type', ''),
+                    'code': account_info.get('code', ''),
+                    'level': balance_info['level'],
+                    'is_postable': balance_info['is_postable'],
+                    'has_children': balance_info['has_children'],
+                    'child_count': balance_info['child_count']
                 })
+                
+                # Update totals for trial balance validation
+                total_debits += debit_balance
+                total_credits += credit_balance
+        
+        # Sort by account code for consistent display
+        trial_balance.sort(key=lambda x: x.get('code', '') or x['name'])
         
         return trial_balance
     
@@ -1401,92 +1548,286 @@ class UnifiedAccountingSystem:
             return account_field.split(" - ", 1)[1].strip()
         return account_field.strip()
 
-    def generate_income_statement_breakdown(self, start_date: str, end_date: str) -> Dict:
-        """Generate income statement with breakdown"""
+    def generate_income_statement_breakdown(self, start_date: Optional[str] = None, 
+                                          end_date: Optional[str] = None) -> Dict[str, Any]:
+        """Generate income statement with hierarchical balance aggregation."""
+        try:
+            # Use hierarchical balances for accurate reporting
+            hierarchical_balances = self.get_hierarchical_account_balances(start_date, end_date)
+            accounts = self.get_chart_of_accounts(active_only=False)
+            
+            # Create account type lookup and hierarchy mapping
+            account_types = {acc['name']: acc.get('account_type', '').lower() for acc in accounts}
+            account_by_id = {acc['id']: acc for acc in accounts}
+            
+            # Build hierarchical structure for income statement sections
+            def build_income_hierarchy(account_type_filter):
+                """Build hierarchical tree for income statement accounts."""
+                tree = []
+                
+                # Get accounts of the specified type
+                type_accounts = [acc for acc in accounts if acc.get('account_type', '').lower() == account_type_filter]
+                
+                # Build parent-child relationships
+                for account in type_accounts:
+                    if not account.get('parent_id'):  # Root accounts
+                        node = self._build_account_node(account, type_accounts, hierarchical_balances, account_by_id)
+                        if node:  # Only add if has balance or children
+                            tree.append(node)
+                
+                return sorted(tree, key=lambda x: x['code'] or x['name'])
+            
+            # Build hierarchical trees for each section
+            revenues_tree = build_income_hierarchy('revenue')
+            expenses_tree = build_income_hierarchy('expense')
+            
+            # Separate COGS from other expenses
+            cogs_tree = []
+            operating_expenses_tree = []
+            
+            for node in expenses_tree:
+                if 'cost' in node['name'].lower() or 'cogs' in node['name'].lower():
+                    cogs_tree.append(node)
+                else:
+                    operating_expenses_tree.append(node)
+            
+            # Calculate totals
+            total_revenue = self._calculate_tree_total(revenues_tree)
+            total_cogs = self._calculate_tree_total(cogs_tree)
+            total_expenses = self._calculate_tree_total(operating_expenses_tree)
+            gross_profit = total_revenue - total_cogs
+            net_income = gross_profit - total_expenses
+            
+            return {
+                'revenues': revenues_tree,
+                'cogs': cogs_tree,
+                'expenses': operating_expenses_tree,
+                'total_revenue': total_revenue,
+                'total_cogs': total_cogs,
+                'total_expenses': total_expenses,
+                'gross_profit': gross_profit,
+                'net_income': net_income,
+                'period': f"{start_date or 'All Time'} to {end_date or 'Current'}",
+                'is_hierarchical': True
+            }
+            
+        except Exception as e:
+            print(f"Error generating hierarchical income statement: {e}")
+            # Fallback to original method
+            return self._generate_income_statement_fallback(start_date, end_date)
+    
+    def _generate_income_statement_fallback(self, start_date: Optional[str] = None, 
+                                          end_date: Optional[str] = None) -> Dict[str, Any]:
+        """Fallback method for income statement generation."""
         entries = self.get_journal_entries(start_date, end_date)
         accounts = self.get_chart_of_accounts(active_only=False)
-
+        
         # Create account type lookup
-        account_types = {acc['name']: acc['type'].lower() for acc in accounts}
-
-        revenue_total = 0.0
-        expense_total = 0.0
-        revenue_breakdown = {}
-        expense_breakdown = {}
-
+        account_types = {acc['name']: acc.get('account_type', '').lower() for acc in accounts}
+        
+        # Track account balances
+        account_balances = {}
+        
         for entry in entries:
-            debit_account = self._normalize_account_name(entry.get('debit_account', ''))
-            credit_account = self._normalize_account_name(entry.get('credit_account', ''))
+            debit_account = entry.get('debit_account', '')
+            credit_account = entry.get('credit_account', '')
             amount = float(entry.get('amount', 0))
-
-            # Process revenue (credits to revenue accounts)
-            if account_types.get(credit_account) == 'revenue':
-                revenue_total += amount
-                if credit_account not in revenue_breakdown:
-                    revenue_breakdown[credit_account] = 0.0
-                revenue_breakdown[credit_account] += amount
-
-            # Process expenses (debits to expense accounts)
-            if account_types.get(debit_account) == 'expense':
-                expense_total += amount
-                if debit_account not in expense_breakdown:
-                    expense_breakdown[debit_account] = 0.0
-                expense_breakdown[debit_account] += amount
-
-        net_income = revenue_total - expense_total
-
-        # Convert breakdowns to sorted lists of tuples for UI compatibility
-        revenues = sorted(revenue_breakdown.items(), key=lambda x: x[0])
-        expenses = sorted(expense_breakdown.items(), key=lambda x: x[0])
-
+            
+            # Initialize accounts if not exists
+            if debit_account not in account_balances:
+                account_balances[debit_account] = 0.0
+            if credit_account not in account_balances:
+                account_balances[credit_account] = 0.0
+            
+            # Apply debits and credits based on account types
+            debit_type = account_types.get(debit_account, '')
+            credit_type = account_types.get(credit_account, '')
+            
+            # Assets, Expenses increase with debits
+            if debit_type in ['asset', 'expense']:
+                account_balances[debit_account] += amount
+            else:
+                account_balances[debit_account] -= amount
+            
+            # Liabilities, Equity, Revenue increase with credits  
+            if credit_type in ['liability', 'equity', 'revenue', 'income']:
+                account_balances[credit_account] += amount
+            else:
+                account_balances[credit_account] -= amount
+        
+        # Categorize accounts
+        revenues = {}
+        expenses = {}
+        cogs = {}
+        
+        for account_name, balance in account_balances.items():
+            account_type = account_types.get(account_name, '')
+            
+            if account_type in ['revenue', 'income']:
+                revenues[account_name] = abs(balance)
+            elif account_type == 'expense':
+                if 'cost' in account_name.lower() or 'cogs' in account_name.lower():
+                    cogs[account_name] = abs(balance)
+                else:
+                    expenses[account_name] = abs(balance)
+        
+        # Calculate totals
+        total_revenue = sum(revenues.values())
+        total_cogs = sum(cogs.values())
+        total_expenses = sum(expenses.values())
+        gross_profit = total_revenue - total_cogs
+        net_income = gross_profit - total_expenses
+        
         return {
-            'revenues': revenues,
-            'expenses': expenses,
-            'total_revenue': revenue_total,
-            'total_expenses': expense_total,
-            'net_income': net_income
+            'revenues': sorted(revenues.items(), key=lambda x: x[0]),
+            'cogs': sorted(cogs.items(), key=lambda x: x[0]),
+            'expenses': sorted(expenses.items(), key=lambda x: x[0]),
+            'total_revenue': total_revenue,
+            'total_cogs': total_cogs,
+            'total_expenses': total_expenses,
+            'gross_profit': gross_profit,
+            'net_income': net_income,
+            'period': f"{start_date or 'All Time'} to {end_date or 'Current'}"
         }
 
     def generate_balance_sheet_breakdown(self, as_of_date: str) -> Dict:
-        """Generate balance sheet as of a specific date"""
+        """Generate balance sheet with hierarchical balance aggregation."""
+        try:
+            # Use hierarchical balances for accurate reporting
+            hierarchical_balances = self.get_hierarchical_account_balances(None, as_of_date)
+            accounts = self.get_chart_of_accounts(active_only=False)
+            
+            # Create account type lookup and hierarchy mapping
+            account_types = {acc['name']: acc.get('account_type', '').lower() for acc in accounts}
+            account_by_id = {acc['id']: acc for acc in accounts}
+            
+            # Build hierarchical structure
+            def build_hierarchy_tree(account_type_filter):
+                """Build hierarchical tree for specific account type."""
+                tree = []
+                
+                # Get accounts of the specified type
+                type_accounts = [acc for acc in accounts if acc.get('account_type', '').lower() == account_type_filter]
+                
+                # Build parent-child relationships
+                for account in type_accounts:
+                    if not account.get('parent_id'):  # Root accounts
+                        node = self._build_account_node(account, type_accounts, hierarchical_balances, account_by_id)
+                        if node:  # Only add if has balance or children
+                            tree.append(node)
+                
+                return sorted(tree, key=lambda x: x['code'] or x['name'])
+            
+            # Build hierarchical trees for each section
+            assets_tree = build_hierarchy_tree('asset')
+            liabilities_tree = build_hierarchy_tree('liability')
+            equity_tree = build_hierarchy_tree('equity')
+            
+            # Calculate totals
+            total_assets = self._calculate_tree_total(assets_tree)
+            total_liabilities = self._calculate_tree_total(liabilities_tree)
+            total_equity = self._calculate_tree_total(equity_tree)
+            
+            return {
+                'assets': assets_tree,
+                'liabilities': liabilities_tree,
+                'equity': equity_tree,
+                'total_assets': total_assets,
+                'total_liabilities': total_liabilities,
+                'total_equity': total_equity,
+                'as_of_date': as_of_date,
+                'is_hierarchical': True
+            }
+            
+        except Exception as e:
+            print(f"Error generating hierarchical balance sheet: {e}")
+            # Fallback to original method
+            return self._generate_balance_sheet_fallback(as_of_date)
+    
+    def _build_account_node(self, account, all_accounts, hierarchical_balances, account_by_id):
+        """Build a hierarchical node for an account."""
+        account_name = account['name']
+        balance_info = hierarchical_balances.get(account_name, {})
+        net_balance = balance_info.get('net_balance', 0.0)
+        
+        # Check if this account or its children have balances
+        has_balance = abs(net_balance) >= 0.01
+        has_children_with_balance = False
+        
+        # Find children
+        children = []
+        for child_account in all_accounts:
+            if child_account.get('parent_id') == account['id']:
+                child_node = self._build_account_node(child_account, all_accounts, hierarchical_balances, account_by_id)
+                if child_node:
+                    children.append(child_node)
+                    has_children_with_balance = True
+        
+        # Only include if has balance or children with balance
+        if has_balance or has_children_with_balance:
+            return {
+                'id': account['id'],
+                'name': account_name,
+                'code': account.get('code', ''),
+                'level': account.get('level', 3),
+                'balance': max(0, net_balance) if account.get('account_type', '').lower() in ['asset', 'liability'] else net_balance,
+                'is_postable': account.get('is_postable', True),
+                'has_children': len(children) > 0,
+                'children': children,
+                'account_type': account.get('account_type', '')
+            }
+        
+        return None
+    
+    def _calculate_tree_total(self, tree):
+        """Calculate total balance for a hierarchical tree.
+        Only count leaf accounts (level 3) to avoid double-counting."""
+        total = 0.0
+        for node in tree:
+            # If this is a leaf account (level 3) or has no children, count its balance
+            if node.get('level', 3) == 3 or not node.get('children', []):
+                total += node.get('balance', 0.0)
+            else:
+                # For parent accounts, only count children (avoid double-counting)
+                total += self._calculate_tree_total(node.get('children', []))
+        return total
+    
+    def _generate_balance_sheet_fallback(self, as_of_date: str) -> Dict:
+        """Fallback method for balance sheet generation."""
         trial_balance = self.get_trial_balance(None, as_of_date)
         accounts = self.get_chart_of_accounts(active_only=False)
-
+        
         # Create account type lookup
-        account_types = {acc['name']: acc['type'].lower() for acc in accounts}
-
+        account_types = {acc['name']: acc.get('account_type', '').lower() for acc in accounts}
+        
         assets = {}
         liabilities = {}
         equity = {}
-
+        
         for entry in trial_balance:
             account_name = entry['name']
             balance = entry.get('debit_total', 0.0) - entry.get('credit_total', 0.0)
-            account_type = account_types.get(account_name, '').lower()
-
+            account_type = account_types.get(account_name, '')
+            
             if account_type == 'asset':
-                assets[account_name] = balance
+                assets[account_name] = max(0, balance)
             elif account_type == 'liability':
-                liabilities[account_name] = balance
+                liabilities[account_name] = max(0, -balance)  # Liabilities have credit balance
             elif account_type == 'equity':
-                equity[account_name] = balance
-
+                equity[account_name] = -balance  # Equity has credit balance
+        
         total_assets = sum(assets.values())
         total_liabilities = sum(liabilities.values())
         total_equity = sum(equity.values())
-
-        # Convert to sorted lists of tuples for UI compatibility
-        assets_list = sorted([(k, v) for k, v in assets.items()], key=lambda x: x[0])
-        liabilities_list = sorted([(k, v) for k, v in liabilities.items()], key=lambda x: x[0])
-        equity_list = sorted([(k, v) for k, v in equity.items()], key=lambda x: x[0])
-
+        
         return {
-            'assets': assets_list,
-            'liabilities': liabilities_list,
-            'equity': equity_list,
+            'assets': sorted(assets.items(), key=lambda x: x[0]),
+            'liabilities': sorted(liabilities.items(), key=lambda x: x[0]),
+            'equity': sorted(equity.items(), key=lambda x: x[0]),
             'total_assets': total_assets,
             'total_liabilities': total_liabilities,
-            'total_equity': total_equity
+            'total_equity': total_equity,
+            'as_of_date': as_of_date
         }
 
     def generate_statement_of_equity(self, start_date: str, end_date: str) -> Dict:
@@ -1494,7 +1835,7 @@ class UnifiedAccountingSystem:
         # Get beginning equity balance
         beginning_balance = self.get_trial_balance(None, start_date)
         accounts = self.get_chart_of_accounts(active_only=False)
-        account_types = {acc['name']: acc['type'].lower() for acc in accounts}
+        account_types = {acc['name']: acc.get('account_type', '').lower() for acc in accounts}
 
         # Sum balances for equity accounts
         beginning_equity = 0.0
@@ -1502,12 +1843,13 @@ class UnifiedAccountingSystem:
             account_name = entry.get('name', '')
             account_type = account_types.get(account_name, '').lower()
             if account_type == 'equity':
-                balance = entry.get('debit_total', 0.0) - entry.get('credit_total', 0.0)
+                # Use net_balance from the new trial balance format
+                balance = entry.get('net_balance', 0.0)
                 beginning_equity += balance
 
         # Get net income for the period
         income_statement = self.generate_income_statement_breakdown(start_date, end_date)
-        net_income = income_statement['net_income']
+        net_income = income_statement.get('net_income', 0)
 
         # Calculate ending equity
         ending_equity = beginning_equity + net_income
