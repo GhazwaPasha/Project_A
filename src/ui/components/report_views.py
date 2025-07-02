@@ -1080,7 +1080,7 @@ class StatementOfEquityView(BaseFinancialStatementView):
 
 
 class RatioAnalysisView(BaseFinancialStatementView):
-    """Comprehensive ratio analysis view with interactive dashboard."""
+    """Comprehensive ratio analysis view with card-based dashboard."""
     
     def __init__(self, parent=None):
         super().__init__("Financial Ratio Analysis", "Comprehensive Financial Metrics")
@@ -1090,68 +1090,93 @@ class RatioAnalysisView(BaseFinancialStatementView):
         # Make the main content area transparent
         self.setStyleSheet("background: transparent;")
         
-        self._setup_ratio_sections()
+        # Override the header to include tabs
+        self._setup_custom_header()
+        self._setup_ratio_cards()
         
-    def _setup_ratio_sections(self):
-        """Setup the ratio analysis sections with tabs and content areas."""
-        from PyQt6.QtWidgets import QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame
+    def _setup_navigation_bar(self, parent_layout):
+        """Override base navigation to include tabs in center."""
+        from PyQt6.QtWidgets import QHBoxLayout, QPushButton
         
-        # KPI Summary Cards Section (directly on main page, no container)
-        self._create_kpi_section(self.content_layout)
+        nav_layout = QHBoxLayout()
         
-        # Add spacing after KPI cards (matching standard spacing)
-        self.content_layout.addSpacing(16)
-        
-        # Tabbed Ratio Categories (directly on main page, no dark background container)
-        self._create_ratio_tabs(self.content_layout)
-        
-    def _create_kpi_section(self, parent_layout):
-        """Create the top KPI summary cards section."""
-        from ..components.widgets import MetricCard
-        
-        # KPI cards layout
-        kpi_layout = QHBoxLayout()
-        kpi_layout.setSpacing(ResponsiveHelper.scale_size(20, 16, 28))
-        
-        # Create KPI cards
-        self.health_card = MetricCard("Financial Health", "85%", "↗️ Good Standing", clickable=True)
-        self.liquidity_card = MetricCard("Liquidity Score", "2.4", "↗️ Strong", clickable=True)
-        self.profitability_card = MetricCard("Profitability", "12.5%", "↗️ Above Average", clickable=True)
-        self.risk_card = MetricCard("Risk Level", "Low", "✅ Stable", clickable=True)
-        
-        # Make KPI cards more compact for ratio analysis page
-        for card in [self.health_card, self.liquidity_card, self.profitability_card, self.risk_card]:
-            card.setMinimumHeight(ResponsiveHelper.scale_size(100, 90, 120))
-            card.setMaximumHeight(ResponsiveHelper.scale_size(130, 120, 150))
-            kpi_layout.addWidget(card)
-            
-        parent_layout.addLayout(kpi_layout)
-        
-    def _create_ratio_tabs(self, parent_layout):
-        """Create tabbed interface for ratio categories."""
-        from PyQt6.QtWidgets import QStackedWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QPushButton
-        
-        # Tab buttons row with container frame (exactly like DateRangeSelector)
-        tab_container_layout = QHBoxLayout()
-        tab_container_layout.setContentsMargins(0, 8, 0, 8)  # Match DateRangeSelector margins
-        tab_container_layout.setSpacing(12)
-        
-        # Create container frame like DateRangeSelector
-        tab_group = QFrame()
-        tab_group.setStyleSheet("""
-            QFrame {
+        # Back button
+        back_btn = QPushButton("◀ Reports")
+        back_btn.setFixedSize(140, 36)
+        back_btn.setStyleSheet("""
+            QPushButton {
                 background: rgba(255, 255, 255, 0.03);
                 border: 1px solid rgba(255, 255, 255, 0.05);
-                border-radius: 8px;
-                padding: 4px;
+                border-radius: 6px;
+                padding: 4px 16px;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 13px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.08);
+                color: white;
             }
         """)
+        back_btn.clicked.connect(self.backToReports.emit)
+        nav_layout.addWidget(back_btn)
         
-        tab_layout = QHBoxLayout(tab_group)
-        tab_layout.setSpacing(4)
-        tab_layout.setContentsMargins(4, 4, 4, 4)
+        nav_layout.addStretch()
         
-        # Tab buttons with exact DateRangeSelector styling
+        # Tab container in center
+        self._create_tab_container(nav_layout)
+        
+        nav_layout.addStretch()
+        
+        # Print button
+        print_btn = QPushButton("Print Report")
+        print_btn.setFixedSize(140, 36)
+        print_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 6px;
+                padding: 4px 16px;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 13px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.08);
+                color: white;
+            }
+        """)
+        print_btn.clicked.connect(self._print_statement)
+        nav_layout.addWidget(print_btn)
+        
+        parent_layout.addLayout(nav_layout)
+    
+    def _setup_custom_header(self):
+        """Override the base navigation to add tabs in the center."""
+        # This is now handled by overriding _setup_navigation_bar
+        pass
+    
+    def _create_tab_container(self, parent_layout):
+        """Create the tab container with buttons."""
+        from PyQt6.QtWidgets import QHBoxLayout, QPushButton, QFrame
+        
+        # Tab container frame
+        tab_container = QFrame()
+        tab_container.setStyleSheet(f"""
+            QFrame {{
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: {ResponsiveHelper.scale_size(8, 6, 10)}px;
+                padding: {ResponsiveHelper.scale_size(4, 3, 6)}px;
+            }}
+        """)
+        
+        tab_layout = QHBoxLayout(tab_container)
+        tab_layout.setContentsMargins(ResponsiveHelper.scale_size(4, 3, 6), ResponsiveHelper.scale_size(4, 3, 6),
+                                     ResponsiveHelper.scale_size(4, 3, 6), ResponsiveHelper.scale_size(4, 3, 6))
+        tab_layout.setSpacing(ResponsiveHelper.scale_size(4, 3, 6))
+        
+        # Tab buttons
         self.tab_buttons = []
         tab_names = ["Liquidity", "Profitability", "Leverage", "Efficiency", "Market"]
         
@@ -1160,143 +1185,368 @@ class RatioAnalysisView(BaseFinancialStatementView):
             button.setCheckable(True)
             if i == 0:  # Default to first tab
                 button.setChecked(True)
-            button.setStyleSheet(self._get_tab_filter_button_style())
+            button.setStyleSheet(self._get_tab_button_style())
             button.clicked.connect(lambda checked, idx=i: self._switch_tab(idx))
             self.tab_buttons.append(button)
             tab_layout.addWidget(button)
         
-        tab_container_layout.addWidget(tab_group)
-        tab_container_layout.addStretch()  # Push tabs to the left like DateRangeSelector
-        
-        parent_layout.addLayout(tab_container_layout)
-        
-        # Add spacing after tab buttons (matching standard spacing)
-        parent_layout.addSpacing(16)
-        
-        # Stacked widget for tab content (no container)
-        self.ratio_stack = QStackedWidget()
-        
-        # Define ratio categories
-        ratio_categories = {
-            "Liquidity": ["Current Ratio", "Quick Ratio", "Cash Ratio", "Working Capital"],
-            "Profitability": ["Gross Profit Margin", "Net Profit Margin", "Return on Assets", "Return on Equity"],
-            "Leverage": ["Debt-to-Equity Ratio", "Debt Ratio", "Equity Ratio"],
-            "Efficiency": ["Asset Turnover", "Inventory Turnover", "Receivables Turnover"],
-            "Market": ["Price-to-Earnings", "Book Value per Share", "Market Capitalization"]
-        }
-        
-        # Create content for each tab
-        self.ratio_tabs = {}
-        for category, ratios in ratio_categories.items():
-            tab_content = self._create_ratio_tab_content(category, ratios)
-            self.ratio_stack.addWidget(tab_content)
-            self.ratio_tabs[category] = tab_content
-        
-        parent_layout.addWidget(self.ratio_stack)
-        
-    def _get_tab_filter_button_style(self):
-        """Get Windows 11 style tab filter button styling to match DateRangeSelector."""
-        return """
-            QPushButton {
+        parent_layout.addWidget(tab_container)
+    
+    def _get_tab_button_style(self):
+        """Get tab button styling."""
+        return f"""
+            QPushButton {{
                 background: transparent;
                 border: none;
-                border-radius: 6px;
-                padding: 8px 16px;
+                border-radius: {ResponsiveHelper.scale_size(6, 5, 8)}px;
+                padding: {ResponsiveHelper.scale_size(8, 6, 10)}px {ResponsiveHelper.scale_size(16, 12, 20)}px;
                 color: rgba(255, 255, 255, 0.8);
-                font-size: 13px;
+                font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
                 font-weight: 500;
                 margin: 0;
-                min-width: 70px;
-            }
-            QPushButton:hover {
+                min-width: {ResponsiveHelper.scale_size(70, 60, 80)}px;
+            }}
+            QPushButton:hover {{
                 background: rgba(255, 255, 255, 0.08);
                 color: white;
-            }
-            QPushButton:checked {
+            }}
+            QPushButton:checked {{
                 background: rgba(0, 120, 215, 0.3);
                 color: white;
-            }
-            QPushButton:checked:hover {
+            }}
+            QPushButton:checked:hover {{
                 background: rgba(0, 120, 215, 0.4);
-            }
+            }}
         """
+    
+    def _setup_ratio_cards(self):
+        """Setup the main content area with ratio cards."""
+        from PyQt6.QtWidgets import QGridLayout, QWidget
         
+        # Clear existing content
+        self.clear_content()
+        
+        # Create cards container
+        self.cards_container = QWidget()
+        self.cards_layout = QGridLayout(self.cards_container)
+        self.cards_layout.setSpacing(ResponsiveHelper.scale_size(20, 16, 24))
+        self.cards_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Add cards container to main content
+        self.content_layout.addWidget(self.cards_container)
+        
+        # Add summary section
+        self._create_summary_section()
+        
+        self.content_layout.addStretch()
+        
+        # Load initial ratio cards for Liquidity tab
+        self._load_ratio_cards_for_category("Liquidity")
+    
+    def _create_summary_section(self):
+        """Create the summary section with financial insights."""
+        from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel
+        
+        # Summary container with ActionCard-style styling
+        summary_container = QFrame()
+        summary_container.setStyleSheet(f"""
+            QFrame {{
+                background: rgba(33, 150, 243, 0.1);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: {ResponsiveHelper.scale_size(12, 10, 16)}px;
+                margin: {ResponsiveHelper.scale_size(20, 16, 24)}px 0;
+                padding: {ResponsiveHelper.scale_size(24, 20, 32)}px;
+            }}
+            QFrame:hover {{
+                background: rgba(33, 150, 243, 0.15);
+                border: 1px solid rgba(33, 150, 243, 0.4);
+            }}
+        """)
+        
+        layout = QVBoxLayout(summary_container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(ResponsiveHelper.scale_size(16, 12, 20))
+        
+        # Summary title
+        title_label = QLabel("Financial Analysis Summary")
+        title_label.setStyleSheet(f"""
+            QLabel {{
+                color: white;
+                font-size: {ResponsiveHelper.scale_size(20, 18, 24)}px;
+                font-weight: 600;
+                background: transparent;
+                border: none;
+                outline: none;
+                margin: 0px;
+                padding: 0px;
+            }}
+        """)
+        layout.addWidget(title_label)
+        
+        # Summary description
+        desc_label = QLabel("The financial ratios indicate a strong and healthy financial position. The company demonstrates:")
+        desc_label.setStyleSheet(f"""
+            QLabel {{
+                color: rgba(255, 255, 255, 0.8);
+                font-size: {ResponsiveHelper.scale_size(14, 12, 16)}px;
+                font-weight: 400;
+                background: transparent;
+                border: none;
+                outline: none;
+                margin: 0px;
+                padding: 0px;
+                line-height: 1.5;
+            }}
+        """)
+        desc_label.setWordWrap(True)
+        layout.addWidget(desc_label)
+        
+        # Key points
+        points = [
+            "Strong liquidity with current ratio of 2.4",
+            "Healthy profitability with 12.5% net margin", 
+            "Conservative debt levels",
+            "Efficient asset utilization"
+        ]
+        
+        for point in points:
+            point_label = QLabel(f"• {point}")
+            point_label.setStyleSheet(f"""
+                QLabel {{
+                    color: rgba(255, 255, 255, 0.9);
+                    font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
+                    font-weight: 400;
+                    background: transparent;
+                    border: none;
+                    outline: none;
+                    margin: 0px;
+                    padding: {ResponsiveHelper.scale_size(4, 3, 6)}px 0px;
+                    margin-left: {ResponsiveHelper.scale_size(16, 12, 20)}px;
+                }}
+            """)
+            point_label.setWordWrap(True)
+            layout.addWidget(point_label)
+        
+        # Add to main content layout
+        self.content_layout.addWidget(summary_container)
+    
+    def _load_ratio_cards_for_category(self, category):
+        """Load ratio cards for the specified category."""
+        # Clear existing cards
+        for i in reversed(range(self.cards_layout.count())):
+            item = self.cards_layout.itemAt(i)
+            if item:
+                widget = item.widget()
+                if widget:
+                    widget.setParent(None)
+        
+        # Define ratio data for each category
+        ratio_data = {
+            "Liquidity": [
+                {"name": "Current Ratio", "value": "2.40", "target": "1.5-3.0", "status": "Good", "trend": "↗️", "interpretation": "Strong short-term liquidity"},
+                {"name": "Quick Ratio", "value": "1.80", "target": "1.0-2.0", "status": "Good", "trend": "↗️", "interpretation": "Good ability to meet short-term obligations"},
+                {"name": "Cash Ratio", "value": "0.60", "target": "0.2-0.5", "status": "Warning", "trend": "→", "interpretation": "Adequate cash reserves"},
+                {"name": "Working Capital", "value": "$150,000", "target": ">$0", "status": "Good", "trend": "↗️", "interpretation": "Positive working capital"}
+            ],
+            "Profitability": [
+                {"name": "Gross Profit Margin", "value": "35.2%", "target": ">30%", "status": "Good", "trend": "↗️", "interpretation": "Strong pricing power"},
+                {"name": "Net Profit Margin", "value": "12.5%", "target": ">10%", "status": "Good", "trend": "↗️", "interpretation": "Healthy profitability"},
+                {"name": "Return on Assets", "value": "8.3%", "target": ">5%", "status": "Good", "trend": "↗️", "interpretation": "Efficient asset utilization"},
+                {"name": "Return on Equity", "value": "15.7%", "target": ">12%", "status": "Good", "trend": "↗️", "interpretation": "Strong shareholder returns"}
+            ],
+            "Leverage": [
+                {"name": "Debt-to-Equity Ratio", "value": "0.45", "target": "<0.5", "status": "Good", "trend": "↘️", "interpretation": "Conservative debt levels"},
+                {"name": "Debt Ratio", "value": "0.31", "target": "<0.4", "status": "Good", "trend": "↘️", "interpretation": "Low debt burden"},
+                {"name": "Equity Ratio", "value": "0.69", "target": ">0.6", "status": "Good", "trend": "↗️", "interpretation": "Strong equity position"},
+                {"name": "Interest Coverage", "value": "12.5", "target": ">2.5", "status": "Good", "trend": "↗️", "interpretation": "Strong ability to service debt"}
+            ],
+            "Efficiency": [
+                {"name": "Asset Turnover", "value": "1.20", "target": ">1.0", "status": "Good", "trend": "↗️", "interpretation": "Efficient asset utilization"},
+                {"name": "Inventory Turnover", "value": "8.5", "target": ">6.0", "status": "Good", "trend": "↗️", "interpretation": "Good inventory management"},
+                {"name": "Receivables Turnover", "value": "12.3", "target": ">10.0", "status": "Good", "trend": "↗️", "interpretation": "Efficient collections"},
+                {"name": "Days Sales Outstanding", "value": "30 days", "target": "<45 days", "status": "Good", "trend": "↘️", "interpretation": "Quick collection cycle"}
+            ],
+            "Market": [
+                {"name": "Price-to-Earnings", "value": "18.5", "target": "15-25", "status": "Good", "trend": "→", "interpretation": "Reasonable valuation"},
+                {"name": "Book Value per Share", "value": "$25.40", "target": ">$0", "status": "Good", "trend": "↗️", "interpretation": "Strong book value"},
+                {"name": "Market Capitalization", "value": "$1.5M", "target": "N/A", "status": "Info", "trend": "↗️", "interpretation": "Market valuation"},
+                {"name": "Dividend Yield", "value": "2.8%", "target": "2-4%", "status": "Good", "trend": "→", "interpretation": "Reasonable dividend return"}
+            ]
+        }
+        
+        # Create cards for the selected category
+        ratios = ratio_data.get(category, [])
+        for i, ratio in enumerate(ratios):
+            card = self._create_ratio_card(ratio)
+            row = i // 2  # 2 cards per row
+            col = i % 2
+            self.cards_layout.addWidget(card, row, col)
+    
+    def _create_ratio_card(self, ratio_data):
+        """Create a single ratio card matching ActionCard design."""
+        from PyQt6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QGraphicsDropShadowEffect, QSizePolicy
+        from PyQt6.QtGui import QColor
+        from PyQt6.QtCore import Qt
+        
+        card = QFrame()
+        
+        # Apply ActionCard-style glassmorphism with accent color
+        status_color = self._get_status_color(ratio_data["status"])
+        accent_rgb = self._hex_to_rgb(status_color)
+        border_radius = ResponsiveHelper.scale_size(8, 6, 10)
+        
+        card.setStyleSheet(f"""
+            QFrame {{
+                background: rgba({accent_rgb[0]}, {accent_rgb[1]}, {accent_rgb[2]}, 0.1);
+                border: 1px solid rgba(0, 0, 0, 0.3);
+                border-radius: {border_radius}px;
+                margin: 4px;
+            }}
+            QFrame:hover {{
+                background: rgba({accent_rgb[0]}, {accent_rgb[1]}, {accent_rgb[2]}, 0.15);
+                border: 1px solid rgba({accent_rgb[0]}, {accent_rgb[1]}, {accent_rgb[2]}, 0.4);
+            }}
+        """)
+        
+        # Set ActionCard-style dimensions
+        card.setMinimumHeight(ResponsiveHelper.scale_size(140, 120, 160))
+        card.setMaximumHeight(ResponsiveHelper.scale_size(200, 180, 220))
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
+        # Add ActionCard-style drop shadow
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(ResponsiveHelper.scale_size(20, 15, 30))
+        shadow.setXOffset(0)
+        shadow.setYOffset(ResponsiveHelper.scale_size(4, 2, 6))
+        shadow.setColor(QColor(0, 0, 0, 80))
+        card.setGraphicsEffect(shadow)
+        
+        # Layout with ActionCard-style margins
+        layout = QVBoxLayout(card)
+        margins = ResponsiveHelper.scale_size(24, 20, 32)
+        layout.setContentsMargins(margins, margins, margins, margins)
+        layout.setSpacing(ResponsiveHelper.scale_size(12, 8, 16))
+        
+        # Title (ratio name) - ActionCard style
+        name_label = QLabel(ratio_data["name"])
+        name_label.setStyleSheet(f"""
+            QLabel {{
+                color: white;
+                font-size: {ResponsiveHelper.scale_size(16, 14, 18)}px;
+                font-weight: 600;
+                background: transparent;
+                border: none;
+                outline: none;
+                margin: 0px;
+                padding: 0px;
+            }}
+        """)
+        name_label.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        layout.addWidget(name_label)
+        
+        # Value with trend - main content
+        value_layout = QHBoxLayout()
+        value_layout.setSpacing(ResponsiveHelper.scale_size(8, 6, 10))
+        
+        # Value (large, prominent)
+        value_label = QLabel(ratio_data["value"])
+        value_label.setStyleSheet(f"""
+            QLabel {{
+                color: white;
+                font-size: {ResponsiveHelper.scale_size(24, 20, 28)}px;
+                font-weight: 700;
+                background: transparent;
+                border: none;
+                outline: none;
+                margin: 0px;
+                padding: 0px;
+            }}
+        """)
+        value_label.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        value_layout.addWidget(value_label)
+        
+        value_layout.addStretch()
+        
+        # Trend indicator
+        trend_label = QLabel(ratio_data["trend"])
+        trend_label.setStyleSheet(f"""
+            QLabel {{
+                color: rgba(255, 255, 255, 0.8);
+                font-size: {ResponsiveHelper.scale_size(18, 16, 20)}px;
+                background: transparent;
+                border: none;
+                outline: none;
+                margin: 0px;
+                padding: 0px;
+            }}
+        """)
+        trend_label.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        value_layout.addWidget(trend_label)
+        
+        layout.addLayout(value_layout)
+        
+        # Status and target info - ActionCard description style
+        info_text = f"{ratio_data['status']} • Target: {ratio_data['target']}"
+        info_label = QLabel(info_text)
+        info_label.setStyleSheet(f"""
+            QLabel {{
+                color: rgba(255, 255, 255, 0.7);
+                font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
+                font-weight: 400;
+                background: transparent;
+                border: none;
+                outline: none;
+                margin: 0px;
+                padding: 0px;
+                margin-top: {ResponsiveHelper.scale_size(4, 2, 6)}px;
+            }}
+        """)
+        info_label.setWordWrap(True)
+        info_label.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        layout.addWidget(info_label)
+        
+        # Interpretation as secondary description
+        interpretation_label = QLabel(ratio_data["interpretation"])
+        interpretation_label.setStyleSheet(f"""
+            QLabel {{
+                color: rgba(255, 255, 255, 0.6);
+                font-size: {ResponsiveHelper.scale_size(12, 10, 14)}px;
+                font-weight: 400;
+                background: transparent;
+                border: none;
+                outline: none;
+                margin: 0px;
+                padding: 0px;
+                margin-top: {ResponsiveHelper.scale_size(2, 1, 3)}px;
+            }}
+        """)
+        interpretation_label.setWordWrap(True)
+        interpretation_label.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        layout.addWidget(interpretation_label)
+        
+        # Add stretch like ActionCard
+        layout.addStretch()
+        
+        return card
+    
+    def _hex_to_rgb(self, hex_color):
+        """Convert hex color to RGB tuple."""
+        hex_color = hex_color.lstrip('#')
+        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    
     def _switch_tab(self, tab_index):
-        """Switch to the specified tab."""
+        """Switch to the specified tab and load corresponding ratio cards."""
         if 0 <= tab_index < len(self.tab_buttons):
             # Update button checked states
             for i, button in enumerate(self.tab_buttons):
                 button.setChecked(i == tab_index)
             
-            # Switch to the corresponding tab content
-            self.ratio_stack.setCurrentIndex(tab_index)
-        
-    def _create_ratio_tab_content(self, category, ratios):
-        """Create content for a ratio category tab."""
-        # Create ratio table directly
-        headers = [
-            ("Ratio", 300), 
-            ("Current Value", 150), 
-            ("Target Range", 150), 
-            ("Status", 100), 
-            ("Trend", 100),
-            ("Interpretation", 250)
-        ]
-        
-        ratio_table = self._create_statement_table(headers)
-        
-        # Store reference for adding data
-        self.ratio_table = ratio_table
-        
-        # Add placeholder ratio data
-        self._add_placeholder_ratios(ratios)
-        
-        return ratio_table
-        
-    def _add_placeholder_ratios(self, ratios):
-        """Add placeholder ratio data for demonstration."""
-        # Mock data for demonstration
-        mock_data = {
-            "Current Ratio": {"value": 2.4, "target": "1.5-3.0", "status": "Good", "trend": "↗️", "interpretation": "Strong short-term liquidity"},
-            "Quick Ratio": {"value": 1.8, "target": "1.0-2.0", "status": "Good", "trend": "↗️", "interpretation": "Good ability to meet short-term obligations"},
-            "Cash Ratio": {"value": 0.6, "target": "0.2-0.5", "status": "Warning", "trend": "→", "interpretation": "Adequate cash reserves"},
-            "Working Capital": {"value": 150000, "target": ">0", "status": "Good", "trend": "↗️", "interpretation": "Positive working capital"},
-            "Gross Profit Margin": {"value": 35.2, "target": ">30%", "status": "Good", "trend": "↗️", "interpretation": "Strong pricing power"},
-            "Net Profit Margin": {"value": 12.5, "target": ">10%", "status": "Good", "trend": "↗️", "interpretation": "Healthy profitability"},
-            "Return on Assets": {"value": 8.3, "target": ">5%", "status": "Good", "trend": "↗️", "interpretation": "Efficient asset utilization"},
-            "Return on Equity": {"value": 15.7, "target": ">12%", "status": "Good", "trend": "↗️", "interpretation": "Strong shareholder returns"},
-            "Debt-to-Equity Ratio": {"value": 0.45, "target": "<0.5", "status": "Good", "trend": "↘️", "interpretation": "Conservative debt levels"},
-            "Debt Ratio": {"value": 0.31, "target": "<0.4", "status": "Good", "trend": "↘️", "interpretation": "Low debt burden"},
-            "Equity Ratio": {"value": 0.69, "target": ">0.6", "status": "Good", "trend": "↗️", "interpretation": "Strong equity position"},
-            "Asset Turnover": {"value": 1.2, "target": ">1.0", "status": "Good", "trend": "↗️", "interpretation": "Efficient asset utilization"},
-            "Inventory Turnover": {"value": 8.5, "target": ">6.0", "status": "Good", "trend": "↗️", "interpretation": "Good inventory management"},
-            "Receivables Turnover": {"value": 12.3, "target": ">10.0", "status": "Good", "trend": "↗️", "interpretation": "Efficient collections"},
-            "Price-to-Earnings": {"value": 18.5, "target": "15-25", "status": "Good", "trend": "→", "interpretation": "Reasonable valuation"},
-            "Book Value per Share": {"value": 25.40, "target": ">0", "status": "Good", "trend": "↗️", "interpretation": "Strong book value"},
-            "Market Capitalization": {"value": 1500000, "target": "N/A", "status": "Info", "trend": "↗️", "interpretation": "Market valuation"}
-        }
-        
-        for ratio_name in ratios:
-            if ratio_name in mock_data:
-                data = mock_data[ratio_name]
-                status_color = self._get_status_color(data['status'])
+            # Load cards for the selected category
+            categories = ["Liquidity", "Profitability", "Leverage", "Efficiency", "Market"]
+            if tab_index < len(categories):
+                self._load_ratio_cards_for_category(categories[tab_index])
                 
-                # Format value based on ratio type
-                if "Capitalization" in ratio_name or "Capital" in ratio_name:
-                    value_str = format_currency(data['value'])
-                elif "Margin" in ratio_name or "Return" in ratio_name:
-                    value_str = f"{data['value']:.1f}%"
-                else:
-                    value_str = f"{data['value']:.2f}"
-                
-                self._add_table_row([
-                    (ratio_name, 300),
-                    (value_str, 150),
-                    (data['target'], 150),
-                    (data['status'], 100),
-                    (data['trend'], 100),
-                    (data['interpretation'], 250)
-                ], status_color=status_color)
+
                 
     def _get_status_color(self, status):
         """Get color for ratio status."""
@@ -1312,31 +1562,13 @@ class RatioAnalysisView(BaseFinancialStatementView):
         """Load actual ratio data from the system."""
         self.ratio_data = ratio_data
         
-        # Update KPI cards with real data
-        if ratio_data and 'kpi_summary' in ratio_data:
-            kpi = ratio_data['kpi_summary']
-            self.health_card.set_value(f"{kpi.get('overall_health', 85)}%")
-            self.liquidity_card.set_value(f"{kpi.get('liquidity_score', 2.4):.1f}")
-            self.profitability_card.set_value(f"{kpi.get('profitability_score', 12.5):.1f}%")
-            self.risk_card.set_value(kpi.get('risk_level', 'Low'))
-            
-        # Update ratio tables with real data
-        self._update_ratio_tables(ratio_data)
-        
-    def _update_ratio_tables(self, ratio_data):
-        """Update ratio tables with real data from the system."""
-        if not ratio_data or 'current_ratios' not in ratio_data:
-            return
-            
-        # This would populate the tables with real ratio data
-        # Implementation depends on the structure of your ratio_data
+        # Update ratio cards with real data
+        # This would be implemented to update the cards with actual data
+        # For now, using placeholder data
         pass
         
     def _generate_html_content(self):
         """Generate HTML content for printing/export."""
-        if not self.ratio_data:
-            return "<html><body><h1>No ratio data available</h1></body></html>"
-            
         html = f"""
         <html>
         <head>
@@ -1348,122 +1580,113 @@ class RatioAnalysisView(BaseFinancialStatementView):
                     color: #333;
                 }}
                 h1 {{ color: #1976D2; border-bottom: 2px solid #1976D2; }}
-                .ratio-table {{ 
-                    width: 100%; 
-                    border-collapse: collapse; 
+                h2 {{ color: #1976D2; margin-top: 30px; }}
+                .ratio-grid {{ 
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 20px;
                     margin: 20px 0;
                 }}
-                .ratio-table th, .ratio-table td {{ 
-                    padding: 12px; 
+                .ratio-card {{ 
                     border: 1px solid #ddd; 
-                    text-align: left; 
+                    padding: 20px; 
+                    border-radius: 8px;
+                    background: #f9f9f9;
                 }}
-                .ratio-table th {{ 
-                    background: #f5f5f5; 
+                .ratio-name {{ 
+                    font-size: 18px;
                     font-weight: 600;
+                    color: #1976D2;
+                    margin-bottom: 10px;
+                }}
+                .ratio-value {{ 
+                    font-size: 28px;
+                    font-weight: 700;
+                    color: #333;
+                    margin-bottom: 8px;
+                }}
+                .ratio-target {{ 
+                    color: #666;
+                    font-size: 14px;
+                    margin-bottom: 8px;
+                }}
+                .ratio-interpretation {{ 
+                    color: #555;
+                    font-size: 13px;
+                    line-height: 1.4;
                 }}
                 .status-good {{ color: #4CAF50; font-weight: 600; }}
                 .status-warning {{ color: #FF9800; font-weight: 600; }}
                 .status-critical {{ color: #F44336; font-weight: 600; }}
-                .kpi-section {{ 
-                    display: flex; 
-                    justify-content: space-between; 
-                    margin: 20px 0;
-                }}
-                .kpi-card {{ 
-                    border: 1px solid #ddd; 
-                    padding: 20px; 
-                    text-align: center; 
-                    flex: 1; 
-                    margin: 0 10px;
-                }}
-                .kpi-value {{ 
-                    font-size: 24px; 
-                    font-weight: 700; 
-                    color: #1976D2;
-                }}
+                .status-info {{ color: #2196F3; font-weight: 600; }}
+                .category-section {{ margin-bottom: 40px; }}
             </style>
         </head>
         <body>
             <h1>Financial Ratio Analysis Report</h1>
             <p><strong>Generated on:</strong> {datetime.now().strftime('%B %d, %Y at %I:%M %p')}</p>
             
-            <div class="kpi-section">
-                <div class="kpi-card">
-                    <div class="kpi-value">85%</div>
-                    <div>Financial Health</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-value">2.4</div>
-                    <div>Liquidity Score</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-value">12.5%</div>
-                    <div>Profitability</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-value">Low</div>
-                    <div>Risk Level</div>
+            <div class="category-section">
+                <h2>Liquidity Ratios</h2>
+                <div class="ratio-grid">
+                    <div class="ratio-card">
+                        <div class="ratio-name">Current Ratio</div>
+                        <div class="ratio-value">2.40</div>
+                        <div class="ratio-target">Target: 1.5-3.0 | <span class="status-good">Good</span> | ↗️</div>
+                        <div class="ratio-interpretation">Strong short-term liquidity</div>
+                    </div>
+                    <div class="ratio-card">
+                        <div class="ratio-name">Quick Ratio</div>
+                        <div class="ratio-value">1.80</div>
+                        <div class="ratio-target">Target: 1.0-2.0 | <span class="status-good">Good</span> | ↗️</div>
+                        <div class="ratio-interpretation">Good ability to meet short-term obligations</div>
+                    </div>
+                    <div class="ratio-card">
+                        <div class="ratio-name">Cash Ratio</div>
+                        <div class="ratio-value">0.60</div>
+                        <div class="ratio-target">Target: 0.2-0.5 | <span class="status-warning">Warning</span> | →</div>
+                        <div class="ratio-interpretation">Adequate cash reserves</div>
+                    </div>
+                    <div class="ratio-card">
+                        <div class="ratio-name">Working Capital</div>
+                        <div class="ratio-value">$150,000</div>
+                        <div class="ratio-target">Target: >$0 | <span class="status-good">Good</span> | ↗️</div>
+                        <div class="ratio-interpretation">Positive working capital</div>
+                    </div>
                 </div>
             </div>
             
-            <h2>Ratio Analysis</h2>
-            <table class="ratio-table">
-                <thead>
-                    <tr>
-                        <th>Ratio</th>
-                        <th>Current Value</th>
-                        <th>Target Range</th>
-                        <th>Status</th>
-                        <th>Trend</th>
-                        <th>Interpretation</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>Current Ratio</td>
-                        <td>2.40</td>
-                        <td>1.5-3.0</td>
-                        <td class="status-good">Good</td>
-                        <td>↗️</td>
-                        <td>Strong short-term liquidity</td>
-                    </tr>
-                    <tr>
-                        <td>Quick Ratio</td>
-                        <td>1.80</td>
-                        <td>1.0-2.0</td>
-                        <td class="status-good">Good</td>
-                        <td>↗️</td>
-                        <td>Good ability to meet short-term obligations</td>
-                    </tr>
-                    <tr>
-                        <td>Gross Profit Margin</td>
-                        <td>35.2%</td>
-                        <td>>30%</td>
-                        <td class="status-good">Good</td>
-                        <td>↗️</td>
-                        <td>Strong pricing power</td>
-                    </tr>
-                    <tr>
-                        <td>Net Profit Margin</td>
-                        <td>12.5%</td>
-                        <td>>10%</td>
-                        <td class="status-good">Good</td>
-                        <td>↗️</td>
-                        <td>Healthy profitability</td>
-                    </tr>
-                    <tr>
-                        <td>Debt-to-Equity Ratio</td>
-                        <td>0.45</td>
-                        <td><0.5</td>
-                        <td class="status-good">Good</td>
-                        <td>↘️</td>
-                        <td>Conservative debt levels</td>
-                    </tr>
-                </tbody>
-            </table>
+            <div class="category-section">
+                <h2>Profitability Ratios</h2>
+                <div class="ratio-grid">
+                    <div class="ratio-card">
+                        <div class="ratio-name">Gross Profit Margin</div>
+                        <div class="ratio-value">35.2%</div>
+                        <div class="ratio-target">Target: >30% | <span class="status-good">Good</span> | ↗️</div>
+                        <div class="ratio-interpretation">Strong pricing power</div>
+                    </div>
+                    <div class="ratio-card">
+                        <div class="ratio-name">Net Profit Margin</div>
+                        <div class="ratio-value">12.5%</div>
+                        <div class="ratio-target">Target: >10% | <span class="status-good">Good</span> | ↗️</div>
+                        <div class="ratio-interpretation">Healthy profitability</div>
+                    </div>
+                    <div class="ratio-card">
+                        <div class="ratio-name">Return on Assets</div>
+                        <div class="ratio-value">8.3%</div>
+                        <div class="ratio-target">Target: >5% | <span class="status-good">Good</span> | ↗️</div>
+                        <div class="ratio-interpretation">Efficient asset utilization</div>
+                    </div>
+                    <div class="ratio-card">
+                        <div class="ratio-name">Return on Equity</div>
+                        <div class="ratio-value">15.7%</div>
+                        <div class="ratio-target">Target: >12% | <span class="status-good">Good</span> | ↗️</div>
+                        <div class="ratio-interpretation">Strong shareholder returns</div>
+                    </div>
+                </div>
+            </div>
             
-            <div style="margin-top: 40px; padding: 20px; background: #f9f9f9; border-radius: 8px;">
+            <div style="margin-top: 40px; padding: 20px; background: #f0f8ff; border-radius: 8px; border-left: 4px solid #1976D2;">
                 <h3>Summary</h3>
                 <p>The financial ratios indicate a strong and healthy financial position. The company demonstrates:</p>
                 <ul>
