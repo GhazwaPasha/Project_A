@@ -138,10 +138,6 @@ class SimpleAIStatusBar(QLineEdit):
                 selection-background-color: rgba(100, 181, 246, 0.3);
                 outline: none;
                 text-align: center;
-                box-shadow: 
-                    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-                    0 0 20px rgba(255, 255, 255, 0.1),
-                    0 2px 8px rgba(0, 0, 0, 0.1);
             }
             
             QLineEdit:hover {
@@ -152,9 +148,6 @@ class SimpleAIStatusBar(QLineEdit):
                     stop: 1 rgba(255, 255, 255, 0.08));
                 border: 1px solid rgba(0, 0, 0, 0.3);
                 outline: none;
-                box-shadow: 
-                    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-                    0 2px 8px rgba(0, 0, 0, 0.1);
             }
             
             QLineEdit:focus {
@@ -167,9 +160,6 @@ class SimpleAIStatusBar(QLineEdit):
                 color: white;
                 outline: none;
                 text-align: left;
-                box-shadow: 
-                    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-                    0 2px 8px rgba(0, 0, 0, 0.1);
             }
             
             QLineEdit::placeholder {

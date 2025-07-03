@@ -607,6 +607,28 @@ class HierarchicalAccountsPage(QWidget):
     def _setup_ui(self):
         """Setup the enhanced accounts page UI."""
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Create stacked widget for switching views
+        self.stacked_widget = QStackedWidget()
+        
+        # Create main accounts overview page
+        self.overview_page = self._create_overview_page()
+        self.stacked_widget.addWidget(self.overview_page)
+        
+        # Create account classifications page
+        from .account_classifications import AccountClassificationsPage
+        self.classifications_page = AccountClassificationsPage(self.system, self)
+        self.classifications_page.backToAccounts.connect(self._show_overview)
+        self.stacked_widget.addWidget(self.classifications_page)
+        
+        layout.addWidget(self.stacked_widget)
+    
+    def _create_overview_page(self):
+        """Create the main accounts overview page."""
+        page = QWidget()
+        layout = QVBoxLayout(page)
         responsive_margin = ResponsiveHelper.scale_size(32, 24, 48)
         layout.setContentsMargins(responsive_margin, 0,  # Remove top margin
                                 responsive_margin, responsive_margin)
@@ -715,6 +737,12 @@ class HierarchicalAccountsPage(QWidget):
         splitter.setSizes([700, 300])
         
         layout.addWidget(splitter, stretch=1)
+        
+        return page
+    
+    def _show_overview(self):
+        """Show the main accounts overview page."""
+        self.stacked_widget.setCurrentIndex(0)
         
     def _create_toolbar(self, layout):
         """Create enhanced toolbar with hierarchy-specific actions."""
@@ -868,6 +896,47 @@ class HierarchicalAccountsPage(QWidget):
         self.delete_btn.clicked.connect(self._delete_selected_account)
         button_layout.addWidget(self.delete_btn)
         
+        # Add spacing
+        button_layout.addSpacing(16)
+        
+        # Account Classifications button
+        classifications_btn = QPushButton()
+        classifications_btn.setText("  Balance Sheet Categories")
+        
+        try:
+            classifications_icon = QIcon("assets/icons/reports_modern.svg")
+            if not classifications_icon.isNull():
+                classifications_btn.setIcon(classifications_icon)
+            else:
+                classifications_btn.setText("📊 Balance Sheet Categories")
+        except:
+            classifications_btn.setText("📊 Balance Sheet Categories")
+            
+        classifications_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(156, 39, 176, 0.15);
+                border: 1px solid rgba(156, 39, 176, 0.3);
+                border-radius: 8px;
+                padding: 8px 16px;
+                color: #CE93D8;
+                font-size: 12px;
+                font-weight: 600;
+                text-align: left;
+                icon-size: 16px;
+                min-height: 32px;
+            }
+            QPushButton:hover {
+                background: rgba(156, 39, 176, 0.2);
+                border: 1px solid rgba(156, 39, 176, 0.5);
+            }
+            QPushButton:pressed {
+                background: rgba(156, 39, 176, 0.1);
+                border: 1px solid rgba(156, 39, 176, 0.4);
+            }
+        """)
+        classifications_btn.clicked.connect(self._open_classifications)
+        button_layout.addWidget(classifications_btn)
+        
         layout.addLayout(button_layout)
         
     def _refresh_data(self):
@@ -931,6 +1000,13 @@ class HierarchicalAccountsPage(QWidget):
             if self._find_and_select_item(item.child(i), code):
                 return True
         return False
+    
+    def _open_classifications(self):
+        """Open the account classifications page."""
+        # Switch to the classifications page in the stacked widget
+        self.stacked_widget.setCurrentIndex(1)
+    
+
     
     def _add_account(self):
         """Show form to add a new account."""

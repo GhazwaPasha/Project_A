@@ -167,6 +167,20 @@ CREATE TABLE public.period_closing (
     UNIQUE(organization_id, period_name)
 );
 
+-- Account classifications for balance sheet categorization
+CREATE TABLE public.account_classifications (
+    id BIGSERIAL PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+    account_id BIGINT NOT NULL REFERENCES public.accounts(id) ON DELETE CASCADE,
+    classification VARCHAR(50) NOT NULL CHECK (classification IN (
+        'current_asset', 'fixed_asset', 'other_asset',
+        'current_liability', 'long_term_liability', 'other_liability'
+    )),
+    assigned_by UUID REFERENCES public.user_profiles(id),
+    assigned_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    UNIQUE(organization_id, account_id)
+);
+
 -- ===============================================
 -- 4. HELPER FUNCTIONS
 -- ===============================================
@@ -432,6 +446,10 @@ CREATE INDEX idx_budget_entries_budget_id ON public.budget_entries(budget_id);
 CREATE INDEX idx_budget_entries_account_id ON public.budget_entries(account_id);
 
 CREATE INDEX idx_period_closing_org_id ON public.period_closing(organization_id);
+
+CREATE INDEX idx_account_classifications_org_id ON public.account_classifications(organization_id);
+CREATE INDEX idx_account_classifications_account_id ON public.account_classifications(account_id);
+CREATE INDEX idx_account_classifications_classification ON public.account_classifications(classification);
 
 -- ===============================================
 -- 7. TRIGGERS FOR UPDATED_AT

@@ -222,13 +222,13 @@ class CleanApp:
 
 def main():
     """Main entry point"""
-    print("🚀 AI Accountant - Clean Multi-Tenant SaaS")
+    print("AI Accountant - Clean Multi-Tenant SaaS")
     print("=" * 40)
     
     if is_supabase_configured():
-        print("✅ Supabase configured - Starting application...")
+        print("Supabase configured - Starting application...")
     else:
-        print("❌ Supabase not configured!")
+        print("Supabase not configured!")
         print("   Required setup:")
         print("   1. Create Supabase project")
         print("   2. Run CLEAN_SUPABASE_RESET.sql in Supabase SQL Editor")

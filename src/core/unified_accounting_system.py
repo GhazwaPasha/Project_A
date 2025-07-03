@@ -513,34 +513,36 @@ class UnifiedAccountingSystem:
     # ================================
     
     def get_chart_of_accounts(self, active_only: bool = True) -> List[Dict[str, Any]]:
-        """Get chart of accounts for current organization with calculated hierarchy fields."""
+        """Get chart of accounts with a cache-first strategy."""
         if not self.current_organization_id:
             return []
-        
-        # Try online first
+
+        # 1. Load from cache first for speed
+        cached_accounts = self.offline_cache.get_cached_data('accounts', self.current_organization_id)
+        if cached_accounts:
+            self.logger.info(f"Loaded {len(cached_accounts)} accounts from cache.")
+            # In the background, refresh the cache from the database
+            threading.Thread(target=self._refresh_cache, daemon=True).start()
+            return self._process_accounts(cached_accounts, active_only)
+
+        # 2. If cache is empty, fetch from the database
         if self.is_online:
             try:
                 self._set_database_context()
                 result = self.db_manager.get_accounts(self.current_organization_id, active_only)
                 if result:
-                    # Update cache
                     self.offline_cache.cache_data('accounts', result, self.current_organization_id)
-                    # Add calculated fields
-                    return self._enhance_accounts_with_hierarchy(result)
+                    return self._process_accounts(result, active_only)
             except Exception as e:
                 self.logger.error(f"Online accounts fetch failed: {e}")
-        
-        # Fallback to cached data
-        self.logger.info("📱 Using cached accounts data")
-        cached_accounts = self.offline_cache.get_cached_data('accounts', self.current_organization_id)
-        
+
+        return []
+
+    def _process_accounts(self, accounts: List[Dict], active_only: bool) -> List[Dict]:
+        """Helper to filter and enhance accounts."""
         if active_only:
-            filtered_accounts = [acc for acc in cached_accounts if acc.get('is_active', True)]
-        else:
-            filtered_accounts = cached_accounts
-            
-        # Add calculated fields
-        return self._enhance_accounts_with_hierarchy(filtered_accounts)
+            accounts = [acc for acc in accounts if acc.get('is_active', True)]
+        return self._enhance_accounts_with_hierarchy(accounts)
     
     def _enhance_accounts_with_hierarchy(self, accounts: List[Dict]) -> List[Dict]:
         """Add calculated hierarchy fields to account records"""
@@ -865,11 +867,18 @@ class UnifiedAccountingSystem:
     
     def get_journal_entries(self, start_date: Optional[str] = None, 
                           end_date: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Get journal entries for current organization in application format."""
+        """Get journal entries with a cache-first strategy."""
         if not self.current_organization_id:
             return []
-        
-        # Try online first
+
+        # 1. Load from cache first
+        cached_entries = self.offline_cache.get_cached_data('journal_entries', self.current_organization_id)
+        if cached_entries:
+            self.logger.info(f"Loaded {len(cached_entries)} journal entries from cache.")
+            threading.Thread(target=self._refresh_cache, daemon=True).start()
+            return self._filter_entries(cached_entries, start_date, end_date)
+
+        # 2. If cache is empty, fetch from the database
         if self.is_online:
             try:
                 self._set_database_context()
@@ -877,35 +886,29 @@ class UnifiedAccountingSystem:
                     self.current_organization_id, start_date, end_date
                 )
                 if raw_result:
-                    # Transform raw database format to application format
                     from .data_transformer import data_transformer
                     app_entries = data_transformer.transform_journal_entries_list(raw_result)
-                    
-                    # Update cache with raw data (cache handles its own transformation)
                     self.offline_cache.cache_data('journal_entries', raw_result, self.current_organization_id)
-                    
-                    # Return application format for consistent usage
                     return app_entries
             except Exception as e:
                 self.logger.error(f"Online journal entries fetch failed: {e}")
-        
-        # Fallback to cached data (already in application format)
-        self.logger.info("📱 Using cached journal entries")
-        cached_entries = self.offline_cache.get_cached_data('journal_entries', self.current_organization_id)
-        
-        # Apply date filtering to cached data
-        if start_date or end_date:
-            filtered = []
-            for entry in cached_entries:
-                entry_date = entry.get('date', '')
-                if start_date and entry_date < start_date:
-                    continue
-                if end_date and entry_date > end_date:
-                    continue
-                filtered.append(entry)
-            return filtered
-        
-        return cached_entries
+
+        return []
+
+    def _filter_entries(self, entries: List[Dict], start_date: Optional[str], end_date: Optional[str]) -> List[Dict]:
+        """Filter journal entries by date."""
+        if not start_date and not end_date:
+            return entries
+
+        filtered = []
+        for entry in entries:
+            entry_date = entry.get('date', '')
+            if start_date and entry_date < start_date:
+                continue
+            if end_date and entry_date > end_date:
+                continue
+            filtered.append(entry)
+        return filtered
     
     def get_recent_journal_entries(self, limit: int = 20) -> List[Dict]:
         """Get recent journal entries in UI-friendly format"""
@@ -1621,18 +1624,18 @@ class UnifiedAccountingSystem:
         """Fallback method for income statement generation."""
         entries = self.get_journal_entries(start_date, end_date)
         accounts = self.get_chart_of_accounts(active_only=False)
-        
+
         # Create account type lookup
         account_types = {acc['name']: acc.get('account_type', '').lower() for acc in accounts}
-        
+
         # Track account balances
         account_balances = {}
-        
+
         for entry in entries:
             debit_account = entry.get('debit_account', '')
             credit_account = entry.get('credit_account', '')
             amount = float(entry.get('amount', 0))
-            
+
             # Initialize accounts if not exists
             if debit_account not in account_balances:
                 account_balances[debit_account] = 0.0
@@ -1677,7 +1680,7 @@ class UnifiedAccountingSystem:
         total_expenses = sum(expenses.values())
         gross_profit = total_revenue - total_cogs
         net_income = gross_profit - total_expenses
-        
+
         return {
             'revenues': sorted(revenues.items(), key=lambda x: x[0]),
             'cogs': sorted(cogs.items(), key=lambda x: x[0]),
@@ -1691,52 +1694,86 @@ class UnifiedAccountingSystem:
         }
 
     def generate_balance_sheet_breakdown(self, as_of_date: str) -> Dict:
-        """Generate balance sheet with hierarchical balance aggregation."""
+        """Generate balance sheet with hierarchical balance aggregation and proper classifications."""
         try:
             # Use hierarchical balances for accurate reporting
             hierarchical_balances = self.get_hierarchical_account_balances(None, as_of_date)
             accounts = self.get_chart_of_accounts(active_only=False)
+            classifications = self.get_account_classifications()
             
             # Create account type lookup and hierarchy mapping
             account_types = {acc['name']: acc.get('account_type', '').lower() for acc in accounts}
             account_by_id = {acc['id']: acc for acc in accounts}
             
-            # Build hierarchical structure
-            def build_hierarchy_tree(account_type_filter):
-                """Build hierarchical tree for specific account type."""
+            # Build hierarchical structure with classifications
+            def build_classified_tree(account_type_filter):
+                """Build hierarchical tree for specific account type with classifications."""
                 tree = []
                 
                 # Get accounts of the specified type
                 type_accounts = [acc for acc in accounts if acc.get('account_type', '').lower() == account_type_filter]
                 
-                # Build parent-child relationships
-                for account in type_accounts:
-                    if not account.get('parent_id'):  # Root accounts
-                        node = self._build_account_node(account, type_accounts, hierarchical_balances, account_by_id)
-                        if node:  # Only add if has balance or children
-                            tree.append(node)
+                # Group by classification
+                classified_accounts = {
+                    'current_asset': [],
+                    'fixed_asset': [],
+                    'other_asset': [],
+                    'current_liability': [],
+                    'long_term_liability': [],
+                    'other_liability': []
+                }
                 
-                return sorted(tree, key=lambda x: x['code'] or x['name'])
+                for account in type_accounts:
+                    classification = classifications.get(account['id'], '')
+                    if classification in classified_accounts:
+                        classified_accounts[classification].append(account)
+                    else:
+                        # Default classification based on account type
+                        if account_type_filter == 'asset':
+                            classified_accounts['other_asset'].append(account)
+                        elif account_type_filter == 'liability':
+                            classified_accounts['other_liability'].append(account)
+                
+                # Build trees for each classification
+                for classification, accounts_list in classified_accounts.items():
+                    if accounts_list:
+                        # Build parent-child relationships for this classification
+                        classification_tree = []
+                        for account in accounts_list:
+                            if not account.get('parent_id'):  # Root accounts
+                                node = self._build_account_node(account, accounts_list, hierarchical_balances, account_by_id)
+                                if node:  # Only add if has balance or children
+                                    classification_tree.append(node)
+                        
+                        if classification_tree:
+                            tree.append({
+                                'classification': classification,
+                                'name': self._get_classification_display_name(classification),
+                                'accounts': sorted(classification_tree, key=lambda x: x['code'] or x['name'])
+                            })
+                
+                return tree
             
-            # Build hierarchical trees for each section
-            assets_tree = build_hierarchy_tree('asset')
-            liabilities_tree = build_hierarchy_tree('liability')
-            equity_tree = build_hierarchy_tree('equity')
+            # Build classified trees
+            assets_classified = build_classified_tree('asset')
+            liabilities_classified = build_classified_tree('liability')
+            equity_tree = self._build_simple_tree('equity', accounts, hierarchical_balances, account_by_id)
             
             # Calculate totals
-            total_assets = self._calculate_tree_total(assets_tree)
-            total_liabilities = self._calculate_tree_total(liabilities_tree)
+            total_assets = sum(self._calculate_tree_total(section['accounts']) for section in assets_classified)
+            total_liabilities = sum(self._calculate_tree_total(section['accounts']) for section in liabilities_classified)
             total_equity = self._calculate_tree_total(equity_tree)
             
             return {
-                'assets': assets_tree,
-                'liabilities': liabilities_tree,
+                'assets': assets_classified,
+                'liabilities': liabilities_classified,
                 'equity': equity_tree,
                 'total_assets': total_assets,
                 'total_liabilities': total_liabilities,
                 'total_equity': total_equity,
                 'as_of_date': as_of_date,
-                'is_hierarchical': True
+                'is_hierarchical': True,
+                'is_classified': True
             }
             
         except Exception as e:
@@ -1796,30 +1833,30 @@ class UnifiedAccountingSystem:
         """Fallback method for balance sheet generation."""
         trial_balance = self.get_trial_balance(None, as_of_date)
         accounts = self.get_chart_of_accounts(active_only=False)
-        
+
         # Create account type lookup
         account_types = {acc['name']: acc.get('account_type', '').lower() for acc in accounts}
-        
+
         assets = {}
         liabilities = {}
         equity = {}
-        
+
         for entry in trial_balance:
             account_name = entry['name']
             balance = entry.get('debit_total', 0.0) - entry.get('credit_total', 0.0)
             account_type = account_types.get(account_name, '')
-            
+
             if account_type == 'asset':
                 assets[account_name] = max(0, balance)
             elif account_type == 'liability':
                 liabilities[account_name] = max(0, -balance)  # Liabilities have credit balance
             elif account_type == 'equity':
                 equity[account_name] = -balance  # Equity has credit balance
-        
+
         total_assets = sum(assets.values())
         total_liabilities = sum(liabilities.values())
         total_equity = sum(equity.values())
-        
+
         return {
             'assets': sorted(assets.items(), key=lambda x: x[0]),
             'liabilities': sorted(liabilities.items(), key=lambda x: x[0]),
@@ -2018,6 +2055,116 @@ class UnifiedAccountingSystem:
         """Force reseed accounts (placeholder for compatibility)"""
         self.logger.info("Force reseed - use account creation methods instead")
         return True
+    
+    # ================================
+    # ACCOUNT CLASSIFICATIONS
+    # ================================
+    
+    def get_account_classifications(self) -> Dict[int, str]:
+        """Get all account classifications for the current organization."""
+        if not self.current_organization_id:
+            return {}
+        
+        try:
+            if self.is_online:
+                self._set_database_context()
+                result = self.supabase.table('account_classifications').select(
+                    'account_id, classification'
+                ).eq('organization_id', self.current_organization_id).execute()
+                
+                classifications = {}
+                for row in result.data:
+                    classifications[row['account_id']] = row['classification']
+                return classifications
+            else:
+                # Fallback to cached data
+                return {}
+        except Exception as e:
+            self.logger.error(f"Failed to get account classifications: {e}")
+            return {}
+    
+    def save_account_classifications(self, classifications: Dict[int, str]) -> bool:
+        """Save account classifications to database."""
+        if not self.current_organization_id:
+            return False
+        
+        try:
+            if self.is_online:
+                self._set_database_context()
+                
+                # Delete existing classifications
+                self.supabase.table('account_classifications').delete().eq(
+                    'organization_id', self.current_organization_id
+                ).execute()
+                
+                # Insert new classifications
+                if classifications:
+                    classification_data = []
+                    for account_id, classification in classifications.items():
+                        classification_data.append({
+                            'organization_id': self.current_organization_id,
+                            'account_id': account_id,
+                            'classification': classification,
+                            'assigned_by': self.current_user_id
+                        })
+                    
+                    self.supabase.table('account_classifications').insert(
+                        classification_data
+                    ).execute()
+                
+                return True
+            else:
+                # Queue for offline sync
+                for account_id, classification in classifications.items():
+                    self.offline_cache.queue_operation(
+                        'insert', 'account_classifications', {
+                            'organization_id': self.current_organization_id,
+                            'account_id': account_id,
+                            'classification': classification,
+                            'assigned_by': self.current_user_id
+                        }, self.current_organization_id, self.current_user_id or ''
+                    )
+                return True
+        except Exception as e:
+            self.logger.error(f"Failed to save account classifications: {e}")
+            return False
+    
+    def get_account_classification(self, account_id: int) -> Optional[str]:
+        """Get classification for a specific account."""
+        classifications = self.get_account_classifications()
+        return classifications.get(account_id)
+    
+    def classify_account(self, account_id: int, classification: str) -> bool:
+        """Classify a single account."""
+        return self.save_account_classifications({account_id: classification})
+    
+    def _get_classification_display_name(self, classification: str) -> str:
+        """Get display name for classification."""
+        display_names = {
+            'current_asset': 'Current Assets',
+            'fixed_asset': 'Fixed Assets',
+            'other_asset': 'Other Assets',
+            'current_liability': 'Current Liabilities',
+            'long_term_liability': 'Long-term Liabilities',
+            'other_liability': 'Other Liabilities'
+        }
+        return display_names.get(classification, classification.replace('_', ' ').title())
+    
+    def _build_simple_tree(self, account_type_filter, accounts, hierarchical_balances, account_by_id):
+        """Build simple hierarchical tree without classifications."""
+        tree = []
+        
+        # Get accounts of the specified type
+        type_accounts = [acc for acc in accounts if acc.get('account_type', '').lower() == account_type_filter]
+        
+        # Build parent-child relationships
+        for account in type_accounts:
+            if not account.get('parent_id'):  # Root accounts
+                node = self._build_account_node(account, type_accounts, hierarchical_balances, account_by_id)
+                if node:  # Only add if has balance or children
+                    tree.append(node)
+        
+        return sorted(tree, key=lambda x: x['code'] or x['name'])
 
 # ================================
 # ENHANCED FEATURES INTEGRATION

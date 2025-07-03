@@ -377,7 +377,7 @@ class BaseFinancialStatementView(QWidget):
         
         # Add row to table
         self.table_content_layout.addWidget(row)
-    
+        
     def _add_hierarchical_accounts(self, accounts, indent_level=0):
         """Add hierarchical account nodes to the table."""
         for account in accounts:
@@ -443,6 +443,19 @@ class BaseFinancialStatementView(QWidget):
                         html += self._generate_hierarchical_html(children, indent_level + 1)
         
         return html
+    
+    def _calculate_tree_total(self, tree):
+        """Calculate total balance for a hierarchical tree.
+        Only count leaf accounts (level 3) to avoid double-counting."""
+        total = 0.0
+        for node in tree:
+            # If this is a leaf account (level 3) or has no children, count its balance
+            if node.get('level', 3) == 3 or not node.get('children', []):
+                total += node.get('balance', 0.0)
+            else:
+                # For parent accounts, only count children (avoid double-counting)
+                total += self._calculate_tree_total(node.get('children', []))
+        return total
         
     def clear_content(self):
         """Clear the content layout."""
@@ -773,13 +786,47 @@ class BalanceSheetView(BaseFinancialStatementView):
           # Assets section
         if data.get('assets'):
             self._add_table_row([("ASSETS", 400), ("", 200)], is_subtotal=True)
-            self._add_hierarchical_accounts(data.get('assets', []), indent_level=1)
+            
+            # Handle classified assets structure
+            if data.get('is_classified'):
+                for asset_section in data.get('assets', []):
+                    section_name = asset_section.get('name', '')
+                    section_accounts = asset_section.get('accounts', [])
+                    
+                    if section_accounts:
+                        self._add_table_row([(section_name, 400), ("", 200)], is_subtotal=True)
+                        self._add_hierarchical_accounts(section_accounts, indent_level=1)
+                        
+                        # Calculate section total
+                        section_total = self._calculate_tree_total(section_accounts)
+                        self._add_table_row([(f"Total {section_name}", 400), (format_currency(section_total), 200)], is_total=True)
+            else:
+                # Fallback to old structure
+                self._add_hierarchical_accounts(data.get('assets', []), indent_level=1)
+            
             self._add_table_row([("Total Assets", 400), (format_currency(data.get('total_assets', 0)), 200)], is_total=True)
             
         # Liabilities section
         if data.get('liabilities'):
             self._add_table_row([("LIABILITIES", 400), ("", 200)], is_subtotal=True)
-            self._add_hierarchical_accounts(data.get('liabilities', []), indent_level=1)
+            
+            # Handle classified liabilities structure
+            if data.get('is_classified'):
+                for liability_section in data.get('liabilities', []):
+                    section_name = liability_section.get('name', '')
+                    section_accounts = liability_section.get('accounts', [])
+                    
+                    if section_accounts:
+                        self._add_table_row([(section_name, 400), ("", 200)], is_subtotal=True)
+                        self._add_hierarchical_accounts(section_accounts, indent_level=1)
+                        
+                        # Calculate section total
+                        section_total = self._calculate_tree_total(section_accounts)
+                        self._add_table_row([(f"Total {section_name}", 400), (format_currency(section_total), 200)], is_total=True)
+            else:
+                # Fallback to old structure
+                self._add_hierarchical_accounts(data.get('liabilities', []), indent_level=1)
+            
             self._add_table_row([("Total Liabilities", 400), (format_currency(data.get('total_liabilities', 0)), 200)], is_total=True)
             
         # Equity section

@@ -305,31 +305,34 @@ class EnhancedAccountMatcher(AccountMatcher):
         self._build_semantic_maps()
     
     def _build_semantic_maps(self):
-        """Build semantic mapping for better account matching."""
-        self.semantic_map = {}  # Alias -> possible accounts
-        
-        # Build reverse mapping from aliases to accounts
-        for semantic_key, aliases in self.aliases.items():
+        """Build semantic mapping for better account matching (optimized)."""
+        self.semantic_map = {}  # Concept -> list of related accounts
+        self.alias_to_concept = {}  # Alias -> concept
+
+        # 1. Create a reverse map from alias to its semantic concept
+        for concept, aliases in self.aliases.items():
             for alias in aliases:
-                alias_lower = alias.lower()
-                if alias_lower not in self.semantic_map:
-                    self.semantic_map[alias_lower] = []
-                
-                # Find accounts that might match this semantic concept
-                for account in self.chart_of_accounts:
-                    account_lower = account.lower()
-                    account_name = account_lower
-                    if " - " in account_lower:
-                        _, account_name = account_lower.split(" - ", 1)
-                    
-                    # Check if any alias matches the account name
-                    for check_alias in aliases:
-                        if (check_alias.lower() in account_name or 
-                            any(word in account_name for word in check_alias.lower().split())):
-                            if account not in self.semantic_map[alias_lower]:
-                                self.semantic_map[alias_lower].append(account)
-                            break
-    
+                self.alias_to_concept[alias.lower()] = concept
+
+        # 2. Create a map of concepts to related accounts in a single pass
+        for account in self.chart_of_accounts:
+            account_lower = account.lower()
+            account_name = account_lower.split(" - ", 1)[-1]
+            
+            # Use a set to avoid duplicate concepts for a single account
+            matched_concepts = set()
+
+            # Check against all aliases to find matching concepts
+            for alias, concept in self.alias_to_concept.items():
+                if alias in account_name:
+                    matched_concepts.add(concept)
+            
+            # Add account to all matched concepts
+            for concept in matched_concepts:
+                if concept not in self.semantic_map:
+                    self.semantic_map[concept] = []
+                self.semantic_map[concept].append(account)
+
     def match_account(self, input_text: str, confidence_threshold: float = 0.6) -> Tuple[Optional[str], float]:
         """Enhanced matching with semantic understanding."""
         if not input_text or not input_text.strip():
@@ -339,50 +342,67 @@ class EnhancedAccountMatcher(AccountMatcher):
         
         # 1. Try parent class matching first (exact matches)
         matched_account, confidence = super().match_account(input_text, confidence_threshold)
-        if matched_account and confidence >= 0.8:  # High confidence, use it
+        if matched_account and confidence >= 0.95:  # Trust very high confidence matches
             return matched_account, confidence
         
-        # 2. Semantic/alias matching
+        # 2. Semantic/alias matching (now finds the best match)
         semantic_match, semantic_confidence = self._semantic_match(input_clean)
-        if semantic_match and semantic_confidence > confidence:
-            return semantic_match, semantic_confidence
         
         # 3. Enhanced fuzzy matching for known concepts
         enhanced_match, enhanced_confidence = self._enhanced_fuzzy_match(input_clean)
-        if enhanced_match and enhanced_confidence > confidence:
-            return enhanced_match, enhanced_confidence
-        
-        # 4. Return best match from parent class if above threshold
-        if matched_account and confidence >= confidence_threshold:
-            return matched_account, confidence
+
+        # Compare all potential matches and return the best one
+        best_match = matched_account
+        best_confidence = confidence
+
+        if semantic_confidence > best_confidence:
+            best_match = semantic_match
+            best_confidence = semantic_confidence
+
+        if enhanced_confidence > best_confidence:
+            best_match = enhanced_match
+            best_confidence = enhanced_confidence
+            
+        if best_confidence >= confidence_threshold:
+            return best_match, best_confidence
         
         return None, 0.0
-    
+
     def _semantic_match(self, input_text: str) -> Tuple[Optional[str], float]:
-        """Match using semantic aliases."""
-        # Direct semantic lookup
-        if input_text in self.semantic_map:
-            candidates = self.semantic_map[input_text]
-            if candidates:
-                return candidates[0], 0.85  # High confidence for semantic match
+        """Match using semantic aliases, finding the best candidate."""
+        input_words = set(self._extract_keywords(input_text))
         
-        # Partial semantic matching
-        input_words = set(input_text.split())
         best_match = None
         best_score = 0.0
         
-        for alias, accounts in self.semantic_map.items():
-            alias_words = set(alias.split())
+        # Find all candidate accounts from relevant semantic concepts
+        candidate_accounts = set()
+        for word in input_words:
+            if word in self.alias_to_concept:
+                concept = self.alias_to_concept[word]
+                if concept in self.semantic_map:
+                    candidate_accounts.update(self.semantic_map[concept])
+
+        if not candidate_accounts:
+            # Fallback for direct alias text match
+            if input_text in self.alias_to_concept:
+                concept = self.alias_to_concept[input_text]
+                if concept in self.semantic_map:
+                    candidate_accounts.update(self.semantic_map[concept])
+
+        # Score each candidate to find the best one
+        for account in candidate_accounts:
+            # Use the base similarity calculator for a consistent score
+            score = self._calculate_similarity(input_text, account)
             
-            # Check word overlap
-            if input_words & alias_words:  # If there's any overlap
-                overlap_ratio = len(input_words & alias_words) / len(input_words | alias_words)
-                if overlap_ratio > 0.5 and accounts:  # At least 50% word overlap
-                    score = min(0.8, 0.6 + overlap_ratio * 0.2)
-                    if score > best_score:
-                        best_score = score
-                        best_match = accounts[0]
-        
+            # Boost score for being a semantic match
+            semantic_boost = 0.15
+            final_score = min(0.9, score + semantic_boost)
+
+            if final_score > best_score:
+                best_score = final_score
+                best_match = account
+                
         return best_match, best_score
     
     def _enhanced_fuzzy_match(self, input_text: str) -> Tuple[Optional[str], float]:

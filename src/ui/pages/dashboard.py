@@ -183,10 +183,16 @@ class DashboardPage(QWidget):
         try:
             # Use hierarchical balance calculation if available
             if hasattr(self.system, 'get_hierarchical_account_balances'):
-                from_date_str = from_date.toString("yyyy-MM-dd") if from_date else None
-                to_date_str = to_date.toString("yyyy-MM-dd") if to_date else None
+                # Handle both QDate objects and string dates
+                if hasattr(from_date, 'toString'):
+                    from_date_str = from_date.toString("yyyy-MM-dd") if from_date else None
+                else:
+                    from_date_str = from_date if from_date else None
+                if hasattr(to_date, 'toString'):
+                    to_date_str = to_date.toString("yyyy-MM-dd") if to_date else None
+                else:
+                    to_date_str = to_date if to_date else None
                 hierarchical_balances = self.system.get_hierarchical_account_balances(from_date_str, to_date_str)
-                
                 total = 0.0
                 for account_name, balance_info in hierarchical_balances.items():
                     # Get account type from system
@@ -196,16 +202,13 @@ class DashboardPage(QWidget):
                         if acc[0] == account_name:  # acc[0] is name in tuple format
                             account_type = acc[1]  # acc[1] is type
                             break
-                    
                     if account_type and account_type.lower() == 'asset':
                         net_balance = balance_info.get('net_balance', 0.0)
                         total += max(0, net_balance)  # Assets should be positive
-                
                 return total
             else:
                 # Fallback to original method
                 return self._get_total_assets_fallback(from_date, to_date)
-                
         except Exception as e:
             print(f"Error calculating hierarchical assets: {e}")
             return self._get_total_assets_fallback(from_date, to_date)
@@ -233,10 +236,16 @@ class DashboardPage(QWidget):
         try:
             # Use hierarchical balance calculation if available
             if hasattr(self.system, 'get_hierarchical_account_balances'):
-                from_date_str = from_date.toString("yyyy-MM-dd") if from_date else None
-                to_date_str = to_date.toString("yyyy-MM-dd") if to_date else None
+                # Handle both QDate objects and string dates
+                if hasattr(from_date, 'toString'):
+                    from_date_str = from_date.toString("yyyy-MM-dd") if from_date else None
+                else:
+                    from_date_str = from_date if from_date else None
+                if hasattr(to_date, 'toString'):
+                    to_date_str = to_date.toString("yyyy-MM-dd") if to_date else None
+                else:
+                    to_date_str = to_date if to_date else None
                 hierarchical_balances = self.system.get_hierarchical_account_balances(from_date_str, to_date_str)
-                
                 total = 0.0
                 for account_name, balance_info in hierarchical_balances.items():
                     # Get account type from system
@@ -246,16 +255,13 @@ class DashboardPage(QWidget):
                         if acc[0] == account_name:  # acc[0] is name in tuple format
                             account_type = acc[1]  # acc[1] is type
                             break
-                    
                     if account_type and account_type.lower() == 'liability':
                         net_balance = balance_info.get('net_balance', 0.0)
                         total += max(0, net_balance)  # Liabilities should be positive
-                
                 return total
             else:
                 # Fallback to original method
                 return self._get_total_liabilities_fallback(from_date, to_date)
-                
         except Exception as e:
             print(f"Error calculating hierarchical liabilities: {e}")
             return self._get_total_liabilities_fallback(from_date, to_date)
@@ -283,10 +289,16 @@ class DashboardPage(QWidget):
         try:
             # Use hierarchical balance calculation if available
             if hasattr(self.system, 'get_hierarchical_account_balances'):
-                from_date_str = from_date.toString("yyyy-MM-dd") if from_date else None
-                to_date_str = to_date.toString("yyyy-MM-dd") if to_date else None
+                # Handle both QDate objects and string dates
+                if hasattr(from_date, 'toString'):
+                    from_date_str = from_date.toString("yyyy-MM-dd") if from_date else None
+                else:
+                    from_date_str = from_date if from_date else None
+                if hasattr(to_date, 'toString'):
+                    to_date_str = to_date.toString("yyyy-MM-dd") if to_date else None
+                else:
+                    to_date_str = to_date if to_date else None
                 hierarchical_balances = self.system.get_hierarchical_account_balances(from_date_str, to_date_str)
-                
                 total = 0.0
                 for account_name, balance_info in hierarchical_balances.items():
                     # Get account type from system
@@ -296,16 +308,13 @@ class DashboardPage(QWidget):
                         if acc[0] == account_name:  # acc[0] is name in tuple format
                             account_type = acc[1]  # acc[1] is type
                             break
-                    
                     if account_type and account_type.lower() in ['revenue', 'income']:
                         net_balance = balance_info.get('net_balance', 0.0)
                         total += abs(net_balance) if abs_value else net_balance
-                
                 return total
             else:
                 # Fallback to original method
                 return self._get_total_revenue_fallback(from_date, to_date, abs_value)
-                
         except Exception as e:
             print(f"Error calculating hierarchical revenue: {e}")
             return self._get_total_revenue_fallback(from_date, to_date, abs_value)
@@ -326,10 +335,16 @@ class DashboardPage(QWidget):
         try:
             # Use hierarchical balance calculation if available
             if hasattr(self.system, 'get_hierarchical_account_balances'):
-                from_date_str = from_date.toString("yyyy-MM-dd") if from_date else None
-                to_date_str = to_date.toString("yyyy-MM-dd") if to_date else None
+                # Handle both QDate objects and string dates
+                if hasattr(from_date, 'toString'):
+                    from_date_str = from_date.toString("yyyy-MM-dd") if from_date else None
+                else:
+                    from_date_str = from_date if from_date else None
+                if hasattr(to_date, 'toString'):
+                    to_date_str = to_date.toString("yyyy-MM-dd") if to_date else None
+                else:
+                    to_date_str = to_date if to_date else None
                 hierarchical_balances = self.system.get_hierarchical_account_balances(from_date_str, to_date_str)
-                
                 total = 0.0
                 for account_name, balance_info in hierarchical_balances.items():
                     # Get account type from system
@@ -339,16 +354,13 @@ class DashboardPage(QWidget):
                         if acc[0] == account_name:  # acc[0] is name in tuple format
                             account_type = acc[1]  # acc[1] is type
                             break
-                    
                     if account_type and account_type.lower() == 'expense':
                         net_balance = balance_info.get('net_balance', 0.0)
                         total += abs(net_balance) if abs_value and net_balance < 0 else net_balance
-                
                 return total
             else:
                 # Fallback to original method
                 return self._get_total_expenses_fallback(from_date, to_date, abs_value)
-                
         except Exception as e:
             print(f"Error calculating hierarchical expenses: {e}")
             return self._get_total_expenses_fallback(from_date, to_date, abs_value)
