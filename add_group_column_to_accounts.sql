@@ -4,6 +4,24 @@
 -- This script adds a group column to the accounts table
 -- and handles both fresh installations and existing databases
 
+-- Drop old classification constraint if it exists
+DO $$
+BEGIN
+    -- Check if the old classification_check constraint exists
+    IF EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE table_name = 'accounts' 
+        AND table_schema = 'public' 
+        AND constraint_name = 'accounts_classification_check'
+    ) THEN
+        -- Drop the old constraint
+        ALTER TABLE public.accounts DROP CONSTRAINT accounts_classification_check;
+        RAISE NOTICE 'Dropped old accounts_classification_check constraint';
+    ELSE
+        RAISE NOTICE 'Old accounts_classification_check constraint does not exist';
+    END IF;
+END $$;
+
 -- Check if classification column exists and rename it to group
 DO $$
 BEGIN
@@ -27,15 +45,39 @@ BEGIN
         ) THEN
             -- Add group column
             ALTER TABLE public.accounts 
-            ADD COLUMN "group" VARCHAR(50) CHECK ("group" IN (
-                'current_asset', 'fixed_asset', 'other_asset',
-                'current_liability', 'long_term_liability', 'other_liability',
-                'cogs', ''
-            ));
+            ADD COLUMN "group" VARCHAR(50);
             RAISE NOTICE 'Added group column to accounts table';
         ELSE
             RAISE NOTICE 'Group column already exists';
         END IF;
+    END IF;
+END $$;
+
+-- Add CHECK constraint if it doesn't exist
+DO $$
+BEGIN
+    -- Check if the CHECK constraint already exists
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE table_name = 'accounts' 
+        AND table_schema = 'public' 
+        AND constraint_type = 'CHECK'
+        AND constraint_name LIKE '%group%'
+    ) THEN
+        -- Add CHECK constraint
+        ALTER TABLE public.accounts 
+        ADD CONSTRAINT accounts_group_check 
+        CHECK ("group" IN (
+            'current_asset', 'fixed_asset', 'other_asset', 'prepaid_expense',
+            'current_liability', 'long_term_liability', 'other_liability',
+            'owners_equity', 'retained_earnings', 'other_equity',
+            'sales_revenue', 'service_revenue', 'other_revenue', 'interest_income',
+            'cogs', 'operating_expense', 'administrative_expense', 'selling_expense', 
+            'financial_expense', 'other_expense', ''
+        ));
+        RAISE NOTICE 'Added CHECK constraint to group column';
+    ELSE
+        RAISE NOTICE 'CHECK constraint already exists on group column';
     END IF;
 END $$;
 
@@ -77,11 +119,6 @@ AND (
     LOWER(name) LIKE '%ar%' OR
     LOWER(name) LIKE '%receivable%' OR
     
-    -- Inventory
-    LOWER(name) LIKE '%inventory%' OR
-    LOWER(name) LIKE '%stock%' OR
-    LOWER(name) LIKE '%goods%' OR
-    
     -- Prepaid expenses
     LOWER(name) LIKE '%prepaid%' OR
     LOWER(name) LIKE '%advance%' OR
@@ -90,6 +127,17 @@ AND (
     LOWER(name) LIKE '%short term%' OR
     LOWER(name) LIKE '%temporary%' OR
     LOWER(name) LIKE '%marketable%'
+);
+
+-- Update inventory accounts as other assets
+UPDATE public.accounts 
+SET "group" = 'other_asset'
+WHERE account_type = 'asset' 
+AND ("group" IS NULL OR "group" = '')
+AND (
+    LOWER(name) LIKE '%inventory%' OR
+    LOWER(name) LIKE '%stock%' OR
+    LOWER(name) LIKE '%goods%'
 );
 
 -- Update fixed assets
@@ -186,6 +234,122 @@ AND (
     LOWER(name) LIKE '%labor cost%'
 );
 
+-- Update equity accounts
+UPDATE public.accounts 
+SET "group" = 'owners_equity'
+WHERE account_type = 'equity' 
+AND ("group" IS NULL OR "group" = '')
+AND (
+    LOWER(name) LIKE '%owner%' OR
+    LOWER(name) LIKE '%capital%' OR
+    LOWER(name) LIKE '%investment%' OR
+    LOWER(name) LIKE '%drawing%' OR
+    LOWER(name) LIKE '%withdrawal%'
+);
+
+-- Update retained earnings
+UPDATE public.accounts 
+SET "group" = 'retained_earnings'
+WHERE account_type = 'equity' 
+AND ("group" IS NULL OR "group" = '')
+AND (
+    LOWER(name) LIKE '%retained%' OR
+    LOWER(name) LIKE '%earnings%' OR
+    LOWER(name) LIKE '%profit%'
+);
+
+-- Update other equity (remaining equity accounts)
+UPDATE public.accounts 
+SET "group" = 'other_equity'
+WHERE account_type = 'equity' 
+AND ("group" IS NULL OR "group" = '');
+
+-- Update revenue accounts
+UPDATE public.accounts 
+SET "group" = 'sales_revenue'
+WHERE account_type = 'revenue' 
+AND ("group" IS NULL OR "group" = '')
+AND (
+    LOWER(name) LIKE '%sales%' OR
+    LOWER(name) LIKE '%revenue%' OR
+    LOWER(name) LIKE '%income%'
+);
+
+-- Update service revenue
+UPDATE public.accounts 
+SET "group" = 'service_revenue'
+WHERE account_type = 'revenue' 
+AND ("group" IS NULL OR "group" = '')
+AND (
+    LOWER(name) LIKE '%service%' OR
+    LOWER(name) LIKE '%consulting%' OR
+    LOWER(name) LIKE '%fees%'
+);
+
+-- Update interest income
+UPDATE public.accounts 
+SET "group" = 'interest_income'
+WHERE account_type = 'revenue' 
+AND ("group" IS NULL OR "group" = '')
+AND (
+    LOWER(name) LIKE '%interest%' OR
+    LOWER(name) LIKE '%dividend%'
+);
+
+-- Update other revenue (remaining revenue accounts)
+UPDATE public.accounts 
+SET "group" = 'other_revenue'
+WHERE account_type = 'revenue' 
+AND ("group" IS NULL OR "group" = '');
+
+-- Update additional expense groups
+UPDATE public.accounts 
+SET "group" = 'operating_expense'
+WHERE account_type = 'expense' 
+AND ("group" IS NULL OR "group" = '')
+AND (
+    LOWER(name) LIKE '%operating%' OR
+    LOWER(name) LIKE '%general%' OR
+    LOWER(name) LIKE '%overhead%'
+);
+
+UPDATE public.accounts 
+SET "group" = 'administrative_expense'
+WHERE account_type = 'expense' 
+AND ("group" IS NULL OR "group" = '')
+AND (
+    LOWER(name) LIKE '%administrative%' OR
+    LOWER(name) LIKE '%office%' OR
+    LOWER(name) LIKE '%management%'
+);
+
+UPDATE public.accounts 
+SET "group" = 'selling_expense'
+WHERE account_type = 'expense' 
+AND ("group" IS NULL OR "group" = '')
+AND (
+    LOWER(name) LIKE '%selling%' OR
+    LOWER(name) LIKE '%marketing%' OR
+    LOWER(name) LIKE '%advertising%' OR
+    LOWER(name) LIKE '%promotion%'
+);
+
+UPDATE public.accounts 
+SET "group" = 'financial_expense'
+WHERE account_type = 'expense' 
+AND ("group" IS NULL OR "group" = '')
+AND (
+    LOWER(name) LIKE '%interest expense%' OR
+    LOWER(name) LIKE '%bank charges%' OR
+    LOWER(name) LIKE '%finance%'
+);
+
+-- Update other expenses (remaining expense accounts)
+UPDATE public.accounts 
+SET "group" = 'other_expense'
+WHERE account_type = 'expense' 
+AND ("group" IS NULL OR "group" = '');
+
 -- ===============================================
 -- VERIFY THE CHANGE
 -- ===============================================
@@ -217,7 +381,12 @@ LIMIT 10;
 -- All existing accounts have been classified based on their names
 -- Users can update groups through the UI
 -- The group column supports the following values:
---   - current_asset, fixed_asset, other_asset (for assets)
+--   - current_asset, fixed_asset, other_asset, prepaid_expense (for assets)
 --   - current_liability, long_term_liability, other_liability (for liabilities)
---   - cogs (for cost of goods sold expenses)
---   - empty string (for other account types) 
+--   - owners_equity, retained_earnings, other_equity (for equity)
+--   - sales_revenue, service_revenue, other_revenue, interest_income (for revenue)
+--   - cogs, operating_expense, administrative_expense, selling_expense, 
+--     financial_expense, other_expense (for expenses)
+--   - empty string (for other account types)
+-- 
+-- Note: Inventory accounts are now classified as 'other_asset' instead of 'current_asset' 

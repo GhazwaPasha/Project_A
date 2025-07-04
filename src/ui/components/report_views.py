@@ -5,7 +5,8 @@ Professional document-style views for financial statements with print functional
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-    QFrame, QScrollArea, QSpacerItem, QSizePolicy, QTabWidget
+    QFrame, QScrollArea, QSpacerItem, QSizePolicy, QTabWidget,
+    QTreeWidget, QTreeWidgetItem, QHeaderView
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -175,6 +176,7 @@ class BaseFinancialStatementView(QWidget):
         
         # Content widget - no margins or padding to fill entire space
         self.content_widget = QWidget()
+        self.content_widget.setStyleSheet("background: transparent;")
         self.content_layout = QVBoxLayout(self.content_widget)
         self.content_layout.setSpacing(0)  # No spacing between elements
         self.content_layout.setContentsMargins(0, 0, 0, 0)  # No margins to fill entire area
@@ -585,13 +587,14 @@ class BaseFinancialStatementView(QWidget):
 
 
 class IncomeStatementView(BaseFinancialStatementView):
-    """Income Statement detailed view with professional table layout."""
+    """Income Statement detailed view with professional tree layout."""
     
     def __init__(self, parent=None):
         super().__init__("Income Statement", "For the Period Ended")
-        
+        self.tree = None
+    
     def show_income_statement(self, system, from_date=None, to_date=None):
-        """Display the income statement data in professional table format."""
+        """Display the income statement data in a modern tree format using group-based categorization."""
         self.clear_content()
         self.system = system
         self.from_date = from_date
@@ -605,60 +608,177 @@ class IncomeStatementView(BaseFinancialStatementView):
         else:
             self.page_header.update_subtitle("All Time")
         
-        # Get data from accounting system
+        # Get data from accounting system using group-based method
         try:
-            data = system.generate_income_statement_breakdown(from_date, to_date)
-            print(f"Income statement data: {data}")
-            print(f"Revenues: {data.get('revenues', [])}")
-            print(f"COGS: {data.get('cogs', [])}")
-            print(f"Expenses: {data.get('expenses', [])}")
+            data = system.generate_group_based_income_statement(from_date, to_date)
         except Exception as e:
-            print(f"Error generating income statement: {e}")
-            return
+            print(f"Error generating group-based income statement: {e}")
+            # Fallback to original method
+            try:
+                data = system.generate_income_statement_breakdown(from_date, to_date)
+            except Exception as e2:
+                print(f"Error generating fallback income statement: {e2}")
+                return
         
-        # Create main table
-        headers = [("Account", 400), ("Amount", 200)]
-        table = self._create_statement_table(headers)
-          # Revenue section
-        if data.get('revenues'):
-            self._add_table_row([("REVENUE", 400), ("", 200)], is_subtotal=True)
-            self._add_hierarchical_accounts(data.get('revenues', []), indent_level=1)
-            self._add_table_row([("Total Revenue", 400), (format_currency(data.get('total_revenue', 0)), 200)], is_total=True)
-        else:
-            # Add placeholder if no revenue data
-            self._add_table_row([("REVENUE", 400), ("", 200)], is_subtotal=True)
-            self._add_table_row([("No revenue data available", 400), ("", 200)], indent_level=1)
-            self._add_table_row([("Total Revenue", 400), (format_currency(0), 200)], is_total=True)
-            
-        # Cost of Goods Sold
-        if data.get('cogs'):
-            self._add_table_row([("COST OF GOODS SOLD", 400), ("", 200)], is_subtotal=True)
-            self._add_hierarchical_accounts(data.get('cogs', []), indent_level=1)
-            self._add_table_row([("Total Cost of Goods Sold", 400), (format_currency(data.get('total_cogs', 0)), 200)], is_total=True)
-        else:
-            # Add placeholder if no COGS data
-            self._add_table_row([("COST OF GOODS SOLD", 400), ("", 200)], is_subtotal=True)
-            self._add_table_row([("No COGS data available", 400), ("", 200)], indent_level=1)
-            self._add_table_row([("Total Cost of Goods Sold", 400), (format_currency(0), 200)], is_total=True)
-            
-        # Gross Profit
-        self._add_table_row([("Gross Profit", 400), (format_currency(data.get('gross_profit', 0)), 200)], is_total=True)
+        # Create tree widget
+        self.tree = QTreeWidget()
+        self.tree.setColumnCount(2)
+        self.tree.setHeaderLabels(["Account", "Amount"])
+        header = self.tree.header()
+        if header is not None:
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.tree.setStyleSheet("""
+            QTreeWidget {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 8px;
+                color: white;
+                font-size: 12px;
+                selection-background-color: rgba(0, 120, 215, 0.25);
+                gridline-color: transparent;
+                outline: none;
+                padding: 8px;
+            }
+            QTreeWidget::item {
+                border: none;
+                padding: 8px;
+                margin: 2px 4px;
+                border-radius: 4px;
+            }
+            QTreeWidget::item:hover {
+                background: rgba(255, 255, 255, 0.05);
+            }
+            QTreeWidget::item:selected {
+                background: rgba(0, 120, 215, 0.25);
+                color: white;
+            }
+            QTreeWidget::item:selected:hover {
+                background: rgba(0, 120, 215, 0.35);
+            }
+            QHeaderView::section {
+                background: rgba(255, 255, 255, 0.08);
+                border: none;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+                padding: 12px;
+                color: rgba(255, 255, 255, 0.9);
+                font-size: 11px;
+                font-weight: 600;
+            }
+            QHeaderView::section:first {
+                border-top-left-radius: 8px;
+                padding-left: 16px;
+            }
+            QHeaderView::section:last {
+                border-top-right-radius: 8px;
+            }
+        """ + ModernScrollbarStyles.get_vertical_scrollbar_style())
         
-        # Operating Expenses
-        if data.get('expenses'):
-            self._add_table_row([("OPERATING EXPENSES", 400), ("", 200)], is_subtotal=True)
-            self._add_hierarchical_accounts(data.get('expenses', []), indent_level=1)
-            self._add_table_row([("Total Operating Expenses", 400), (format_currency(data.get('total_expenses', 0)), 200)], is_total=True)
-        else:
-            # Add placeholder if no expenses data
-            self._add_table_row([("OPERATING EXPENSES", 400), ("", 200)], is_subtotal=True)
-            self._add_table_row([("No expenses data available", 400), ("", 200)], indent_level=1)
-            self._add_table_row([("Total Operating Expenses", 400), (format_currency(0), 200)], is_total=True)
+        def add_section(title, accounts, total, total_label):
+            if self.tree is None:
+                return
+            section = QTreeWidgetItem([title, ""])
+            section.setFirstColumnSpanned(True)
+            section.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+            self.tree.addTopLevelItem(section)
+            self._add_hierarchical_accounts_to_tree(accounts, section)
+            total_item = QTreeWidgetItem([total_label, format_currency(total)])
+            total_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+            total_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            self.tree.addTopLevelItem(total_item)
+        
+        # Check if using group-based data
+        if data.get('is_group_based'):
+            # Revenue sections using groups
+            if data.get('revenue_sections'):
+                for revenue_section in data['revenue_sections']:
+                    section_name = revenue_section.get('name', '')
+                    section_accounts = revenue_section.get('accounts', [])
+                    section_total = revenue_section.get('total', 0)
+                    
+                    if section_accounts:
+                        add_section(section_name, section_accounts, section_total, f"Total {section_name}")
             
+            # Add total revenue
+            total_revenue_item = QTreeWidgetItem(["Total Revenue", format_currency(data.get('total_revenue', 0))])
+            total_revenue_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+            total_revenue_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            self.tree.addTopLevelItem(total_revenue_item)
+            
+            # COGS section
+            cogs_sections = [s for s in data.get('expense_sections', []) if s.get('group') == 'cogs']
+            if cogs_sections:
+                for cogs_section in cogs_sections:
+                    section_name = cogs_section.get('name', '')
+                    section_accounts = cogs_section.get('accounts', [])
+                    section_total = cogs_section.get('total', 0)
+                    
+                    if section_accounts:
+                        add_section(section_name, section_accounts, section_total, f"Total {section_name}")
+            
+            # Gross Profit
+            gross_profit_item = QTreeWidgetItem(["Gross Profit", format_currency(data.get('gross_profit', 0))])
+            gross_profit_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+            gross_profit_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            self.tree.addTopLevelItem(gross_profit_item)
+            
+            # Operating expenses (non-COGS)
+            operating_expense_sections = [s for s in data.get('expense_sections', []) if s.get('group') != 'cogs']
+            if operating_expense_sections:
+                for expense_section in operating_expense_sections:
+                    section_name = expense_section.get('name', '')
+                    section_accounts = expense_section.get('accounts', [])
+                    section_total = expense_section.get('total', 0)
+                    
+                    if section_accounts:
+                        add_section(section_name, section_accounts, section_total, f"Total {section_name}")
+            
+            # Add total operating expenses
+            total_operating_expenses_item = QTreeWidgetItem(["Total Operating Expenses", format_currency(data.get('total_operating_expenses', 0))])
+            total_operating_expenses_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+            total_operating_expenses_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            self.tree.addTopLevelItem(total_operating_expenses_item)
+            
+        else:
+            # Fallback to original structure
+            add_section("REVENUE", data.get('revenues', []), data.get('total_revenue', 0), "Total Revenue")
+            add_section("COST OF GOODS SOLD", data.get('cogs', []), data.get('total_cogs', 0), "Total Cost of Goods Sold")
+            
+            # Gross Profit
+            gross_profit_item = QTreeWidgetItem(["Gross Profit", format_currency(data.get('gross_profit', 0))])
+            gross_profit_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+            gross_profit_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            self.tree.addTopLevelItem(gross_profit_item)
+            
+            add_section("OPERATING EXPENSES", data.get('expenses', []), data.get('total_expenses', 0), "Total Operating Expenses")
+        
         # Net Income
-        self._add_table_row([("NET INCOME", 400), (format_currency(data.get('net_income', 0)), 200)], is_total=True)
+        net_income_item = QTreeWidgetItem(["NET INCOME", format_currency(data.get('net_income', 0))])
+        net_income_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+        net_income_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+        self.tree.addTopLevelItem(net_income_item)
         
-        self.content_layout.addWidget(table)
+        self.content_layout.addWidget(self.tree)
+    
+    def _add_hierarchical_accounts_to_tree(self, accounts, parent_item):
+        """Add accounts to tree widget with proper balance display."""
+        for acc in accounts:
+            name = acc.get('name', '')
+            
+            # Get balance from the account data or hierarchical balances
+            balance = acc.get('balance', 0)
+            if balance == 0 and 'net_balance' in acc:
+                balance = acc.get('net_balance', 0)
+            
+            amount = format_currency(balance)
+            item = QTreeWidgetItem([name, amount])
+            parent_item.addChild(item)
+            
+            # For the new standard hierarchy, accounts are flat (no children)
+            # But keep the old logic for backward compatibility
+            children = acc.get('children', [])
+            if children:
+                self._add_hierarchical_accounts_to_tree(children, item)
     
     def _regenerate_with_new_dates(self):
         """Regenerate the income statement with current date range."""
@@ -754,14 +874,15 @@ class TrialBalanceView(BaseFinancialStatementView):
         self.set_date_selector_all_time_by_default = True  # Always set selector to "All Time" by default
 
 class BalanceSheetView(BaseFinancialStatementView):
-    """Balance Sheet detailed view with professional table layout."""
+    """Balance Sheet detailed view with professional tree layout."""
     
     def __init__(self, parent=None):
         super().__init__("Balance Sheet", "Statement of Financial Position")
         self.set_date_selector_all_time_by_default = True  # Always set selector to "All Time" by default
+        self.tree = None
         
     def show_balance_sheet(self, system, as_of_date=None):
-        """Display the balance sheet data in professional table format."""
+        """Display the balance sheet data in a modern tree format using group-based categorization."""
         self.clear_content()
         self.system = system
         self.from_date = None
@@ -773,69 +894,187 @@ class BalanceSheetView(BaseFinancialStatementView):
         else:
             self.page_header.update_subtitle("All Time")
         
-        # Get data from accounting system
+        # Get data from accounting system using group-based method
         try:
-            data = system.generate_balance_sheet_breakdown(as_of_date)
+            data = system.generate_group_based_balance_sheet(as_of_date)
         except Exception as e:
-            print(f"Error generating balance sheet: {e}")
-            return
+            print(f"Error generating group-based balance sheet: {e}")
+            # Fallback to original method
+            try:
+                data = system.generate_balance_sheet_breakdown(as_of_date)
+            except Exception as e2:
+                print(f"Error generating fallback balance sheet: {e2}")
+                return
         
-        # Create main table
-        headers = [("Account", 400), ("Amount", 200)]
-        table = self._create_statement_table(headers)
-          # Assets section
-        if data.get('assets'):
-            self._add_table_row([("ASSETS", 400), ("", 200)], is_subtotal=True)
-            
-            # Handle classified assets structure
-            if data.get('is_classified'):
-                for asset_section in data.get('assets', []):
+        # Create tree widget
+        self.tree = QTreeWidget()
+        self.tree.setColumnCount(2)
+        self.tree.setHeaderLabels(["Account", "Amount"])
+        header = self.tree.header()
+        if header is not None:
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.tree.setStyleSheet("""
+            QTreeWidget {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 8px;
+                color: white;
+                font-size: 12px;
+                selection-background-color: rgba(0, 120, 215, 0.25);
+                gridline-color: transparent;
+                outline: none;
+                padding: 8px;
+            }
+            QTreeWidget::item {
+                border: none;
+                padding: 8px;
+                margin: 2px 4px;
+                border-radius: 4px;
+            }
+            QTreeWidget::item:hover {
+                background: rgba(255, 255, 255, 0.05);
+            }
+            QTreeWidget::item:selected {
+                background: rgba(0, 120, 215, 0.25);
+                color: white;
+            }
+            QTreeWidget::item:selected:hover {
+                background: rgba(0, 120, 215, 0.35);
+            }
+            QHeaderView::section {
+                background: rgba(255, 255, 255, 0.08);
+                border: none;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+                padding: 12px;
+                color: rgba(255, 255, 255, 0.9);
+                font-size: 11px;
+                font-weight: 600;
+            }
+            QHeaderView::section:first {
+                border-top-left-radius: 8px;
+                padding-left: 16px;
+            }
+            QHeaderView::section:last {
+                border-top-right-radius: 8px;
+            }
+        """ + ModernScrollbarStyles.get_vertical_scrollbar_style())
+        
+        def add_section(title, accounts, total, total_label):
+            if self.tree is None:
+                return
+            section = QTreeWidgetItem([title, ""])
+            section.setFirstColumnSpanned(True)
+            section.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+            self.tree.addTopLevelItem(section)
+            self._add_hierarchical_accounts_to_tree(accounts, section)
+            total_item = QTreeWidgetItem([total_label, format_currency(total)])
+            total_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+            total_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            self.tree.addTopLevelItem(total_item)
+        
+        # Check if using group-based data
+        if data.get('is_group_based'):
+            # Assets section
+            if data.get('asset_sections'):
+                for asset_section in data['asset_sections']:
                     section_name = asset_section.get('name', '')
                     section_accounts = asset_section.get('accounts', [])
+                    section_total = asset_section.get('total', 0)
                     
                     if section_accounts:
-                        self._add_table_row([(section_name, 400), ("", 200)], is_subtotal=True)
-                        self._add_hierarchical_accounts(section_accounts, indent_level=1)
-                        
-                        # Calculate section total
-                        section_total = self._calculate_tree_total(section_accounts)
-                        self._add_table_row([(f"Total {section_name}", 400), (format_currency(section_total), 200)], is_total=True)
-            else:
-                # Fallback to old structure
-                self._add_hierarchical_accounts(data.get('assets', []), indent_level=1)
+                        add_section(section_name, section_accounts, section_total, f"Total {section_name}")
             
-            self._add_table_row([("Total Assets", 400), (format_currency(data.get('total_assets', 0)), 200)], is_total=True)
+            # Add total assets
+            total_assets_item = QTreeWidgetItem(["Total Assets", format_currency(data.get('total_assets', 0))])
+            total_assets_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+            total_assets_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            self.tree.addTopLevelItem(total_assets_item)
             
-        # Liabilities section
-        if data.get('liabilities'):
-            self._add_table_row([("LIABILITIES", 400), ("", 200)], is_subtotal=True)
-            
-            # Handle classified liabilities structure
-            if data.get('is_classified'):
-                for liability_section in data.get('liabilities', []):
+            # Liabilities section
+            if data.get('liability_sections'):
+                for liability_section in data['liability_sections']:
                     section_name = liability_section.get('name', '')
                     section_accounts = liability_section.get('accounts', [])
+                    section_total = liability_section.get('total', 0)
                     
                     if section_accounts:
-                        self._add_table_row([(section_name, 400), ("", 200)], is_subtotal=True)
-                        self._add_hierarchical_accounts(section_accounts, indent_level=1)
+                        add_section(section_name, section_accounts, section_total, f"Total {section_name}")
+            
+            # Add total liabilities
+            total_liabilities_item = QTreeWidgetItem(["Total Liabilities", format_currency(data.get('total_liabilities', 0))])
+            total_liabilities_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+            total_liabilities_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            self.tree.addTopLevelItem(total_liabilities_item)
+            
+            # Equity section
+            if data.get('equity_sections'):
+                for equity_section in data['equity_sections']:
+                    section_name = equity_section.get('name', '')
+                    section_accounts = equity_section.get('accounts', [])
+                    section_total = equity_section.get('total', 0)
+                    
+                    if section_accounts:
+                        add_section(section_name, section_accounts, section_total, f"Total {section_name}")
+            
+            # Add total equity
+            total_equity_item = QTreeWidgetItem(["Total Equity", format_currency(data.get('total_equity', 0))])
+            total_equity_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+            total_equity_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            self.tree.addTopLevelItem(total_equity_item)
+            
+        else:
+            # Fallback to original structure
+            if data.get('assets'):
+                if data.get('is_classified'):
+                    for asset_section in data.get('assets', []):
+                        section_name = asset_section.get('name', '')
+                        section_accounts = asset_section.get('accounts', [])
                         
-                        # Calculate section total
-                        section_total = self._calculate_tree_total(section_accounts)
-                        self._add_table_row([(f"Total {section_name}", 400), (format_currency(section_total), 200)], is_total=True)
-            else:
-                # Fallback to old structure
-                self._add_hierarchical_accounts(data.get('liabilities', []), indent_level=1)
+                        if section_accounts:
+                            add_section(section_name, section_accounts, self._calculate_tree_total(section_accounts), f"Total {section_name}")
+                else:
+                    # Fallback to old structure
+                    add_section("ASSETS", data.get('assets', []), data.get('total_assets', 0), "Total Assets")
             
-            self._add_table_row([("Total Liabilities", 400), (format_currency(data.get('total_liabilities', 0)), 200)], is_total=True)
+            # Liabilities section
+            if data.get('liabilities'):
+                if data.get('is_classified'):
+                    for liability_section in data.get('liabilities', []):
+                        section_name = liability_section.get('name', '')
+                        section_accounts = liability_section.get('accounts', [])
+                        
+                        if section_accounts:
+                            add_section(section_name, section_accounts, self._calculate_tree_total(section_accounts), f"Total {section_name}")
+                else:
+                    # Fallback to old structure
+                    add_section("LIABILITIES", data.get('liabilities', []), data.get('total_liabilities', 0), "Total Liabilities")
             
-        # Equity section
-        if data.get('equity'):
-            self._add_table_row([("EQUITY", 400), ("", 200)], is_subtotal=True)
-            self._add_hierarchical_accounts(data.get('equity', []), indent_level=1)
-            self._add_table_row([("Total Equity", 400), (format_currency(data.get('total_equity', 0)), 200)], is_total=True)
+            # Equity section
+            if data.get('equity'):
+                add_section("EQUITY", data.get('equity', []), data.get('total_equity', 0), "Total Equity")
             
-        self.content_layout.addWidget(table)
+        self.content_layout.addWidget(self.tree)
+    
+    def _add_hierarchical_accounts_to_tree(self, accounts, parent_item):
+        """Add accounts to tree widget with proper balance display."""
+        for acc in accounts:
+            name = acc.get('name', '')
+            
+            # Get balance from the account data or hierarchical balances
+            balance = acc.get('balance', 0)
+            if balance == 0 and 'net_balance' in acc:
+                balance = acc.get('net_balance', 0)
+            
+            amount = format_currency(balance)
+            item = QTreeWidgetItem([name, amount])
+            parent_item.addChild(item)
+            
+            # For the new standard hierarchy, accounts are flat (no children)
+            # But keep the old logic for backward compatibility
+            children = acc.get('children', [])
+            if children:
+                self._add_hierarchical_accounts_to_tree(children, item)
     
     def _regenerate_with_new_dates(self):
         """Regenerate the balance sheet with current date range."""
@@ -917,13 +1156,14 @@ class BalanceSheetView(BaseFinancialStatementView):
 
 
 class CashFlowStatementView(BaseFinancialStatementView):
-    """Cash Flow Statement detailed view with professional table layout."""
+    """Cash Flow Statement detailed view with professional tree layout."""
     
     def __init__(self, parent=None):
         super().__init__("Cash Flow Statement", "Statement of Cash Flows")
+        self.tree = None
         
     def show_cash_flow_statement(self, system, from_date=None, to_date=None):
-        """Display the cash flow statement data in professional table format."""
+        """Display the cash flow statement data in a modern tree format."""
         self.clear_content()
         self.system = system
         self.from_date = from_date
@@ -944,34 +1184,94 @@ class CashFlowStatementView(BaseFinancialStatementView):
             print(f"Error generating cash flow statement: {e}")
             return
         
-        # Create main table
-        headers = [("Description", 400), ("Amount", 200)]
-        table = self._create_statement_table(headers)
-          # Operating Activities
+        # Create tree widget
+        self.tree = QTreeWidget()
+        self.tree.setColumnCount(2)
+        self.tree.setHeaderLabels(["Description", "Amount"])
+        header = self.tree.header()
+        if header is not None:
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.tree.setStyleSheet("""
+            QTreeWidget {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 8px;
+                color: white;
+                font-size: 12px;
+                selection-background-color: rgba(0, 120, 215, 0.25);
+                gridline-color: transparent;
+                outline: none;
+                padding: 8px;
+            }
+            QTreeWidget::item {
+                border: none;
+                padding: 8px;
+                margin: 2px 4px;
+                border-radius: 4px;
+            }
+            QTreeWidget::item:hover {
+                background: rgba(255, 255, 255, 0.05);
+            }
+            QTreeWidget::item:selected {
+                background: rgba(0, 120, 215, 0.25);
+                color: white;
+            }
+            QTreeWidget::item:selected:hover {
+                background: rgba(0, 120, 215, 0.35);
+            }
+            QHeaderView::section {
+                background: rgba(255, 255, 255, 0.08);
+                border: none;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+                padding: 12px;
+                color: rgba(255, 255, 255, 0.9);
+                font-size: 11px;
+                font-weight: 600;
+            }
+            QHeaderView::section:first {
+                border-top-left-radius: 8px;
+                padding-left: 16px;
+            }
+            QHeaderView::section:last {
+                border-top-right-radius: 8px;
+            }
+        """ + ModernScrollbarStyles.get_vertical_scrollbar_style())
+        
+        def add_section(title, items, total, total_label):
+            if self.tree is None:
+                return
+            section = QTreeWidgetItem([title, ""])
+            section.setFirstColumnSpanned(True)
+            section.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+            self.tree.addTopLevelItem(section)
+            for description, amount in items:
+                item = QTreeWidgetItem([description.title(), format_currency(amount)])
+                section.addChild(item)
+            total_item = QTreeWidgetItem([total_label, format_currency(total)])
+            total_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+            total_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            self.tree.addTopLevelItem(total_item)
+        
+        # Operating Activities
         if data.get('operating activities'):
-            self._add_table_row([("CASH FLOWS FROM OPERATING ACTIVITIES", 400), ("", 200)], is_subtotal=True)
-            for description, amount in data.get('operating activities', []):
-                self._add_table_row([(description.title(), 400), (format_currency(amount), 200)], indent_level=1)
-            self._add_table_row([("Net Cash from Operating Activities", 400), (format_currency(data.get('net_operating', 0)), 200)], is_total=True)
+            add_section("CASH FLOWS FROM OPERATING ACTIVITIES", data.get('operating activities', []), data.get('net_operating', 0), "Net Cash from Operating Activities")
             
         # Investing Activities
         if data.get('investing activities'):
-            self._add_table_row([("CASH FLOWS FROM INVESTING ACTIVITIES", 400), ("", 200)], is_subtotal=True)
-            for description, amount in data.get('investing activities', []):
-                self._add_table_row([(description.title(), 400), (format_currency(amount), 200)], indent_level=1)
-            self._add_table_row([("Net Cash from Investing Activities", 400), (format_currency(data.get('net_investing', 0)), 200)], is_total=True)
+            add_section("CASH FLOWS FROM INVESTING ACTIVITIES", data.get('investing activities', []), data.get('net_investing', 0), "Net Cash from Investing Activities")
             
         # Financing Activities
         if data.get('financing activities'):
-            self._add_table_row([("CASH FLOWS FROM FINANCING ACTIVITIES", 400), ("", 200)], is_subtotal=True)
-            for description, amount in data.get('financing activities', []):
-                self._add_table_row([(description.title(), 400), (format_currency(amount), 200)], indent_level=1)
-            self._add_table_row([("Net Cash from Financing Activities", 400), (format_currency(data.get('net_financing', 0)), 200)], is_total=True)
+            add_section("CASH FLOWS FROM FINANCING ACTIVITIES", data.get('financing activities', []), data.get('net_financing', 0), "Net Cash from Financing Activities")
             
         # Net Change in Cash
-        self._add_table_row([("NET CHANGE IN CASH", 400), (format_currency(data.get('net_cash_flow', 0)), 200)], is_total=True)
+        net_change_item = QTreeWidgetItem(["NET CHANGE IN CASH", format_currency(data.get('net_cash_flow', 0))])
+        net_change_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+        net_change_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+        self.tree.addTopLevelItem(net_change_item)
         
-        self.content_layout.addWidget(table)
+        self.content_layout.addWidget(self.tree)
     
     def _regenerate_with_new_dates(self):
         """Regenerate the cash flow statement with current date range."""
@@ -1059,13 +1359,14 @@ class CashFlowStatementView(BaseFinancialStatementView):
 
 
 class StatementOfEquityView(BaseFinancialStatementView):
-    """Statement of Equity detailed view with professional table layout."""
+    """Statement of Equity detailed view with professional tree layout."""
     
     def __init__(self, parent=None):
         super().__init__("Statement of Owner's Equity", "Changes in Owner's Equity")
+        self.tree = None
         
     def show_statement_of_equity(self, system, from_date=None, to_date=None):
-        """Display the statement of equity data in professional table format."""
+        """Display the statement of equity data in a modern tree format."""
         self.clear_content()
         self.system = system
         self.from_date = from_date
@@ -1086,33 +1387,99 @@ class StatementOfEquityView(BaseFinancialStatementView):
             print(f"Error generating statement of equity: {e}")
             return
         
-        # Create main table
-        headers = [("Description", 400), ("Amount", 200)]
-        table = self._create_statement_table(headers)
+        # Create tree widget
+        self.tree = QTreeWidget()
+        self.tree.setColumnCount(2)
+        self.tree.setHeaderLabels(["Description", "Amount"])
+        header = self.tree.header()
+        if header is not None:
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.tree.setStyleSheet("""
+            QTreeWidget {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 8px;
+                color: white;
+                font-size: 12px;
+                selection-background-color: rgba(0, 120, 215, 0.25);
+                gridline-color: transparent;
+                outline: none;
+                padding: 8px;
+            }
+            QTreeWidget::item {
+                border: none;
+                padding: 8px;
+                margin: 2px 4px;
+                border-radius: 4px;
+            }
+            QTreeWidget::item:hover {
+                background: rgba(255, 255, 255, 0.05);
+            }
+            QTreeWidget::item:selected {
+                background: rgba(0, 120, 215, 0.25);
+                color: white;
+            }
+            QTreeWidget::item:selected:hover {
+                background: rgba(0, 120, 215, 0.35);
+            }
+            QHeaderView::section {
+                background: rgba(255, 255, 255, 0.08);
+                border: none;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+                padding: 12px;
+                color: rgba(255, 255, 255, 0.9);
+                font-size: 11px;
+                font-weight: 600;
+            }
+            QHeaderView::section:first {
+                border-top-left-radius: 8px;
+                padding-left: 16px;
+            }
+            QHeaderView::section:last {
+                border-top-right-radius: 8px;
+            }
+        """ + ModernScrollbarStyles.get_vertical_scrollbar_style())
         
         # Beginning Equity
-        self._add_table_row([("Owner's Equity - Beginning of Period", 400), (format_currency(data.get('beginning_equity', 0)), 200)], is_total=True)
-          # Changes during period
-        self._add_table_row([("CHANGES DURING PERIOD", 400), ("", 200)], is_subtotal=True)
+        beginning_item = QTreeWidgetItem(["Owner's Equity - Beginning of Period", format_currency(data.get('beginning_equity', 0))])
+        beginning_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+        beginning_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+        self.tree.addTopLevelItem(beginning_item)
+        
+        # Changes section
+        changes_section = QTreeWidgetItem(["CHANGES DURING PERIOD", ""])
+        changes_section.setFirstColumnSpanned(True)
+        changes_section.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+        self.tree.addTopLevelItem(changes_section)
         
         # Net Income
-        self._add_table_row([("Net Income", 400), (format_currency(data.get('net_income', 0)), 200)], indent_level=1)
+        net_income_item = QTreeWidgetItem(["Net Income", format_currency(data.get('net_income', 0))])
+        changes_section.addChild(net_income_item)
         
         # Owner Investments
         if data.get('owner_investments', 0) != 0:
-            self._add_table_row([("Owner Investments", 400), (format_currency(data.get('owner_investments', 0)), 200)], indent_level=1)
+            investments_item = QTreeWidgetItem(["Owner Investments", format_currency(data.get('owner_investments', 0))])
+            changes_section.addChild(investments_item)
             
         # Owner Withdrawals
         if data.get('owner_withdrawals', 0) != 0:
-            self._add_table_row([("Owner Withdrawals", 400), (format_currency(data.get('owner_withdrawals', 0)), 200)], indent_level=1)
+            withdrawals_item = QTreeWidgetItem(["Owner Withdrawals", format_currency(data.get('owner_withdrawals', 0))])
+            changes_section.addChild(withdrawals_item)
             
         # Total Changes
-        self._add_table_row([("Total Changes", 400), (format_currency(data.get('total_changes', 0)), 200)], is_subtotal=True)
+        total_changes_item = QTreeWidgetItem(["Total Changes", format_currency(data.get('total_changes', 0))])
+        total_changes_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+        total_changes_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+        self.tree.addTopLevelItem(total_changes_item)
         
         # Ending Equity
-        self._add_table_row([("Owner's Equity - End of Period", 400), (format_currency(data.get('ending_equity', 0)), 200)], is_total=True)
+        ending_item = QTreeWidgetItem(["Owner's Equity - End of Period", format_currency(data.get('ending_equity', 0))])
+        ending_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+        ending_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+        self.tree.addTopLevelItem(ending_item)
         
-        self.content_layout.addWidget(table)
+        self.content_layout.addWidget(self.tree)
     
     def _regenerate_with_new_dates(self):
         """Regenerate the statement of equity with current date range."""

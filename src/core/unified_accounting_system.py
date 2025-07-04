@@ -2308,11 +2308,11 @@ class UnifiedAccountingSystem:
     def get_group_options_by_type(self, account_type: str) -> List[str]:
         """Get available group options for a given account type."""
         group_options = {
-            'asset': ['None', 'Current Assets', 'Fixed Assets', 'Other Assets'],
-            'liability': ['None', 'Current Liabilities', 'Long-term Liabilities', 'Other Liabilities'],
-            'expense': ['None', 'Cost of Goods Sold'],
-            'revenue': ['None'],
-            'equity': ['None']
+            'asset': ['None', 'Current Asset', 'Fixed Asset', 'Other Asset', 'Prepaid Expense'],
+            'liability': ['None', 'Current Liability', 'Long-term Liability', 'Other Liability'],
+            'equity': ['None', 'Owners Equity', 'Retained Earnings', 'Other Equity'],
+            'revenue': ['None', 'Sales Revenue', 'Service Revenue', 'Other Revenue', 'Interest Income'],
+            'expense': ['None', 'Cost of Goods Sold', 'Operating Expense', 'Administrative Expense', 'Selling Expense', 'Financial Expense', 'Other Expense'],
         }
         return group_options.get(account_type.lower(), ['None'])
     
@@ -2321,16 +2321,29 @@ class UnifiedAccountingSystem:
         if not group or group == 'None':
             return 'None'
         
-        display_names = {
-            'current_asset': 'Current Assets',
-            'fixed_asset': 'Fixed Assets',
-            'other_asset': 'Other Assets',
-            'current_liability': 'Current Liabilities',
-            'long_term_liability': 'Long-term Liabilities',
-            'other_liability': 'Other Liabilities',
-            'cogs': 'Cost of Goods Sold'
+        display_map = {
+            'current_asset': 'Current Asset',
+            'fixed_asset': 'Fixed Asset',
+            'other_asset': 'Other Asset',
+            'prepaid_expense': 'Prepaid Expense',
+            'current_liability': 'Current Liability',
+            'long_term_liability': 'Long-term Liability',
+            'other_liability': 'Other Liability',
+            'owners_equity': 'Owners Equity',
+            'retained_earnings': 'Retained Earnings',
+            'other_equity': 'Other Equity',
+            'sales_revenue': 'Sales Revenue',
+            'service_revenue': 'Service Revenue',
+            'other_revenue': 'Other Revenue',
+            'interest_income': 'Interest Income',
+            'cogs': 'Cost of Goods Sold',
+            'operating_expense': 'Operating Expense',
+            'administrative_expense': 'Administrative Expense',
+            'selling_expense': 'Selling Expense',
+            'financial_expense': 'Financial Expense',
+            'other_expense': 'Other Expense'
         }
-        return display_names.get(group, group.replace('_', ' ').title())
+        return display_map.get(group, group.replace('_', ' ').title())
     
     def get_group_key_from_display(self, display_name: str) -> str:
         """Convert display name back to group key."""
@@ -2338,13 +2351,26 @@ class UnifiedAccountingSystem:
             return ''
         
         reverse_mapping = {
-            'Current Assets': 'current_asset',
-            'Fixed Assets': 'fixed_asset',
-            'Other Assets': 'other_asset',
-            'Current Liabilities': 'current_liability',
-            'Long-term Liabilities': 'long_term_liability',
-            'Other Liabilities': 'other_liability',
-            'Cost of Goods Sold': 'cogs'
+            'Current Asset': 'current_asset',
+            'Fixed Asset': 'fixed_asset',
+            'Other Asset': 'other_asset',
+            'Prepaid Expense': 'prepaid_expense',
+            'Current Liability': 'current_liability',
+            'Long-term Liability': 'long_term_liability',
+            'Other Liability': 'other_liability',
+            'Owners Equity': 'owners_equity',
+            'Retained Earnings': 'retained_earnings',
+            'Other Equity': 'other_equity',
+            'Sales Revenue': 'sales_revenue',
+            'Service Revenue': 'service_revenue',
+            'Other Revenue': 'other_revenue',
+            'Interest Income': 'interest_income',
+            'Cost of Goods Sold': 'cogs',
+            'Operating Expense': 'operating_expense',
+            'Administrative Expense': 'administrative_expense',
+            'Selling Expense': 'selling_expense',
+            'Financial Expense': 'financial_expense',
+            'Other Expense': 'other_expense'
         }
         return reverse_mapping.get(display_name, '')
     
@@ -2411,6 +2437,289 @@ class UnifiedAccountingSystem:
         if account:
             return account.get('group') if account.get('group_inherited') else None
         return None
+
+    def generate_group_based_income_statement(self, start_date: Optional[str] = None, 
+                                            end_date: Optional[str] = None) -> Dict[str, Any]:
+        """Generate income statement using group-based categorization with standard hierarchical structure."""
+        try:
+            # Use hierarchical balances for accurate reporting
+            hierarchical_balances = self.get_hierarchical_account_balances(start_date, end_date)
+            accounts = self.get_chart_of_accounts(active_only=False)
+            
+            # Create account lookup
+            account_by_id = {acc['id']: acc for acc in accounts}
+            
+            # Group accounts by their group classification
+            revenue_groups = {
+                'sales_revenue': [],
+                'service_revenue': [],
+                'other_revenue': [],
+                'interest_income': []
+            }
+            
+            expense_groups = {
+                'cogs': [],
+                'operating_expense': [],
+                'administrative_expense': [],
+                'selling_expense': [],
+                'financial_expense': [],
+                'other_expense': []
+            }
+            
+            # Categorize accounts by group
+            for account in accounts:
+                account_type = account.get('account_type', '').lower()
+                group = account.get('group', '')
+                
+                if account_type == 'revenue':
+                    if group in revenue_groups:
+                        revenue_groups[group].append(account)
+                    else:
+                        revenue_groups['other_revenue'].append(account)
+                elif account_type == 'expense':
+                    if group in expense_groups:
+                        expense_groups[group].append(account)
+                    else:
+                        expense_groups['other_expense'].append(account)
+            
+            # Build standard hierarchical structure for revenue groups
+            revenue_sections = []
+            for group_key, group_accounts in revenue_groups.items():
+                if group_accounts:
+                    # Get only postable accounts for this group
+                    postable_accounts = [acc for acc in group_accounts if acc.get('is_postable', False)]
+                    
+                    if postable_accounts:
+                        # Calculate total for this group and add balance info to accounts
+                        group_total = 0
+                        for acc in postable_accounts:
+                            balance = hierarchical_balances.get(str(acc['id']), {}).get('net_balance', 0)
+                            acc['balance'] = balance
+                            acc['net_balance'] = balance
+                            group_total += balance
+                        
+                        # Create group section with postable accounts
+                        revenue_sections.append({
+                            'group': group_key,
+                            'name': self.get_group_display_name(group_key),
+                            'accounts': postable_accounts,
+                            'total': group_total,
+                            'is_group_section': True
+                        })
+            
+            # Build standard hierarchical structure for expense groups
+            expense_sections = []
+            for group_key, group_accounts in expense_groups.items():
+                if group_accounts:
+                    # Get only postable accounts for this group
+                    postable_accounts = [acc for acc in group_accounts if acc.get('is_postable', False)]
+                    
+                    if postable_accounts:
+                        # Calculate total for this group and add balance info to accounts
+                        group_total = 0
+                        for acc in postable_accounts:
+                            balance = hierarchical_balances.get(str(acc['id']), {}).get('net_balance', 0)
+                            acc['balance'] = balance
+                            acc['net_balance'] = balance
+                            group_total += balance
+                        
+                        # Create group section with postable accounts
+                        expense_sections.append({
+                            'group': group_key,
+                            'name': self.get_group_display_name(group_key),
+                            'accounts': postable_accounts,
+                            'total': group_total,
+                            'is_group_section': True
+                        })
+            
+            # Calculate totals
+            total_revenue = sum(section['total'] for section in revenue_sections)
+            total_cogs = sum(section['total'] for section in expense_sections if section['group'] == 'cogs')
+            total_operating_expenses = sum(section['total'] for section in expense_sections if section['group'] != 'cogs')
+            
+            gross_profit = total_revenue - total_cogs
+            net_income = gross_profit - total_operating_expenses
+            
+            return {
+                'revenue_sections': revenue_sections,
+                'expense_sections': expense_sections,
+                'total_revenue': total_revenue,
+                'total_cogs': total_cogs,
+                'total_operating_expenses': total_operating_expenses,
+                'gross_profit': gross_profit,
+                'net_income': net_income,
+                'period': f"{start_date or 'All Time'} to {end_date or 'Current'}",
+                'is_group_based': True,
+                'is_hierarchical': True,
+                'structure': 'standard_hierarchy'
+            }
+            
+        except Exception as e:
+            print(f"Error generating group-based income statement: {e}")
+            # Fallback to original method
+            return self.generate_income_statement_breakdown(start_date, end_date)
+    
+    def _build_group_tree(self, group_accounts: List[Dict], hierarchical_balances: Dict, account_by_id: Dict) -> List[Dict]:
+        """Build hierarchical tree for accounts in a specific group."""
+        tree = []
+        
+        # Build parent-child relationships for this group
+        for account in group_accounts:
+            if not account.get('parent_id'):  # Root accounts
+                node = self._build_account_node(account, group_accounts, hierarchical_balances, account_by_id)
+                if node:  # Only add if has balance or children
+                    tree.append(node)
+        
+        return sorted(tree, key=lambda x: x['code'] or x['name'])
+
+    def generate_group_based_balance_sheet(self, as_of_date: str) -> Dict[str, Any]:
+        """Generate balance sheet using group-based categorization with standard hierarchical structure."""
+        try:
+            # Use hierarchical balances for accurate reporting
+            hierarchical_balances = self.get_hierarchical_account_balances(None, as_of_date)
+            accounts = self.get_chart_of_accounts(active_only=False)
+            
+            # Create account lookup
+            account_by_id = {acc['id']: acc for acc in accounts}
+            
+            # Group accounts by their group classification
+            asset_groups = {
+                'current_asset': [],
+                'fixed_asset': [],
+                'other_asset': [],
+                'prepaid_expense': []
+            }
+            
+            liability_groups = {
+                'current_liability': [],
+                'long_term_liability': [],
+                'other_liability': []
+            }
+            
+            equity_groups = {
+                'owners_equity': [],
+                'retained_earnings': [],
+                'other_equity': []
+            }
+            
+            # Categorize accounts by group
+            for account in accounts:
+                account_type = account.get('account_type', '').lower()
+                group = account.get('group', '')
+                
+                if account_type == 'asset':
+                    if group in asset_groups:
+                        asset_groups[group].append(account)
+                    else:
+                        asset_groups['other_asset'].append(account)
+                elif account_type == 'liability':
+                    if group in liability_groups:
+                        liability_groups[group].append(account)
+                    else:
+                        liability_groups['other_liability'].append(account)
+                elif account_type == 'equity':
+                    if group in equity_groups:
+                        equity_groups[group].append(account)
+                    else:
+                        equity_groups['other_equity'].append(account)
+            
+            # Build standard hierarchical structure for asset groups
+            asset_sections = []
+            for group_key, group_accounts in asset_groups.items():
+                if group_accounts:
+                    # Get only postable accounts for this group
+                    postable_accounts = [acc for acc in group_accounts if acc.get('is_postable', False)]
+                    
+                    if postable_accounts:
+                        # Calculate total for this group and add balance info to accounts
+                        group_total = 0
+                        for acc in postable_accounts:
+                            balance = hierarchical_balances.get(str(acc['id']), {}).get('net_balance', 0)
+                            acc['balance'] = balance
+                            acc['net_balance'] = balance
+                            group_total += balance
+                        
+                        # Create group section with postable accounts
+                        asset_sections.append({
+                            'group': group_key,
+                            'name': self.get_group_display_name(group_key),
+                            'accounts': postable_accounts,
+                            'total': group_total,
+                            'is_group_section': True
+                        })
+            
+            # Build standard hierarchical structure for liability groups
+            liability_sections = []
+            for group_key, group_accounts in liability_groups.items():
+                if group_accounts:
+                    # Get only postable accounts for this group
+                    postable_accounts = [acc for acc in group_accounts if acc.get('is_postable', False)]
+                    
+                    if postable_accounts:
+                        # Calculate total for this group and add balance info to accounts
+                        group_total = 0
+                        for acc in postable_accounts:
+                            balance = hierarchical_balances.get(str(acc['id']), {}).get('net_balance', 0)
+                            acc['balance'] = balance
+                            acc['net_balance'] = balance
+                            group_total += balance
+                        
+                        # Create group section with postable accounts
+                        liability_sections.append({
+                            'group': group_key,
+                            'name': self.get_group_display_name(group_key),
+                            'accounts': postable_accounts,
+                            'total': group_total,
+                            'is_group_section': True
+                        })
+            
+            # Build standard hierarchical structure for equity groups
+            equity_sections = []
+            for group_key, group_accounts in equity_groups.items():
+                if group_accounts:
+                    # Get only postable accounts for this group
+                    postable_accounts = [acc for acc in group_accounts if acc.get('is_postable', False)]
+                    
+                    if postable_accounts:
+                        # Calculate total for this group and add balance info to accounts
+                        group_total = 0
+                        for acc in postable_accounts:
+                            balance = hierarchical_balances.get(str(acc['id']), {}).get('net_balance', 0)
+                            acc['balance'] = balance
+                            acc['net_balance'] = balance
+                            group_total += balance
+                        
+                        # Create group section with postable accounts
+                        equity_sections.append({
+                            'group': group_key,
+                            'name': self.get_group_display_name(group_key),
+                            'accounts': postable_accounts,
+                            'total': group_total,
+                            'is_group_section': True
+                        })
+            
+            # Calculate totals
+            total_assets = sum(section['total'] for section in asset_sections)
+            total_liabilities = sum(section['total'] for section in liability_sections)
+            total_equity = sum(section['total'] for section in equity_sections)
+            
+            return {
+                'asset_sections': asset_sections,
+                'liability_sections': liability_sections,
+                'equity_sections': equity_sections,
+                'total_assets': total_assets,
+                'total_liabilities': total_liabilities,
+                'total_equity': total_equity,
+                'as_of_date': as_of_date or 'Current',
+                'is_group_based': True,
+                'is_hierarchical': True,
+                'structure': 'standard_hierarchy'
+            }
+            
+        except Exception as e:
+            print(f"Error generating group-based balance sheet: {e}")
+            # Fallback to original method
+            return self.generate_balance_sheet_breakdown(as_of_date)
 
 # ================================
 # ENHANCED FEATURES INTEGRATION
