@@ -25,6 +25,46 @@ def test_group_based_reports():
         auth_manager = AuthManager()
         system = UnifiedAccountingSystem(auth_manager)
         
+        print("\n📋 Checking Account Data...")
+        try:
+            # Get all accounts
+            accounts = system.get_chart_of_accounts(active_only=False)
+            print(f"✅ Found {len(accounts)} total accounts")
+            
+            # Check group assignments
+            accounts_with_groups = [acc for acc in accounts if acc.get('group')]
+            accounts_without_groups = [acc for acc in accounts if not acc.get('group')]
+            
+            print(f"   - Accounts with groups: {len(accounts_with_groups)}")
+            print(f"   - Accounts without groups: {len(accounts_without_groups)}")
+            
+            # Check postable accounts
+            postable_accounts = [acc for acc in accounts if acc.get('is_postable', False)]
+            non_postable_accounts = [acc for acc in accounts if not acc.get('is_postable', False)]
+            
+            print(f"   - Postable accounts: {len(postable_accounts)}")
+            print(f"   - Non-postable accounts: {len(non_postable_accounts)}")
+            
+            # Show some account examples
+            if accounts:
+                print("\n📝 Sample Accounts:")
+                for i, acc in enumerate(accounts[:5]):
+                    print(f"   {i+1}. {acc.get('name', 'N/A')} (Type: {acc.get('account_type', 'N/A')}, Group: {acc.get('group', 'None')}, Postable: {acc.get('is_postable', False)})")
+            
+            # Check group distribution
+            if accounts_with_groups:
+                print("\n🏷️ Group Distribution:")
+                group_counts = {}
+                for acc in accounts_with_groups:
+                    group = acc.get('group', 'unknown')
+                    group_counts[group] = group_counts.get(group, 0) + 1
+                
+                for group, count in sorted(group_counts.items()):
+                    print(f"   - {group}: {count} accounts")
+            
+        except Exception as e:
+            print(f"❌ Account data check failed: {e}")
+        
         # Set organization (you may need to adjust this)
         # system.set_organization("your-org-id")
         

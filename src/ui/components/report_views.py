@@ -679,12 +679,12 @@ class IncomeStatementView(BaseFinancialStatementView):
                 return
             section = QTreeWidgetItem([title, ""])
             section.setFirstColumnSpanned(True)
-            section.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+            section.setFont(0, QFont(self.font_family, 10, QFont.Weight.Bold))  # Smaller font for sub-headings
             self.tree.addTopLevelItem(section)
             self._add_hierarchical_accounts_to_tree(accounts, section)
             total_item = QTreeWidgetItem([total_label, format_currency(total)])
-            total_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
-            total_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            total_item.setFont(0, QFont(self.font_family, 10, QFont.Weight.Bold))  # Smaller font for sub-totals
+            total_item.setFont(1, QFont(self.font_family, 10, QFont.Weight.Bold))
             self.tree.addTopLevelItem(total_item)
         
         # Check if using group-based data
@@ -701,8 +701,8 @@ class IncomeStatementView(BaseFinancialStatementView):
             
             # Add total revenue
             total_revenue_item = QTreeWidgetItem(["Total Revenue", format_currency(data.get('total_revenue', 0))])
-            total_revenue_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
-            total_revenue_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            total_revenue_item.setFont(0, QFont(self.font_family, 13, QFont.Weight.Bold))  # Larger font for main totals
+            total_revenue_item.setFont(1, QFont(self.font_family, 13, QFont.Weight.Bold))
             self.tree.addTopLevelItem(total_revenue_item)
             
             # COGS section
@@ -718,8 +718,8 @@ class IncomeStatementView(BaseFinancialStatementView):
             
             # Gross Profit
             gross_profit_item = QTreeWidgetItem(["Gross Profit", format_currency(data.get('gross_profit', 0))])
-            gross_profit_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
-            gross_profit_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            gross_profit_item.setFont(0, QFont(self.font_family, 13, QFont.Weight.Bold))  # Larger font for main totals
+            gross_profit_item.setFont(1, QFont(self.font_family, 13, QFont.Weight.Bold))
             self.tree.addTopLevelItem(gross_profit_item)
             
             # Operating expenses (non-COGS)
@@ -735,8 +735,8 @@ class IncomeStatementView(BaseFinancialStatementView):
             
             # Add total operating expenses
             total_operating_expenses_item = QTreeWidgetItem(["Total Operating Expenses", format_currency(data.get('total_operating_expenses', 0))])
-            total_operating_expenses_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
-            total_operating_expenses_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            total_operating_expenses_item.setFont(0, QFont(self.font_family, 13, QFont.Weight.Bold))  # Larger font for main totals
+            total_operating_expenses_item.setFont(1, QFont(self.font_family, 13, QFont.Weight.Bold))
             self.tree.addTopLevelItem(total_operating_expenses_item)
             
         else:
@@ -746,36 +746,29 @@ class IncomeStatementView(BaseFinancialStatementView):
             
             # Gross Profit
             gross_profit_item = QTreeWidgetItem(["Gross Profit", format_currency(data.get('gross_profit', 0))])
-            gross_profit_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
-            gross_profit_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            gross_profit_item.setFont(0, QFont(self.font_family, 13, QFont.Weight.Bold))  # Larger font for main totals
+            gross_profit_item.setFont(1, QFont(self.font_family, 13, QFont.Weight.Bold))
             self.tree.addTopLevelItem(gross_profit_item)
             
             add_section("OPERATING EXPENSES", data.get('expenses', []), data.get('total_expenses', 0), "Total Operating Expenses")
         
         # Net Income
         net_income_item = QTreeWidgetItem(["NET INCOME", format_currency(data.get('net_income', 0))])
-        net_income_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
-        net_income_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+        net_income_item.setFont(0, QFont(self.font_family, 13, QFont.Weight.Bold))  # Larger font for main totals
+        net_income_item.setFont(1, QFont(self.font_family, 13, QFont.Weight.Bold))
         self.tree.addTopLevelItem(net_income_item)
         
         self.content_layout.addWidget(self.tree)
     
     def _add_hierarchical_accounts_to_tree(self, accounts, parent_item):
-        """Add accounts to tree widget with proper balance display."""
+        """Recursively add account tree nodes to the tree widget, showing balance for every node."""
         for acc in accounts:
             name = acc.get('name', '')
-            
-            # Get balance from the account data or hierarchical balances
             balance = acc.get('balance', 0)
-            if balance == 0 and 'net_balance' in acc:
-                balance = acc.get('net_balance', 0)
-            
             amount = format_currency(balance)
             item = QTreeWidgetItem([name, amount])
             parent_item.addChild(item)
-            
-            # For the new standard hierarchy, accounts are flat (no children)
-            # But keep the old logic for backward compatibility
+            # Recursively add children
             children = acc.get('children', [])
             if children:
                 self._add_hierarchical_accounts_to_tree(children, item)
@@ -789,15 +782,24 @@ class IncomeStatementView(BaseFinancialStatementView):
             self.show_income_statement(self.system, from_date_str, to_date_str)
         
     def _generate_html_content(self):
-        """Generate HTML content for Income Statement printing."""
+        """Generate HTML content for Income Statement printing using the new hierarchical group-based data."""
         if not self.system:
             return super()._generate_html_content()
-            
         try:
-            data = self.system.generate_income_statement_breakdown(self.from_date, self.to_date)
+            data = self.system.generate_group_based_income_statement(self.from_date, self.to_date)
         except:
             return super()._generate_html_content()
-            
+        def render_tree_html(accounts, indent_level=0):
+            html = ""
+            for acc in accounts:
+                name = acc.get('name', '')
+                balance = acc.get('balance', 0)
+                children = acc.get('children', [])
+                indent_style = f"padding-left: {indent_level * 20}px;" if indent_level > 0 else ""
+                html += f'<tr class="account"><td style="{indent_style}">{name}</td><td class="amount">{format_currency(balance)}</td></tr>'
+                if children:
+                    html += render_tree_html(children, indent_level + 1)
+            return html
         html = f"""
         <!DOCTYPE html>
         <html>
@@ -820,49 +822,48 @@ class IncomeStatementView(BaseFinancialStatementView):
             <h1>INCOME STATEMENT</h1>
             <h2>For the Period Ended</h2>
             <div class="date">{self._get_date_range_text()}</div>
-            
             <table>
                 <thead>
                     <tr><th>Account</th><th class="amount">Amount</th></tr>
                 </thead>
                 <tbody>
         """
-        
-        # Revenue section
-        if data.get('revenues'):
-            html += '<tr class="section-header"><td>REVENUE</td><td></td></tr>'
-            html += self._generate_hierarchical_html(data.get('revenues', []), indent_level=1)
+        # Revenue sections
+        if data.get('revenue_sections'):
+            for section in data['revenue_sections']:
+                html += f'<tr class="section-header"><td>{section["name"]}</td><td></td></tr>'
+                html += render_tree_html(section.get('accounts', []), indent_level=1)
+                html += f'<tr class="total"><td>Total {section["name"]}</td><td class="amount">{format_currency(section.get("total", 0))}</td></tr>'
             html += f'<tr class="total"><td>Total Revenue</td><td class="amount">{format_currency(data.get("total_revenue", 0))}</td></tr>'
-            
         # COGS section
-        if data.get('cogs'):
-            html += '<tr class="section-header"><td>COST OF GOODS SOLD</td><td></td></tr>'
-            html += self._generate_hierarchical_html(data.get('cogs', []), indent_level=1)
+        cogs_sections = [s for s in data.get('expense_sections', []) if s.get('group') == 'cogs']
+        if cogs_sections:
+            for section in cogs_sections:
+                html += f'<tr class="section-header"><td>{section["name"]}</td><td></td></tr>'
+                html += render_tree_html(section.get('accounts', []), indent_level=1)
+                html += f'<tr class="total"><td>Total {section["name"]}</td><td class="amount">{format_currency(section.get("total", 0))}</td></tr>'
             html += f'<tr class="total"><td>Total Cost of Goods Sold</td><td class="amount">{format_currency(data.get("total_cogs", 0))}</td></tr>'
-            
         # Gross Profit
         html += f'<tr class="total"><td>Gross Profit</td><td class="amount">{format_currency(data.get("gross_profit", 0))}</td></tr>'
-        
-        # Expenses section
-        if data.get('expenses'):
-            html += '<tr class="section-header"><td>OPERATING EXPENSES</td><td></td></tr>'
-            html += self._generate_hierarchical_html(data.get('expenses', []), indent_level=1)
-            html += f'<tr class="total"><td>Total Operating Expenses</td><td class="amount">{format_currency(data.get("total_expenses", 0))}</td></tr>'
-            
+        # Operating expenses (non-COGS)
+        operating_expense_sections = [s for s in data.get('expense_sections', []) if s.get('group') != 'cogs']
+        if operating_expense_sections:
+            for section in operating_expense_sections:
+                html += f'<tr class="section-header"><td>{section["name"]}</td><td></td></tr>'
+                html += render_tree_html(section.get('accounts', []), indent_level=1)
+                html += f'<tr class="total"><td>Total {section["name"]}</td><td class="amount">{format_currency(section.get("total", 0))}</td></tr>'
+            html += f'<tr class="total"><td>Total Operating Expenses</td><td class="amount">{format_currency(data.get("total_operating_expenses", 0))}</td></tr>'
         # Net Income
         html += f'<tr class="total"><td>NET INCOME</td><td class="amount">{format_currency(data.get("net_income", 0))}</td></tr>'
-        
         html += f"""
                 </tbody>
             </table>
-            
             <div style="text-align: center; margin-top: 50px; color: #999; font-size: 11px;">
                 {self.date_generated.text()}
             </div>
         </body>
         </html>
         """
-        
         return html
 
 
@@ -965,12 +966,12 @@ class BalanceSheetView(BaseFinancialStatementView):
                 return
             section = QTreeWidgetItem([title, ""])
             section.setFirstColumnSpanned(True)
-            section.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
+            section.setFont(0, QFont(self.font_family, 10, QFont.Weight.Bold))  # Smaller font for sub-headings
             self.tree.addTopLevelItem(section)
             self._add_hierarchical_accounts_to_tree(accounts, section)
             total_item = QTreeWidgetItem([total_label, format_currency(total)])
-            total_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
-            total_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            total_item.setFont(0, QFont(self.font_family, 10, QFont.Weight.Bold))  # Smaller font for sub-totals
+            total_item.setFont(1, QFont(self.font_family, 10, QFont.Weight.Bold))
             self.tree.addTopLevelItem(total_item)
         
         # Check if using group-based data
@@ -987,8 +988,8 @@ class BalanceSheetView(BaseFinancialStatementView):
             
             # Add total assets
             total_assets_item = QTreeWidgetItem(["Total Assets", format_currency(data.get('total_assets', 0))])
-            total_assets_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
-            total_assets_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            total_assets_item.setFont(0, QFont(self.font_family, 13, QFont.Weight.Bold))  # Larger font for main totals
+            total_assets_item.setFont(1, QFont(self.font_family, 13, QFont.Weight.Bold))
             self.tree.addTopLevelItem(total_assets_item)
             
             # Liabilities section
@@ -1003,8 +1004,8 @@ class BalanceSheetView(BaseFinancialStatementView):
             
             # Add total liabilities
             total_liabilities_item = QTreeWidgetItem(["Total Liabilities", format_currency(data.get('total_liabilities', 0))])
-            total_liabilities_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
-            total_liabilities_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            total_liabilities_item.setFont(0, QFont(self.font_family, 13, QFont.Weight.Bold))  # Larger font for main totals
+            total_liabilities_item.setFont(1, QFont(self.font_family, 13, QFont.Weight.Bold))
             self.tree.addTopLevelItem(total_liabilities_item)
             
             # Equity section
@@ -1019,8 +1020,8 @@ class BalanceSheetView(BaseFinancialStatementView):
             
             # Add total equity
             total_equity_item = QTreeWidgetItem(["Total Equity", format_currency(data.get('total_equity', 0))])
-            total_equity_item.setFont(0, QFont(self.font_family, 11, QFont.Weight.Bold))
-            total_equity_item.setFont(1, QFont(self.font_family, 11, QFont.Weight.Bold))
+            total_equity_item.setFont(0, QFont(self.font_family, 13, QFont.Weight.Bold))  # Larger font for main totals
+            total_equity_item.setFont(1, QFont(self.font_family, 13, QFont.Weight.Bold))
             self.tree.addTopLevelItem(total_equity_item)
             
         else:
@@ -1057,21 +1058,14 @@ class BalanceSheetView(BaseFinancialStatementView):
         self.content_layout.addWidget(self.tree)
     
     def _add_hierarchical_accounts_to_tree(self, accounts, parent_item):
-        """Add accounts to tree widget with proper balance display."""
+        """Recursively add account tree nodes to the tree widget, showing balance for every node."""
         for acc in accounts:
             name = acc.get('name', '')
-            
-            # Get balance from the account data or hierarchical balances
             balance = acc.get('balance', 0)
-            if balance == 0 and 'net_balance' in acc:
-                balance = acc.get('net_balance', 0)
-            
             amount = format_currency(balance)
             item = QTreeWidgetItem([name, amount])
             parent_item.addChild(item)
-            
-            # For the new standard hierarchy, accounts are flat (no children)
-            # But keep the old logic for backward compatibility
+            # Recursively add children
             children = acc.get('children', [])
             if children:
                 self._add_hierarchical_accounts_to_tree(children, item)
@@ -1084,15 +1078,27 @@ class BalanceSheetView(BaseFinancialStatementView):
             self.show_balance_sheet(self.system, as_of_date_str)
         
     def _generate_html_content(self):
-        """Generate HTML content for Balance Sheet printing."""
+        """Generate HTML content for Balance Sheet printing using the new hierarchical group-based data."""
         if not self.system:
             return super()._generate_html_content()
-            
+        
         try:
-            data = self.system.generate_balance_sheet_breakdown(self.to_date)
+            data = self.system.generate_group_based_balance_sheet(self.to_date)
         except:
             return super()._generate_html_content()
-            
+        
+        def render_tree_html(accounts, indent_level=0):
+            html = ""
+            for acc in accounts:
+                name = acc.get('name', '')
+                balance = acc.get('balance', 0)
+                children = acc.get('children', [])
+                indent_style = f"padding-left: {indent_level * 20}px;" if indent_level > 0 else ""
+                html += f'<tr class="account"><td style="{indent_style}">{name}</td><td class="amount">{format_currency(balance)}</td></tr>'
+                if children:
+                    html += render_tree_html(children, indent_level + 1)
+            return html
+        
         html = f"""
         <!DOCTYPE html>
         <html>
@@ -1115,43 +1121,42 @@ class BalanceSheetView(BaseFinancialStatementView):
             <h1>BALANCE SHEET</h1>
             <h2>Statement of Financial Position</h2>
             <div class="date">{self._get_date_range_text()}</div>
-            
             <table>
                 <thead>
                     <tr><th>Account</th><th class="amount">Amount</th></tr>
                 </thead>
                 <tbody>
         """
-        
         # Assets section
-        if data.get('assets'):
-            html += '<tr class="section-header"><td>ASSETS</td><td></td></tr>'
-            html += self._generate_hierarchical_html(data.get('assets', []), indent_level=1)
+        if data.get('asset_sections'):
+            for section in data['asset_sections']:
+                html += f'<tr class="section-header"><td>{section["name"]}</td><td></td></tr>'
+                html += render_tree_html(section.get('accounts', []), indent_level=1)
+                html += f'<tr class="total"><td>Total {section["name"]}</td><td class="amount">{format_currency(section.get("total", 0))}</td></tr>'
             html += f'<tr class="total"><td>Total Assets</td><td class="amount">{format_currency(data.get("total_assets", 0))}</td></tr>'
-            
         # Liabilities section
-        if data.get('liabilities'):
-            html += '<tr class="section-header"><td>LIABILITIES</td><td></td></tr>'
-            html += self._generate_hierarchical_html(data.get('liabilities', []), indent_level=1)
+        if data.get('liability_sections'):
+            for section in data['liability_sections']:
+                html += f'<tr class="section-header"><td>{section["name"]}</td><td></td></tr>'
+                html += render_tree_html(section.get('accounts', []), indent_level=1)
+                html += f'<tr class="total"><td>Total {section["name"]}</td><td class="amount">{format_currency(section.get("total", 0))}</td></tr>'
             html += f'<tr class="total"><td>Total Liabilities</td><td class="amount">{format_currency(data.get("total_liabilities", 0))}</td></tr>'
-            
         # Equity section
-        if data.get('equity'):
-            html += '<tr class="section-header"><td>EQUITY</td><td></td></tr>'
-            html += self._generate_hierarchical_html(data.get('equity', []), indent_level=1)
+        if data.get('equity_sections'):
+            for section in data['equity_sections']:
+                html += f'<tr class="section-header"><td>{section["name"]}</td><td></td></tr>'
+                html += render_tree_html(section.get('accounts', []), indent_level=1)
+                html += f'<tr class="total"><td>Total {section["name"]}</td><td class="amount">{format_currency(section.get("total", 0))}</td></tr>'
             html += f'<tr class="total"><td>Total Equity</td><td class="amount">{format_currency(data.get("total_equity", 0))}</td></tr>'
-            
         html += f"""
                 </tbody>
             </table>
-            
             <div style="text-align: center; margin-top: 50px; color: #999; font-size: 11px;">
                 {self.date_generated.text()}
             </div>
         </body>
         </html>
         """
-        
         return html
 
 

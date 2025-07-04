@@ -2490,19 +2490,27 @@ class UnifiedAccountingSystem:
                     postable_accounts = [acc for acc in group_accounts if acc.get('is_postable', False)]
                     
                     if postable_accounts:
-                        # Calculate total for this group and add balance info to accounts
-                        group_total = 0
+                        # Build complete hierarchy for each postable account
+                        hierarchical_accounts = []
                         for acc in postable_accounts:
-                            balance = hierarchical_balances.get(str(acc['id']), {}).get('net_balance', 0)
+                            # Get complete hierarchy path for this account
+                            hierarchy_path = self._get_account_hierarchy_path(acc['id'], accounts)
+                            balance = hierarchical_balances.get(acc['name'], {}).get('net_balance', 0)
+                            
+                            # Add hierarchy information to account
                             acc['balance'] = balance
                             acc['net_balance'] = balance
-                            group_total += balance
+                            acc['hierarchy_path'] = hierarchy_path
+                            hierarchical_accounts.append(acc)
                         
-                        # Create group section with postable accounts
+                        # Calculate total for this group
+                        group_total = sum(acc['balance'] for acc in hierarchical_accounts)
+                        
+                        # Create group section with hierarchical accounts
                         revenue_sections.append({
                             'group': group_key,
                             'name': self.get_group_display_name(group_key),
-                            'accounts': postable_accounts,
+                            'accounts': hierarchical_accounts,
                             'total': group_total,
                             'is_group_section': True
                         })
@@ -2515,19 +2523,27 @@ class UnifiedAccountingSystem:
                     postable_accounts = [acc for acc in group_accounts if acc.get('is_postable', False)]
                     
                     if postable_accounts:
-                        # Calculate total for this group and add balance info to accounts
-                        group_total = 0
+                        # Build complete hierarchy for each postable account
+                        hierarchical_accounts = []
                         for acc in postable_accounts:
-                            balance = hierarchical_balances.get(str(acc['id']), {}).get('net_balance', 0)
+                            # Get complete hierarchy path for this account
+                            hierarchy_path = self._get_account_hierarchy_path(acc['id'], accounts)
+                            balance = hierarchical_balances.get(acc['name'], {}).get('net_balance', 0)
+                            
+                            # Add hierarchy information to account
                             acc['balance'] = balance
                             acc['net_balance'] = balance
-                            group_total += balance
+                            acc['hierarchy_path'] = hierarchy_path
+                            hierarchical_accounts.append(acc)
                         
-                        # Create group section with postable accounts
+                        # Calculate total for this group
+                        group_total = sum(acc['balance'] for acc in hierarchical_accounts)
+                        
+                        # Create group section with hierarchical accounts
                         expense_sections.append({
                             'group': group_key,
                             'name': self.get_group_display_name(group_key),
-                            'accounts': postable_accounts,
+                            'accounts': hierarchical_accounts,
                             'total': group_total,
                             'is_group_section': True
                         })
@@ -2627,76 +2643,44 @@ class UnifiedAccountingSystem:
             asset_sections = []
             for group_key, group_accounts in asset_groups.items():
                 if group_accounts:
-                    # Get only postable accounts for this group
-                    postable_accounts = [acc for acc in group_accounts if acc.get('is_postable', False)]
-                    
-                    if postable_accounts:
-                        # Calculate total for this group and add balance info to accounts
-                        group_total = 0
-                        for acc in postable_accounts:
-                            balance = hierarchical_balances.get(str(acc['id']), {}).get('net_balance', 0)
-                            acc['balance'] = balance
-                            acc['net_balance'] = balance
-                            group_total += balance
-                        
-                        # Create group section with postable accounts
-                        asset_sections.append({
-                            'group': group_key,
-                            'name': self.get_group_display_name(group_key),
-                            'accounts': postable_accounts,
-                            'total': group_total,
-                            'is_group_section': True
-                        })
+                    # Build a true tree for this group
+                    tree = self._build_account_tree(group_accounts, hierarchical_balances)
+                    group_total = self._calculate_tree_total(tree)
+                    asset_sections.append({
+                        'group': group_key,
+                        'name': self.get_group_display_name(group_key),
+                        'accounts': tree,
+                        'total': group_total,
+                        'is_group_section': True
+                    })
             
             # Build standard hierarchical structure for liability groups
             liability_sections = []
             for group_key, group_accounts in liability_groups.items():
                 if group_accounts:
-                    # Get only postable accounts for this group
-                    postable_accounts = [acc for acc in group_accounts if acc.get('is_postable', False)]
-                    
-                    if postable_accounts:
-                        # Calculate total for this group and add balance info to accounts
-                        group_total = 0
-                        for acc in postable_accounts:
-                            balance = hierarchical_balances.get(str(acc['id']), {}).get('net_balance', 0)
-                            acc['balance'] = balance
-                            acc['net_balance'] = balance
-                            group_total += balance
-                        
-                        # Create group section with postable accounts
-                        liability_sections.append({
-                            'group': group_key,
-                            'name': self.get_group_display_name(group_key),
-                            'accounts': postable_accounts,
-                            'total': group_total,
-                            'is_group_section': True
-                        })
+                    tree = self._build_account_tree(group_accounts, hierarchical_balances)
+                    group_total = self._calculate_tree_total(tree)
+                    liability_sections.append({
+                        'group': group_key,
+                        'name': self.get_group_display_name(group_key),
+                        'accounts': tree,
+                        'total': group_total,
+                        'is_group_section': True
+                    })
             
             # Build standard hierarchical structure for equity groups
             equity_sections = []
             for group_key, group_accounts in equity_groups.items():
                 if group_accounts:
-                    # Get only postable accounts for this group
-                    postable_accounts = [acc for acc in group_accounts if acc.get('is_postable', False)]
-                    
-                    if postable_accounts:
-                        # Calculate total for this group and add balance info to accounts
-                        group_total = 0
-                        for acc in postable_accounts:
-                            balance = hierarchical_balances.get(str(acc['id']), {}).get('net_balance', 0)
-                            acc['balance'] = balance
-                            acc['net_balance'] = balance
-                            group_total += balance
-                        
-                        # Create group section with postable accounts
-                        equity_sections.append({
-                            'group': group_key,
-                            'name': self.get_group_display_name(group_key),
-                            'accounts': postable_accounts,
-                            'total': group_total,
-                            'is_group_section': True
-                        })
+                    tree = self._build_account_tree(group_accounts, hierarchical_balances)
+                    group_total = self._calculate_tree_total(tree)
+                    equity_sections.append({
+                        'group': group_key,
+                        'name': self.get_group_display_name(group_key),
+                        'accounts': tree,
+                        'total': group_total,
+                        'is_group_section': True
+                    })
             
             # Calculate totals
             total_assets = sum(section['total'] for section in asset_sections)
@@ -2720,6 +2704,59 @@ class UnifiedAccountingSystem:
             print(f"Error generating group-based balance sheet: {e}")
             # Fallback to original method
             return self.generate_balance_sheet_breakdown(as_of_date)
+
+    def _get_account_hierarchy_path(self, account_id: int, all_accounts: List[Dict]) -> List[Dict]:
+        """Get the complete hierarchy path for an account from root to the account itself."""
+        path = []
+        current_id = account_id
+        
+        # Build path from account up to root
+        while current_id:
+            # Find current account
+            current_account = next((acc for acc in all_accounts if acc['id'] == current_id), None)
+            if not current_account:
+                break
+            
+            # Add to path (insert at beginning to maintain root->leaf order)
+            path.insert(0, {
+                'id': current_account['id'],
+                'name': current_account['name'],
+                'code': current_account.get('code', ''),
+                'level': current_account.get('level', 1),
+                'is_postable': current_account.get('is_postable', False)
+            })
+            
+            # Move to parent
+            current_id = current_account.get('parent_id')
+        
+        return path
+
+    def _build_account_tree(self, accounts: list, balances: dict) -> list:
+        """Builds a hierarchical tree from a flat account list using parent_id relationships."""
+        account_by_id = {acc['id']: acc for acc in accounts}
+        children_by_parent = {}
+        for acc in accounts:
+            parent_id = acc.get('parent_id')
+            if parent_id:
+                children_by_parent.setdefault(parent_id, []).append(acc)
+        
+        def build_node(acc):
+            node = {
+                'id': acc['id'],
+                'name': acc['name'],
+                'code': acc.get('code', ''),
+                'level': acc.get('level', 1),
+                'is_postable': acc.get('is_postable', False),
+                'balance': balances.get(acc['name'], {}).get('net_balance', 0),
+                'children': []
+            }
+            for child in children_by_parent.get(acc['id'], []):
+                node['children'].append(build_node(child))
+            return node
+        
+        # Only top-level accounts (no parent in this group)
+        roots = [acc for acc in accounts if not acc.get('parent_id') or acc.get('parent_id') not in account_by_id]
+        return [build_node(acc) for acc in roots]
 
 # ================================
 # ENHANCED FEATURES INTEGRATION
