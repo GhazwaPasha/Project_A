@@ -58,9 +58,11 @@ class AccountCard(QFrame):
         layout.setSpacing(8)
           # Header row
         header_layout = QHBoxLayout()
-        header_layout.setSpacing(8)
-          # Account code
+        header_layout.setSpacing(4)  # Reduced spacing between tags
+        
+        # Account code
         code_label = QLabel(self.account_data['code'] or "")
+        code_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         code_label.setStyleSheet("""
             color: #64B5F6;
             font-weight: 600;
@@ -68,8 +70,10 @@ class AccountCard(QFrame):
             background: rgba(100, 181, 246, 0.2);
             padding: 2px 6px;
             border-radius: 4px;
-            border: none;        """)
+            border: none;
+        """)
         code_label.setFixedWidth(50)
+        code_label.setFixedHeight(24)
         header_layout.addWidget(code_label)
         
         # Level tag with color coding
@@ -81,6 +85,7 @@ class AccountCard(QFrame):
         
         level_style = level_colors.get(self.account_level, level_colors[1])
         level_label = QLabel(f"lvl. {self.account_level}")
+        level_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         level_label.setStyleSheet(f"""
             color: {level_style["color"]};
             font-weight: 600;
@@ -91,6 +96,7 @@ class AccountCard(QFrame):
             border: none;
         """)
         level_label.setFixedWidth(50)
+        level_label.setFixedHeight(24)
         level_label.setToolTip(f"Account Level {self.account_level}")
         header_layout.addWidget(level_label)
         
@@ -103,6 +109,7 @@ class AccountCard(QFrame):
         # Reporting tag (R)
         if is_reporting:
             reporting_label = QLabel("R")
+            reporting_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             reporting_label.setStyleSheet("""
                 color: #FF6B6B;
                 font-weight: 700;
@@ -113,12 +120,14 @@ class AccountCard(QFrame):
                 border: none;
             """)
             reporting_label.setFixedWidth(30)
+            reporting_label.setFixedHeight(24)
             reporting_label.setToolTip("Reporting Account")
             header_layout.addWidget(reporting_label)
         
         # Postable tag (P)
         if is_postable:
             postable_label = QLabel("P")
+            postable_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             postable_label.setStyleSheet("""
                 color: #4ECDC4;
                 font-weight: 700;
@@ -129,6 +138,7 @@ class AccountCard(QFrame):
                 border: none;
             """)
             postable_label.setFixedWidth(30)
+            postable_label.setFixedHeight(24)
             postable_label.setToolTip("Postable Account")
             header_layout.addWidget(postable_label)
         

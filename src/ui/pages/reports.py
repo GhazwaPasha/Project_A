@@ -64,10 +64,11 @@ class ReportCard(QFrame):
         
         # Header row with colored indicator tag (like ledger level tags)
         header_layout = QHBoxLayout()
-        header_layout.setSpacing(8)
+        header_layout.setSpacing(4)  # Reduced spacing for tighter layout
         
         # Colored indicator tag (styled like ledger level tags)
         indicator = QLabel("●")
+        indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
         indicator.setStyleSheet(f"""
             color: {self.color};
             font-weight: 600;
@@ -78,6 +79,7 @@ class ReportCard(QFrame):
             border: none;
         """)
         indicator.setFixedWidth(20)
+        indicator.setFixedHeight(24)
         header_layout.addWidget(indicator)
         
         header_layout.addStretch()
