@@ -817,7 +817,6 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         from .pages.trial_balance import TrialBalancePage
         from .pages.reports import ReportsPage
         from .pages.accounts_hierarchy import HierarchicalAccountsPage
-        from .pages.account_classifications import AccountClassificationsPage
         from .pages.reminders_tasks import RemindersTasksPage
         from .pages.period_closing import PeriodClosingPage
         from .pages.team_management import TeamManagementPage

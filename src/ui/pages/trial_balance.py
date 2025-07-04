@@ -37,7 +37,7 @@ class TrialBalancePage(QWidget):
         self._setup_ui()
         self._apply_styling()
         # Load data after UI is fully set up to ensure date selector is properly initialized
-        QTimer.singleShot(0, self._load_data)
+        QTimer.singleShot(100, self._load_data)
         
     def _setup_ui(self):
         """Setup clean professional trial balance UI without scrolling."""
@@ -400,6 +400,10 @@ class TrialBalancePage(QWidget):
     def _refresh_data(self):
         """Refresh trial balance data."""
         try:
+            # Check if UI is fully initialized
+            if not hasattr(self, 'card_balance_status') or not self.card_balance_status:
+                return
+                
             from_date, to_date = self.date_selector.get_date_range()
             trial_data = self._calculate_trial_balance(from_date, to_date)
             self._update_balance_metrics(trial_data)
@@ -547,6 +551,18 @@ class TrialBalancePage(QWidget):
             
     def _update_balance_metrics(self, trial_data):
         """Update compact metrics cards and date info."""
+        # Check if UI is fully initialized
+        if not hasattr(self, 'card_balance_status') or not self.card_balance_status:
+            return
+        if not hasattr(self, 'card_total_debits') or not self.card_total_debits:
+            return
+        if not hasattr(self, 'card_total_credits') or not self.card_total_credits:
+            return
+        if not hasattr(self, 'card_difference') or not self.card_difference:
+            return
+        if not hasattr(self, 'date_info_label') or not self.date_info_label:
+            return
+            
         symbol = self._get_currency_symbol()
         
         # Balance status (removed emoji)
@@ -694,6 +710,10 @@ class TrialBalancePage(QWidget):
     def refresh_currency_display(self):
         """Refresh all currency displays when currency symbol changes."""
         try:
+            # Check if UI is fully initialized
+            if not hasattr(self, 'card_balance_status') or not self.card_balance_status:
+                return
+                
             # Get current date range and recalculate trial balance
             from_date, to_date = self.date_selector.get_date_range()
             self._refresh_data()

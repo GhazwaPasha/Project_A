@@ -125,8 +125,19 @@ class AccountFormCard(QFrame):
         self.type_combo.addItems(["Asset", "Liability", "Equity", "Revenue", "Expense"])
         self.type_combo.setStyleSheet(self._get_combo_style())
         self.type_combo.currentTextChanged.connect(self._update_parent_options)
+        self.type_combo.currentTextChanged.connect(self._update_group_options)
         form_layout.addWidget(type_label, row, 0)
         form_layout.addWidget(self.type_combo, row, 1)
+        row += 1
+        
+        # Group
+        group_label = QLabel("Group")
+        group_label.setStyleSheet(self._get_label_style())
+        self.group_combo = QComboBox()
+        self.group_combo.setStyleSheet(self._get_combo_style())
+        self.group_combo.currentTextChanged.connect(self._on_group_changed)
+        form_layout.addWidget(group_label, row, 0)
+        form_layout.addWidget(self.group_combo, row, 1)
         row += 1
         
         # Level
@@ -215,8 +226,13 @@ class AccountFormCard(QFrame):
         # Add form layout to main layout
         layout.addLayout(form_layout)
         
-        # Update parent options
+        # Update parent options and initialize group options
         self._update_parent_options()
+        
+        # Initialize group options for the default account type
+        default_type = self.type_combo.currentText()
+        if default_type:
+            self._update_group_options(default_type)
         
     def _get_label_style(self):
         return """
@@ -314,6 +330,12 @@ class AccountFormCard(QFrame):
             }
         """
     
+    def _on_group_changed(self):
+        """Handle group selection changes."""
+        # This method can be used for any group-specific logic
+        # For now, it's just a placeholder
+        pass
+        
     def _on_level_changed(self):
         """Handle hierarchy level change."""
         level = self.level_combo.currentIndex() + 1
@@ -339,6 +361,10 @@ class AccountFormCard(QFrame):
                 return
             
         level = self.level_combo.currentIndex() + 1
+        current_type = self.type_combo.currentText()
+        
+        # Update group options based on account type
+        self._update_group_options(current_type)
         
         if level == 1:
             # Level 1 accounts have no parent
@@ -352,7 +378,6 @@ class AccountFormCard(QFrame):
             # Get all accounts and filter for potential parents
             try:
                 all_accounts = self.system.get_chart_of_accounts(active_only=False)
-                current_type = self.type_combo.currentText()
                 
                 if not all_accounts:
                     # Update completer with empty list
@@ -388,7 +413,7 @@ class AccountFormCard(QFrame):
                             # Try to get level from account, calculate if missing
                             acc_level = account.get('level')
                             if acc_level is None:
-                                acc_level = calculate_account_level(account, all_accounts)
+                                acc_level = calculate_account_level(account, all_accs)
                         else:
                             # Tuple format: (name, type, code, parent_code, level, is_postable, description)
                             if len(account) >= 5:
@@ -421,6 +446,23 @@ class AccountFormCard(QFrame):
                 # Clear completer on error
                 model = QStringListModel([])
                 self.parent_completer.setModel(model)
+    
+    def _update_group_options(self, account_type):
+        """Update group options based on account type."""
+        if not self.system:
+            return
+            
+        # Get group options for the account type
+        group_options = self.system.get_group_options_by_type(account_type)
+        
+        # Clear and repopulate the group combo box
+        self.group_combo.clear()
+        self.group_combo.addItems(group_options)
+        
+        # Set default to "None"
+        none_index = self.group_combo.findText("None")
+        if none_index >= 0:
+            self.group_combo.setCurrentIndex(none_index)
     
     def _validate_parent_account(self):
         """Validate the entered parent account."""
@@ -474,6 +516,12 @@ class AccountFormCard(QFrame):
         type_index = self.type_combo.findText(account_type)
         if type_index >= 0:
             self.type_combo.setCurrentIndex(type_index)
+            # Update group options based on the account type
+            self._update_group_options(account_type)
+            
+        # Store group value to restore later
+        group = account_data.get('group', '')
+        print(f"🔍 DEBUG: Setting group for account '{account_data['name']}': '{group}'")
             
         # Set level
         if account_data['level'] and 1 <= account_data['level'] <= 3:
@@ -482,7 +530,7 @@ class AccountFormCard(QFrame):
         # Set postable status
         self.postable_check.setChecked(account_data['is_postable'])
         
-        # Update parent options and set parent
+        # Update parent options and set parent (this will reset group combo to "None")
         self._update_parent_options()
         if account_data.get('parent_code'):
             # Find the parent account and set it in the input field
@@ -505,12 +553,27 @@ class AccountFormCard(QFrame):
             except Exception as e:
                 print(f"Error setting parent account: {e}")
                 self.parent_input.setText(account_data['parent_code'])
+                
+        # Now restore the group value AFTER _update_parent_options has been called
+        if group:
+            group_display = self.system.get_group_display_name(group)
+            print(f"🔍 DEBUG: Restoring group display name: '{group_display}'")
+            group_index = self.group_combo.findText(group_display)
+            print(f"🔍 DEBUG: Group index in combo: {group_index}")
+            if group_index >= 0:
+                self.group_combo.setCurrentIndex(group_index)
+                print(f"🔍 DEBUG: Group combo restored to index {group_index}")
+            else:
+                print(f"🔍 DEBUG: Group '{group_display}' not found in combo options: {[self.group_combo.itemText(i) for i in range(self.group_combo.count())]}")
+        else:
+            print(f"🔍 DEBUG: No group value for account '{account_data['name']}'")
                     
     def reset_form(self):
         """Reset the form to its initial state."""
         self.name_edit.clear()
         self.code_edit.clear()
         self.type_combo.setCurrentIndex(0)
+        self.group_combo.clear()
         self.level_combo.setCurrentIndex(0)
         self.parent_input.clear()
         self.postable_check.setChecked(True)
@@ -566,8 +629,14 @@ class AccountFormCard(QFrame):
             'code': self.code_edit.text().strip(),
             'parent_code': parent_code,
             'level': level,
-            'is_postable': self.postable_check.isChecked()
+            'is_postable': self.postable_check.isChecked(),
+            'group': self.system.get_group_key_from_display(self.group_combo.currentText())
         }
+        
+        # Debug logging
+        print(f"🔍 DEBUG: Form submission data: {data}")
+        print(f"🔍 DEBUG: Group combo text: '{self.group_combo.currentText()}'")
+        print(f"🔍 DEBUG: Group key from display: '{data['group']}'")
         
         if self.edit_mode and self.account_data:
             data['old_name'] = self.account_data['name']
@@ -610,21 +679,10 @@ class HierarchicalAccountsPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        # Create stacked widget for switching views
-        self.stacked_widget = QStackedWidget()
-        
         # Create main accounts overview page
         self.overview_page = self._create_overview_page()
-        self.stacked_widget.addWidget(self.overview_page)
-        
-        # Create account classifications page
-        from .account_classifications import AccountClassificationsPage
-        self.classifications_page = AccountClassificationsPage(self.system, self)
-        self.classifications_page.backToAccounts.connect(self._show_overview)
-        self.stacked_widget.addWidget(self.classifications_page)
-        
-        layout.addWidget(self.stacked_widget)
-    
+        layout.addWidget(self.overview_page)
+
     def _create_overview_page(self):
         """Create the main accounts overview page."""
         page = QWidget()
@@ -650,7 +708,7 @@ class HierarchicalAccountsPage(QWidget):
         
         # Create tree widget
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Code", "Account Name", "Type", "Level", "Postable"])
+        self.tree.setHeaderLabels(["Code", "Account Name", "Type", "Group", "Level", "Postable"])
         self.tree.setRootIsDecorated(True)
         self.tree.setAnimated(True)
         self.tree.setIndentation(20)
@@ -664,17 +722,20 @@ class HierarchicalAccountsPage(QWidget):
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Code
             header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)           # Account Name (main content)
             header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Type
-            header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Level
-            header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Postable
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Group
+            header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Level
+            header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)  # Postable
             
             # Set minimum widths to ensure content is always visible
             header.setMinimumSectionSize(60)   # Minimum for any column
             self.tree.setColumnWidth(0, 80)    # Code column - fixed reasonable width
             self.tree.setColumnWidth(1, 250)   # Account Name - larger for hierarchy display
             self.tree.setColumnWidth(2, 80)    # Type column
-            self.tree.setColumnWidth(3, 80)    # Level column  
-            self.tree.setColumnWidth(4, 70)    # Postable column
-          # Modern tree styling with shared scrollbar
+            self.tree.setColumnWidth(3, 120)   # Group column
+            self.tree.setColumnWidth(4, 80)    # Level column  
+            self.tree.setColumnWidth(5, 70)    # Postable column
+        
+        # Modern tree styling with shared scrollbar
         tree_style = """
             QTreeWidget {
                 background: rgba(255, 255, 255, 0.05);
@@ -739,11 +800,7 @@ class HierarchicalAccountsPage(QWidget):
         layout.addWidget(splitter, stretch=1)
         
         return page
-    
-    def _show_overview(self):
-        """Show the main accounts overview page."""
-        self.stacked_widget.setCurrentIndex(0)
-        
+
     def _create_toolbar(self, layout):
         """Create enhanced toolbar with hierarchy-specific actions."""
         toolbar_layout = QHBoxLayout()
@@ -797,7 +854,11 @@ class HierarchicalAccountsPage(QWidget):
             filter_layout.addWidget(btn)
             
         layout.addWidget(filter_group)
-        
+
+    def _show_overview(self):
+        """Show the main accounts overview page."""
+        pass
+
     def _create_action_buttons(self, layout):
         """Create action buttons."""
         button_layout = QHBoxLayout()
@@ -805,140 +866,39 @@ class HierarchicalAccountsPage(QWidget):
         
         # Refresh button
         refresh_btn = QPushButton()
-        refresh_btn.setText("  Refresh")
-        refresh_btn.setToolTip("Refresh the Chart of Accounts")
-        
-        try:
-            # Try to use a modern refresh icon
-            refresh_icon = QIcon("assets/icons/magic.svg")  # Using magic icon as a refresh symbol
-            if not refresh_icon.isNull():
-                refresh_btn.setIcon(refresh_icon)
-            else:
-                refresh_btn.setText("🔄 Refresh")
-        except:
-            refresh_btn.setText("🔄 Refresh")
-            
-        refresh_btn.setStyleSheet("""
-            QPushButton {
-                background: rgba(100, 181, 246, 0.15);
-                border: 1px solid rgba(100, 181, 246, 0.3);
-                border-radius: 8px;
-                padding: 8px 16px;
-                color: #90CAF9;
-                font-size: 12px;
-                font-weight: 600;
-                text-align: left;
-                icon-size: 16px;
-                min-height: 32px;
-            }
-            QPushButton:hover {
-                background: rgba(100, 181, 246, 0.2);
-                border: 1px solid rgba(100, 181, 246, 0.5);
-            }
-            QPushButton:pressed {
-                background: rgba(100, 181, 246, 0.1);
-                border: 1px solid rgba(100, 181, 246, 0.4);
-            }
-        """)
+        refresh_btn.setText("🔄 Refresh")
+        refresh_btn.setStyleSheet(self._get_add_button_style())
         refresh_btn.clicked.connect(self._refresh_data)
         button_layout.addWidget(refresh_btn)
         
         # Add Account button
-        add_btn = QPushButton()
-        add_btn.setText("  Add Account")
-        
-        try:
-            add_icon = QIcon("assets/icons/accounts_modern.svg")
-            if not add_icon.isNull():
-                add_btn.setIcon(add_icon)
-            else:
-                add_btn.setText("➕ Add Account")
-        except:
-            add_btn.setText("➕ Add Account")
-            
-        add_btn.setStyleSheet(self._get_add_button_style())
-        add_btn.clicked.connect(self._add_account)
-        button_layout.addWidget(add_btn)
+        self.add_btn = QPushButton()
+        self.add_btn.setText("➕ Add Account")
+        self.add_btn.setStyleSheet(self._get_add_button_style())
+        self.add_btn.clicked.connect(self._add_account)
+        button_layout.addWidget(self.add_btn)
         
         # Edit Account button
         self.edit_btn = QPushButton()
-        self.edit_btn.setText("  Edit Account")
-        self.edit_btn.setEnabled(False)  # Disabled until selection
-        
-        try:
-            edit_icon = QIcon("assets/icons/pen.svg")
-            if not edit_icon.isNull():
-                self.edit_btn.setIcon(edit_icon)
-            else:
-                self.edit_btn.setText("✏️ Edit Account")
-        except:
-            self.edit_btn.setText("✏️ Edit Account")
-            
+        self.edit_btn.setText("✏️ Edit Account")
         self.edit_btn.setStyleSheet(self._get_edit_button_style())
         self.edit_btn.clicked.connect(self._edit_selected_account)
+        self.edit_btn.setEnabled(False)
         button_layout.addWidget(self.edit_btn)
         
         # Delete Account button
         self.delete_btn = QPushButton()
-        self.delete_btn.setText("  Delete Account")
-        self.delete_btn.setEnabled(False)  # Disabled until selection
-        
-        try:
-            delete_icon = QIcon("assets/icons/close.svg")
-            if not delete_icon.isNull():
-                self.delete_btn.setIcon(delete_icon)
-            else:
-                self.delete_btn.setText("🗑️ Delete Account")
-        except:
-            self.delete_btn.setText("🗑️ Delete Account")
-            
+        self.delete_btn.setText("🗑️ Delete Account")
         self.delete_btn.setStyleSheet(self._get_delete_button_style())
         self.delete_btn.clicked.connect(self._delete_selected_account)
+        self.delete_btn.setEnabled(False)
         button_layout.addWidget(self.delete_btn)
         
         # Add spacing
         button_layout.addSpacing(16)
         
-        # Account Classifications button
-        classifications_btn = QPushButton()
-        classifications_btn.setText("  Balance Sheet Categories")
-        
-        try:
-            classifications_icon = QIcon("assets/icons/reports_modern.svg")
-            if not classifications_icon.isNull():
-                classifications_btn.setIcon(classifications_icon)
-            else:
-                classifications_btn.setText("📊 Balance Sheet Categories")
-        except:
-            classifications_btn.setText("📊 Balance Sheet Categories")
-            
-        classifications_btn.setStyleSheet("""
-            QPushButton {
-                background: rgba(156, 39, 176, 0.15);
-                border: 1px solid rgba(156, 39, 176, 0.3);
-                border-radius: 8px;
-                padding: 8px 16px;
-                color: #CE93D8;
-                font-size: 12px;
-                font-weight: 600;
-                text-align: left;
-                icon-size: 16px;
-                min-height: 32px;
-            }
-            QPushButton:hover {
-                background: rgba(156, 39, 176, 0.2);
-                border: 1px solid rgba(156, 39, 176, 0.5);
-            }
-            QPushButton:pressed {
-                background: rgba(156, 39, 176, 0.1);
-                border: 1px solid rgba(156, 39, 176, 0.4);
-            }
-        """)
-        classifications_btn.clicked.connect(self._open_classifications)
-        button_layout.addWidget(classifications_btn)
-        
         layout.addLayout(button_layout)
-        
+    
     def _refresh_data(self):
         """Refresh the chart of accounts data."""
         # Force a database refresh
@@ -1000,13 +960,6 @@ class HierarchicalAccountsPage(QWidget):
             if self._find_and_select_item(item.child(i), code):
                 return True
         return False
-    
-    def _open_classifications(self):
-        """Open the account classifications page."""
-        # Switch to the classifications page in the stacked widget
-        self.stacked_widget.setCurrentIndex(1)
-    
-
     
     def _add_account(self):
         """Show form to add a new account."""
@@ -1180,12 +1133,25 @@ class HierarchicalAccountsPage(QWidget):
                 parent_code = account.get('parent_code', '')
                 is_postable = account.get('is_postable', True)
                 
+                # Get group data with inheritance
+                group = account.get('group', '')
+                group_inherited = account.get('group_inherited', False)
+                
+                # Format group display
+                if group:
+                    group_display = self.system.get_group_display_name(group)
+                    if group_inherited:
+                        group_display += " (inherited)"
+                else:
+                    group_display = "None"
+                
                 item = QTreeWidgetItem()
                 item.setText(0, code or "")
                 item.setText(1, name)
-                item.setText(2, acc_type)
-                item.setText(3, f"Level {level}")
-                item.setText(4, "✓" if is_postable else "✗")
+                item.setText(2, acc_type.capitalize() if acc_type else "")
+                item.setText(3, group_display)
+                item.setText(4, f"Level {level}")
+                item.setText(5, "✓" if is_postable else "✗")
                 
                 # Store account data in item
                 item.setData(0, Qt.ItemDataRole.UserRole, {
@@ -1196,7 +1162,9 @@ class HierarchicalAccountsPage(QWidget):
                     'parent_code': parent_code,
                     'level': level,
                     'is_postable': is_postable,
-                    'description': description
+                    'description': description,
+                    'group': group,
+                    'group_inherited': group_inherited
                 })
                 
                 # Color coding by level
@@ -1207,15 +1175,21 @@ class HierarchicalAccountsPage(QWidget):
                 }
                 
                 if level in level_colors:
-                    for col in range(5):
+                    for col in range(6):  # Updated to 6 columns
                         item.setForeground(col, level_colors[level])
                         
                 # Bold font for non-postable accounts (usually headers)
                 if not is_postable:
                     font = QFont()
                     font.setBold(True)
-                    for col in range(5):
+                    for col in range(6):  # Updated to 6 columns
                         item.setFont(col, font)
+                
+                # Italic font for inherited groups
+                if group_inherited:
+                    font = QFont()
+                    font.setItalic(True)
+                    item.setFont(3, font)  # Group column
                 
                 items[code] = item
                 
@@ -1284,7 +1258,7 @@ class HierarchicalAccountsPage(QWidget):
         current_widths = [self.tree.columnWidth(i) for i in range(self.tree.columnCount())]
         
         # Set intelligent minimums and adjustments for each column
-        min_widths = [80, 200, 80, 80, 70]  # Code, Account Name, Type, Level, Postable
+        min_widths = [80, 200, 80, 120, 80, 70]  # Code, Account Name, Type, Group, Level, Postable
         
         # Ensure Account Name column has enough space for hierarchical content
         # Add extra space for indentation (20px per level * 3 levels + padding)
@@ -1571,7 +1545,8 @@ class AccountDetailsPanel(QStackedWidget):
                         'code': data['code'] or None,
                         'parent_id': parent_id,
                         'is_postable': data['is_postable'],
-                        'description': ""
+                        'description': "",
+                        'group': data.get('group', '')
                     }
                     
                     # Access the base system for database operations
@@ -1607,7 +1582,8 @@ class AccountDetailsPanel(QStackedWidget):
                     'code': data['code'] or None,
                     'parent_id': parent_id,
                     'is_postable': data['is_postable'],
-                    'description': ""
+                    'description': "",
+                    'group': data.get('group', '')
                 }
                 
                 # Access the base system for database operations

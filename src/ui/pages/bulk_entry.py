@@ -43,10 +43,11 @@ class BulkEntryPage(QWidget):
             # Use the working load_accounts_from_system function
             self.formatted_accounts = load_accounts_from_system(self.system)
             
+            # Initialize account_matcher to None before refresh
+            self.account_matcher = None
+            
             # Enhanced AccountMatcher for intelligent import assistance with semantic understanding
-            self.account_matcher = EnhancedAccountMatcher(self.formatted_accounts) if self.formatted_accounts else None
-            if self.account_matcher and self.formatted_accounts:
-                print(f"📊 EnhancedAccountMatcher initialized with {len(self.formatted_accounts)} accounts")
+            self._refresh_account_matcher()
         except Exception as e:
             print(f"❌ Error loading accounts in bulk entry: {e}")
             self.formatted_accounts = []
@@ -735,6 +736,42 @@ class BulkEntryPage(QWidget):
                 # Ensure proper cleanup
                 self._cleanup_unused_resources()
     
+    def _refresh_accounts(self):
+        """Internal method to refresh accounts when events are triggered."""
+        try:
+            # Use the same simple approach as initialization
+            self.formatted_accounts = load_accounts_from_system(self.system)
+            self._refresh_account_matcher()
+            
+            # Refresh all cards
+            self.refresh_accounts_from_system()
+        except Exception as e:
+            print(f"❌ Error refreshing accounts in bulk entry: {e}")
+            self.formatted_accounts = []
+            self.account_matcher = None
+    
+    def _refresh_account_matcher(self):
+        """Refresh the EnhancedAccountMatcher with fresh account data."""
+        try:
+            # Get fresh data from system to ensure we have the latest
+            fresh_accounts = load_accounts_from_system(self.system, use_fresh_data=True)
+            if fresh_accounts:
+                if self.account_matcher:
+                    # Use the refresh method if matcher already exists
+                    self.account_matcher.refresh_accounts(fresh_accounts)
+                else:
+                    # Create new matcher if none exists
+                    self.account_matcher = EnhancedAccountMatcher(fresh_accounts)
+                    print(f"✅ EnhancedAccountMatcher created with {len(fresh_accounts)} accounts")
+                # Update formatted_accounts to match
+                self.formatted_accounts = fresh_accounts
+            else:
+                self.account_matcher = None
+                print("⚠️ No fresh accounts available for EnhancedAccountMatcher")
+        except Exception as e:
+            print(f"❌ Error refreshing EnhancedAccountMatcher: {e}")
+            self.account_matcher = None
+    
     def refresh_accounts_from_system(self):
         """Reload accounts from the system and refresh all entry cards."""
         try:
@@ -1078,7 +1115,11 @@ class BulkEntryPage(QWidget):
                 all_formatted_accounts = []
             
             # Reinitialize EnhancedAccountMatcher with ALL accounts (including non-postable)
-            self.account_matcher = EnhancedAccountMatcher(all_formatted_accounts) if all_formatted_accounts else None
+            if all_formatted_accounts:
+                self.account_matcher = EnhancedAccountMatcher(all_formatted_accounts)
+                print(f"✅ EnhancedAccountMatcher reinitialized with {len(all_formatted_accounts)} accounts (including non-postable)")
+            else:
+                self.account_matcher = None
             
             # Update all existing cards with the new account list
             for card in self.entry_cards:
@@ -1088,20 +1129,6 @@ class BulkEntryPage(QWidget):
             print("✅ Account list and matcher refreshed in bulk entry page")
         except Exception as e:
             print(f"❌ Error refreshing accounts in bulk entry: {e}")
-            self.account_matcher = None
-    
-    def _refresh_accounts(self):
-        """Internal method to refresh accounts when events are triggered."""
-        try:
-            # Use the same simple approach as initialization
-            self.formatted_accounts = load_accounts_from_system(self.system)
-            self.account_matcher = EnhancedAccountMatcher(self.formatted_accounts) if self.formatted_accounts else None
-            
-            # Refresh all cards
-            self.refresh_accounts_from_system()
-        except Exception as e:
-            print(f"❌ Error refreshing accounts in bulk entry: {e}")
-            self.formatted_accounts = []
             self.account_matcher = None
     
     def _resolve_account_for_import(self, raw_account_name):

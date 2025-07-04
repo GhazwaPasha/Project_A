@@ -304,6 +304,13 @@ class EnhancedAccountMatcher(AccountMatcher):
         self.aliases = create_common_account_aliases()
         self._build_semantic_maps()
     
+    def refresh_accounts(self, new_chart_of_accounts: List[str]):
+        """Refresh the account matcher with new account data."""
+        self.chart_of_accounts = new_chart_of_accounts
+        self._build_matching_maps()
+        self._build_semantic_maps()
+        print(f"🔄 EnhancedAccountMatcher refreshed with {len(new_chart_of_accounts)} accounts")
+    
     def _build_semantic_maps(self):
         """Build semantic mapping for better account matching (optimized)."""
         self.semantic_map = {}  # Concept -> list of related accounts

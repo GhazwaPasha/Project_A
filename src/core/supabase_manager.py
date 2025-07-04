@@ -346,17 +346,35 @@ class SupabaseManager:
     def update_account(self, account_id: int, updates: Dict[str, Any]) -> bool:
         """Update account."""
         try:
+            print(f"🔍 DEBUG: SupabaseManager.update_account - account_id: {account_id}, updates: {updates}")
+            
             # Filter out fields that don't exist in the database schema
+            # Note: 'group' field should be included as it exists in the accounts table
             filtered_updates = {k: v for k, v in updates.items() if k != 'is_postable'}
             filtered_updates['updated_at'] = datetime.now().isoformat()
+            
+            print(f"🔍 DEBUG: SupabaseManager filtered_updates: {filtered_updates}")
             
             # Convert account_type to lowercase to match database enum
             if 'account_type' in filtered_updates:
                 filtered_updates['account_type'] = filtered_updates['account_type'].lower()
             
+            # Handle group field - ensure it's properly formatted
+            if 'group' in filtered_updates:
+                group_value = filtered_updates['group']
+                # Convert empty string to None for database
+                if group_value == '':
+                    filtered_updates['group'] = None
+                print(f"🔍 DEBUG: Group field in update: {filtered_updates['group']}")
+            
             result = self.supabase.table('accounts').update(filtered_updates).eq('id', account_id).execute()
-            return len(result.data) > 0
+            print(f"🔍 DEBUG: Supabase update result: {result.data if result else 'None'}")
+            
+            success = len(result.data) > 0
+            print(f"🔍 DEBUG: Update success: {success}")
+            return success
         except Exception as e:
+            print(f"🔍 DEBUG: SupabaseManager.update_account exception: {e}")
             self.logger.error(f"Error updating account: {e}")
             return False
     

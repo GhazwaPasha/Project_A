@@ -134,11 +134,16 @@ def get_label_style(field_type=None):
         max-height: 14px;
     """
 
-def load_accounts_from_system(system):
+def load_accounts_from_system(system, use_fresh_data=False):
     """Load accounts from the accounting system."""
     try:
         if hasattr(system, 'get_chart_of_accounts'):
-            accounts_data = system.get_chart_of_accounts(active_only=False)
+            if use_fresh_data and hasattr(system, 'get_chart_of_accounts_fresh'):
+                # Use fresh data method for consistency
+                accounts_data = system.get_chart_of_accounts_fresh(active_only=False)
+            else:
+                # Use regular cache-first method
+                accounts_data = system.get_chart_of_accounts(active_only=False)
             # Handle both dict and tuple formats
             if accounts_data and len(accounts_data) > 0:
                 sample_account = accounts_data[0]

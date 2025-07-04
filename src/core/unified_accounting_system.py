@@ -538,6 +538,32 @@ class UnifiedAccountingSystem:
 
         return []
 
+    def get_chart_of_accounts_fresh(self, active_only: bool = True) -> List[Dict[str, Any]]:
+        """Get chart of accounts with fresh data (bypassing cache for consistency)."""
+        if not self.current_organization_id:
+            return []
+
+        # Always try to get fresh data from database first
+        if self.is_online:
+            try:
+                self._set_database_context()
+                result = self.db_manager.get_accounts(self.current_organization_id, active_only)
+                if result:
+                    # Update cache with fresh data
+                    self.offline_cache.cache_data('accounts', result, self.current_organization_id)
+                    self.logger.info(f"Loaded {len(result)} fresh accounts from database.")
+                    return self._process_accounts(result, active_only)
+            except Exception as e:
+                self.logger.error(f"Fresh accounts fetch failed: {e}")
+
+        # Fallback to cache if online fetch fails
+        cached_accounts = self.offline_cache.get_cached_data('accounts', self.current_organization_id)
+        if cached_accounts:
+            self.logger.info(f"Fallback: Loaded {len(cached_accounts)} accounts from cache.")
+            return self._process_accounts(cached_accounts, active_only)
+
+        return []
+
     def _process_accounts(self, accounts: List[Dict], active_only: bool) -> List[Dict]:
         """Helper to filter and enhance accounts."""
         if active_only:
@@ -565,25 +591,40 @@ class UnifiedAccountingSystem:
             """Calculate hierarchy level (1-4)"""
             if visited is None:
                 visited = set()
-            
             acc_id = acc['id']
             if acc_id in visited:  # Prevent infinite loops
                 return 1
             visited.add(acc_id)
-            
             parent_id = acc.get('parent_id')
             if not parent_id or parent_id not in account_by_id:
                 return 1  # Root level
-            
             parent_acc = account_by_id[parent_id]
             return calculate_level(parent_acc, visited) + 1
+        
+        def get_inherited_group(acc, visited=None):
+            """Get group inherited from parent account"""
+            if visited is None:
+                visited = set()
+            acc_id = acc['id']
+            if acc_id in visited:  # Prevent infinite loops
+                return None
+            visited.add(acc_id)
+            # Check if account has direct group assignment
+            direct_group = acc.get('group')
+            if direct_group:
+                return direct_group
+            # Check parent inheritance
+            parent_id = acc.get('parent_id')
+            if parent_id and parent_id in account_by_id:
+                parent_acc = account_by_id[parent_id]
+                return get_inherited_group(parent_acc, visited)
+            return None
         
         def is_postable(acc):
             """Determine if account is postable based on hierarchy rules"""
             acc_id = acc['id']
             level = calculate_level(acc)
             has_children = acc_id in children_by_parent
-            
             # Rules for postability:
             # 1. If it's a leaf account (no children), it's postable
             # 2. For level 3+ accounts without children are postable
@@ -610,12 +651,14 @@ class UnifiedAccountingSystem:
             enhanced_acc['level'] = calculate_level(acc)
             enhanced_acc['is_postable'] = is_postable(acc)
             enhanced_acc['parent_code'] = get_parent_code(acc)
-            
+            # Add group data with inheritance
+            direct_group = acc.get('group')
+            inherited_group = get_inherited_group(acc)
+            enhanced_acc['group'] = direct_group or inherited_group
+            enhanced_acc['group_inherited'] = direct_group is None and inherited_group is not None
             # Add compatibility field mappings for UI
             enhanced_acc['type'] = acc.get('account_type', acc.get('type', ''))  # Map account_type to type for UI compatibility
-            
             enhanced_accounts.append(enhanced_acc)
-        
         return enhanced_accounts
     
     def get_accounts(self, active_only: bool = True) -> List[Dict[str, Any]]:
@@ -723,6 +766,9 @@ class UnifiedAccountingSystem:
         if not self.auth_manager.can_create_accounts(self.current_organization_id):
             raise PermissionError("Insufficient permissions to create accounts")
         
+        # Extract group data before creating account
+        group = account_data.pop('group', None)
+        
         # Add organization context
         account_data['organization_id'] = self.current_organization_id
         account_data['created_by'] = self.current_user_id
@@ -740,6 +786,13 @@ class UnifiedAccountingSystem:
                 print(f"Debug: UnifiedAccountingSystem.create_account online result: {result}")
                 if result:
                     print(f"Debug: Online creation successful, returning: {result}")
+                    
+                    # Save group if provided
+                    if group and group != 'None':
+                        account_id = result.get('id')
+                        if account_id:
+                            self.save_account_group(account_id, group)
+                    
                     return result
                 else:
                     print(f"Debug: Online creation returned None, falling back to queue")
@@ -749,6 +802,10 @@ class UnifiedAccountingSystem:
                 self.is_online = False
         
         # Queue for later sync if offline
+        # Store group data in the account_data for offline sync
+        if group and group != 'None':
+            account_data['group'] = group
+        
         self.offline_cache.queue_operation(
             'INSERT', 'accounts', account_data, 
             self.current_organization_id, self.current_user_id
@@ -767,22 +824,100 @@ class UnifiedAccountingSystem:
         if not self.auth_manager.can_edit_accounts(self.current_organization_id):
             raise PermissionError("Insufficient permissions to update accounts")
         
+        print(f"🔍 DEBUG: update_account - account_id: {account_id}, full_updates: {updates}")
+        
+        # Check if group is being updated
+        group_updated = 'group' in updates
+        new_group = updates.get('group')
+        
         # Try online first
         if self.is_online:
             try:
                 self._set_database_context()
-                return self.db_manager.update_account(account_id, updates)
+                # Include group in the main update - don't separate it
+                success = self.db_manager.update_account(account_id, updates)
+                print(f"🔍 DEBUG: db_manager.update_account result: {success}")
+                
+                if success:
+                    # If group was updated, update child accounts' inherited groups
+                    # We do this regardless of whether the group value changed, because
+                    # child accounts might not have the group value stored in the database
+                    if group_updated and new_group:
+                        print(f"🔍 DEBUG: Group field updated to '{new_group}', updating child accounts")
+                        self._update_child_accounts_inherited_groups(account_id, new_group)
+                    
+                    # Force cache refresh to reflect changes
+                    self._refresh_cache()
+                
+                return success
             except Exception as e:
+                print(f"🔍 DEBUG: update_account exception: {e}")
                 self.logger.error(f"Online account update failed: {e}")
                 self.is_online = False
         
         # Queue for later sync if offline
         updates['id'] = account_id
+        
         self.offline_cache.queue_operation(
             'UPDATE', 'accounts', updates,
             self.current_organization_id, self.current_user_id
         )
         return True
+    
+    def _update_child_accounts_inherited_groups(self, parent_account_id: int, new_parent_group: str):
+        """Update inherited groups for all child accounts when parent group changes."""
+        try:
+            print(f"🔍 DEBUG: _update_child_accounts_inherited_groups - parent_id: {parent_account_id}, new_group: {new_parent_group}")
+            
+            # Get all accounts to find children
+            all_accounts = self.get_chart_of_accounts(active_only=False)
+            account_by_id = {acc['id']: acc for acc in all_accounts}
+            
+            # Find all child accounts (direct and indirect)
+            children_to_update = []
+            
+            def find_children(parent_id, visited=None):
+                """Recursively find all children of a parent account."""
+                if visited is None:
+                    visited = set()
+                if parent_id in visited:
+                    return  # Prevent infinite loops
+                visited.add(parent_id)
+                
+                for acc in all_accounts:
+                    if acc.get('parent_id') == parent_id:
+                        # Check if the child account has a direct group assignment
+                        direct_group = acc.get('group')
+                        if not direct_group:  # No direct group assignment - should inherit
+                            children_to_update.append(acc)
+                            print(f"🔍 DEBUG: Found child account to update: {acc['name']} (ID: {acc['id']}) - no direct group")
+                        else:
+                            print(f"🔍 DEBUG: Skipping child account {acc['name']} - has direct group assignment: {direct_group}")
+                        
+                        # Recursively find grandchildren regardless of whether this child has a direct group
+                        find_children(acc['id'], visited)
+            
+            find_children(parent_account_id)
+            
+            print(f"🔍 DEBUG: Found {len(children_to_update)} child accounts to update")
+            
+            # Update each child account's group in the database
+            for child_account in children_to_update:
+                child_id = child_account['id']
+                try:
+                    # Update the group field directly in the database
+                    update_data = {'group': new_parent_group}
+                    success = self.db_manager.update_account(child_id, update_data)
+                    if success:
+                        print(f"🔍 DEBUG: Updated child account '{child_account['name']}' group to '{new_parent_group}'")
+                    else:
+                        print(f"🔍 DEBUG: Failed to update child account '{child_account['name']}' group")
+                except Exception as e:
+                    print(f"🔍 DEBUG: Error updating child account '{child_account['name']}': {e}")
+                    
+        except Exception as e:
+            print(f"🔍 DEBUG: Error in _update_child_accounts_inherited_groups: {e}")
+            self.logger.error(f"Error updating child accounts' inherited groups: {e}")
     
     def delete_account(self, account_identifier: Union[int, str]) -> bool:
         """Delete account by ID or name (soft delete)."""
@@ -2165,6 +2300,117 @@ class UnifiedAccountingSystem:
                     tree.append(node)
         
         return sorted(tree, key=lambda x: x['code'] or x['name'])
+    
+    # ================================
+    # GROUP MANAGEMENT (NEW)
+    # ================================
+    
+    def get_group_options_by_type(self, account_type: str) -> List[str]:
+        """Get available group options for a given account type."""
+        group_options = {
+            'asset': ['None', 'Current Assets', 'Fixed Assets', 'Other Assets'],
+            'liability': ['None', 'Current Liabilities', 'Long-term Liabilities', 'Other Liabilities'],
+            'expense': ['None', 'Cost of Goods Sold'],
+            'revenue': ['None'],
+            'equity': ['None']
+        }
+        return group_options.get(account_type.lower(), ['None'])
+    
+    def get_group_display_name(self, group: str) -> str:
+        """Get display name for group."""
+        if not group or group == 'None':
+            return 'None'
+        
+        display_names = {
+            'current_asset': 'Current Assets',
+            'fixed_asset': 'Fixed Assets',
+            'other_asset': 'Other Assets',
+            'current_liability': 'Current Liabilities',
+            'long_term_liability': 'Long-term Liabilities',
+            'other_liability': 'Other Liabilities',
+            'cogs': 'Cost of Goods Sold'
+        }
+        return display_names.get(group, group.replace('_', ' ').title())
+    
+    def get_group_key_from_display(self, display_name: str) -> str:
+        """Convert display name back to group key."""
+        if not display_name or display_name == 'None':
+            return ''
+        
+        reverse_mapping = {
+            'Current Assets': 'current_asset',
+            'Fixed Assets': 'fixed_asset',
+            'Other Assets': 'other_asset',
+            'Current Liabilities': 'current_liability',
+            'Long-term Liabilities': 'long_term_liability',
+            'Other Liabilities': 'other_liability',
+            'Cost of Goods Sold': 'cogs'
+        }
+        return reverse_mapping.get(display_name, '')
+    
+    def save_account_group(self, account_id: int, group: str) -> bool:
+        """Save group for a single account by updating the group column in the accounts table."""
+        if not self.current_organization_id:
+            return False
+        try:
+            print(f"🔍 DEBUG: save_account_group - account_id: {account_id}, group: {group}, is_online: {self.is_online}")
+            if self.is_online:
+                self._set_database_context()
+                # Update the group column in the accounts table
+                print(f"🔍 DEBUG: Executing Supabase update for account {account_id} with group '{group}'")
+                
+                # Check if group column exists first
+                try:
+                    result = self.supabase.table('accounts').update({'group': group}).eq('id', account_id).eq('organization_id', self.current_organization_id).execute()
+                    print(f"🔍 DEBUG: Supabase update result: {result.data if result else 'None'}")
+                    
+                    if result and result.data:
+                        print(f"✅ Group updated successfully for account {account_id}")
+                        self._refresh_cache()
+                        return True
+                    else:
+                        print(f"⚠️ No rows updated for account {account_id}")
+                        return False
+                        
+                except Exception as column_error:
+                    print(f"🔍 DEBUG: Column error: {column_error}")
+                    # Check if this is a column doesn't exist error
+                    if "column" in str(column_error).lower() and "does not exist" in str(column_error).lower():
+                        print(f"❌ Group column does not exist in accounts table. Please run the migration script: add_group_column_to_accounts.sql")
+                        return False
+                    else:
+                        # Re-raise if it's a different error
+                        raise column_error
+            else:
+                # Queue for offline sync
+                print(f"🔍 DEBUG: Queuing group update for offline sync")
+                self.offline_cache.queue_operation(
+                    'update', 'accounts', {
+                        'id': account_id,
+                        'group': group
+                    }, self.current_organization_id, self.current_user_id or ''
+                )
+                return True
+        except Exception as e:
+            print(f"🔍 DEBUG: save_account_group exception: {e}")
+            self.logger.error(f"Failed to save account group: {e}")
+            return False
+    
+    def get_account_group(self, account_id: int) -> Optional[str]:
+        """Get group for a specific account (including inheritance)."""
+        accounts = self.get_chart_of_accounts(active_only=False)
+        account = next((acc for acc in accounts if acc['id'] == account_id), None)
+        if account:
+            return account.get('group')
+        return None
+    
+    def get_inherited_group_for_account(self, account_id: int) -> Optional[str]:
+        """Get inherited group for an account (without direct assignment)."""
+        accounts = self.get_chart_of_accounts(active_only=False)
+        account = next((acc for acc in accounts if acc['id'] == account_id), None)
+        if account:
+            return account.get('group') if account.get('group_inherited') else None
+        return None
 
 # ================================
 # ENHANCED FEATURES INTEGRATION
