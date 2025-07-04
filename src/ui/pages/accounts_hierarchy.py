@@ -68,14 +68,14 @@ class AccountFormCard(QFrame):
         cancel_btn.setStyleSheet(self._get_cancel_button_style())
         cancel_btn.clicked.connect(self._on_cancel)
         
-        save_text = "Update" if self.edit_mode else "Add"
-        save_btn = QPushButton(save_text)
-        save_btn.setStyleSheet(self._get_save_button_style())
-        save_btn.clicked.connect(self._on_submit)
+        save_text = "Save" if self.edit_mode else "Add"
+        self.save_btn = QPushButton(save_text)
+        self.save_btn.setStyleSheet(self._get_save_button_style())
+        self.save_btn.clicked.connect(self._on_submit)
         
         button_layout.addStretch()
         button_layout.addWidget(cancel_btn)
-        button_layout.addWidget(save_btn)
+        button_layout.addWidget(self.save_btn)
         
         layout.addLayout(button_layout)
         
@@ -568,6 +568,12 @@ class AccountFormCard(QFrame):
         else:
             print(f"🔍 DEBUG: No group value for account '{account_data['name']}'")
                     
+    def _update_button_text(self):
+        """Update the save button text based on edit mode."""
+        if hasattr(self, 'save_btn'):
+            save_text = "Save" if self.edit_mode else "Add"
+            self.save_btn.setText(save_text)
+    
     def reset_form(self):
         """Reset the form to its initial state."""
         self.name_edit.clear()
@@ -579,6 +585,8 @@ class AccountFormCard(QFrame):
         self.postable_check.setChecked(True)
         self.account_data = None
         self._update_parent_options()
+        # Update button text after reset
+        self._update_button_text()
         
     def _on_submit(self):
         """Handle form submission."""
@@ -1489,6 +1497,9 @@ class AccountDetailsPanel(QStackedWidget):
             self.form_card.edit_mode = True
         else:
             self.form_card.edit_mode = False
+        
+        # Update button text after setting edit mode
+        self.form_card._update_button_text()
         
         # Update the form title
         title_text = "Edit Account" if edit_mode else "Add New Account"
