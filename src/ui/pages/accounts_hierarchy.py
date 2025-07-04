@@ -1742,106 +1742,336 @@ class AccountDetailsPanel(QStackedWidget):
         self.show_info()
         
     def _create_info_widget(self):
-        """Create widget to display selected account information."""
-        info_frame = QFrame()
-        info_frame.setStyleSheet("""
-            QFrame {
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.05);
-                border-radius: 8px;
-                padding: 16px;
-                max-height: 200px;
-            }
-        """)
+        """Create widget to display selected account information with modern card styling."""
+        from ..components.styles import ResponsiveHelper
+        from PyQt6.QtWidgets import QGraphicsDropShadowEffect
+        from PyQt6.QtGui import QColor
+        from PyQt6.QtCore import QSize
         
-        layout = QVBoxLayout(info_frame)
-        layout.setSpacing(0)
-        layout.setContentsMargins(0, 0, 0, 0)
+        self.info_frame = QFrame()
         
-        # Info content
-        self.info_label = QLabel()
-        self.info_label.setStyleSheet("""
-            QLabel {
+        # Store current account level for color theming
+        self.current_level = 1
+        
+        # Apply modern glassmorphism styling similar to ActionCard
+        border_radius = ResponsiveHelper.scale_size(8, 6, 10)
+        margins = ResponsiveHelper.scale_size(24, 20, 32)
+        
+        # Initial styling (will be updated based on level)
+        self._apply_level_styling(self.current_level)
+        
+        # Set minimum and maximum dimensions
+        self.info_frame.setMinimumHeight(ResponsiveHelper.scale_size(200, 180, 220))
+        self.info_frame.setMaximumHeight(ResponsiveHelper.scale_size(400, 360, 440))
+        
+        # Add drop shadow for depth
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(ResponsiveHelper.scale_size(20, 15, 30))
+        shadow.setXOffset(0)
+        shadow.setYOffset(ResponsiveHelper.scale_size(4, 2, 6))
+        shadow.setColor(QColor(0, 0, 0, 80))
+        self.info_frame.setGraphicsEffect(shadow)
+        
+        # Main layout
+        main_layout = QVBoxLayout(self.info_frame)
+        main_layout.setContentsMargins(margins, margins, margins, margins)
+        main_layout.setSpacing(ResponsiveHelper.scale_size(16, 12, 20))
+        
+        # Header section with account name and code
+        header_layout = QVBoxLayout()
+        header_layout.setSpacing(ResponsiveHelper.scale_size(8, 6, 10))
+        
+        # Account name
+        self.account_name_label = QLabel()
+        self.account_name_label.setStyleSheet(f"""
+            QLabel {{
+                color: white;
+                font-size: {ResponsiveHelper.scale_size(20, 18, 24)}px;
+                font-weight: 600;
                 background: transparent;
                 border: none;
-                text-align: center;
-            }
+                margin: 0px;
+                padding: 0px;
+            }}
         """)
-        self.info_label.setWordWrap(True)
-        self.info_label.setAlignment(Qt.AlignmentFlag.AlignTop)
-        layout.addWidget(self.info_label)
+        header_layout.addWidget(self.account_name_label)
+        
+        # Account code
+        self.account_code_label = QLabel()
+        self.account_code_label.setStyleSheet(f"""
+            QLabel {{
+                color: rgba(255, 255, 255, 0.7);
+                font-size: {ResponsiveHelper.scale_size(14, 12, 16)}px;
+                font-weight: 400;
+                background: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }}
+        """)
+        header_layout.addWidget(self.account_code_label)
+        
+        main_layout.addLayout(header_layout)
+        
+        # Two-column details section
+        details_layout = QHBoxLayout()
+        details_layout.setSpacing(ResponsiveHelper.scale_size(32, 24, 40))
+        
+        # Left column
+        left_column = QVBoxLayout()
+        left_column.setSpacing(ResponsiveHelper.scale_size(12, 10, 16))
+        
+        # Right column  
+        right_column = QVBoxLayout()
+        right_column.setSpacing(ResponsiveHelper.scale_size(12, 10, 16))
+        
+        # Create detail labels for left column
+        self.type_label = self._create_detail_label("Type", "")
+        self.group_label = self._create_detail_label("Group", "")
+        self.level_label = self._create_detail_label("Level", "")
+        
+        left_column.addWidget(self.type_label)
+        left_column.addWidget(self.group_label)
+        left_column.addWidget(self.level_label)
+        left_column.addStretch()
+        
+        # Create detail labels for right column
+        self.parent_label = self._create_detail_label("Parent", "")
+        self.postable_label = self._create_detail_label("Postable", "")
+        self.status_label = self._create_detail_label("Status", "")
+        
+        right_column.addWidget(self.parent_label)
+        right_column.addWidget(self.postable_label) 
+        right_column.addWidget(self.status_label)
+        right_column.addStretch()
+        
+        details_layout.addLayout(left_column)
+        details_layout.addLayout(right_column)
+        
+        main_layout.addLayout(details_layout)
+        main_layout.addStretch()
         
         # Set initial empty state
         self._clear_info()
         
-        return info_frame
+        return self.info_frame
+    
+    def _apply_level_styling(self, level):
+        """Apply level-based color styling to the info card."""
+        from ..components.styles import ResponsiveHelper
         
+        # Level color scheme matching the hierarchy tree
+        level_colors = {
+            1: {"bg": "100, 150, 255", "accent": "#6496FF"},    # Blue for level 1
+            2: {"bg": "150, 200, 100", "accent": "#96C864"},    # Green for level 2  
+            3: {"bg": "255, 200, 100", "accent": "#FFC864"}     # Orange for level 3
+        }
+        
+        border_radius = ResponsiveHelper.scale_size(8, 6, 10)
+        
+        # Get colors for current level
+        color_info = level_colors.get(level, level_colors[1])
+        bg_rgb = color_info["bg"]
+        accent_color = color_info["accent"]
+        
+        # Convert accent color to RGB for transparency effects
+        accent_rgb = self._hex_to_rgb(accent_color)
+        
+        self.info_frame.setStyleSheet(f"""
+            QFrame {{
+                background: rgba({bg_rgb}, 0.12);
+                border: 1px solid rgba({accent_rgb[0]}, {accent_rgb[1]}, {accent_rgb[2]}, 0.3);
+                border-radius: {border_radius}px;
+                margin: 4px;
+            }}
+            QFrame:hover {{
+                background: rgba({bg_rgb}, 0.18);
+                border: 1px solid rgba({accent_rgb[0]}, {accent_rgb[1]}, {accent_rgb[2]}, 0.4);
+            }}
+        """)
+    
+    def _hex_to_rgb(self, hex_color):
+        """Convert hex color to RGB tuple."""
+        hex_color = hex_color.lstrip('#')
+        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    
+    def _create_detail_label(self, title, value):
+        """Create a detail label with title and value."""
+        from ..components.styles import ResponsiveHelper
+        
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(ResponsiveHelper.scale_size(4, 2, 6))
+        
+        # Title label
+        title_label = QLabel(title)
+        title_label.setStyleSheet(f"""
+            QLabel {{
+                color: rgba(255, 255, 255, 0.6);
+                font-size: {ResponsiveHelper.scale_size(12, 10, 14)}px;
+                font-weight: 500;
+                background: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }}
+        """)
+        layout.addWidget(title_label)
+        
+        # Value label
+        value_label = QLabel(value)
+        value_label.setStyleSheet(f"""
+            QLabel {{
+                color: white;
+                font-size: {ResponsiveHelper.scale_size(14, 12, 16)}px;
+                font-weight: 400;
+                background: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }}
+        """)
+        layout.addWidget(value_label)
+        
+        # Store value label for updates
+        container.value_label = value_label
+        
+        return container
+
     def _clear_info(self):
         """Clear the info panel with a modern empty state."""
-        empty_html = """
-        <div style="color: rgba(255,255,255,0.5); font-family: {ModernStyles.get_font_family()}; text-align: center;">
-            <div style="margin-bottom: 16px; opacity: 0.7;">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-            </div>
-            <div style="font-size: 15px; font-weight: 500; margin-bottom: 8px;">
-                No Account Selected
-            </div>
-            <div style="font-size: 13px; color: rgba(255,255,255,0.4);">
-                Select an account from the list to view its details
-            </div>
-        </div>
-        """
-        self.info_label.setText(empty_html)
-        self.info_label.setTextFormat(Qt.TextFormat.RichText)
+        from ..components.styles import ResponsiveHelper
+        
+        # Clear main labels
+        self.account_name_label.setText("No Account Selected")
+        self.account_name_label.setStyleSheet(f"""
+            QLabel {{
+                color: rgba(255, 255, 255, 0.5);
+                font-size: {ResponsiveHelper.scale_size(18, 16, 20)}px;
+                font-weight: 500;
+                background: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }}
+        """)
+        
+        self.account_code_label.setText("Select an account from the list to view its details")
+        self.account_code_label.setStyleSheet(f"""
+            QLabel {{
+                color: rgba(255, 255, 255, 0.4);
+                font-size: {ResponsiveHelper.scale_size(13, 11, 15)}px;
+                font-weight: 400;
+                background: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }}
+        """)
+        
+        # Clear detail labels
+        self.type_label.value_label.setText("—")
+        self.group_label.value_label.setText("—")
+        self.level_label.value_label.setText("—")
+        self.parent_label.value_label.setText("—")
+        self.postable_label.value_label.setText("—")
+        self.status_label.value_label.setText("—")
         
     def _update_info(self, account_data):
         """Update the info panel with selected account info."""
+        from ..components.styles import ResponsiveHelper
+        
         if not account_data:
             self._clear_info()
             return
-            
-        level_colors = {
-            1: "#4CAF50",  # Green for level 1
-            2: "#2196F3",  # Blue for level 2
-            3: "#FF9800"   # Orange for level 3
-        }
         
-        level_color = level_colors.get(account_data['level'], "#FFFFFF")
+        # Update level and apply corresponding color styling
+        level = account_data.get('level', 1)
+        self.current_level = level
+        self._apply_level_styling(level)
         
-        # Create detailed info display with modern Windows 11 styling
-        info_html = f"""
-        <div style="color: white; font-family: {ModernStyles.get_font_family()};">
-            <div style="margin-bottom: 16px;">
-                <h3 style="color: {level_color}; margin: 0 0 4px 0; font-size: 20px; font-weight: 600;">
-                    {account_data['name']}
-                </h3>
-                <div style="color: rgba(255,255,255,0.7); font-size: 13px;">
-                    {account_data['code']}
-                </div>
-            </div>
-            
-            <div style="display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center;">
-                <div style="color: rgba(255,255,255,0.7); font-weight: 500;">Type</div>
-                <div style="color: white;">{(account_data.get('account_type') or account_data.get('type', '')).capitalize()}</div>
-                
-                <div style="color: rgba(255,255,255,0.7); font-weight: 500;">Level</div>
-                <div style="color: white;">Level {account_data['level']}</div>
-                
-                <div style="color: rgba(255,255,255,0.7); font-weight: 500;">Postable</div>
-                <div style="color: white;">{"Yes" if account_data['is_postable'] else "No"}</div>
-                
-                {f'''<div style="color: rgba(255,255,255,0.7); font-weight: 500;">Parent</div>
-                <div style="color: white;">{account_data['parent_code']}</div>''' if account_data['parent_code'] else ""}
-            </div>
-        </div>
-        """
+        # Restore normal styling for account name
+        self.account_name_label.setStyleSheet(f"""
+            QLabel {{
+                color: white;
+                font-size: {ResponsiveHelper.scale_size(20, 18, 24)}px;
+                font-weight: 600;
+                background: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }}
+        """)
         
-        self.info_label.setText(info_html)
-        self.info_label.setTextFormat(Qt.TextFormat.RichText)
+        # Restore normal styling for account code
+        self.account_code_label.setStyleSheet(f"""
+            QLabel {{
+                color: rgba(255, 255, 255, 0.7);
+                font-size: {ResponsiveHelper.scale_size(14, 12, 16)}px;
+                font-weight: 400;
+                background: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }}
+        """)
+        
+        # Update header information
+        self.account_name_label.setText(account_data['name'])
+        self.account_code_label.setText(account_data['code'] or "No Code")
+        
+        # Update detail labels
+        account_type = (account_data.get('account_type') or account_data.get('type', '')).capitalize()
+        self.type_label.value_label.setText(account_type or "—")
+        
+        # Get group display name - improved logic
+        group_value = account_data.get('group', '')
+        group_inherited = account_data.get('group_inherited', False)
+        
+        if group_value:
+            # Try to get display name from system
+            try:
+                # Navigate to the main page to get the system
+                main_page = self.parent().parent()  # AccountDetailsPanel -> HierarchicalAccountsPage
+                if hasattr(main_page, 'system') and hasattr(main_page.system, 'get_group_display_name'):
+                    group_display = main_page.system.get_group_display_name(group_value)
+                    if group_display and group_display != group_value:
+                        group_text = group_display
+                    else:
+                        # Fallback to formatting the group value
+                        group_text = group_value.replace('_', ' ').title()
+                else:
+                    # Fallback to formatting the group value
+                    group_text = group_value.replace('_', ' ').title()
+                
+                # Add inherited indicator if applicable
+                if group_inherited:
+                    group_text += " (inherited)"
+                    
+                self.group_label.value_label.setText(group_text)
+            except Exception:
+                # Final fallback
+                group_text = group_value.replace('_', ' ').title() if group_value else "—"
+                if group_inherited:
+                    group_text += " (inherited)"
+                self.group_label.value_label.setText(group_text)
+        else:
+            self.group_label.value_label.setText("—")
+        
+        self.level_label.value_label.setText(f"Level {level}")
+        
+        # Parent account
+        parent_code = account_data.get('parent_code', '')
+        self.parent_label.value_label.setText(parent_code if parent_code else "Root Account")
+        
+        # Postable status
+        is_postable = account_data.get('is_postable', False)
+        self.postable_label.value_label.setText("Yes" if is_postable else "No")
+        
+        # Status (active/inactive)
+        is_active = account_data.get('is_active', True)
+        self.status_label.value_label.setText("Active" if is_active else "Inactive")
 
     def _calculate_level(self, account, all_accounts, visited=None):
         """Calculate hierarchy level for an account"""
