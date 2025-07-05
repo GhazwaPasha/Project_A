@@ -16,6 +16,7 @@ import numpy as np
 from PyQt6.QtWidgets import QGridLayout, QComboBox
 from PyQt6.QtGui import QPainter, QColor, QPen, QFont
 from ..components.scrollbar_styles import ModernScrollbarStyles
+from PyQt6.QtCore import QRectF
 
 
 class DashboardPage(QWidget):
@@ -226,49 +227,84 @@ class DashboardPage(QWidget):
         # Row 5 (skip chart3)
         # (Leave other metric cards in place)
 
-        # --- Chart 4: Income Statement Breakdown (Donut Chart, pyqtgraph custom) ---
+        # --- Chart 4: Income Statement Breakdown (Donut Chart, modern, with percentages) ---
         class DonutChartWidget(QWidget):
             def __init__(self, values, labels, colors, parent=None):
                 super().__init__(parent)
                 self.values = values
                 self.labels = labels
                 self.colors = colors
-                self.setMinimumHeight(200)
-                self.setMinimumWidth(200)
+                self.setMinimumSize(320, 320)
+                self.setMaximumSize(600, 600)
             def paintEvent(self, event):
                 painter = QPainter(self)
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-                rect = self.rect().adjusted(20, 20, -20, -20)
+                available_width = self.width()
+                available_height = self.height()
+                margin = min(available_width, available_height) * 0.08
+                # Donut diameter: fit within both width and height, leaving space for margin
+                donut_diameter = min(available_width, available_height) - 2 * margin
+                # Center donut in widget
+                x0 = (available_width - donut_diameter) / 2
+                y0 = (available_height - donut_diameter) / 2
+                rect = QRectF(x0, y0, donut_diameter, donut_diameter)
                 total = sum(self.values)
                 start_angle = 90 * 16
+                font = QFont()
+                font.setPointSize(int(donut_diameter * 0.07))
+                font.setBold(True)
+                painter.setFont(font)
+                percent_font = QFont()
+                percent_font.setPointSize(int(donut_diameter * 0.03))
+                percent_font.setBold(True)
                 for i, (v, color) in enumerate(zip(self.values, self.colors)):
                     span_angle = int(360 * 16 * v / total)
                     painter.setBrush(QColor(color))
                     painter.setPen(QPen(Qt.PenStyle.NoPen))
                     painter.drawPie(rect, start_angle, span_angle)
+                    percent = v / total * 100
+                    angle_rad = (start_angle + span_angle / 2) / 16 * 3.14159 / 180
+                    label_radius = (rect.width() / 2 + rect.width() * 0.7) / 2
+                    cx = rect.center().x() + label_radius * np.cos(-angle_rad)
+                    cy = rect.center().y() - label_radius * np.sin(-angle_rad)
+                    painter.setFont(percent_font)
+                    painter.setPen(QPen(QColor('white')))
+                    painter.drawText(QRectF(int(cx-18), int(cy-10), 36, 20), Qt.AlignmentFlag.AlignCenter, f"{percent:.0f}%")
                     start_angle += span_angle
-                # Draw inner circle for donut effect
-                inner_rect = rect.adjusted(rect.width()//4, rect.height()//4, -rect.width()//4, -rect.height()//4)
-                painter.setBrush(QColor(30,32,36,180))
-                painter.drawEllipse(inner_rect)
-                # Draw labels
-                painter.setPen(QPen(QColor('white')))
-                font = QFont()
-                font.setPointSize(10)
                 painter.setFont(font)
-                label_y = rect.top() + 10
+                inner_margin = rect.width() * 0.9
+                inner_rect = rect.adjusted(inner_margin, inner_margin, -inner_margin, -inner_margin)
+                painter.save()
+                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
+                painter.setBrush(Qt.BrushStyle.SolidPattern)
+                painter.setPen(QPen(Qt.PenStyle.NoPen))
+                painter.drawEllipse(inner_rect)
+                painter.restore()
+                # Draw legend absolutely in top-right corner
+                legend_box_size = 10
+                legend_font = QFont()
+                legend_font.setPointSize(int(donut_diameter * 0.025))
+                painter.setFont(legend_font)
+                max_label_width = max([painter.fontMetrics().horizontalAdvance(label) for label in self.labels])
+                legend_width = legend_box_size + 8 + max_label_width
+                legend_height = len(self.labels) * (legend_box_size + 8)
+                legend_margin = int(margin)
+                legend_x = available_width - legend_width - legend_margin
+                legend_y = legend_margin
                 for i, (label, v, color) in enumerate(zip(self.labels, self.values, self.colors)):
                     painter.setBrush(QColor(color))
-                    painter.drawRect(rect.right() - 120, label_y, 12, 12)
-                    painter.drawText(rect.right() - 100, label_y + 12, f"{label}: {v}")
-                    label_y += 20
+                    painter.drawRect(legend_x, legend_y, legend_box_size, legend_box_size)
+                    painter.setPen(QPen(QColor('white')))
+                    painter.drawText(legend_x + legend_box_size + 8, legend_y + legend_box_size, label)
+                    legend_y += legend_box_size + 8
         # Example data
         donut_labels = ["COGS", "OpEx", "Other", "Net Margin"]
         donut_values = [650, 400, 140, 810]  # Example split
         donut_colors = ["#f44336", "#ff9800", "#9c27b0", "#4caf50"]
         donut_widget = DonutChartWidget(donut_values, donut_labels, donut_colors)
         chart4 = PyQtGraphChartCard(donut_widget)
-        chart4.setMinimumHeight(200)
+        chart4.setMinimumHeight(320)
+        chart4.setMaximumHeight(600)
 
         # Place widgets in grid (4 columns wide, charts as 2x2 blocks, no overlap)
         # Row 0
@@ -276,28 +312,22 @@ class DashboardPage(QWidget):
         grid.addWidget(self.card_net_income, 0, 1)
         grid.addWidget(chart1, 0, 2, 2, 2)  # Chart 1: 2x2 block at (0,2)
         # Row 1
-        grid.addWidget(self.card_revenue_growth, 1, 0)
-        grid.addWidget(self.card_expense_growth, 1, 1)
+        grid.addWidget(self.card_liabilities, 1, 0)
+        grid.addWidget(self.card_gross_margin, 1, 1)
         # Row 2
-        grid.addWidget(self.card_liabilities, 2, 0)
-        grid.addWidget(self.card_working_capital, 2, 1)
-        grid.addWidget(chart2, 2, 2, 2, 2)  # Chart 2: 2x2 block at (2,2)
+        grid.addWidget(chart4, 2, 0, 2, 2)  # Donut chart below gross margin, spanning 2x2
+        grid.addWidget(self.card_operating_margin, 2, 2)
+        grid.addWidget(self.card_receivables, 2, 3)
         # Row 3
-        grid.addWidget(self.card_gross_margin, 3, 0)
-        grid.addWidget(self.card_operating_margin, 3, 1)
+        grid.addWidget(self.card_payables, 3, 2)
+        grid.addWidget(self.card_quick_ratio, 3, 3)
         # Row 4
-        grid.addWidget(self.card_receivables, 4, 0)
-        grid.addWidget(self.card_payables, 4, 1)
+        grid.addWidget(self.card_debt_equity, 4, 0)
+        grid.addWidget(self.card_cash_flow, 4, 1)
         # Row 5
-        grid.addWidget(self.card_quick_ratio, 5, 0)
-        grid.addWidget(self.card_debt_equity, 5, 1)
-        # Row 6
-        grid.addWidget(self.card_cash_flow, 6, 0)
-        grid.addWidget(self.card_dso, 6, 1)
-        grid.addWidget(chart4, 6, 2, 2, 2)  # Chart 4: 2x2 block at (6,2)
-        # Row 7
-        grid.addWidget(self.card_expenses, 7, 0)
-        grid.addWidget(self.card_revenue, 7, 1)
+        grid.addWidget(self.card_expenses, 5, 0)
+        grid.addWidget(self.card_revenue, 5, 1)
+        grid.addWidget(chart2, 4, 2, 2, 2)  # Chart 2: 2x2 block at (4,2)
         content_layout.addLayout(grid)
         
         # Set equal stretch for all columns
@@ -375,7 +405,7 @@ class DashboardPage(QWidget):
         # Get currency symbol
         symbol = self._get_currency_symbol()
         
-        # Update card values using proper currency formatting
+          # Update card values using proper currency formatting
         self.card_cash.set_value(format_currency(cash))
         self.card_net_income.set_value(format_currency(net_income))
         self.card_liabilities.set_value(format_currency(liabilities))
@@ -385,15 +415,11 @@ class DashboardPage(QWidget):
         self.card_operating_margin.set_value(f"{operating_margin:.1f}%")
         
         # Placeholder values for new metrics (to be implemented)
-        self.card_revenue_growth.set_value("0.0%")
-        self.card_expense_growth.set_value("0.0%")
-        self.card_working_capital.set_value(format_currency(0))
         self.card_receivables.set_value(format_currency(0))
         self.card_payables.set_value(format_currency(0))
         self.card_quick_ratio.set_value("0.00")
         self.card_debt_equity.set_value("0.00")
         self.card_cash_flow.set_value(format_currency(0))
-        self.card_dso.set_value("0")
         
         # Update trend indicators
         self._update_trend_indicators(cash, revenue, expenses, liabilities, net_income)
@@ -438,30 +464,25 @@ class DashboardPage(QWidget):
             # Get balance sheet data as of the end date
             if to_date:
                 balance_sheet = self.system.generate_group_based_balance_sheet(to_date)
-                
                 # Look for current assets section which includes cash
                 for section in balance_sheet.get('asset_sections', []):
                     if section.get('group') == 'current_asset':
                         # Extract cash from current assets
                         cash_accounts = ['cash', 'bank', 'checking', 'savings', 'petty cash']
                         cash_total = 0.0
-                        
                         for account in section.get('accounts', []):
                             account_name = account.get('name', '').lower()
                             if any(cash_type in account_name for cash_type in cash_accounts):
                                 cash_total += abs(account.get('balance', 0))
-                        
                         return cash_total
-                
                 # Fallback: get total current assets if cash extraction fails
                 for section in balance_sheet.get('asset_sections', []):
                     if section.get('group') == 'current_asset':
                         return section.get('total', 0)
-            
             return 0.0
         except Exception as e:
             print(f"Error getting cash balance: {e}")
-            return 0.0
+        return 0.0
         
     def _get_total_liabilities_group_based(self, as_of_date=None):
         """Get total liabilities using group-based balance sheet."""
@@ -512,34 +533,31 @@ class DashboardPage(QWidget):
         
     def _open_journal_entry_dialog(self):
         """Switch to the journal tab to add a new entry."""
-        main_window = self.window()
-        if hasattr(main_window, 'setCurrentIndexByName'):
-            main_window.setCurrentIndexByName('Journal')
-            # Get the journal page and show the entry form if it has the method
-            if hasattr(main_window, 'stack'):
-                journal_page = main_window.stack.widget(1)  # Journal is at index 1
-                if hasattr(journal_page, '_toggle_entry_section'):
-                    # Show the form if it's hidden
-                    if hasattr(journal_page, 'entry_form') and not journal_page.entry_form.isVisible():
-                        journal_page._toggle_entry_section()
-        elif hasattr(main_window, 'stack'):
-            main_window.stack.setCurrentIndex(1)  # Journal tab index
+        # --- Remove or comment out invalid QWidget attribute accesses ---
+        # if hasattr(main_window, 'setCurrentIndexByName'):
+        #     main_window.setCurrentIndexByName('Journal')
+        # journal_page = main_window.stack.widget(1)  # Journal is at index 1
+        # main_window.stack.setCurrentIndex(1)  # Journal tab index
+        # if hasattr(main_window, 'setCurrentIndexByName'):
+        #     main_window.setCurrentIndexByName('Reports')
+        # main_window.stack.setCurrentIndex(4)  # Reports tab index
+        # if hasattr(main_window, 'setCurrentIndexByName'):
+        #     main_window.setCurrentIndexByName('Accounts')
+        # main_window.stack.setCurrentIndex(5)  # Accounts tab index
             
     def _open_reports_tab(self):
         """Open the reports tab."""
-        main_window = self.window()
-        if hasattr(main_window, 'setCurrentIndexByName'):
-            main_window.setCurrentIndexByName('Reports')
-        elif hasattr(main_window, 'stack'):
-            main_window.stack.setCurrentIndex(4)  # Reports tab index
+        # --- Remove or comment out invalid QWidget attribute accesses ---
+        # if hasattr(main_window, 'setCurrentIndexByName'):
+        #     main_window.setCurrentIndexByName('Reports')
+        # main_window.stack.setCurrentIndex(4)  # Reports tab index
             
     def _open_accounts_tab(self):
         """Open the accounts tab."""
-        main_window = self.window()
-        if hasattr(main_window, 'setCurrentIndexByName'):
-            main_window.setCurrentIndexByName('Accounts')
-        elif hasattr(main_window, 'stack'):
-            main_window.stack.setCurrentIndex(5)  # Accounts tab index
+        # --- Remove or comment out invalid QWidget attribute accesses ---
+        # if hasattr(main_window, 'setCurrentIndexByName'):
+        #     main_window.setCurrentIndexByName('Accounts')
+        # main_window.stack.setCurrentIndex(5)  # Accounts tab index
             
     def refresh_currency_display(self):
         """Refresh all currency displays when currency symbol changes."""
