@@ -160,24 +160,37 @@ class FinancialRatioCalculator:
         }
     
     def _get_financial_statement_data(self, as_of_date: date) -> Optional[Dict[str, Any]]:
-        """Get financial statement data for ratio calculations."""
+        """Get financial statement data for ratio calculations using group-based categorization."""
         try:
             if not self.accounting_system:
                 return None
             
-            # Get balance sheet data
-            balance_sheet = self.accounting_system.generate_balance_sheet_breakdown(
+            # Get group-based balance sheet data
+            balance_sheet = self.accounting_system.generate_group_based_balance_sheet(
                 as_of_date.strftime('%Y-%m-%d')
             )
             
-            # Get income statement data (last 12 months)
+            # Get group-based income statement data (last 12 months)
             year_start = as_of_date.replace(month=1, day=1)
-            income_statement = self.accounting_system.generate_income_statement_breakdown(
+            income_statement = self.accounting_system.generate_group_based_income_statement(
                 year_start.strftime('%Y-%m-%d'),
                 as_of_date.strftime('%Y-%m-%d')
             )
             
-            # Calculate derived values
+            # Extract data from group-based sections
+            current_assets = self._get_group_balance('current_asset', balance_sheet)
+            current_liabilities = self._get_group_balance('current_liability', balance_sheet)
+            cash = self._extract_cash_from_current_assets(balance_sheet)
+            inventory = self._extract_inventory_from_other_assets(balance_sheet)
+            receivables = self._extract_receivables_from_current_assets(balance_sheet)
+            payables = self._extract_payables_from_current_liabilities(balance_sheet)
+            long_term_debt = self._get_group_balance('long_term_liability', balance_sheet)
+            
+            # Debug logging
+            self.logger.info(f"Financial data extraction - Current Assets: {current_assets}, Current Liabilities: {current_liabilities}")
+            self.logger.info(f"Financial data extraction - Cash: {cash}, Inventory: {inventory}, Receivables: {receivables}")
+            self.logger.info(f"Financial data extraction - Payables: {payables}, Long-term Debt: {long_term_debt}")
+            
             financial_data = {
                 # Balance Sheet Items
                 'total_assets': balance_sheet.get('total_assets', 0),
@@ -188,17 +201,17 @@ class FinancialRatioCalculator:
                 'total_revenue': income_statement.get('total_revenue', 0),
                 'total_cogs': income_statement.get('total_cogs', 0),
                 'gross_profit': income_statement.get('gross_profit', 0),
-                'total_expenses': income_statement.get('total_expenses', 0),
+                'total_expenses': income_statement.get('total_operating_expenses', 0),
                 'net_income': income_statement.get('net_income', 0),
                 
-                # Detailed account balances for specific calculations
-                'cash': self._get_account_balance(['Cash', 'Cash in Hand', 'Cash at Bank'], balance_sheet),
-                'current_assets': self._get_current_assets(balance_sheet),
-                'current_liabilities': self._get_current_liabilities(balance_sheet),
-                'inventory': self._get_account_balance(['Inventory'], balance_sheet),
-                'accounts_receivable': self._get_account_balance(['Accounts Receivable'], balance_sheet),
-                'accounts_payable': self._get_account_balance(['Accounts Payable'], balance_sheet),
-                'long_term_debt': self._get_long_term_debt(balance_sheet),
+                # Extract group-based data for specific calculations
+                'cash': cash,
+                'current_assets': current_assets,
+                'current_liabilities': current_liabilities,
+                'inventory': inventory,
+                'accounts_receivable': receivables,
+                'accounts_payable': payables,
+                'long_term_debt': long_term_debt,
                 
                 # Period information
                 'period_days': (as_of_date - year_start).days + 1,
@@ -211,50 +224,242 @@ class FinancialRatioCalculator:
             self.logger.error(f"Failed to get financial statement data: {e}")
             return None
     
+    def _get_group_balance(self, group_name: str, balance_sheet: Dict) -> float:
+        """Get total balance for a specific account group from group-based balance sheet."""
+        try:
+            # Debug logging
+            self.logger.info(f"Looking for group '{group_name}' in balance sheet")
+            self.logger.info(f"Available asset sections: {[s.get('group', 'unknown') for s in balance_sheet.get('asset_sections', [])]}")
+            self.logger.info(f"Available liability sections: {[s.get('group', 'unknown') for s in balance_sheet.get('liability_sections', [])]}")
+            self.logger.info(f"Available equity sections: {[s.get('group', 'unknown') for s in balance_sheet.get('equity_sections', [])]}")
+            
+            # Look for the group in asset sections
+            for section in balance_sheet.get('asset_sections', []):
+                if section.get('group') == group_name:
+                    total = section.get('total', 0)
+                    self.logger.info(f"Found group '{group_name}' in asset sections with total: {total}")
+                    return total
+            
+            # Look for the group in liability sections
+            for section in balance_sheet.get('liability_sections', []):
+                if section.get('group') == group_name:
+                    total = section.get('total', 0)
+                    self.logger.info(f"Found group '{group_name}' in liability sections with total: {total}")
+                    return total
+            
+            # Look for the group in equity sections
+            for section in balance_sheet.get('equity_sections', []):
+                if section.get('group') == group_name:
+                    total = section.get('total', 0)
+                    self.logger.info(f"Found group '{group_name}' in equity sections with total: {total}")
+                    return total
+            
+            self.logger.warning(f"Group '{group_name}' not found in any section")
+            return 0.0
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get balance for group {group_name}: {e}")
+            return 0.0
+    
+    def _extract_cash_from_current_assets(self, balance_sheet: Dict) -> float:
+        """Extract cash balance from current assets section."""
+        try:
+            for section in balance_sheet.get('asset_sections', []):
+                if section.get('group') == 'current_asset':
+                    accounts = section.get('accounts', [])
+                    cash_total = 0.0
+                    for account in accounts:
+                        # Look for cash-related accounts in the hierarchy
+                        if self._is_cash_account(account):
+                            cash_total += account.get('balance', 0)
+                        # Also check children recursively
+                        cash_total += self._extract_cash_from_account_tree(account)
+                    return cash_total
+            return 0.0
+        except Exception as e:
+            self.logger.error(f"Failed to extract cash: {e}")
+            return 0.0
+    
+    def _extract_inventory_from_other_assets(self, balance_sheet: Dict) -> float:
+        """Extract inventory balance from other assets section."""
+        try:
+            for section in balance_sheet.get('asset_sections', []):
+                if section.get('group') == 'other_asset':
+                    accounts = section.get('accounts', [])
+                    inventory_total = 0.0
+                    for account in accounts:
+                        # Look for inventory-related accounts in the hierarchy
+                        if self._is_inventory_account(account):
+                            inventory_total += account.get('balance', 0)
+                        # Also check children recursively
+                        inventory_total += self._extract_inventory_from_account_tree(account)
+                    return inventory_total
+            return 0.0
+        except Exception as e:
+            self.logger.error(f"Failed to extract inventory: {e}")
+            return 0.0
+    
+    def _extract_receivables_from_current_assets(self, balance_sheet: Dict) -> float:
+        """Extract accounts receivable from current assets section."""
+        try:
+            for section in balance_sheet.get('asset_sections', []):
+                if section.get('group') == 'current_asset':
+                    accounts = section.get('accounts', [])
+                    receivables_total = 0.0
+                    for account in accounts:
+                        # Look for receivable-related accounts in the hierarchy
+                        if self._is_receivable_account(account):
+                            receivables_total += account.get('balance', 0)
+                        # Also check children recursively
+                        receivables_total += self._extract_receivables_from_account_tree(account)
+                    return receivables_total
+            return 0.0
+        except Exception as e:
+            self.logger.error(f"Failed to extract receivables: {e}")
+            return 0.0
+    
+    def _extract_payables_from_current_liabilities(self, balance_sheet: Dict) -> float:
+        """Extract accounts payable from current liabilities section."""
+        try:
+            for section in balance_sheet.get('liability_sections', []):
+                if section.get('group') == 'current_liability':
+                    accounts = section.get('accounts', [])
+                    payables_total = 0.0
+                    for account in accounts:
+                        # Look for payable-related accounts in the hierarchy
+                        if self._is_payable_account(account):
+                            payables_total += account.get('balance', 0)
+                        # Also check children recursively
+                        payables_total += self._extract_payables_from_account_tree(account)
+                    return payables_total
+            return 0.0
+        except Exception as e:
+            self.logger.error(f"Failed to extract payables: {e}")
+            return 0.0
+    
+    def _is_cash_account(self, account: Dict) -> bool:
+        """Check if account is a cash account."""
+        name = account.get('name', '').lower()
+        return any(keyword in name for keyword in ['cash', 'bank', 'checking', 'savings', 'money market'])
+    
+    def _is_inventory_account(self, account: Dict) -> bool:
+        """Check if account is an inventory account."""
+        name = account.get('name', '').lower()
+        return any(keyword in name for keyword in ['inventory', 'stock', 'goods'])
+    
+    def _is_receivable_account(self, account: Dict) -> bool:
+        """Check if account is a receivable account."""
+        name = account.get('name', '').lower()
+        return any(keyword in name for keyword in ['receivable', 'ar', 'accounts receivable'])
+    
+    def _is_payable_account(self, account: Dict) -> bool:
+        """Check if account is a payable account."""
+        name = account.get('name', '').lower()
+        return any(keyword in name for keyword in ['payable', 'ap', 'accounts payable'])
+    
+    def _extract_cash_from_account_tree(self, account: Dict) -> float:
+        """Recursively extract cash from account tree."""
+        total = 0.0
+        children = account.get('children', [])
+        for child in children:
+            if self._is_cash_account(child):
+                total += child.get('balance', 0)
+            total += self._extract_cash_from_account_tree(child)
+        return total
+    
+    def _extract_inventory_from_account_tree(self, account: Dict) -> float:
+        """Recursively extract inventory from account tree."""
+        total = 0.0
+        children = account.get('children', [])
+        for child in children:
+            if self._is_inventory_account(child):
+                total += child.get('balance', 0)
+            total += self._extract_inventory_from_account_tree(child)
+        return total
+    
+    def _extract_receivables_from_account_tree(self, account: Dict) -> float:
+        """Recursively extract receivables from account tree."""
+        total = 0.0
+        children = account.get('children', [])
+        for child in children:
+            if self._is_receivable_account(child):
+                total += child.get('balance', 0)
+            total += self._extract_receivables_from_account_tree(child)
+        return total
+    
+    def _extract_payables_from_account_tree(self, account: Dict) -> float:
+        """Recursively extract payables from account tree."""
+        total = 0.0
+        children = account.get('children', [])
+        for child in children:
+            if self._is_payable_account(child):
+                total += child.get('balance', 0)
+            total += self._extract_payables_from_account_tree(child)
+        return total
+    
     def _calculate_liquidity_ratios(self, financial_data: Dict[str, Any]) -> Dict[str, Dict]:
         """Calculate liquidity ratios."""
         ratios = {}
         
+        # Debug logging
+        self.logger.info(f"Calculating liquidity ratios - Current Assets: {financial_data.get('current_assets', 0)}, Current Liabilities: {financial_data.get('current_liabilities', 0)}")
+        
         # Current Ratio
-        if financial_data['current_liabilities'] > 0:
-            current_ratio = financial_data['current_assets'] / financial_data['current_liabilities']
+        current_assets = financial_data.get('current_assets', 0)
+        current_liabilities = financial_data.get('current_liabilities', 0)
+        
+        if current_liabilities > 0:
+            current_ratio = current_assets / current_liabilities
             ratios['current_ratio'] = {
                 'value': float(current_ratio),
                 'description': 'Current Assets / Current Liabilities',
                 'interpretation': 'Ability to pay short-term debts',
                 'unit': 'ratio'
             }
+            self.logger.info(f"Current Ratio calculated: {current_ratio}")
+        else:
+            self.logger.warning(f"Current Ratio not calculated - Current Liabilities is {current_liabilities}")
         
         # Quick Ratio (Acid Test)
-        if financial_data['current_liabilities'] > 0:
-            quick_assets = financial_data['current_assets'] - financial_data['inventory']
-            quick_ratio = quick_assets / financial_data['current_liabilities']
+        if current_liabilities > 0:
+            inventory = financial_data.get('inventory', 0)
+            quick_assets = current_assets - inventory
+            quick_ratio = quick_assets / current_liabilities
             ratios['quick_ratio'] = {
                 'value': float(quick_ratio),
                 'description': '(Current Assets - Inventory) / Current Liabilities',
                 'interpretation': 'Ability to pay short-term debts without selling inventory',
                 'unit': 'ratio'
             }
+            self.logger.info(f"Quick Ratio calculated: {quick_ratio} (Quick Assets: {quick_assets}, Inventory: {inventory})")
+        else:
+            self.logger.warning(f"Quick Ratio not calculated - Current Liabilities is {current_liabilities}")
         
         # Cash Ratio
-        if financial_data['current_liabilities'] > 0:
-            cash_ratio = financial_data['cash'] / financial_data['current_liabilities']
+        if current_liabilities > 0:
+            cash = financial_data.get('cash', 0)
+            cash_ratio = cash / current_liabilities
             ratios['cash_ratio'] = {
                 'value': float(cash_ratio),
                 'description': 'Cash / Current Liabilities',
                 'interpretation': 'Ability to pay short-term debts with cash only',
                 'unit': 'ratio'
             }
+            self.logger.info(f"Cash Ratio calculated: {cash_ratio} (Cash: {cash})")
+        else:
+            self.logger.warning(f"Cash Ratio not calculated - Current Liabilities is {current_liabilities}")
         
-        # Working Capital
-        working_capital = financial_data['current_assets'] - financial_data['current_liabilities']
+        # Working Capital (always calculate this)
+        working_capital = current_assets - current_liabilities
         ratios['working_capital'] = {
             'value': float(working_capital),
             'description': 'Current Assets - Current Liabilities',
             'interpretation': 'Available short-term financial resources',
             'unit': 'currency'
         }
+        self.logger.info(f"Working Capital calculated: {working_capital}")
         
+        self.logger.info(f"Liquidity ratios calculated: {list(ratios.keys())}")
         return ratios
     
     def _calculate_profitability_ratios(self, financial_data: Dict[str, Any]) -> Dict[str, Dict]:
@@ -484,59 +689,6 @@ class FinancialRatioCalculator:
                         alerts.append(alert)
         
         return alerts
-    
-    def _get_account_balance(self, account_names: List[str], balance_sheet: Dict) -> float:
-        """Get total balance for specified account names."""
-        total = 0
-        
-        # Check assets
-        for account, balance in balance_sheet.get('assets', []):
-            if any(name.lower() in account.lower() for name in account_names):
-                total += balance
-        
-        # Check liabilities
-        for account, balance in balance_sheet.get('liabilities', []):
-            if any(name.lower() in account.lower() for name in account_names):
-                total += balance
-        
-        return total
-    
-    def _get_current_assets(self, balance_sheet: Dict) -> float:
-        """Calculate current assets from balance sheet."""
-        current_asset_indicators = [
-            'cash', 'receivable', 'inventory', 'prepaid', 'short-term'
-        ]
-        
-        current_assets = 0
-        for account, balance in balance_sheet.get('assets', []):
-            if any(indicator in account.lower() for indicator in current_asset_indicators):
-                current_assets += balance
-        
-        return current_assets
-    
-    def _get_current_liabilities(self, balance_sheet: Dict) -> float:
-        """Calculate current liabilities from balance sheet."""
-        current_liability_indicators = [
-            'payable', 'accrued', 'short-term', 'current', 'tax payable'
-        ]
-        
-        current_liabilities = 0
-        for account, balance in balance_sheet.get('liabilities', []):
-            if any(indicator in account.lower() for indicator in current_liability_indicators):
-                current_liabilities += balance
-        
-        return current_liabilities
-    
-    def _get_long_term_debt(self, balance_sheet: Dict) -> float:
-        """Calculate long-term debt from balance sheet."""
-        long_term_indicators = ['long-term', 'mortgage', 'bond', 'note payable']
-        
-        long_term_debt = 0
-        for account, balance in balance_sheet.get('liabilities', []):
-            if any(indicator in account.lower() for indicator in long_term_indicators):
-                long_term_debt += balance
-        
-        return long_term_debt
     
     def _sanitize_financial_data(self, financial_data: Dict) -> Dict:
         """Remove sensitive details and keep summary for transparency."""
