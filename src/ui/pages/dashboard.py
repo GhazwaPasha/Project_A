@@ -13,7 +13,7 @@ from ..components.styles import ModernStyles, GlassmorphismHelper
 from ..components.mica_effect import MicaEffect
 import pyqtgraph as pg
 import numpy as np
-from PyQt6.QtWidgets import QGridLayout
+from PyQt6.QtWidgets import QGridLayout, QComboBox
 from PyQt6.QtGui import QPainter, QColor, QPen, QFont
 from ..components.scrollbar_styles import ModernScrollbarStyles
 
@@ -102,25 +102,60 @@ class DashboardPage(QWidget):
         self.card_revenue = MetricCard("Revenue", "0.00", "", clickable=True)
 
         # --- Chart 1: Revenue vs Expenses (Line/Area Chart, pyqtgraph) ---
+        # Fetch all accounts for dropdowns (no postable filter)
+        accounts = self.system.get_chart_of_accounts(active_only=True)
+        account_names = [acc['name'] for acc in accounts]
+        # Dropdowns
+        account1_combo = QComboBox()
+        account1_combo.addItems(account_names)
+        account1_combo.setStyleSheet("background: rgba(32,34,37,0.7); color: white; border-radius: 8px; padding: 6px 12px; font-size: 13px;")
+        account2_combo = QComboBox()
+        account2_combo.addItems(account_names)
+        account2_combo.setStyleSheet("background: rgba(32,34,37,0.7); color: white; border-radius: 8px; padding: 6px 12px; font-size: 13px;")
+        # Layout for dropdowns
+        dropdown_layout = QHBoxLayout()
+        dropdown_layout.setContentsMargins(0, 0, 0, 8)
+        dropdown_layout.setSpacing(16)
+        dropdown_layout.addStretch(1)
+        dropdown_layout.addWidget(account1_combo)
+        dropdown_layout.addSpacing(8)
+        dropdown_layout.addWidget(QLabel("vs"))
+        dropdown_layout.addSpacing(8)
+        dropdown_layout.addWidget(account2_combo)
+        dropdown_layout.addStretch(1)
+        dropdown_widget = QWidget()
+        dropdown_widget.setLayout(dropdown_layout)
+        # Chart
         chart1_plot = pg.PlotWidget(background='w')
         chart1_plot.setBackground(None)
         chart1_plot.setStyleSheet('background: transparent;')
-        chart1_plot.setTitle("<span style='color:white;font-size:16pt'>Revenue vs Expenses</span>")
         months = np.arange(6)
         month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
-        revenue = np.array([1000, 1200, 1300, 1250, 1400, 1500])
-        expenses = np.array([800, 900, 950, 1000, 1100, 1200])
-        chart1_plot.plot(months, revenue, pen=pg.mkPen('#4caf50', width=3), name="Revenue", symbol='o', symbolBrush='#4caf50')
-        chart1_plot.plot(months, expenses, pen=pg.mkPen('#f44336', width=3), name="Expenses", symbol='o', symbolBrush='#f44336')
-        chart1_plot.showGrid(x=False, y=False)
-        chart1_plot.getAxis('left').setPen(pg.mkPen('w', width=1))
-        chart1_plot.getAxis('bottom').setPen(pg.mkPen('w', width=1))
-        chart1_plot.getAxis('bottom').setTicks([list(enumerate(month_labels))])
-        chart1_plot.setLabel('left', "Amount", color='white', size='10pt')
-        chart1_plot.setLabel('bottom', "Month", color='white', size='10pt')
-        chart1_plot.addLegend(offset=(10,10), labelTextColor='white', brush=pg.mkBrush(30,32,36,180))
-        chart1 = PyQtGraphChartCard(chart1_plot)
+        # Combine dropdowns and chart in a vertical layout
+        chart1_container = QWidget()
+        chart1_vlayout = QVBoxLayout(chart1_container)
+        chart1_vlayout.setContentsMargins(0, 0, 0, 0)
+        chart1_vlayout.setSpacing(0)
+        chart1_vlayout.addWidget(dropdown_widget)
+        chart1_vlayout.addWidget(chart1_plot)
+        chart1 = PyQtGraphChartCard(chart1_container)
         chart1.setMinimumHeight(200)
+        # Define update_chart after combo boxes are created
+        def update_chart():
+            account1 = account1_combo.currentText()
+            account2 = account2_combo.currentText()
+            data1 = np.array([1000, 1200, 1300, 1250, 1400, 1500]) + hash(account1) % 200
+            data2 = np.array([800, 900, 950, 1000, 1100, 1200]) + hash(account2) % 200
+            chart1_plot.clear()
+            chart1_plot.plot(months, data1, pen=pg.mkPen('#4caf50', width=3), name=account1, symbol='o', symbolBrush='#4caf50')
+            chart1_plot.plot(months, data2, pen=pg.mkPen('#f44336', width=3), name=account2, symbol='o', symbolBrush='#f44336')
+            chart1_plot.getAxis('bottom').setTicks([list(enumerate(month_labels))])
+            chart1_plot.setLabel('left', "Amount", color='white', size='10pt')
+            chart1_plot.setLabel('bottom', "Month", color='white', size='10pt')
+            chart1_plot.addLegend(offset=(10,10), labelTextColor='white', brush=pg.mkBrush(30,32,36,180))
+        account1_combo.currentIndexChanged.connect(update_chart)
+        account2_combo.currentIndexChanged.connect(update_chart)
+        update_chart()
 
         # --- Chart 2: Gross Margin (Line Chart, pyqtgraph) ---
         chart2_plot = pg.PlotWidget(background='w')
