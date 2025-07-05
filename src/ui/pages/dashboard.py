@@ -118,16 +118,16 @@ class DashboardPage(QWidget):
         self._update_metrics()
         
     def _update_metrics(self):
-        """Update financial metrics cards with current data."""
+        """Update financial metrics cards with current data using group-based reporting."""
         from_date, to_date = self.date_selector.get_date_range()
         from_date_str = from_date.toString("yyyy-MM-dd")
         to_date_str = to_date.toString("yyyy-MM-dd")
         
-        # Get financial data
-        cash = self._get_balance('Cash', from_date_str, to_date_str)
-        liabilities = self._get_total_liabilities(from_date_str, to_date_str)
-        revenue = self._get_total_revenue(from_date_str, to_date_str, abs_value=True)
-        expenses = self._get_total_expenses(from_date_str, to_date_str)
+        # Get financial data using group-based methods
+        cash = self._get_cash_balance(from_date_str, to_date_str)
+        liabilities = self._get_total_liabilities_group_based(to_date_str)
+        revenue = self._get_total_revenue_group_based(from_date_str, to_date_str)
+        expenses = self._get_total_expenses_group_based(from_date_str, to_date_str)
         
         # Get currency symbol
         symbol = self._get_currency_symbol()
@@ -164,217 +164,65 @@ class DashboardPage(QWidget):
             self.card_liabilities.set_ticker("📋 Outstanding", "#2196F3")
         else:            self.card_liabilities.set_ticker("✅ Clear", "#4CAF50")
             
-    def _get_balance(self, account_name, from_date=None, to_date=None):
-        """Get balance for a specific account in date range."""
-        trial_balance = self.system.get_trial_balance(from_date, to_date)
-        
-        # Convert list of records to account name -> balance mapping
-        for account in trial_balance:
-            if account['name'] == account_name:
-                # Calculate net balance (debit - credit for assets, credit - debit for liabilities/equity)
-                debit_total = float(account['debit_total'])
-                credit_total = float(account['credit_total'])
-                return debit_total - credit_total
-        
-        return 0.0
-        
-    def _get_total_assets(self, from_date=None, to_date=None):
-        """Calculate total assets using hierarchical balance calculation."""
+    def _get_cash_balance(self, from_date=None, to_date=None):
+        """Get cash balance using group-based reporting."""
         try:
-            # Use hierarchical balance calculation if available
-            if hasattr(self.system, 'get_hierarchical_account_balances'):
-                # Handle both QDate objects and string dates
-                if hasattr(from_date, 'toString'):
-                    from_date_str = from_date.toString("yyyy-MM-dd") if from_date else None
-                else:
-                    from_date_str = from_date if from_date else None
-                if hasattr(to_date, 'toString'):
-                    to_date_str = to_date.toString("yyyy-MM-dd") if to_date else None
-                else:
-                    to_date_str = to_date if to_date else None
-                hierarchical_balances = self.system.get_hierarchical_account_balances(from_date_str, to_date_str)
-                total = 0.0
-                for account_name, balance_info in hierarchical_balances.items():
-                    # Get account type from system
-                    accounts = self.system.get_all_accounts()
-                    account_type = None
-                    for acc in accounts:
-                        if acc[0] == account_name:  # acc[0] is name in tuple format
-                            account_type = acc[1]  # acc[1] is type
-                            break
-                    if account_type and account_type.lower() == 'asset':
-                        net_balance = balance_info.get('net_balance', 0.0)
-                        total += max(0, net_balance)  # Assets should be positive
-                return total
-            else:
-                # Fallback to original method
-                return self._get_total_assets_fallback(from_date, to_date)
+            # Get balance sheet data as of the end date
+            if to_date:
+                balance_sheet = self.system.generate_group_based_balance_sheet(to_date)
+                
+                # Look for current assets section which includes cash
+                for section in balance_sheet.get('asset_sections', []):
+                    if section.get('group') == 'current_asset':
+                        # Extract cash from current assets
+                        cash_accounts = ['cash', 'bank', 'checking', 'savings', 'petty cash']
+                        cash_total = 0.0
+                        
+                        for account in section.get('accounts', []):
+                            account_name = account.get('name', '').lower()
+                            if any(cash_type in account_name for cash_type in cash_accounts):
+                                cash_total += abs(account.get('balance', 0))
+                        
+                        return cash_total
+                
+                # Fallback: get total current assets if cash extraction fails
+                for section in balance_sheet.get('asset_sections', []):
+                    if section.get('group') == 'current_asset':
+                        return section.get('total', 0)
+            
+            return 0.0
         except Exception as e:
-            print(f"Error calculating hierarchical assets: {e}")
-            return self._get_total_assets_fallback(from_date, to_date)
-    
-    def _get_total_assets_fallback(self, from_date=None, to_date=None):
-        """Fallback method for asset calculation."""
-        accounts = self.system.get_all_accounts()
-        trial_balance = self.system.get_trial_balance(from_date, to_date)
-        total = 0.0
+            print(f"Error getting cash balance: {e}")
+            return 0.0
         
-        for name, acc_type, code, parent_code, level, is_postable, description in accounts:
-            if acc_type == 'Asset':
-                # Find balance for this account in trial balance
-                for tb_account in trial_balance:
-                    if tb_account['name'] == name:
-                        debit_total = float(tb_account['debit_total'])
-                        credit_total = float(tb_account['credit_total'])
-                        # For assets, debit increases balance
-                        total += debit_total - credit_total
-                        break
-        return total
-        
-    def _get_total_liabilities(self, from_date=None, to_date=None):
-        """Calculate total liabilities using hierarchical balance calculation."""
+    def _get_total_liabilities_group_based(self, as_of_date=None):
+        """Get total liabilities using group-based balance sheet."""
         try:
-            # Use hierarchical balance calculation if available
-            if hasattr(self.system, 'get_hierarchical_account_balances'):
-                # Handle both QDate objects and string dates
-                if hasattr(from_date, 'toString'):
-                    from_date_str = from_date.toString("yyyy-MM-dd") if from_date else None
-                else:
-                    from_date_str = from_date if from_date else None
-                if hasattr(to_date, 'toString'):
-                    to_date_str = to_date.toString("yyyy-MM-dd") if to_date else None
-                else:
-                    to_date_str = to_date if to_date else None
-                hierarchical_balances = self.system.get_hierarchical_account_balances(from_date_str, to_date_str)
-                total = 0.0
-                for account_name, balance_info in hierarchical_balances.items():
-                    # Get account type from system
-                    accounts = self.system.get_all_accounts()
-                    account_type = None
-                    for acc in accounts:
-                        if acc[0] == account_name:  # acc[0] is name in tuple format
-                            account_type = acc[1]  # acc[1] is type
-                            break
-                    if account_type and account_type.lower() == 'liability':
-                        net_balance = balance_info.get('net_balance', 0.0)
-                        total += max(0, net_balance)  # Liabilities should be positive
-                return total
-            else:
-                # Fallback to original method
-                return self._get_total_liabilities_fallback(from_date, to_date)
+            balance_sheet = self.system.generate_group_based_balance_sheet(as_of_date)
+            return balance_sheet.get('total_liabilities', 0)
         except Exception as e:
-            print(f"Error calculating hierarchical liabilities: {e}")
-            return self._get_total_liabilities_fallback(from_date, to_date)
-    
-    def _get_total_liabilities_fallback(self, from_date=None, to_date=None):
-        """Fallback method for liability calculation."""
-        accounts = self.system.get_all_accounts()
-        trial_balance = self.system.get_trial_balance(from_date, to_date)
-        total = 0.0
+            print(f"Error getting total liabilities: {e}")
+            return 0.0
         
-        for name, acc_type, code, parent_code, level, is_postable, description in accounts:
-            if acc_type == 'Liability':
-                # Find balance for this account in trial balance
-                for tb_account in trial_balance:
-                    if tb_account['name'] == name:
-                        debit_total = float(tb_account['debit_total'])
-                        credit_total = float(tb_account['credit_total'])
-                        # For liabilities, credit increases balance
-                        total += credit_total - debit_total
-                        break
-        return total
-        
-    def _get_total_revenue(self, from_date=None, to_date=None, abs_value=True):
-        """Calculate total revenue using hierarchical balance calculation."""
+    def _get_total_revenue_group_based(self, from_date=None, to_date=None):
+        """Get total revenue using group-based income statement."""
         try:
-            # Use hierarchical balance calculation if available
-            if hasattr(self.system, 'get_hierarchical_account_balances'):
-                # Handle both QDate objects and string dates
-                if hasattr(from_date, 'toString'):
-                    from_date_str = from_date.toString("yyyy-MM-dd") if from_date else None
-                else:
-                    from_date_str = from_date if from_date else None
-                if hasattr(to_date, 'toString'):
-                    to_date_str = to_date.toString("yyyy-MM-dd") if to_date else None
-                else:
-                    to_date_str = to_date if to_date else None
-                hierarchical_balances = self.system.get_hierarchical_account_balances(from_date_str, to_date_str)
-                total = 0.0
-                for account_name, balance_info in hierarchical_balances.items():
-                    # Get account type from system
-                    accounts = self.system.get_all_accounts()
-                    account_type = None
-                    for acc in accounts:
-                        if acc[0] == account_name:  # acc[0] is name in tuple format
-                            account_type = acc[1]  # acc[1] is type
-                            break
-                    if account_type and account_type.lower() in ['revenue', 'income']:
-                        net_balance = balance_info.get('net_balance', 0.0)
-                        total += abs(net_balance) if abs_value else net_balance
-                return total
-            else:
-                # Fallback to original method
-                return self._get_total_revenue_fallback(from_date, to_date, abs_value)
+            income_statement = self.system.generate_group_based_income_statement(from_date, to_date)
+            return income_statement.get('total_revenue', 0)
         except Exception as e:
-            print(f"Error calculating hierarchical revenue: {e}")
-            return self._get_total_revenue_fallback(from_date, to_date, abs_value)
-    
-    def _get_total_revenue_fallback(self, from_date=None, to_date=None, abs_value=True):
-        """Fallback method for revenue calculation."""
-        accounts = self.system.get_all_accounts()
-        balance = self.system.get_trial_balance(from_date, to_date)
-        total = 0.0
-        for name, acc_type, code, parent_code, level, is_postable, description in accounts:
-            if acc_type in ('Revenue', 'Income'):
-                val = balance.get(name, 0.0)
-                total += abs(val) if abs_value else val
-        return total
+            print(f"Error getting total revenue: {e}")
+            return 0.0
         
-    def _get_total_expenses(self, from_date=None, to_date=None, abs_value=True):
-        """Calculate total expenses using hierarchical balance calculation."""
+    def _get_total_expenses_group_based(self, from_date=None, to_date=None):
+        """Get total expenses using group-based income statement."""
         try:
-            # Use hierarchical balance calculation if available
-            if hasattr(self.system, 'get_hierarchical_account_balances'):
-                # Handle both QDate objects and string dates
-                if hasattr(from_date, 'toString'):
-                    from_date_str = from_date.toString("yyyy-MM-dd") if from_date else None
-                else:
-                    from_date_str = from_date if from_date else None
-                if hasattr(to_date, 'toString'):
-                    to_date_str = to_date.toString("yyyy-MM-dd") if to_date else None
-                else:
-                    to_date_str = to_date if to_date else None
-                hierarchical_balances = self.system.get_hierarchical_account_balances(from_date_str, to_date_str)
-                total = 0.0
-                for account_name, balance_info in hierarchical_balances.items():
-                    # Get account type from system
-                    accounts = self.system.get_all_accounts()
-                    account_type = None
-                    for acc in accounts:
-                        if acc[0] == account_name:  # acc[0] is name in tuple format
-                            account_type = acc[1]  # acc[1] is type
-                            break
-                    if account_type and account_type.lower() == 'expense':
-                        net_balance = balance_info.get('net_balance', 0.0)
-                        total += abs(net_balance) if abs_value and net_balance < 0 else net_balance
-                return total
-            else:
-                # Fallback to original method
-                return self._get_total_expenses_fallback(from_date, to_date, abs_value)
+            income_statement = self.system.generate_group_based_income_statement(from_date, to_date)
+            total_cogs = income_statement.get('total_cogs', 0)
+            total_operating_expenses = income_statement.get('total_operating_expenses', 0)
+            return total_cogs + total_operating_expenses
         except Exception as e:
-            print(f"Error calculating hierarchical expenses: {e}")
-            return self._get_total_expenses_fallback(from_date, to_date, abs_value)
-    
-    def _get_total_expenses_fallback(self, from_date=None, to_date=None, abs_value=True):
-        """Fallback method for expense calculation."""
-        accounts = self.system.get_all_accounts()
-        balance = self.system.get_trial_balance(from_date, to_date)
-        total = 0.0
-        for name, acc_type, code, parent_code, level, is_postable, description in accounts:
-            if acc_type == 'Expense':
-                val = balance.get(name, 0.0)
-                total += abs(val) if abs_value and val < 0 else val
-        return total
+            print(f"Error getting total expenses: {e}")
+            return 0.0
         
     def _get_currency_symbol(self):
         """Get the currency symbol from the main window."""
