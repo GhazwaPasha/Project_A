@@ -1407,21 +1407,21 @@ class ChartCard(QFrame):
     def __init__(self, chart_widget, parent=None):
         super().__init__(parent)
         self.setObjectName("ChartCard")
-        self.setStyleSheet("""
-            QFrame#ChartCard {
+        self.setStyleSheet(f"""
+            QFrame#ChartCard {{
                 background: rgba(32, 34, 37, 0.1);
                 border: 1px solid rgba(0, 0, 0, 0.3);
-                border-radius: 18px;
+                border-radius: {ResponsiveHelper.scale_size(8, 6, 10)}px;
                 margin: 4px;
-            }
-            QFrame#ChartCard:hover {
+            }}
+            QFrame#ChartCard:hover {{
                 background: rgba(32, 34, 37, 0.15);
                 border: 1px solid rgba(32, 34, 37, 0.4);
-            }
-            QFrame#ChartCard:pressed {
+            }}
+            QFrame#ChartCard:pressed {{
                 background: rgba(32, 34, 37, 0.2);
                 border: 1px solid rgba(32, 34, 37, 0.5);
-            }
+            }}
         """)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 18, 18, 18)
@@ -1441,21 +1441,21 @@ class PyQtGraphChartCard(QFrame):
     def __init__(self, chart_widget, parent=None):
         super().__init__(parent)
         self.setObjectName("PyQtGraphChartCard")
-        self.setStyleSheet("""
-            QFrame#PyQtGraphChartCard {
+        self.setStyleSheet(f"""
+            QFrame#PyQtGraphChartCard {{
                 background: rgba(32, 34, 37, 0.1);
                 border: 1px solid rgba(0, 0, 0, 0.3);
-                border-radius: 18px;
+                border-radius: {ResponsiveHelper.scale_size(8, 6, 10)}px;
                 margin: 4px;
-            }
-            QFrame#PyQtGraphChartCard:hover {
+            }}
+            QFrame#PyQtGraphChartCard:hover {{
                 background: rgba(32, 34, 37, 0.15);
                 border: 1px solid rgba(32, 34, 37, 0.4);
-            }
-            QFrame#PyQtGraphChartCard:pressed {
+            }}
+            QFrame#PyQtGraphChartCard:pressed {{
                 background: rgba(32, 34, 37, 0.2);
                 border: 1px solid rgba(32, 34, 37, 0.5);
-            }
+            }}
         """)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 18, 18, 18)

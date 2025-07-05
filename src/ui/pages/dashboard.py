@@ -97,7 +97,7 @@ class DashboardPage(QWidget):
         self.card_payables = MetricCard("Accounts Payable", "0.00", "", clickable=True)
         self.card_quick_ratio = MetricCard("Quick Ratio", "0.00", "", clickable=True)
         self.card_debt_equity = MetricCard("Debt-to-Equity", "0.00", "", clickable=True)
-        self.card_cash_flow = MetricCard("Cash Flow", "0.00", "", clickable=True)
+        self.card_current_ratio = MetricCard("Current Ratio", "0.00", "", clickable=True)
         self.card_dso = MetricCard("Days Sales Outstanding", "0", "", clickable=True)
         self.card_expenses = MetricCard("Expenses", "0.00", "", clickable=True)
         self.card_revenue = MetricCard("Revenue", "0.00", "", clickable=True)
@@ -323,7 +323,7 @@ class DashboardPage(QWidget):
         grid.addWidget(self.card_quick_ratio, 3, 3)
         # Row 4
         grid.addWidget(self.card_debt_equity, 4, 0)
-        grid.addWidget(self.card_cash_flow, 4, 1)
+        grid.addWidget(self.card_current_ratio, 4, 1)
         # Row 5
         grid.addWidget(self.card_expenses, 5, 0)
         grid.addWidget(self.card_revenue, 5, 1)
@@ -348,8 +348,8 @@ class DashboardPage(QWidget):
         """)
         content_layout.addWidget(actions_title)
         
-        # Actions layout
-        actions_layout = QHBoxLayout()
+        # Actions layout - use grid to occupy full width
+        actions_layout = QGridLayout()
         actions_layout.setSpacing(ResponsiveHelper.scale_size(20, 16, 28))
         
         # Create action cards
@@ -374,11 +374,23 @@ class DashboardPage(QWidget):
         )
         manage_accounts_card.clicked = self._open_accounts_tab
         
-        # Add action cards
-        for card in [add_entry_card, view_reports_card, manage_accounts_card]:
-            actions_layout.addWidget(card)
+        settings_card = ActionCard(
+            "Settings",
+            "Configure application preferences and system settings",
+            accent_color="#9C27B0"
+        )
+        settings_card.clicked = self._open_settings_tab
+        
+        # Add action cards to grid (4 columns)
+        actions_layout.addWidget(add_entry_card, 0, 0)
+        actions_layout.addWidget(view_reports_card, 0, 1)
+        actions_layout.addWidget(manage_accounts_card, 0, 2)
+        actions_layout.addWidget(settings_card, 0, 3)
+        
+        # Set equal stretch for all columns so they occupy full width
+        for col in range(4):
+            actions_layout.setColumnStretch(col, 1)
             
-        actions_layout.addStretch()
         content_layout.addLayout(actions_layout)
         
     def _load_data(self):
@@ -414,15 +426,109 @@ class DashboardPage(QWidget):
         self.card_gross_margin.set_value(f"{gross_margin:.1f}%")
         self.card_operating_margin.set_value(f"{operating_margin:.1f}%")
         
-        # Placeholder values for new metrics (to be implemented)
-        self.card_receivables.set_value(format_currency(0))
-        self.card_payables.set_value(format_currency(0))
-        self.card_quick_ratio.set_value("0.00")
-        self.card_debt_equity.set_value("0.00")
-        self.card_cash_flow.set_value(format_currency(0))
+        # Calculate and update ratios using the financial ratio calculator
+        self._update_ratio_metrics(to_date_str)
+        
+        # Get accounts receivable and payable data
+        receivables = self._get_accounts_receivable(to_date_str)
+        payables = self._get_accounts_payable(to_date_str)
+        
+        # Update receivables and payables cards
+        self.card_receivables.set_value(format_currency(receivables))
+        self.card_payables.set_value(format_currency(payables))
         
         # Update trend indicators
         self._update_trend_indicators(cash, revenue, expenses, liabilities, net_income)
+        
+    def _update_ratio_metrics(self, as_of_date):
+        """Update ratio metrics using the financial ratio calculator."""
+        try:
+            # Import the financial ratio calculator
+            from src.core.financial_ratios import FinancialRatioCalculator
+            from datetime import datetime
+            
+            # Convert string date to date object
+            if isinstance(as_of_date, str):
+                as_of_date = datetime.strptime(as_of_date, '%Y-%m-%d').date()
+            
+            # Create ratio calculator instance
+            ratio_calculator = FinancialRatioCalculator(self.system.db_manager, self.system)
+            
+            # Calculate all ratios
+            print(f"🔍 Calculating ratios for date: {as_of_date}")
+            ratio_data = ratio_calculator.calculate_all_ratios(as_of_date)
+            
+            if 'error' in ratio_data:
+                print(f"❌ Error calculating ratios: {ratio_data['error']}")
+                # Set default values on error
+                self.card_quick_ratio.set_value("0.00")
+                self.card_debt_equity.set_value("0.00")
+                self.card_current_ratio.set_value("0.00")
+                return
+            
+            print(f"✅ Ratio calculation successful: {ratio_data.keys()}")
+            
+            # Extract ratios from the calculated data
+            ratios = ratio_data.get('ratios', {})
+            print(f"📊 Available ratio categories: {list(ratios.keys())}")
+            
+            # Update Quick Ratio
+            liquidity_ratios = ratios.get('liquidity', {})
+            print(f"💧 Liquidity ratios available: {list(liquidity_ratios.keys())}")
+            quick_ratio_data = liquidity_ratios.get('quick_ratio', {})
+            quick_ratio_value = quick_ratio_data.get('value', 0.0)
+            print(f"⚡ Quick Ratio: {quick_ratio_value}")
+            self.card_quick_ratio.set_value(f"{quick_ratio_value:.2f}")
+            
+            # Update Current Ratio
+            current_ratio_data = liquidity_ratios.get('current_ratio', {})
+            current_ratio_value = current_ratio_data.get('value', 0.0)
+            print(f"📈 Current Ratio: {current_ratio_value}")
+            self.card_current_ratio.set_value(f"{current_ratio_value:.2f}")
+            
+            # Update Debt-to-Equity Ratio
+            leverage_ratios = ratios.get('leverage', {})
+            print(f"⚖️ Leverage ratios available: {list(leverage_ratios.keys())}")
+            debt_equity_data = leverage_ratios.get('debt_to_equity', {})
+            debt_equity_value = debt_equity_data.get('value', 0.0)
+            print(f"🏗️ Debt-to-Equity: {debt_equity_value}")
+            self.card_debt_equity.set_value(f"{debt_equity_value:.2f}")
+            
+            # Add trend indicators for ratios
+            self._update_ratio_trend_indicators(quick_ratio_value, current_ratio_value, debt_equity_value)
+            
+        except Exception as e:
+            print(f"Error updating ratio metrics: {e}")
+            # Set default values on error
+            self.card_quick_ratio.set_value("0.00")
+            self.card_debt_equity.set_value("0.00")
+            self.card_current_ratio.set_value("0.00")
+            
+    def _update_ratio_trend_indicators(self, quick_ratio, current_ratio, debt_equity):
+        """Update trend indicators for ratio cards."""
+        # Quick Ratio trend (good: >1.0, excellent: >1.5)
+        if quick_ratio >= 1.5:
+            self.card_quick_ratio.set_ticker("🟢 Excellent", "#4CAF50")
+        elif quick_ratio >= 1.0:
+            self.card_quick_ratio.set_ticker("🟡 Good", "#FF9800")
+        else:
+            self.card_quick_ratio.set_ticker("🔴 Low", "#F44336")
+            
+        # Current Ratio trend (good: >1.5, excellent: >2.0)
+        if current_ratio >= 2.0:
+            self.card_current_ratio.set_ticker("🟢 Excellent", "#4CAF50")
+        elif current_ratio >= 1.5:
+            self.card_current_ratio.set_ticker("🟡 Good", "#FF9800")
+        else:
+            self.card_current_ratio.set_ticker("🔴 Low", "#F44336")
+            
+        # Debt-to-Equity trend (good: <0.5, warning: >1.0)
+        if debt_equity <= 0.5:
+            self.card_debt_equity.set_ticker("🟢 Low Risk", "#4CAF50")
+        elif debt_equity <= 1.0:
+            self.card_debt_equity.set_ticker("🟡 Moderate", "#FF9800")
+        else:
+            self.card_debt_equity.set_ticker("🔴 High Risk", "#F44336")
         
     def _update_trend_indicators(self, cash, revenue, expenses, liabilities, net_income):
         """Update trend indicators for cards."""
@@ -521,6 +627,84 @@ class DashboardPage(QWidget):
         except Exception as e:
             print(f"Error getting COGS: {e}")
             return 0.0
+            
+    def _get_accounts_receivable(self, as_of_date=None):
+        """Get accounts receivable using group-based balance sheet."""
+        try:
+            balance_sheet = self.system.generate_group_based_balance_sheet(as_of_date)
+            
+            # Look for current assets section which includes receivables
+            for section in balance_sheet.get('asset_sections', []):
+                if section.get('group') == 'current_asset':
+                    # Extract receivables from current assets
+                    receivable_accounts = ['receivable', 'ar', 'accounts receivable', 'trade receivable']
+                    receivable_total = 0.0
+                    for account in section.get('accounts', []):
+                        account_name = account.get('name', '').lower()
+                        if any(receivable_type in account_name for receivable_type in receivable_accounts):
+                            receivable_total += abs(account.get('balance', 0))
+                        # Also check children recursively
+                        receivable_total += self._extract_receivables_from_account_tree(account)
+                    return receivable_total
+            return 0.0
+        except Exception as e:
+            print(f"Error getting accounts receivable: {e}")
+            return 0.0
+            
+    def _get_accounts_payable(self, as_of_date=None):
+        """Get accounts payable using group-based balance sheet."""
+        try:
+            balance_sheet = self.system.generate_group_based_balance_sheet(as_of_date)
+            
+            # Look for current liabilities section which includes payables
+            for section in balance_sheet.get('liability_sections', []):
+                if section.get('group') == 'current_liability':
+                    # Extract payables from current liabilities
+                    payable_accounts = ['payable', 'ap', 'accounts payable', 'trade payable']
+                    payable_total = 0.0
+                    for account in section.get('accounts', []):
+                        account_name = account.get('name', '').lower()
+                        if any(payable_type in account_name for payable_type in payable_accounts):
+                            payable_total += abs(account.get('balance', 0))
+                        # Also check children recursively
+                        payable_total += self._extract_payables_from_account_tree(account)
+                    return payable_total
+            return 0.0
+        except Exception as e:
+            print(f"Error getting accounts payable: {e}")
+            return 0.0
+            
+    def _extract_receivables_from_account_tree(self, account):
+        """Extract receivables from account tree recursively."""
+        receivable_total = 0.0
+        receivable_accounts = ['receivable', 'ar', 'accounts receivable', 'trade receivable']
+        
+        # Check if this account is a receivable
+        account_name = account.get('name', '').lower()
+        if any(receivable_type in account_name for receivable_type in receivable_accounts):
+            receivable_total += abs(account.get('balance', 0))
+        
+        # Check children recursively
+        for child in account.get('children', []):
+            receivable_total += self._extract_receivables_from_account_tree(child)
+            
+        return receivable_total
+        
+    def _extract_payables_from_account_tree(self, account):
+        """Extract payables from account tree recursively."""
+        payable_total = 0.0
+        payable_accounts = ['payable', 'ap', 'accounts payable', 'trade payable']
+        
+        # Check if this account is a payable
+        account_name = account.get('name', '').lower()
+        if any(payable_type in account_name for payable_type in payable_accounts):
+            payable_total += abs(account.get('balance', 0))
+        
+        # Check children recursively
+        for child in account.get('children', []):
+            payable_total += self._extract_payables_from_account_tree(child)
+            
+        return payable_total
         
     def _get_currency_symbol(self):
         """Get the currency symbol from the main window."""
@@ -533,31 +717,27 @@ class DashboardPage(QWidget):
         
     def _open_journal_entry_dialog(self):
         """Switch to the journal tab to add a new entry."""
-        # --- Remove or comment out invalid QWidget attribute accesses ---
-        # if hasattr(main_window, 'setCurrentIndexByName'):
-        #     main_window.setCurrentIndexByName('Journal')
-        # journal_page = main_window.stack.widget(1)  # Journal is at index 1
-        # main_window.stack.setCurrentIndex(1)  # Journal tab index
-        # if hasattr(main_window, 'setCurrentIndexByName'):
-        #     main_window.setCurrentIndexByName('Reports')
-        # main_window.stack.setCurrentIndex(4)  # Reports tab index
-        # if hasattr(main_window, 'setCurrentIndexByName'):
-        #     main_window.setCurrentIndexByName('Accounts')
-        # main_window.stack.setCurrentIndex(5)  # Accounts tab index
+        main_window = self.window()
+        if main_window and hasattr(main_window, 'setCurrentIndexByName'):
+            main_window.setCurrentIndexByName('Journal')
             
     def _open_reports_tab(self):
         """Open the reports tab."""
-        # --- Remove or comment out invalid QWidget attribute accesses ---
-        # if hasattr(main_window, 'setCurrentIndexByName'):
-        #     main_window.setCurrentIndexByName('Reports')
-        # main_window.stack.setCurrentIndex(4)  # Reports tab index
+        main_window = self.window()
+        if main_window and hasattr(main_window, 'setCurrentIndexByName'):
+            main_window.setCurrentIndexByName('Reports')
             
     def _open_accounts_tab(self):
         """Open the accounts tab."""
-        # --- Remove or comment out invalid QWidget attribute accesses ---
-        # if hasattr(main_window, 'setCurrentIndexByName'):
-        #     main_window.setCurrentIndexByName('Accounts')
-        # main_window.stack.setCurrentIndex(5)  # Accounts tab index
+        main_window = self.window()
+        if main_window and hasattr(main_window, 'setCurrentIndexByName'):
+            main_window.setCurrentIndexByName('Accounts')
+            
+    def _open_settings_tab(self):
+        """Open the settings tab."""
+        main_window = self.window()
+        if main_window and hasattr(main_window, 'setCurrentIndexByName'):
+            main_window.setCurrentIndexByName('Settings')
             
     def refresh_currency_display(self):
         """Refresh all currency displays when currency symbol changes."""
