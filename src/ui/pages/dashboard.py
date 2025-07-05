@@ -158,36 +158,73 @@ class DashboardPage(QWidget):
         update_chart()
 
         # --- Chart 2: Gross Margin (Line Chart, pyqtgraph) ---
+        # Dropdown for metric selection
+        margin_options = ["Gross Margin", "Net Margin", "Revenue Growth"]
+        margin_combo = QComboBox()
+        margin_combo.addItems(margin_options)
+        margin_combo.setStyleSheet("background: rgba(32,34,37,0.7); color: white; border-radius: 8px; padding: 6px 12px; font-size: 13px;")
+        margin_dropdown_layout = QHBoxLayout()
+        margin_dropdown_layout.setContentsMargins(0, 0, 0, 8)
+        margin_dropdown_layout.setSpacing(16)
+        margin_dropdown_layout.addStretch(1)
+        margin_dropdown_layout.addWidget(margin_combo)
+        margin_dropdown_layout.addStretch(1)
+        margin_dropdown_widget = QWidget()
+        margin_dropdown_widget.setLayout(margin_dropdown_layout)
+        # Chart
         chart2_plot = pg.PlotWidget(background='w')
         chart2_plot.setBackground(None)
         chart2_plot.setStyleSheet('background: transparent;')
-        chart2_plot.setTitle("<span style='color:white;font-size:16pt'>Gross Margin</span>")
-        gross_margin = np.array([0.91, 0.93, 0.92, 0.94, 0.95, 0.96])
-        chart2_plot.plot(months, gross_margin*100, pen=pg.mkPen('#00bcd4', width=3), symbol='o', symbolBrush='#00bcd4', name="Gross Margin")
         chart2_plot.showGrid(x=False, y=False)
         chart2_plot.getAxis('left').setPen(pg.mkPen('w', width=1))
         chart2_plot.getAxis('bottom').setPen(pg.mkPen('w', width=1))
         chart2_plot.getAxis('bottom').setTicks([list(enumerate(month_labels))])
         chart2_plot.setLabel('left', "%", color='white', size='10pt')
         chart2_plot.setLabel('bottom', "Month", color='white', size='10pt')
-        chart2 = PyQtGraphChartCard(chart2_plot)
+        # Combine dropdown and chart in a vertical layout
+        chart2_container = QWidget()
+        chart2_vlayout = QVBoxLayout(chart2_container)
+        chart2_vlayout.setContentsMargins(0, 0, 0, 0)
+        chart2_vlayout.setSpacing(0)
+        chart2_vlayout.addWidget(margin_dropdown_widget)
+        chart2_vlayout.addWidget(chart2_plot)
+        chart2 = PyQtGraphChartCard(chart2_container)
         chart2.setMinimumHeight(200)
+        # Update function for margin chart
+        def update_margin_chart():
+            metric = margin_combo.currentText()
+            chart2_plot.clear()
+            if metric == "Gross Margin":
+                data = np.array([0.91, 0.93, 0.92, 0.94, 0.95, 0.96]) * 100
+                color = '#00bcd4'
+                label = "Gross Margin"
+            elif metric == "Net Margin":
+                data = np.array([0.21, 0.23, 0.22, 0.24, 0.25, 0.26]) * 100
+                color = '#4caf50'
+                label = "Net Margin"
+            elif metric == "Revenue Growth":
+                data = np.array([0.02, 0.03, 0.01, 0.04, 0.05, 0.03]) * 100
+                color = '#2196f3'
+                label = "Revenue Growth"
+            else:
+                data = np.zeros(6)
+                color = 'white'
+                label = metric
+            chart2_plot.plot(months, data, pen=pg.mkPen(color, width=3), symbol='o', symbolBrush=color, name=label)
+            chart2_plot.getAxis('bottom').setTicks([list(enumerate(month_labels))])
+            chart2_plot.setLabel('left', "%", color='white', size='10pt')
+            chart2_plot.setLabel('bottom', "Month", color='white', size='10pt')
+            chart2_plot.addLegend(offset=(10,10), labelTextColor='white', brush=pg.mkBrush(30,32,36,180))
+        margin_combo.currentIndexChanged.connect(update_margin_chart)
+        update_margin_chart()
 
         # --- Chart 3: Revenue Growth (Line Chart, pyqtgraph) ---
-        chart3_plot = pg.PlotWidget(background='w')
-        chart3_plot.setBackground(None)
-        chart3_plot.setStyleSheet('background: transparent;')
-        chart3_plot.setTitle("<span style='color:white;font-size:16pt'>Revenue Growth</span>")
-        growth = np.array([0.02, 0.03, 0.01, 0.04, 0.05, 0.03])  # 2%, 3%, ...
-        chart3_plot.plot(months, growth*100, pen=pg.mkPen('#2196f3', width=3), symbol='o', symbolBrush='#2196f3', name="Growth")
-        chart3_plot.showGrid(x=False, y=False)
-        chart3_plot.getAxis('left').setPen(pg.mkPen('w', width=1))
-        chart3_plot.getAxis('bottom').setPen(pg.mkPen('w', width=1))
-        chart3_plot.getAxis('bottom').setTicks([list(enumerate(month_labels))])
-        chart3_plot.setLabel('left', "%", color='white', size='10pt')
-        chart3_plot.setLabel('bottom', "Month", color='white', size='10pt')
-        chart3 = PyQtGraphChartCard(chart3_plot)
-        chart3.setMinimumHeight(200)
+        # (Remove the Revenue Growth chart from the grid layout)
+        # (Delete or comment out any grid.addWidget(chart3, ...) lines)
+        # Row 4 (skip chart3)
+        # grid.addWidget(chart3, 4, 2, 2, 2)  # Chart 3: 2x2 block at (4,2)
+        # Row 5 (skip chart3)
+        # (Leave other metric cards in place)
 
         # --- Chart 4: Income Statement Breakdown (Donut Chart, pyqtgraph custom) ---
         class DonutChartWidget(QWidget):
@@ -251,7 +288,6 @@ class DashboardPage(QWidget):
         # Row 4
         grid.addWidget(self.card_receivables, 4, 0)
         grid.addWidget(self.card_payables, 4, 1)
-        grid.addWidget(chart3, 4, 2, 2, 2)  # Chart 3: 2x2 block at (4,2)
         # Row 5
         grid.addWidget(self.card_quick_ratio, 5, 0)
         grid.addWidget(self.card_debt_equity, 5, 1)
