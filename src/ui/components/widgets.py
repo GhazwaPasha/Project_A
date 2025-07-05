@@ -1401,3 +1401,41 @@ class EditableAccountComboBox(QComboBox):
         # Force the combo box itself to repaint
         self.update()
         self.repaint()
+
+
+class ChartCard(QFrame):
+    def __init__(self, chart_widget, parent=None):
+        super().__init__(parent)
+        self.setObjectName("ChartCard")
+        self.setStyleSheet("""
+            QFrame#ChartCard {
+                background: rgba(30, 32, 36, 0.7);
+                border-radius: 18px;
+                border: 1.5px solid rgba(255,255,255,0.07);
+                box-shadow: 0 2px 12px 0 rgba(0,0,0,0.12);
+            }
+        """)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(0)
+        chart_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        layout.addWidget(chart_widget)
+
+
+class PyQtGraphChartCard(QFrame):
+    def __init__(self, chart_widget, parent=None):
+        super().__init__(parent)
+        self.setObjectName("PyQtGraphChartCard")
+        self.setStyleSheet("""
+            QFrame#PyQtGraphChartCard {
+                background: rgba(30, 32, 36, 0.5);
+                border-radius: 18px;
+                border: none;
+                box-shadow: 0 2px 12px 0 rgba(0,0,0,0.12);
+            }
+        """)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(0)
+        chart_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        layout.addWidget(chart_widget)

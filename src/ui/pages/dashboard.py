@@ -8,9 +8,14 @@ from ..common import (
     ResponsiveHelper, Qt, QScrollArea, QFrame
 )
 from ...core.utils import format_currency
-from ..components.widgets import MetricCard, ActionCard, PageHeader, DateRangeSelector
+from ..components.widgets import MetricCard, ActionCard, PageHeader, DateRangeSelector, ChartCard, PyQtGraphChartCard
 from ..components.styles import ModernStyles, GlassmorphismHelper
 from ..components.mica_effect import MicaEffect
+import pyqtgraph as pg
+import numpy as np
+from PyQt6.QtWidgets import QGridLayout
+from PyQt6.QtGui import QPainter, QColor, QPen, QFont
+from ..components.scrollbar_styles import ModernScrollbarStyles
 
 
 class DashboardPage(QWidget):
@@ -53,6 +58,7 @@ class DashboardPage(QWidget):
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setStyleSheet(ModernScrollbarStyles.get_vertical_scrollbar_style())
         
         # Content widget for scrollable area
         content_widget = QWidget()
@@ -74,7 +80,6 @@ class DashboardPage(QWidget):
         
     def _create_mixed_metrics_layout(self, content_layout):
         """Create the mixed metrics layout with cards and charts as a 4-column grid, with charts as 2x2 blocks."""
-        from PyQt6.QtWidgets import QGridLayout
         grid = QGridLayout()
         grid.setSpacing(ResponsiveHelper.scale_size(20, 16, 28))
 
@@ -96,51 +101,132 @@ class DashboardPage(QWidget):
         self.card_expenses = MetricCard("Expenses", "0.00", "", clickable=True)
         self.card_revenue = MetricCard("Revenue", "0.00", "", clickable=True)
 
-        # Chart placeholders (replace with real chart widgets later)
-        chart1 = QLabel("📊 Revenue vs Expenses Chart\n(2x2 block)")
-        chart1.setStyleSheet("""
-            QLabel {
-                background: rgba(255, 255, 255, 0.1);
-                border: 2px dashed rgba(255, 255, 255, 0.3);
-                border-radius: 12px;
-                color: white;
-                padding: 40px;
-                font-size: 14px;
-                text-align: center;
-            }
-        """)
+        # --- Chart 1: Revenue vs Expenses (Line/Area Chart, pyqtgraph) ---
+        chart1_plot = pg.PlotWidget(background='w')
+        chart1_plot.setBackground(None)
+        chart1_plot.setStyleSheet('background: transparent;')
+        chart1_plot.setTitle("<span style='color:white;font-size:16pt'>Revenue vs Expenses</span>")
+        months = np.arange(6)
+        month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+        revenue = np.array([1000, 1200, 1300, 1250, 1400, 1500])
+        expenses = np.array([800, 900, 950, 1000, 1100, 1200])
+        chart1_plot.plot(months, revenue, pen=pg.mkPen('#4caf50', width=3), name="Revenue", symbol='o', symbolBrush='#4caf50')
+        chart1_plot.plot(months, expenses, pen=pg.mkPen('#f44336', width=3), name="Expenses", symbol='o', symbolBrush='#f44336')
+        chart1_plot.showGrid(x=True, y=True, alpha=0.15)
+        chart1_plot.getAxis('left').setPen(pg.mkPen('w', width=1))
+        chart1_plot.getAxis('bottom').setPen(pg.mkPen('w', width=1))
+        chart1_plot.getAxis('bottom').setTicks([list(enumerate(month_labels))])
+        chart1_plot.setLabel('left', "Amount", color='white', size='10pt')
+        chart1_plot.setLabel('bottom', "Month", color='white', size='10pt')
+        chart1_plot.addLegend(offset=(10,10), labelTextColor='white', brush=pg.mkBrush(30,32,36,180))
+        chart1 = PyQtGraphChartCard(chart1_plot)
         chart1.setMinimumHeight(200)
 
-        chart2 = QLabel("💧 Cash Flow Chart\n(2x2 block)")
-        chart2.setStyleSheet(chart1.styleSheet())
+        # --- Chart 2: Gross Margin (Line Chart, pyqtgraph) ---
+        chart2_plot = pg.PlotWidget(background='w')
+        chart2_plot.setBackground(None)
+        chart2_plot.setStyleSheet('background: transparent;')
+        chart2_plot.setTitle("<span style='color:white;font-size:16pt'>Gross Margin</span>")
+        gross_margin = np.array([0.91, 0.93, 0.92, 0.94, 0.95, 0.96])
+        chart2_plot.plot(months, gross_margin*100, pen=pg.mkPen('#00bcd4', width=3), symbol='o', symbolBrush='#00bcd4', name="Gross Margin")
+        chart2_plot.showGrid(x=True, y=True, alpha=0.15)
+        chart2_plot.getAxis('left').setPen(pg.mkPen('w', width=1))
+        chart2_plot.getAxis('bottom').setPen(pg.mkPen('w', width=1))
+        chart2_plot.getAxis('bottom').setTicks([list(enumerate(month_labels))])
+        chart2_plot.setLabel('left', "%", color='white', size='10pt')
+        chart2_plot.setLabel('bottom', "Month", color='white', size='10pt')
+        chart2 = PyQtGraphChartCard(chart2_plot)
         chart2.setMinimumHeight(200)
 
-        # Place widgets in grid (4 columns wide)
+        # --- Chart 3: Revenue Growth (Line Chart, pyqtgraph) ---
+        chart3_plot = pg.PlotWidget(background='w')
+        chart3_plot.setBackground(None)
+        chart3_plot.setStyleSheet('background: transparent;')
+        chart3_plot.setTitle("<span style='color:white;font-size:16pt'>Revenue Growth</span>")
+        growth = np.array([0.02, 0.03, 0.01, 0.04, 0.05, 0.03])  # 2%, 3%, ...
+        chart3_plot.plot(months, growth*100, pen=pg.mkPen('#2196f3', width=3), symbol='o', symbolBrush='#2196f3', name="Growth")
+        chart3_plot.showGrid(x=True, y=True, alpha=0.15)
+        chart3_plot.getAxis('left').setPen(pg.mkPen('w', width=1))
+        chart3_plot.getAxis('bottom').setPen(pg.mkPen('w', width=1))
+        chart3_plot.getAxis('bottom').setTicks([list(enumerate(month_labels))])
+        chart3_plot.setLabel('left', "%", color='white', size='10pt')
+        chart3_plot.setLabel('bottom', "Month", color='white', size='10pt')
+        chart3 = PyQtGraphChartCard(chart3_plot)
+        chart3.setMinimumHeight(200)
+
+        # --- Chart 4: Income Statement Breakdown (Donut Chart, pyqtgraph custom) ---
+        class DonutChartWidget(QWidget):
+            def __init__(self, values, labels, colors, parent=None):
+                super().__init__(parent)
+                self.values = values
+                self.labels = labels
+                self.colors = colors
+                self.setMinimumHeight(200)
+                self.setMinimumWidth(200)
+            def paintEvent(self, event):
+                painter = QPainter(self)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                rect = self.rect().adjusted(20, 20, -20, -20)
+                total = sum(self.values)
+                start_angle = 90 * 16
+                for i, (v, color) in enumerate(zip(self.values, self.colors)):
+                    span_angle = int(360 * 16 * v / total)
+                    painter.setBrush(QColor(color))
+                    painter.setPen(QPen(Qt.PenStyle.NoPen))
+                    painter.drawPie(rect, start_angle, span_angle)
+                    start_angle += span_angle
+                # Draw inner circle for donut effect
+                inner_rect = rect.adjusted(rect.width()//4, rect.height()//4, -rect.width()//4, -rect.height()//4)
+                painter.setBrush(QColor(30,32,36,180))
+                painter.drawEllipse(inner_rect)
+                # Draw labels
+                painter.setPen(QPen(QColor('white')))
+                font = QFont()
+                font.setPointSize(10)
+                painter.setFont(font)
+                label_y = rect.top() + 10
+                for i, (label, v, color) in enumerate(zip(self.labels, self.values, self.colors)):
+                    painter.setBrush(QColor(color))
+                    painter.drawRect(rect.right() - 120, label_y, 12, 12)
+                    painter.drawText(rect.right() - 100, label_y + 12, f"{label}: {v}")
+                    label_y += 20
+        # Example data
+        donut_labels = ["COGS", "OpEx", "Other", "Net Margin"]
+        donut_values = [650, 400, 140, 810]  # Example split
+        donut_colors = ["#f44336", "#ff9800", "#9c27b0", "#4caf50"]
+        donut_widget = DonutChartWidget(donut_values, donut_labels, donut_colors)
+        chart4 = PyQtGraphChartCard(donut_widget)
+        chart4.setMinimumHeight(200)
+
+        # Place widgets in grid (4 columns wide, charts as 2x2 blocks, no overlap)
         # Row 0
         grid.addWidget(self.card_cash, 0, 0)
         grid.addWidget(self.card_net_income, 0, 1)
-        grid.addWidget(chart1, 0, 2, 2, 2)  # 2x2 block at (0,2)
+        grid.addWidget(chart1, 0, 2, 2, 2)  # Chart 1: 2x2 block at (0,2)
         # Row 1
         grid.addWidget(self.card_revenue_growth, 1, 0)
         grid.addWidget(self.card_expense_growth, 1, 1)
         # Row 2
         grid.addWidget(self.card_liabilities, 2, 0)
         grid.addWidget(self.card_working_capital, 2, 1)
-        grid.addWidget(self.card_gross_margin, 2, 2)
-        grid.addWidget(self.card_operating_margin, 2, 3)
+        grid.addWidget(chart2, 2, 2, 2, 2)  # Chart 2: 2x2 block at (2,2)
         # Row 3
-        grid.addWidget(self.card_receivables, 3, 0)
-        grid.addWidget(self.card_payables, 3, 1)
-        grid.addWidget(chart2, 3, 2, 2, 2)  # 2x2 block at (3,2)
+        grid.addWidget(self.card_gross_margin, 3, 0)
+        grid.addWidget(self.card_operating_margin, 3, 1)
         # Row 4
-        grid.addWidget(self.card_quick_ratio, 4, 0)
-        grid.addWidget(self.card_debt_equity, 4, 1)
+        grid.addWidget(self.card_receivables, 4, 0)
+        grid.addWidget(self.card_payables, 4, 1)
+        grid.addWidget(chart3, 4, 2, 2, 2)  # Chart 3: 2x2 block at (4,2)
         # Row 5
-        grid.addWidget(self.card_cash_flow, 5, 0)
-        grid.addWidget(self.card_dso, 5, 1)
-        grid.addWidget(self.card_expenses, 5, 2)
-        grid.addWidget(self.card_revenue, 5, 3)
-
+        grid.addWidget(self.card_quick_ratio, 5, 0)
+        grid.addWidget(self.card_debt_equity, 5, 1)
+        # Row 6
+        grid.addWidget(self.card_cash_flow, 6, 0)
+        grid.addWidget(self.card_dso, 6, 1)
+        grid.addWidget(chart4, 6, 2, 2, 2)  # Chart 4: 2x2 block at (6,2)
+        # Row 7
+        grid.addWidget(self.card_expenses, 7, 0)
+        grid.addWidget(self.card_revenue, 7, 1)
         content_layout.addLayout(grid)
         
     def _create_actions_section(self, content_layout):
