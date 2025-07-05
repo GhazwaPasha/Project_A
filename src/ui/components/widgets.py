@@ -1409,17 +1409,32 @@ class ChartCard(QFrame):
         self.setObjectName("ChartCard")
         self.setStyleSheet("""
             QFrame#ChartCard {
-                background: rgba(30, 32, 36, 0.7);
+                background: rgba(32, 34, 37, 0.1);
+                border: 1px solid rgba(0, 0, 0, 0.3);
                 border-radius: 18px;
-                border: 1.5px solid rgba(255,255,255,0.07);
-                box-shadow: 0 2px 12px 0 rgba(0,0,0,0.12);
+                margin: 4px;
+            }
+            QFrame#ChartCard:hover {
+                background: rgba(32, 34, 37, 0.15);
+                border: 1px solid rgba(32, 34, 37, 0.4);
+            }
+            QFrame#ChartCard:pressed {
+                background: rgba(32, 34, 37, 0.2);
+                border: 1px solid rgba(32, 34, 37, 0.5);
             }
         """)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(0)
         chart_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(chart_widget)
+        # Add drop shadow for better depth
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(20)
+        shadow.setXOffset(0)
+        shadow.setYOffset(4)
+        shadow.setColor(QColor(0, 0, 0, 80))
+        self.setGraphicsEffect(shadow)
 
 
 class PyQtGraphChartCard(QFrame):
@@ -1428,14 +1443,29 @@ class PyQtGraphChartCard(QFrame):
         self.setObjectName("PyQtGraphChartCard")
         self.setStyleSheet("""
             QFrame#PyQtGraphChartCard {
-                background: rgba(30, 32, 36, 0.5);
+                background: rgba(32, 34, 37, 0.1);
+                border: 1px solid rgba(0, 0, 0, 0.3);
                 border-radius: 18px;
-                border: none;
-                box-shadow: 0 2px 12px 0 rgba(0,0,0,0.12);
+                margin: 4px;
+            }
+            QFrame#PyQtGraphChartCard:hover {
+                background: rgba(32, 34, 37, 0.15);
+                border: 1px solid rgba(32, 34, 37, 0.4);
+            }
+            QFrame#PyQtGraphChartCard:pressed {
+                background: rgba(32, 34, 37, 0.2);
+                border: 1px solid rgba(32, 34, 37, 0.5);
             }
         """)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(0)
         chart_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(chart_widget)
+        # Add drop shadow for better depth
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(20)
+        shadow.setXOffset(0)
+        shadow.setYOffset(4)
+        shadow.setColor(QColor(0, 0, 0, 80))
+        self.setGraphicsEffect(shadow)

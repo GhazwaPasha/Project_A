@@ -112,7 +112,7 @@ class DashboardPage(QWidget):
         expenses = np.array([800, 900, 950, 1000, 1100, 1200])
         chart1_plot.plot(months, revenue, pen=pg.mkPen('#4caf50', width=3), name="Revenue", symbol='o', symbolBrush='#4caf50')
         chart1_plot.plot(months, expenses, pen=pg.mkPen('#f44336', width=3), name="Expenses", symbol='o', symbolBrush='#f44336')
-        chart1_plot.showGrid(x=True, y=True, alpha=0.15)
+        chart1_plot.showGrid(x=False, y=False)
         chart1_plot.getAxis('left').setPen(pg.mkPen('w', width=1))
         chart1_plot.getAxis('bottom').setPen(pg.mkPen('w', width=1))
         chart1_plot.getAxis('bottom').setTicks([list(enumerate(month_labels))])
@@ -129,7 +129,7 @@ class DashboardPage(QWidget):
         chart2_plot.setTitle("<span style='color:white;font-size:16pt'>Gross Margin</span>")
         gross_margin = np.array([0.91, 0.93, 0.92, 0.94, 0.95, 0.96])
         chart2_plot.plot(months, gross_margin*100, pen=pg.mkPen('#00bcd4', width=3), symbol='o', symbolBrush='#00bcd4', name="Gross Margin")
-        chart2_plot.showGrid(x=True, y=True, alpha=0.15)
+        chart2_plot.showGrid(x=False, y=False)
         chart2_plot.getAxis('left').setPen(pg.mkPen('w', width=1))
         chart2_plot.getAxis('bottom').setPen(pg.mkPen('w', width=1))
         chart2_plot.getAxis('bottom').setTicks([list(enumerate(month_labels))])
@@ -145,7 +145,7 @@ class DashboardPage(QWidget):
         chart3_plot.setTitle("<span style='color:white;font-size:16pt'>Revenue Growth</span>")
         growth = np.array([0.02, 0.03, 0.01, 0.04, 0.05, 0.03])  # 2%, 3%, ...
         chart3_plot.plot(months, growth*100, pen=pg.mkPen('#2196f3', width=3), symbol='o', symbolBrush='#2196f3', name="Growth")
-        chart3_plot.showGrid(x=True, y=True, alpha=0.15)
+        chart3_plot.showGrid(x=False, y=False)
         chart3_plot.getAxis('left').setPen(pg.mkPen('w', width=1))
         chart3_plot.getAxis('bottom').setPen(pg.mkPen('w', width=1))
         chart3_plot.getAxis('bottom').setTicks([list(enumerate(month_labels))])
@@ -228,6 +228,10 @@ class DashboardPage(QWidget):
         grid.addWidget(self.card_expenses, 7, 0)
         grid.addWidget(self.card_revenue, 7, 1)
         content_layout.addLayout(grid)
+        
+        # Set equal stretch for all columns
+        for col in range(4):
+            grid.setColumnStretch(col, 1)
         
     def _create_actions_section(self, content_layout):
         """Create the quick actions section."""
