@@ -402,7 +402,7 @@ class SingleEntryTab(QWidget):
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(18, 12, 18, 12)
         header_layout.setSpacing(8)
-        title = QLabel("New Transaction")
+        title = QLabel("Add a New Transaction or Say it!")
         title.setStyleSheet("""
             color: rgba(255, 255, 255, 0.9);
             font-size: 14px;
@@ -663,7 +663,7 @@ class SingleEntryTab(QWidget):
         
         # AI input field and buttons
         self.nl_input = QLineEdit()
-        self.nl_input.setPlaceholderText("Describe your transaction in plain English...")
+        self.nl_input.setPlaceholderText("Go ahead, type your transaction as you'd say it out loud (e.g., 'Paid electricity bill')")
         self.nl_input.setStyleSheet("""
             QLineEdit {
                 background: rgba(255, 255, 255, 0.08);
@@ -723,9 +723,43 @@ class SingleEntryTab(QWidget):
             }
         """
 
-        # Interpret button
-        parse_btn = QPushButton("Interpret")
-        parse_btn.setStyleSheet(button_base_style)
+        # AI Fill button with AI-themed styling
+        ai_button_style = """
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(255, 105, 180, 0.8),
+                    stop:0.5 rgba(199, 21, 133, 0.8),
+                    stop:1 rgba(255, 105, 180, 0.8));
+                border: 1px solid rgba(255, 105, 180, 0.6);
+                border-radius: 8px;
+                color: white;
+                padding: 4px 16px;
+                font-size: 12px;
+                font-weight: 600;
+                min-height: 32px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(255, 105, 180, 0.9),
+                    stop:0.5 rgba(199, 21, 133, 0.9),
+                    stop:1 rgba(255, 105, 180, 0.9));
+                border: 1px solid rgba(255, 105, 180, 0.8);
+                transform: translateY(-1px);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(199, 21, 133, 0.9),
+                    stop:0.5 rgba(255, 105, 180, 0.9),
+                    stop:1 rgba(199, 21, 133, 0.9));
+                border: 1px solid rgba(255, 105, 180, 1.0);
+                transform: translateY(0px);
+            }
+        """
+        
+        parse_btn = QPushButton("✨ AI Fill")
+        parse_btn.setStyleSheet(ai_button_style)
         parse_btn.clicked.connect(self._parse_transaction)
         grid.addWidget(parse_btn, 2, 2)  # row 2, column 2 (Debit)
         
