@@ -443,6 +443,16 @@ class AuthManager:
                 self.logger.warning("No database manager available for permission check")
                 return False
             
+            # Create cache key for this permission check
+            from .rpc_cache_manager import rpc_cache, CacheStrategy
+            cache_key = f"page_access_{self.current_user.id}_{org_id}_{page_key}_{permission_type}"
+            
+            # Check cache first
+            cached_result = rpc_cache.get_cached_result(cache_key, CacheStrategy.MEDIUM_TERM)
+            if cached_result is not None:
+                print(f"🔍 DEBUG can_access_page: Cache hit for {page_key}")
+                return cached_result
+            
             print(f"🔍 DEBUG can_access_page: Checking {page_key} for org {org_id} with permission {permission_type}")
             
             # FIRST: Try database RPC call (if available)
@@ -454,8 +464,12 @@ class AuthManager:
                     'p_permission_type': permission_type
                 }).execute()
                 
-                print(f"🔍 DEBUG can_access_page: RPC success! Result = {result.data}")
-                return bool(result.data) if result.data is not None else False
+                has_permission = bool(result.data) if result.data is not None else False
+                print(f"🔍 DEBUG can_access_page: RPC success! Result = {has_permission}")
+                
+                # Cache the result
+                rpc_cache.set_cached_result(cache_key, has_permission, CacheStrategy.MEDIUM_TERM)
+                return has_permission
                 
             except Exception as rpc_error:
                 print(f"🔍 DEBUG can_access_page: RPC failed - {rpc_error}")
@@ -498,6 +512,9 @@ class AuthManager:
                 has_permission = permission_type in page_perms
                 
                 print(f"🔍 DEBUG can_access_page: Role-based check - {user_role} -> {page_key} -> {permission_type} = {has_permission}")
+                
+                # Cache the result
+                rpc_cache.set_cached_result(cache_key, has_permission, CacheStrategy.MEDIUM_TERM)
                 return has_permission
                 
             except Exception as role_error:
@@ -519,7 +536,8 @@ class AuthManager:
             # Define all pages that need permission checks
             pages = [
                 'dashboard', 'accounts', 'journal_entries', 'reports', 
-                'settings', 'user_management', 'team_management', 'organization_settings'
+                'settings', 'user_management', 'team_management', 'organization_settings',
+                'platform_overview', 'global_organizations', 'period_closing'
             ]
             
             permissions = {}
@@ -532,6 +550,45 @@ class AuthManager:
             self.logger.error(f"Failed to get user page permissions: {e}")
             return {}
     
+    def batch_check_page_permissions(self, org_id: str, pages: List[str], permission_type: str = 'view') -> Dict[str, bool]:
+        """Batch check permissions for multiple pages to reduce RPC calls"""
+        try:
+            if not self.db_manager:
+                self.logger.warning("No database manager available for permission check")
+                return {page: False for page in pages}
+            
+            from .rpc_cache_manager import rpc_cache, CacheStrategy
+            
+            # Check cache first for all pages
+            results = {}
+            uncached_pages = []
+            
+            for page in pages:
+                cache_key = f"page_access_{self.current_user.id}_{org_id}_{page}_{permission_type}"
+                cached_result = rpc_cache.get_cached_result(cache_key, CacheStrategy.MEDIUM_TERM)
+                if cached_result is not None:
+                    results[page] = cached_result
+                else:
+                    uncached_pages.append(page)
+            
+            # If all pages were cached, return immediately
+            if not uncached_pages:
+                self.logger.debug(f"All {len(pages)} page permissions found in cache")
+                return results
+            
+            # For uncached pages, we could implement a batch RPC call here
+            # For now, we'll check them individually but with better logging
+            self.logger.debug(f"Checking {len(uncached_pages)} uncached page permissions")
+            
+            for page in uncached_pages:
+                results[page] = self.can_access_page(page, org_id, permission_type)
+            
+            return results
+                
+        except Exception as e:
+            self.logger.error(f"Failed to batch check page permissions: {e}")
+            return {page: False for page in pages}
+
     def set_database_context(self, user_id: str, organization_id: str, role: str):
         """Set PostgreSQL context for RLS policies"""
         try:

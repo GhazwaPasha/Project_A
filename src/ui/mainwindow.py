@@ -143,6 +143,15 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         from .components.notifications.notification_manager import NotificationManager
         self.notification_manager = NotificationManager()
         
+        # Initialize optimized workspace switching components
+        from ..core.page_manager import PageManager
+        from ..core.batched_query_manager import BatchedQueryManager
+        self.page_manager = PageManager(auth_manager, session_manager)
+        self.batched_query_manager = BatchedQueryManager(auth_manager)
+        
+        # Connect PageManager to main window
+        self.page_manager.set_current_page_getter(self._get_current_page_name)
+        
         # AI processor removed - now handled by SimpleAIStatusBar
         
         self.sidebar_expanded = False  # Start collapsed for a cleaner look
@@ -670,13 +679,44 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         
         # Update AI context with new page information
         page_names = ['dashboard', 'journal', 'ledger', 'trial_balance', 'reports', 
-                     'accounts', 'reminders', 'period_closing']
+                     'accounts', 'reminders', 'period_closing', 'team_management',
+                     'organization_settings', 'user_management', 'platform_overview',
+                     'global_organizations', 'settings']
         if 0 <= index < len(page_names):
-            self._update_ai_page_context(page_names[index])
+            page_name = page_names[index]
+            self._update_ai_page_context(page_name)
+            
+            # Ensure page has fresh data for current workspace
+            if hasattr(self, 'stack') and index < self.stack.count():
+                current_page = self.stack.widget(index)
+                if current_page:
+                    self._ensure_page_data_loaded(current_page, page_name)
         
         # Update which sidebar button is checked
         for i, btn in enumerate(self.sidebar_buttons):
             btn.setChecked(i == index)
+    
+    def _ensure_page_data_loaded(self, page, page_name: str):
+        """Ensure page has fresh data loaded for current workspace"""
+        try:
+            if hasattr(self, 'session_manager') and self.session_manager:
+                current_org_id = self.session_manager.get_current_organization_id()
+                if current_org_id and hasattr(self, 'page_manager'):
+                    # Check if we have cached data for this page
+                    cached_data = self.page_manager.get_page_data(page_name, current_org_id)
+                    
+                    if not cached_data or cached_data.get('status') != 'loaded':
+                        # No cached data, load it now
+                        self.logger.info(f"🔄 Loading data for {page_name} on navigation")
+                        from src.core.page_manager import LoadingPriority
+                        self.page_manager._load_page_priority(page_name, current_org_id, LoadingPriority.HIGH)
+                        
+                        # Refresh the page after loading
+                        if hasattr(page, 'refresh_data'):
+                            page.refresh_data()
+                    
+        except Exception as e:
+            self.logger.error(f"Error ensuring page data loaded: {e}")
         
     def _create_sidebar(self):
         """Create the modern sidebar with responsive design and translucent styling."""
@@ -1606,6 +1646,26 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         # Pages that should be hidden for personal workspaces (single-user orgs)
         personal_workspace_hidden = [8, 9, 10] if org_type == 'personal' else []  # Team, Org Settings, User Mgmt
         
+        # Batch check permissions for all pages to reduce RPC calls
+        pages_to_check = []
+        page_indices = []
+        
+        for i, button in enumerate(self.sidebar_buttons):
+            if i not in personal_workspace_hidden and page_mappings.get(i):
+                pages_to_check.append(page_mappings[i])
+                page_indices.append(i)
+        
+        # Batch check permissions
+        if pages_to_check:
+            try:
+                permissions = auth_manager.batch_check_page_permissions(org_id, pages_to_check, 'view')
+                self.logger.debug(f"Batch permission check completed for {len(pages_to_check)} pages")
+            except Exception as e:
+                self.logger.error(f"Error in batch permission check: {e}")
+                permissions = {page: False for page in pages_to_check}
+        else:
+            permissions = {}
+        
         # Update button visibility based on permissions
         for i, button in enumerate(self.sidebar_buttons):
             should_show = False
@@ -1615,17 +1675,11 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
                 should_show = False
                 self.logger.debug(f"Page {i} hidden for personal workspace")
             elif page_mappings.get(i):
-                # Check database permissions for this page
+                # Use batch-checked permissions
                 page_key = page_mappings[i]
-                try:
-                    can_view = auth_manager.can_access_page(page_key, org_id, 'view')
-                    should_show = can_view
-                    self.logger.debug(f"Page {i} ({page_key}): can_view = {can_view}")
-                except Exception as e:
-                    self.logger.error(f"Error checking permissions for page {i} ({page_key}): {e}")
-                    # Default to hiding on error, except for dashboard
-                    should_show = (i == 0)  # Dashboard should be visible by default
-                    
+                can_view = permissions.get(page_key, False)
+                should_show = can_view
+                self.logger.debug(f"Page {i} ({page_key}): can_view = {can_view}")
             else:
                 # No specific permission mapping - default behavior
                 should_show = (i == 0)  # Show dashboard by default
@@ -2487,42 +2541,171 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
                 self.connection_indicator.update_connection_status(False)
     
     def _on_workspace_changed(self, organization_id: str, organization_name: str):
-        """Handle workspace/organization change from switcher"""
+        """Handle workspace/organization change with optimized loading"""
         try:
-            self.logger.info(f"Workspace changed to: {organization_name} (ID: {organization_id})")
+            self.logger.info(f"🚀 Starting optimized workspace switch to: {organization_name}")
             
-            # Update window title to show current workspace
+            # PHASE 1: IMMEDIATE UI UPDATES (Optimistic) - Non-blocking
+            self._perform_immediate_ui_updates(organization_id, organization_name)
+            
+            # PHASE 2: BACKGROUND DATA LOADING - Asynchronous
+            QTimer.singleShot(0, lambda: self._start_background_data_loading(organization_id, organization_name))
+            
+        except Exception as e:
+            self.logger.error(f"Error in optimized workspace switch: {e}")
+            self._handle_workspace_switch_error(e)
+    
+    def _perform_immediate_ui_updates(self, organization_id: str, organization_name: str):
+        """Perform immediate UI updates that don't require data loading"""
+        try:
+            # Show minimal progress popup
+            from .components.workspace_switching_progress import WorkspaceSwitchingProgress
+            self.progress_popup = WorkspaceSwitchingProgress(self)
+            self.progress_popup.show_progress(self)
+            self.progress_popup.update_status("Switching workspace...", 50)
+            
+            # Update window title immediately
             base_title = "Modern Accounting"
             self.setWindowTitle(f"{base_title} - {organization_name}")
             
-            # Update accounting system with new organization context
+            # Update workspace switcher immediately
+            if hasattr(self, 'bottom_bar') and hasattr(self.bottom_bar, 'workspace_switcher'):
+                self.bottom_bar.workspace_switcher.set_current_workspace(organization_id)
+            
+            # Update session manager context asynchronously
+            if hasattr(self, 'session_manager') and self.session_manager:
+                QTimer.singleShot(0, lambda: self.session_manager.set_active_organization(organization_id))
+            
+            # Invalidate RPC cache for the new organization
+            from src.core.rpc_cache_manager import rpc_cache
+            rpc_cache.invalidate_org_cache(organization_id)
+            
+            # Update accounting system context asynchronously
             if hasattr(self, 'accounting_system') and self.accounting_system:
-                print(f"🔄 Updating accounting system organization context to: {organization_id}")
-                success = self.accounting_system.set_organization(organization_id)
-                if success:
-                    print(f"✅ Accounting system organization context updated successfully")
-                else:
-                    print(f"❌ Failed to update accounting system organization context")
+                QTimer.singleShot(0, lambda: self.accounting_system.set_organization(organization_id))
             
-            # Refresh current page content with new organization context
-            if hasattr(self, 'stack') and self.stack.currentWidget():
-                current_page = self.stack.currentWidget()
-                if hasattr(current_page, 'refresh_data'):
-                    print(f"🔄 Refreshing data for current page: {type(current_page).__name__}")
-                    current_page.refresh_data()
-                else:
-                    print(f"⚠️ Current page {type(current_page).__name__} has no refresh_data method")
-                    
-            # Update navigation visibility based on new organization
-            self._update_navigation_visibility()
+            # Update navigation visibility asynchronously to avoid blocking
+            QTimer.singleShot(0, self._update_navigation_visibility)
             
-            self.logger.debug(f"Successfully switched to workspace: {organization_name}")
+            # Unfreeze UI - user can now interact while data loads in background
+            self._unfreeze_ui_after_switch()
+            
+            self.logger.info(f"✅ Immediate UI updates completed for {organization_name}")
             
         except Exception as e:
-            self.logger.error(f"Error handling workspace change: {e}")
+            self.logger.error(f"Error in immediate UI updates: {e}")
+            raise
+    
+    def _start_background_data_loading(self, organization_id: str, organization_name: str):
+        """Start background data loading using PageManager"""
+        try:
+            # Use PageManager for optimized data loading
+            def on_loading_complete():
+                """Callback when background loading is complete"""
+                try:
+                    # Update progress popup
+                    if hasattr(self, 'progress_popup'):
+                        self.progress_popup.update_status("Workspace switch complete!", 100)
+                        QTimer.singleShot(500, self.progress_popup.hide_progress)
+                    
+                    # Refresh current page with new data
+                    self._refresh_current_page_with_cached_data(organization_id)
+                    
+                    self.logger.info(f"✅ Background data loading completed for {organization_name}")
+                    
+                except Exception as e:
+                    self.logger.error(f"Error in loading completion callback: {e}")
+            
+            # Ensure all pages are loaded for the new workspace
+            self.page_manager.ensure_all_pages_loaded(organization_id)
+            
+            # Start optimized workspace switching
+            self.page_manager.switch_workspace(organization_id, organization_name, on_loading_complete)
+            
+            # Update progress to show background loading
+            if hasattr(self, 'progress_popup'):
+                self.progress_popup.update_status("Loading data in background...", 75)
+            
+        except Exception as e:
+            self.logger.error(f"Error starting background data loading: {e}")
+            raise
+    
+    def _refresh_current_page_with_cached_data(self, organization_id: str):
+        """Refresh all pages with cached data after workspace switch"""
+        try:
+            if hasattr(self, 'stack'):
+                total_pages = self.stack.count()
+                self.logger.info(f"🔄 Refreshing all {total_pages} pages with new workspace data")
+                
+                # Refresh pages asynchronously to avoid blocking UI
+                def refresh_pages():
+                    for i in range(total_pages):
+                        page = self.stack.widget(i)
+                        if page and hasattr(page, 'refresh_data'):
+                            page_name = type(page).__name__
+                            self.logger.debug(f"🔄 Refreshing page {i+1}/{total_pages}: {page_name}")
+                            
+                            try:
+                                # Get cached data for this page
+                                cached_data = self.page_manager.get_page_data(page_name, organization_id)
+                                
+                                if cached_data and cached_data.get('status') == 'loaded':
+                                    # Update page with cached data if available
+                                    if hasattr(page, 'update_with_cached_data'):
+                                        page.update_with_cached_data(cached_data)
+                                    else:
+                                        # Fallback to regular refresh
+                                        page.refresh_data()
+                                else:
+                                    # No cached data, use regular refresh
+                                    page.refresh_data()
+                                    
+                            except Exception as e:
+                                self.logger.error(f"❌ Error refreshing page {page_name}: {e}")
+                                # Still try to refresh with regular method
+                                try:
+                                    page.refresh_data()
+                                except Exception as fallback_error:
+                                    self.logger.error(f"❌ Fallback refresh also failed for {page_name}: {fallback_error}")
+                    
+                    self.logger.info(f"✅ All pages refreshed for workspace {organization_id}")
+                
+                # Use QTimer to defer page refresh to next event loop cycle
+                QTimer.singleShot(0, refresh_pages)
+                    
+        except Exception as e:
+            self.logger.error(f"Error refreshing pages: {e}")
+    
+    def _handle_workspace_switch_error(self, error: Exception):
+        """Handle workspace switching errors"""
+        try:
+            # Ensure UI is unfrozen
+            self._unfreeze_ui_after_switch()
+            
+            # Update progress popup with error
+            if hasattr(self, 'progress_popup'):
+                self.progress_popup.update_status("Error occurred during switch", 100)
+                QTimer.singleShot(1000, self.progress_popup.hide_progress)
+            
+            # Log error
             import traceback
             traceback.print_exc()
             
+        except Exception as e:
+            self.logger.error(f"Error handling workspace switch error: {e}")
+    
+    def _get_current_page_name(self) -> str:
+        """Get current page name for PageManager"""
+        try:
+            if hasattr(self, 'stack'):
+                current_page = self.stack.currentWidget()
+                if current_page:
+                    return type(current_page).__name__
+            return "DashboardPage"  # Default
+        except Exception as e:
+            self.logger.error(f"Error getting current page name: {e}")
+            return "DashboardPage"
+    
     def refresh_workspace_switcher(self):
         """Refresh the workspace switcher with current organizations"""
         try:
@@ -2531,3 +2714,41 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
                 self.logger.debug("Workspace switcher refreshed")
         except Exception as e:
             self.logger.error(f"Error refreshing workspace switcher: {e}")
+    
+    def _freeze_ui_during_switch(self):
+        """Freeze UI during workspace switch to prevent glitches"""
+        try:
+            # Disable main window interactions
+            self.setEnabled(False)
+            
+            # Show loading indicator if available
+            if hasattr(self, 'connection_indicator'):
+                self.connection_indicator.show_loading_state("Switching workspace...")
+            
+            # Disable workspace switcher to prevent rapid switching
+            if hasattr(self, 'bottom_bar') and hasattr(self.bottom_bar, 'workspace_switcher'):
+                self.bottom_bar.workspace_switcher.setEnabled(False)
+            
+            print("🔒 UI frozen during workspace switch")
+            
+        except Exception as e:
+            self.logger.error(f"Error freezing UI: {e}")
+    
+    def _unfreeze_ui_after_switch(self):
+        """Unfreeze UI after workspace switch is complete"""
+        try:
+            # Re-enable main window interactions
+            self.setEnabled(True)
+            
+            # Hide loading indicator if available
+            if hasattr(self, 'connection_indicator'):
+                self.connection_indicator.hide_loading_state()
+            
+            # Re-enable workspace switcher
+            if hasattr(self, 'bottom_bar') and hasattr(self.bottom_bar, 'workspace_switcher'):
+                self.bottom_bar.workspace_switcher.setEnabled(True)
+            
+            print("🔓 UI unfrozen after workspace switch")
+            
+        except Exception as e:
+            self.logger.error(f"Error unfreezing UI: {e}")

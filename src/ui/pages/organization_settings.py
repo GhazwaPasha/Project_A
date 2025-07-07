@@ -716,3 +716,11 @@ class OrganizationSettingsPage(QWidget):
                 event.ignore()
         else:
             event.accept()
+
+    def refresh_data(self):
+        """Refresh organization settings data when organization context changes."""
+        try:
+            print("🔄 Organization Settings: Refreshing data due to organization change...")
+            self._load_organization_data()
+        except Exception as e:
+            print(f"Error refreshing organization settings data: {e}")

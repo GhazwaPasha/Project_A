@@ -200,8 +200,22 @@ class WorkspaceSwitcher(QWidget):
             # Find the organization by ID
             for workspace in self.workspaces:
                 if workspace.get('id') == org_id:
+                    # Update session manager first
+                    if self.session_manager:
+                        success = self.session_manager.set_active_organization(org_id)
+                        if not success:
+                            print(f"❌ Failed to update session manager for organization {org_id}")
+                            return False
+                    
+                    # Update UI
                     self.current_workspace = workspace
-                    self.workspace_label.setText(workspace.get('name', 'Unknown'))
+                    self.workspace_label.setText(workspace.get('name', 'Unknown').upper())
+                    
+                    # Save the last active workspace to user preferences
+                    if self.session_manager:
+                        self.session_manager.save_last_active_workspace(org_id)
+                    
+                    print(f"✅ Workspace switcher updated to: {workspace.get('name', 'Unknown')}")
                     return True
             return False
         except Exception as e:

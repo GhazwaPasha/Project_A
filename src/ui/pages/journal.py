@@ -230,6 +230,18 @@ class JournalPage(QWidget):
                 background: rgba(0, 120, 215, 0.4);
             }
         """
+    
+    def refresh_data(self):
+        """Refresh journal data when organization context changes."""
+        try:
+            print("🔄 Journal: Refreshing data due to organization change...")
+            # Refresh both tabs
+            if hasattr(self, 'single_entry_tab'):
+                self.single_entry_tab.refresh_data()
+            if hasattr(self, 'bulk_entry_tab'):
+                self.bulk_entry_tab.refresh_data()
+        except Exception as e:
+            print(f"Error refreshing journal data: {e}")
 
 
 class SingleEntryTab(QWidget):
@@ -746,7 +758,6 @@ class SingleEntryTab(QWidget):
                     stop:0.5 rgba(199, 21, 133, 0.9),
                     stop:1 rgba(255, 105, 180, 0.9));
                 border: 1px solid rgba(255, 105, 180, 0.8);
-                transform: translateY(-1px);
             }
             QPushButton:pressed {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
@@ -754,7 +765,6 @@ class SingleEntryTab(QWidget):
                     stop:0.5 rgba(255, 105, 180, 0.9),
                     stop:1 rgba(199, 21, 133, 0.9));
                 border: 1px solid rgba(255, 105, 180, 1.0);
-                transform: translateY(0px);
             }
         """
         
@@ -1033,3 +1043,15 @@ class SingleEntryTab(QWidget):
             self.debit_combo.setAccountList(self.accounts)
         if hasattr(self, 'credit_combo'):
             self.credit_combo.setAccountList(self.accounts)
+    
+    def refresh_data(self):
+        """Refresh single entry tab data when organization context changes."""
+        try:
+            print("🔄 SingleEntryTab: Refreshing data due to organization change...")
+            self._load_accounts()
+            self._load_transactions()
+            # Refresh the combo boxes with new accounts
+            self._populate_account_combo(self.debit_combo)
+            self._populate_account_combo(self.credit_combo)
+        except Exception as e:
+            print(f"Error refreshing single entry tab data: {e}")

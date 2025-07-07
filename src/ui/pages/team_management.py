@@ -445,6 +445,14 @@ class TeamManagementPage(QWidget):
         """Remove member from table row"""
         # Get member data from row - placeholder implementation
         pass
+    
+    def refresh_data(self):
+        """Refresh team management data when organization context changes."""
+        try:
+            print("🔄 Team Management: Refreshing data due to organization change...")
+            self._load_team_members()
+        except Exception as e:
+            print(f"Error refreshing team management data: {e}")
 
 
 class InviteMemberDialog(QDialog):
@@ -743,3 +751,6 @@ class EditMemberRoleDialog(QDialog):
         # Placeholder for role update logic
         QMessageBox.information(self, "Success", f"Role updated to {self.role_combo.currentText()}")
         self.accept()
+
+
+

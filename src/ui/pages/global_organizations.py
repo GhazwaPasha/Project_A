@@ -524,6 +524,14 @@ class GlobalOrganizationsPage(QWidget):
     def _manage_organization_users(self, row):
         """Manage organization users"""
         QMessageBox.information(self, "Users", "Organization user management - to be implemented")
+    
+    def refresh_data(self):
+        """Refresh global organizations data when organization context changes."""
+        try:
+            print("🔄 Global Organizations: Refreshing data due to organization change...")
+            self._load_organizations()
+        except Exception as e:
+            print(f"Error refreshing global organizations data: {e}")
 
 
 class CreateOrganizationDialog(QDialog):
@@ -883,3 +891,6 @@ class EditOrganizationDialog(QDialog):
         # Placeholder for save logic
         QMessageBox.information(self, "Success", "Organization changes saved successfully.")
         self.accept()
+
+
+

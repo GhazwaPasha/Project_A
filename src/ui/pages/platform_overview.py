@@ -621,20 +621,20 @@ class PlatformOverviewPage(QWidget):
             # Get organization count
             orgs_result = self.auth_manager.supabase.table('organizations').select('count').execute()
             org_count = len(orgs_result.data) if orgs_result.data else 0
-            self.total_orgs_card.update_value(str(org_count))
+            self.total_orgs_card.set_value(str(org_count))
             
             # Get user count  
             users_result = self.auth_manager.supabase.table('users').select('count').execute()
             user_count = len(users_result.data) if users_result.data else 0
-            self.total_users_card.update_value(str(user_count))
+            self.total_users_card.set_value(str(user_count))
             
             # Mock data for other metrics
-            self.active_sessions_card.update_value("47")
-            self.monthly_revenue_card.update_value("$12,450")
-            self.system_uptime_card.update_value("99.9%")
-            self.db_performance_card.update_value("Good")
-            self.storage_used_card.update_value("280 GB")
-            self.api_requests_card.update_value("15,432")
+            self.active_sessions_card.set_value("47")
+            self.monthly_revenue_card.set_value("$12,450")
+            self.system_uptime_card.set_value("99.9%")
+            self.db_performance_card.set_value("Good")
+            self.storage_used_card.set_value("280 GB")
+            self.api_requests_card.set_value("15,432")
             
         except Exception as e:
             print(f"Error loading platform stats: {e}")
@@ -681,3 +681,11 @@ class PlatformOverviewPage(QWidget):
         if hasattr(self, 'refresh_timer'):
             self.refresh_timer.stop()
         event.accept()
+    
+    def refresh_data(self):
+        """Refresh platform overview data when organization context changes."""
+        try:
+            print("🔄 Platform Overview: Refreshing data due to organization change...")
+            self._load_platform_stats()
+        except Exception as e:
+            print(f"Error refreshing platform overview data: {e}")

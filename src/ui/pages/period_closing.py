@@ -1185,3 +1185,20 @@ class PeriodClosingPage(QWidget):
     def _generate_report(self):
         """Generate period report."""
         QMessageBox.information(self, "Report", "Period report generation would be implemented here.")
+
+    def refresh_data(self):
+        """Refresh period closing data when organization context changes."""
+        try:
+            print("🔄 Period Closing: Refreshing data due to organization change...")
+            # Update organization context in managers
+            if hasattr(self.system, 'current_organization_id'):
+                organization_id = self.system.current_organization_id
+                if self.period_manager:
+                    self.period_manager.organization_id = organization_id
+                if self.audit_manager:
+                    self.audit_manager.organization_id = organization_id
+            
+            # Reload data
+            self._load_data()
+        except Exception as e:
+            print(f"Error refreshing period closing data: {e}")

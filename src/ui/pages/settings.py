@@ -905,3 +905,11 @@ class SettingsPage(QWidget):
             self._save_settings()
             
             QMessageBox.information(self, "Settings Reset", "All settings have been reset to defaults.")
+    
+    def refresh_data(self):
+        """Refresh settings data when organization context changes."""
+        try:
+            print("🔄 Settings: Refreshing data due to organization context change...")
+            self._load_current_settings()
+        except Exception as e:
+            print(f"Error refreshing settings data: {e}")

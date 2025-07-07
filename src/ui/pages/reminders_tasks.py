@@ -892,3 +892,20 @@ class RemindersTasksPage(QWidget):
         self._load_reminder_items()
         
         return reminder['id']
+
+    def refresh_data(self):
+        """Refresh reminders data when organization context changes."""
+        try:
+            print("🔄 Reminders: Refreshing data due to organization change...")
+            # Update user and organization context
+            self.user_id = self._get_current_user_id()
+            self.organization_id = self._get_current_organization_id()
+            
+            # Reload reminders for new organization context
+            self.reminders_file = self._get_user_reminders_file()
+            self.reminders_data = self._load_reminders()
+            
+            # Refresh the UI
+            self._load_reminder_items()
+        except Exception as e:
+            print(f"Error refreshing reminders data: {e}")

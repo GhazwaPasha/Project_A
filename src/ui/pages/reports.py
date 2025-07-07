@@ -609,6 +609,24 @@ class ReportsPage(QWidget):
         except Exception as e:
             print(f"Error refreshing currency display in reports: {e}")
     
+    def refresh_data(self):
+        """Refresh reports data when organization context changes."""
+        try:
+            print("🔄 Reports: Refreshing data due to organization change...")
+            # Refresh all report views
+            if hasattr(self, 'income_statement_view'):
+                self.income_statement_view.refresh_data()
+            if hasattr(self, 'balance_sheet_view'):
+                self.balance_sheet_view.refresh_data()
+            if hasattr(self, 'cash_flow_view'):
+                self.cash_flow_view.refresh_data()
+            if hasattr(self, 'equity_statement_view'):
+                self.equity_statement_view.refresh_data()
+            if hasattr(self, 'ratio_analysis_view'):
+                self.ratio_analysis_view.refresh_data()
+        except Exception as e:
+            print(f"Error refreshing reports data: {e}")
+    
     def _handle_statement_click(self, statement_name):
         """Handle financial statement card clicks."""
         # Get current date range and convert to string format

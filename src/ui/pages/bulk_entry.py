@@ -787,6 +787,14 @@ class BulkEntryPage(QWidget):
         if not self._bulk_import_mode:
             self._update_summary()
     
+    def refresh_data(self):
+        """Refresh bulk entry data when organization context changes."""
+        try:
+            print("🔄 BulkEntry: Refreshing data due to organization change...")
+            self._refresh_accounts()
+        except Exception as e:
+            print(f"Error refreshing bulk entry data: {e}")
+    
     def _update_validation_and_save_state(self):
         """Update validation styling for all cards and save button state."""
         # Skip validation updates during bulk import for performance

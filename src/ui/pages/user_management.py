@@ -830,6 +830,14 @@ class UserManagementPage(QWidget):
         
         if reply == QMessageBox.StandardButton.Yes:
             QMessageBox.information(self, "Success", "Password reset email sent.")
+    
+    def refresh_data(self):
+        """Refresh user management data when organization context changes."""
+        try:
+            print("🔄 User Management: Refreshing data due to organization change...")
+            self._load_users()
+        except Exception as e:
+            print(f"Error refreshing user management data: {e}")
 
 
 class BulkInviteDialog(QDialog):
@@ -1127,3 +1135,6 @@ class EditUserDialog(QDialog):
         # Placeholder for save logic
         QMessageBox.information(self, "Success", "User changes saved successfully.")
         self.accept()
+
+
+
