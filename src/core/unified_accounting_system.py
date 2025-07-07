@@ -500,11 +500,21 @@ class UnifiedAccountingSystem:
             return
         
         try:
+            # Get the actual user role from auth manager
+            role = 'accountant'  # Default fallback
+            if self.auth_manager:
+                user_role = self.auth_manager.get_user_role_in_organization(self.current_organization_id)
+                if user_role:
+                    role = user_role
+            
             self.supabase.rpc('set_app_context', {
                 'user_id': self.current_user_id,
                 'organization_id': self.current_organization_id,
-                'role': 'accountant'  # This should come from session manager
+                'role': role
             }).execute()
+            
+            self.logger.info(f"✅ Database context set for user {self.current_user_id}, org {self.current_organization_id}, role {role}")
+            
         except Exception as e:
             self.logger.error(f"Failed to set database context: {e}")
 

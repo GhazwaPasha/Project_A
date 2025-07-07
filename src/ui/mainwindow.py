@@ -2495,6 +2495,15 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             base_title = "Modern Accounting"
             self.setWindowTitle(f"{base_title} - {organization_name}")
             
+            # Update accounting system with new organization context
+            if hasattr(self, 'accounting_system') and self.accounting_system:
+                print(f"🔄 Updating accounting system organization context to: {organization_id}")
+                success = self.accounting_system.set_organization(organization_id)
+                if success:
+                    print(f"✅ Accounting system organization context updated successfully")
+                else:
+                    print(f"❌ Failed to update accounting system organization context")
+            
             # Refresh current page content with new organization context
             if hasattr(self, 'stack') and self.stack.currentWidget():
                 current_page = self.stack.currentWidget()

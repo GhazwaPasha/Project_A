@@ -198,6 +198,7 @@ class AccountingSystem:
             user_id = self.current_user_id
             role = self.auth_manager.get_user_role_in_organization(org_id) or 'accountant'
             self.auth_manager.set_database_context(user_id, org_id, role)
+            self.logger.info(f"✅ Database context set for user {user_id}, org {org_id}, role {role}")
         except Exception as e:
             self.logger.error(f"Failed to set database context: {e}")
             # Continue anyway - database context error shouldn't fail org switch
