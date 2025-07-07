@@ -1434,6 +1434,14 @@ class LedgerPage(QWidget):
         except Exception as e:
             print(f"Error refreshing currency display: {e}")
     
+    def refresh_data(self):
+        """Refresh ledger data when organization context changes."""
+        try:
+            print("🔄 Ledger: Refreshing data due to organization change...")
+            self._load_accounts()
+        except Exception as e:
+            print(f"Error refreshing ledger data: {e}")
+    
     def set_date_range(self, start_date, end_date):
         """Set the date range programmatically (for AI navigation)."""
         if hasattr(self, 'date_selector') and self.date_selector:

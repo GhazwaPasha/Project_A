@@ -7,7 +7,7 @@ from ..common import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QDialog, QLineEdit, QComboBox,
     QDateEdit, QCompleter, QAbstractScrollArea, Qt, QDate, QStringListModel, QIcon,
-    ResponsiveHelper, MODERN_BUTTON_STYLE, MODERN_TABLE_STYLE, MODERN_FRAME_STYLE
+    ResponsiveHelper, MODERN_BUTTON_STYLE, MODERN_TABLE_STYLE, MODERN_FRAME_STYLE, QFrame
 )
 from PyQt6.QtWidgets import QAbstractItemView, QGraphicsDropShadowEffect, QTextBrowser, QTextBrowser, QScrollArea
 
@@ -862,3 +862,418 @@ class CustomReportBuilderDialog(QDialog):
                 border-radius: 16px;
             }
         """)
+
+
+class CreateOrganizationDialog(QDialog):
+    """Dialog for creating a new organization"""
+    
+    def __init__(self, auth_manager, parent=None):
+        super().__init__(parent)
+        self.auth_manager = auth_manager
+        self.setWindowTitle("Create New Organization")
+        self.setModal(True)
+        self.setFixedSize(500, 400)
+        
+        self._setup_ui()
+        self._apply_styling()
+        
+    def _setup_ui(self):
+        """Setup the dialog UI"""
+        layout = QVBoxLayout(self)
+        layout.setSpacing(20)
+        
+        # Header
+        header_label = QLabel("Create New Organization")
+        header_label.setStyleSheet("""
+            QLabel {
+                color: white;
+                font-size: 20px;
+                font-weight: 600;
+                background: transparent;
+                margin-bottom: 10px;
+            }
+        """)
+        layout.addWidget(header_label)
+        
+        # Description
+        desc_label = QLabel(
+            "Create a new multi-user organization for team collaboration. "
+            "You'll be set as the organization owner and can invite team members."
+        )
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet("""
+            QLabel {
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 14px;
+                background: transparent;
+                margin-bottom: 20px;
+            }
+        """)
+        layout.addWidget(desc_label)
+        
+        # Form container
+        form_frame = QFrame()
+        form_frame.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 12px;
+                padding: 20px;
+            }
+        """)
+        form_layout = QVBoxLayout(form_frame)
+        form_layout.setSpacing(16)
+        
+        # Organization name
+        name_layout = QVBoxLayout()
+        name_label = QLabel("Organization Name *")
+        name_label.setStyleSheet("""
+            QLabel {
+                color: rgba(255, 255, 255, 0.9);
+                font-size: 14px;
+                font-weight: 500;
+                background: transparent;
+            }
+        """)
+        
+        self.name_edit = QLineEdit()
+        self.name_edit.setPlaceholderText("Enter organization name")
+        self.name_edit.setStyleSheet("""
+            QLineEdit {
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 8px;
+                padding: 12px;
+                color: white;
+                font-size: 14px;
+            }
+            QLineEdit:focus {
+                border-color: rgba(100, 150, 255, 0.6);
+                background: rgba(255, 255, 255, 0.15);
+            }
+        """)
+        
+        name_layout.addWidget(name_label)
+        name_layout.addWidget(self.name_edit)
+        form_layout.addLayout(name_layout)
+        
+        # Description
+        desc_layout = QVBoxLayout()
+        desc_label = QLabel("Description")
+        desc_label.setStyleSheet("""
+            QLabel {
+                color: rgba(255, 255, 255, 0.9);
+                font-size: 14px;
+                font-weight: 500;
+                background: transparent;
+            }
+        """)
+        
+        self.desc_edit = QLineEdit()
+        self.desc_edit.setPlaceholderText("Brief description of your organization")
+        self.desc_edit.setStyleSheet("""
+            QLineEdit {
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 8px;
+                padding: 12px;
+                color: white;
+                font-size: 14px;
+            }
+            QLineEdit:focus {
+                border-color: rgba(100, 150, 255, 0.6);
+                background: rgba(255, 255, 255, 0.15);
+            }
+        """)
+        
+        desc_layout.addWidget(desc_label)
+        desc_layout.addWidget(self.desc_edit)
+        form_layout.addLayout(desc_layout)
+        
+        # Industry
+        industry_layout = QVBoxLayout()
+        industry_label = QLabel("Industry")
+        industry_label.setStyleSheet("""
+            QLabel {
+                color: rgba(255, 255, 255, 0.9);
+                font-size: 14px;
+                font-weight: 500;
+                background: transparent;
+            }
+        """)
+        
+        self.industry_combo = QComboBox()
+        self.industry_combo.addItems([
+            "Select Industry", "Technology", "Healthcare", "Finance", "Education", 
+            "Manufacturing", "Retail", "Consulting", "Real Estate", "Non-Profit", 
+            "Government", "Other"
+        ])
+        self.industry_combo.setStyleSheet("""
+            QComboBox {
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 8px;
+                padding: 12px;
+                color: white;
+                font-size: 14px;
+            }
+            QComboBox:focus {
+                border-color: rgba(100, 150, 255, 0.6);
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 20px;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid rgba(255, 255, 255, 0.6);
+            }
+        """)
+        
+        industry_layout.addWidget(industry_label)
+        industry_layout.addWidget(self.industry_combo)
+        form_layout.addLayout(industry_layout)
+        
+        layout.addWidget(form_frame)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(255, 255, 255, 0.15);
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                border-radius: 8px;
+                padding: 12px 24px;
+                color: white;
+                font-size: 14px;
+                font-weight: 500;
+                min-width: 100px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.25);
+            }
+        """)
+        self.cancel_btn.clicked.connect(self.reject)
+        
+        self.create_btn = QPushButton("Create Organization")
+        self.create_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(100, 150, 255, 0.8);
+                border: 1px solid rgba(100, 150, 255, 0.6);
+                border-radius: 8px;
+                padding: 12px 24px;
+                color: white;
+                font-size: 14px;
+                font-weight: 600;
+                min-width: 150px;
+            }
+            QPushButton:hover {
+                background: rgba(100, 150, 255, 1.0);
+                border-color: rgba(100, 150, 255, 0.8);
+            }
+            QPushButton:pressed {
+                background: rgba(80, 120, 200, 1.0);
+            }
+        """)
+        self.create_btn.clicked.connect(self._create_organization)
+        
+        button_layout.addWidget(self.cancel_btn)
+        button_layout.addWidget(self.create_btn)
+        layout.addLayout(button_layout)
+        
+        # Status label
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("""
+            QLabel {
+                color: rgba(255, 255, 255, 0.7);
+                font-size: 13px;
+                background: transparent;
+                margin-top: 10px;
+            }
+        """)
+        layout.addWidget(self.status_label)
+        
+    def _apply_styling(self):
+        """Apply dialog styling"""
+        self.setStyleSheet("""
+            QDialog {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(30, 30, 40, 0.95),
+                    stop:1 rgba(50, 50, 70, 0.95));
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 16px;
+            }
+        """)
+        
+    def _create_organization(self):
+        """Create the organization"""
+        name = self.name_edit.text().strip()
+        description = self.desc_edit.text().strip()
+        industry = self.industry_combo.currentText()
+        
+        if not name:
+            self.status_label.setText("❌ Organization name is required")
+            self.status_label.setStyleSheet("""
+                QLabel {
+                    color: rgba(255, 100, 100, 0.9);
+                    font-size: 13px;
+                    background: transparent;
+                    margin-top: 10px;
+                }
+            """)
+            return
+            
+        if industry == "Select Industry":
+            industry = None
+            
+        # Disable buttons during creation
+        self.create_btn.setEnabled(False)
+        self.cancel_btn.setEnabled(False)
+        self.status_label.setText("Creating organization...")
+        self.status_label.setStyleSheet("""
+            QLabel {
+                color: rgba(255, 255, 255, 0.7);
+                font-size: 13px;
+                background: transparent;
+                margin-top: 10px;
+            }
+        """)
+        
+        try:
+            # Create organization using auth manager
+            if self.auth_manager and self.auth_manager.db_manager:
+                # Prepare organization data matching current schema
+                user_id = self.auth_manager.current_user.id if self.auth_manager.current_user else None
+                org_data = {
+                    'name': name,
+                    'description': description or f'Multi-user organization: {name}',
+                    'settings': {
+                        'workspace_type': 'organization',
+                        'industry': industry if industry and industry != "Select Industry" else None
+                    }
+                }
+                
+                print(f"🔍 Debug: Creating organization with data: {org_data}")
+                new_org = self.auth_manager.db_manager.create_organization(org_data)
+                print(f"🔍 Debug: Organization creation result: {new_org}")
+                
+                # Debug: Check if organization was actually created in database
+                if new_org and new_org.get('id'):
+                    print(f"🔍 Debug: Organization created with ID: {new_org['id']}")
+                    # Verify organization exists in database
+                    verify_result = self.auth_manager.db_manager.supabase.table('organizations').select('*').eq('id', new_org['id']).execute()
+                    print(f"🔍 Debug: Database verification result: {len(verify_result.data) if verify_result.data else 0} records found")
+                else:
+                    print(f"🔍 Debug: Organization creation failed - no ID returned")
+                if new_org:
+                    # Add current user as organization owner
+                    print(f"🔍 Debug: User ID for member creation: {user_id}")
+                    if user_id:
+                        success = self.auth_manager.db_manager.add_organization_member(
+                            new_org['id'], user_id, 'organization_owner'
+                        )
+                        print(f"🔍 Debug: Member creation result: {success}")
+                        if success:
+                            print(f"🔍 Debug: Successfully added user as organization owner")
+                            # Verify member was added to database
+                            member_verify = self.auth_manager.db_manager.supabase.table('organization_members').select('*').eq('organization_id', new_org['id']).eq('user_id', user_id).execute()
+                            print(f"🔍 Debug: Member verification result: {len(member_verify.data) if member_verify.data else 0} records found")
+                            
+                            # Set up basic chart of accounts for the new organization
+                            self.status_label.setText("Setting up basic chart of accounts...")
+                            self._setup_basic_chart_of_accounts(new_org['id'], user_id)
+                            
+                            self.status_label.setText("✅ Organization created successfully!")
+                            self.status_label.setStyleSheet("""
+                                QLabel {
+                                    color: rgba(100, 255, 100, 0.9);
+                                    font-size: 13px;
+                                    background: transparent;
+                                    margin-top: 10px;
+                                }
+                            """)
+                            # Accept the dialog after a short delay
+                            from PyQt6.QtCore import QTimer
+                            QTimer.singleShot(1000, self.accept)
+                            return
+                        else:
+                            self.status_label.setText("❌ Failed to add you as organization owner")
+                    else:
+                        self.status_label.setText("❌ User session not found")
+                else:
+                    self.status_label.setText("❌ Failed to create organization")
+            else:
+                self.status_label.setText("❌ Database connection not available")
+                
+        except Exception as e:
+            self.status_label.setText(f"❌ Error: {str(e)}")
+            
+        # Re-enable buttons
+        self.create_btn.setEnabled(True)
+        self.cancel_btn.setEnabled(True)
+        self.status_label.setStyleSheet("""
+            QLabel {
+                color: rgba(255, 100, 100, 0.9);
+                font-size: 13px;
+                background: transparent;
+                margin-top: 10px;
+            }
+        """)
+    
+    def _setup_basic_chart_of_accounts(self, org_id: str, user_id: str):
+        """Set up a basic chart of accounts for the new organization"""
+        try:
+            # Basic chart of accounts for new organizations
+            basic_accounts = [
+                # Assets
+                {'code': '1000', 'name': 'Cash', 'type': 'asset'},
+                {'code': '1100', 'name': 'Accounts Receivable', 'type': 'asset'},
+                {'code': '1200', 'name': 'Inventory', 'type': 'asset'},
+                {'code': '1500', 'name': 'Equipment', 'type': 'asset'},
+                
+                # Liabilities
+                {'code': '2000', 'name': 'Accounts Payable', 'type': 'liability'},
+                {'code': '2100', 'name': 'Notes Payable', 'type': 'liability'},
+                
+                # Equity
+                {'code': '3000', 'name': 'Owner\'s Equity', 'type': 'equity'},
+                {'code': '3100', 'name': 'Retained Earnings', 'type': 'equity'},
+                
+                # Revenue
+                {'code': '4000', 'name': 'Sales Revenue', 'type': 'revenue'},
+                {'code': '4100', 'name': 'Service Revenue', 'type': 'revenue'},
+                
+                # Expenses
+                {'code': '5000', 'name': 'Cost of Goods Sold', 'type': 'expense'},
+                {'code': '6000', 'name': 'Operating Expenses', 'type': 'expense'},
+                {'code': '6100', 'name': 'Rent Expense', 'type': 'expense'},
+                {'code': '6200', 'name': 'Utilities Expense', 'type': 'expense'},
+            ]
+            
+            created_count = 0
+            for account_data in basic_accounts:
+                try:
+                    # Create account using the auth manager's database manager
+                    account = self.auth_manager.db_manager.create_account(
+                        organization_id=org_id,
+                        code=account_data['code'],
+                        name=account_data['name'],
+                        account_type=account_data['type'],
+                        created_by=user_id
+                    )
+                    if account:
+                        created_count += 1
+                        print(f"✅ Created account: {account_data['code']} - {account_data['name']}")
+                except Exception as e:
+                    print(f"⚠️ Failed to create account {account_data['code']}: {e}")
+            
+            print(f"🎉 Successfully created {created_count} basic accounts for new organization")
+            
+        except Exception as e:
+            print(f"❌ Error setting up basic chart of accounts: {e}")
+            # Don't fail the organization creation if account setup fails

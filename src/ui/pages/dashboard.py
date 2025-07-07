@@ -746,6 +746,14 @@ class DashboardPage(QWidget):
             self._update_metrics()
         except Exception as e:
             print(f"Error refreshing currency display in dashboard: {e}")
+    
+    def refresh_data(self):
+        """Refresh dashboard data when organization context changes."""
+        try:
+            print("🔄 Dashboard: Refreshing data due to organization change...")
+            self._update_metrics()
+        except Exception as e:
+            print(f"Error refreshing dashboard data: {e}")
         
     def _apply_styling(self):
         """Apply beautiful glassmorphism styling to the dashboard."""

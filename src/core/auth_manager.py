@@ -531,3 +531,23 @@ class AuthManager:
         except Exception as e:
             self.logger.error(f"Failed to get user page permissions: {e}")
             return {}
+    
+    def set_database_context(self, user_id: str, organization_id: str, role: str):
+        """Set PostgreSQL context for RLS policies"""
+        try:
+            if not self.supabase:
+                self.logger.warning("No Supabase client available for database context")
+                return
+            
+            # Call the set_app_context RPC function to set PostgreSQL session variables
+            result = self.supabase.rpc('set_app_context', {
+                'user_id': user_id,
+                'organization_id': organization_id,
+                'role': role
+            }).execute()
+            
+            self.logger.info(f"✅ Database context set for user {user_id}, org {organization_id}, role {role}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to set database context: {e}")
+            # Don't raise the exception - this shouldn't break organization switching

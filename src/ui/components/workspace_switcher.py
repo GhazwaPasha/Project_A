@@ -181,6 +181,11 @@ class WorkspaceSwitcher(QWidget):
             if self.session_manager.set_active_organization(workspace_id):
                 self.current_workspace = {'id': workspace_id, 'name': workspace_name}
                 self.workspace_label.setText(workspace_name.upper())
+                
+                # Save the last active workspace to user preferences
+                if self.session_manager:
+                    self.session_manager.save_last_active_workspace(workspace_id)
+                
                 self.workspace_changed.emit(workspace_id, workspace_name)
         except Exception as e:
             print(f"Error switching workspace: {e}")

@@ -20,9 +20,11 @@ from ..components.font_manager import font_manager
 class SettingsPage(QWidget):
     """Settings page for application configuration and preferences."""
     
-    def __init__(self, system, parent=None):
+    def __init__(self, system, auth_manager=None, session_manager=None, parent=None):
         super().__init__(parent)
         self.system = system
+        self.auth_manager = auth_manager
+        self.session_manager = session_manager
         self._setup_ui()
         self._apply_styling()
         
@@ -92,6 +94,7 @@ class SettingsPage(QWidget):
         self._create_general_settings(content_layout)
         self._create_appearance_settings(content_layout)
         self._create_accounting_settings(content_layout)
+        self._create_organization_settings(content_layout)
         
         content_layout.addStretch()
           # Style the scroll area
@@ -413,6 +416,141 @@ class SettingsPage(QWidget):
         accounting_layout.addLayout(save_layout)
         
         main_layout.addWidget(accounting_frame)
+        
+    def _create_organization_settings(self, main_layout):
+        """Create organization management section."""
+        # Only show this section if user is authenticated
+        if not self.auth_manager or not self.session_manager:
+            return
+            
+        # Section title
+        org_title = QLabel("Organization Management")
+        org_title.setStyleSheet(f"""
+            QLabel {{
+                color: white;
+                font-size: {ResponsiveHelper.scale_size(18, 16, 20)}px;
+                font-weight: 600;
+                background: transparent;
+                margin: {ResponsiveHelper.scale_size(16, 12, 20)}px 0px {ResponsiveHelper.scale_size(12, 8, 16)}px 0px;
+            }}
+        """)
+        main_layout.addWidget(org_title)
+        
+        # Organization container
+        org_frame = QFrame()
+        org_frame.setStyleSheet(f"""
+            QFrame {{
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: {ResponsiveHelper.scale_size(12, 8, 16)}px;
+                padding: {ResponsiveHelper.scale_size(20, 16, 24)}px;
+            }}
+        """)
+        org_layout = QVBoxLayout(org_frame)
+        
+        # Current organization info
+        current_org = self.session_manager.get_current_organization()
+        if current_org:
+            org_name = current_org.get('name', 'Unknown')
+            org_type = self.session_manager.get_current_organization_type()
+            user_role = self.session_manager.get_current_user_role()
+            
+            info_text = f"""
+            <div style='color: rgba(255, 255, 255, 0.9); font-size: 14px;'>
+                <strong>Current Organization:</strong> {org_name}<br>
+                <strong>Type:</strong> {org_type.title()}<br>
+                <strong>Your Role:</strong> {user_role.replace('_', ' ').title()}
+            </div>
+            """
+            
+            info_label = QLabel(info_text)
+            info_label.setWordWrap(True)
+            info_label.setStyleSheet("""
+                QLabel {
+                    background: rgba(255, 255, 255, 0.05);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 8px;
+                    padding: 12px;
+                    margin-bottom: 16px;
+                }
+            """)
+            org_layout.addWidget(info_label)
+        
+        # Create organization button
+        create_org_layout = QHBoxLayout()
+        create_org_layout.addStretch()
+        
+        self.create_org_btn = QPushButton("Create New Organization")
+        self.create_org_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(100, 150, 255, 0.8);
+                border: 1px solid rgba(100, 150, 255, 0.6);
+                border-radius: 8px;
+                padding: 12px 24px;
+                color: white;
+                font-size: 14px;
+                font-weight: 600;
+                min-width: 180px;
+            }
+            QPushButton:hover {
+                background: rgba(100, 150, 255, 1.0);
+                border-color: rgba(100, 150, 255, 0.8);
+            }
+            QPushButton:pressed {
+                background: rgba(80, 120, 200, 1.0);
+            }
+        """)
+        self.create_org_btn.clicked.connect(self._show_create_organization_dialog)
+        create_org_layout.addWidget(self.create_org_btn)
+        org_layout.addLayout(create_org_layout)
+        
+        # Description
+        desc_label = QLabel(
+            "Create a new multi-user organization for team collaboration. "
+            "You'll be set as the organization owner and can invite team members."
+        )
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet("""
+            QLabel {
+                color: rgba(255, 255, 255, 0.7);
+                font-size: 13px;
+                background: transparent;
+                margin-top: 12px;
+            }
+        """)
+        org_layout.addWidget(desc_label)
+        
+        main_layout.addWidget(org_frame)
+        
+    def _show_create_organization_dialog(self):
+        """Show the create organization dialog"""
+        if not self.auth_manager:
+            return
+            
+        from ..components.dialogs import CreateOrganizationDialog
+        dialog = CreateOrganizationDialog(self.auth_manager, self)
+        
+        if dialog.exec() == dialog.DialogCode.Accepted:
+            # Refresh the session manager to get updated organizations
+            if self.session_manager:
+                # Refresh organizations list
+                organizations = self.auth_manager.get_user_organizations()
+                if organizations:
+                    # Update session manager with new organizations
+                    self.session_manager.refresh_organizations(organizations)
+                    
+                    # Refresh workspace switcher in main window
+                    if hasattr(self.window(), 'refresh_workspace_switcher'):
+                        self.window().refresh_workspace_switcher()
+                    
+                    # Show success message
+                    from PyQt6.QtWidgets import QMessageBox
+                    QMessageBox.information(
+                        self,
+                        "Organization Created",
+                        "Your new organization has been created successfully!\n\n"
+                        "You can now switch to it using the workspace switcher in the bottom bar."
+                    )
         
         # Load current settings
         self._load_current_settings()

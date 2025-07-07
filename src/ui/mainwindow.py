@@ -854,8 +854,11 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         for idx, PageClass in enumerate(page_classes_in_order):
             if PageClass in [TeamManagementPage, OrganizationSettingsPage, UserManagementPage, 
                            PlatformOverviewPage, GlobalOrganizationsPage]:
-                # Pass auth_manager and session_manager for organization/user management pages
+                # Pass auth_manager for organization/user management pages
                 page = PageClass(self.system, auth_manager=self.auth_manager, parent=self)
+            elif PageClass == SettingsPage:
+                # Pass auth_manager and session_manager for settings page
+                page = PageClass(self.system, auth_manager=self.auth_manager, session_manager=self.session_manager, parent=self)
             elif PageClass == RemindersTasksPage:
                 # Pass notification manager for reminders integration
                 page = PageClass(self.system, notification_manager=self.notification_manager, parent=self)
@@ -2493,10 +2496,13 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             self.setWindowTitle(f"{base_title} - {organization_name}")
             
             # Refresh current page content with new organization context
-            if hasattr(self, 'content_stack') and self.content_stack.currentWidget():
-                current_page = self.content_stack.currentWidget()
+            if hasattr(self, 'stack') and self.stack.currentWidget():
+                current_page = self.stack.currentWidget()
                 if hasattr(current_page, 'refresh_data'):
+                    print(f"🔄 Refreshing data for current page: {type(current_page).__name__}")
                     current_page.refresh_data()
+                else:
+                    print(f"⚠️ Current page {type(current_page).__name__} has no refresh_data method")
                     
             # Update navigation visibility based on new organization
             self._update_navigation_visibility()

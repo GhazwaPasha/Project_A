@@ -681,6 +681,14 @@ class HierarchicalAccountsPage(QWidget):
         # This page doesn't display currency directly, so this is a no-op
         pass
     
+    def refresh_data(self):
+        """Refresh accounts data when organization context changes."""
+        try:
+            print("🔄 Accounts: Refreshing data due to organization change...")
+            self._load_data()
+        except Exception as e:
+            print(f"Error refreshing accounts data: {e}")
+    
     def _setup_ui(self):
         """Setup the enhanced accounts page UI."""
         layout = QVBoxLayout(self)

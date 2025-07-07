@@ -192,6 +192,16 @@ class AccountingSystem:
         
         self.current_organization_id = org_id
         self.logger.info(f"Set organization context to {org_id}")
+        
+        # Set database context for RLS policies
+        try:
+            user_id = self.current_user_id
+            role = self.auth_manager.get_user_role_in_organization(org_id) or 'accountant'
+            self.auth_manager.set_database_context(user_id, org_id, role)
+        except Exception as e:
+            self.logger.error(f"Failed to set database context: {e}")
+            # Continue anyway - database context error shouldn't fail org switch
+        
         return True
     
     def get_current_organization_id(self) -> Optional[str]:

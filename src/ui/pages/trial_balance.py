@@ -720,6 +720,14 @@ class TrialBalancePage(QWidget):
         except Exception as e:
             print(f"Error refreshing currency display: {e}")
     
+    def refresh_data(self):
+        """Refresh trial balance data when organization context changes."""
+        try:
+            print("🔄 Trial Balance: Refreshing data due to organization change...")
+            self._refresh_data()
+        except Exception as e:
+            print(f"Error refreshing trial balance data: {e}")
+    
     def set_date_range(self, start_date, end_date):
         """Set the date range programmatically (for AI navigation)."""
         if hasattr(self, 'date_selector') and self.date_selector:

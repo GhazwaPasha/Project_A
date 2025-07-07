@@ -1,0 +1,49 @@
+[
+  {
+    "id": "ai_reminder_1751338104",
+    "title": "General Reminder",
+    "description": "Reminder created from: set a weekly reminder for monday report",
+    "due_datetime": "2025-07-02 16:00",
+    "recurring": "weekly",
+    "completed": true,
+    "created_at": "2025-07-01T07:48:24.589277"
+  },
+  {
+    "id": "ai_reminder_1751338104",
+    "title": "General Reminder",
+    "description": "Reminder created from: set a weekly reminder for monday report",
+    "due_datetime": "2025-07-02 16:00",
+    "recurring": "weekly",
+    "completed": true,
+    "created_at": "2025-07-01T07:48:24.609509"
+  },
+  {
+    "id": "ai_reminder_1751338144",
+    "title": "General Reminder",
+    "description": "Reminder created from: set a monthly reminder for journal entry",
+    "due_datetime": "2025-08-01 09:00",
+    "recurring": "monthly",
+    "completed": true,
+    "created_at": "2025-07-01T07:49:04.444140"
+  },
+  {
+    "id": "ai_reminder_1751338144",
+    "title": "General Reminder",
+    "description": "Reminder created from: set a monthly reminder for journal entry",
+    "due_datetime": "2025-08-01 09:00",
+    "recurring": "monthly",
+    "completed": true,
+    "created_at": "2025-07-01T07:49:04.475899"
+  },
+  {
+    "id": "reminder_20250701_184644",
+    "title": "General Reminder",
+    "description": "Reminder created from: set a monthly reminder for incomestatement",
+    "due_datetime": "2025-08-01 09:00",
+    "recurring": "monthly",
+    "priority": "medium",
+    "created_datetime": "2025-07-01T18:46:44.159913",
+    "completed": false,
+    "created_at": "2025-07-01T18:46:44.159913"
+  }
+]

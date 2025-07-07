@@ -34,6 +34,23 @@ class SessionManager:
                 self.logger.warning(f"No organizations found for user {user_data.get('email')}")
                 return False
             
+            # Try to load last active workspace from preferences
+            last_active_workspace = self.load_last_active_workspace()
+            
+            if last_active_workspace:
+                # Check if the last active workspace is still available
+                workspace_exists = any(org.get('id') == last_active_workspace for org in organizations)
+                if workspace_exists:
+                    if self.set_active_organization(last_active_workspace):
+                        org_name = next((org.get('name', 'Unknown') for org in organizations if org.get('id') == last_active_workspace), 'Unknown')
+                        self.logger.info(f"Restored last active workspace: {org_name}")
+                        return True
+                    else:
+                        self.logger.warning("Failed to restore last active workspace, falling back to default logic")
+                else:
+                    self.logger.warning("Last active workspace no longer available, falling back to default logic")
+            
+            # Fallback to default logic if no last active workspace or it's not available
             # Try to set active organization based on preference:
             # 1. First team organization (if exists)
             # 2. Personal workspace
@@ -398,3 +415,102 @@ class SessionManager:
         except Exception as e:
             self.logger.error(f"Failed to set current organization: {e}")
             return False
+            
+    def refresh_organizations(self, organizations: List[Dict[str, Any]]) -> None:
+        """Refresh the list of available organizations"""
+        try:
+            if not organizations:
+                return
+                
+            # If we have a current organization, try to keep it active
+            current_org_id = self.get_active_organization_id()
+            
+            # Find the current organization in the new list
+            if current_org_id:
+                current_org = next((org for org in organizations if org.get('id') == current_org_id), None)
+                if current_org:
+                    # Update the current organization data
+                    self.current_organization = current_org
+                    self.logger.info(f"Refreshed current organization: {current_org.get('name')}")
+                    return
+                    
+            # If current organization not found or no current org, set the first one
+            if organizations:
+                first_org = organizations[0]
+                self.set_active_organization(first_org['id'])
+                self.logger.info(f"Set new active organization: {first_org.get('name')}")
+                
+        except Exception as e:
+            self.logger.error(f"Failed to refresh organizations: {e}")
+    
+    def save_last_active_workspace(self, organization_id: str) -> bool:
+        """Save the last active workspace to user preferences"""
+        try:
+            if not self.auth_manager or not self.auth_manager.current_user:
+                return False
+                
+            user_id = self.auth_manager.current_user.id
+            if not user_id:
+                return False
+            
+            # Get current preferences
+            current_preferences = {}
+            if self.auth_manager.db_manager:
+                profile = self.auth_manager.db_manager.get_user_profile(user_id)
+                if profile and profile.get('preferences'):
+                    current_preferences = profile.get('preferences', {})
+            
+            # Update preferences with last active workspace
+            current_preferences['last_active_workspace'] = organization_id
+            
+            # Save updated preferences
+            if self.auth_manager.db_manager:
+                success = self.auth_manager.db_manager.update_user_profile(
+                    user_id, {'preferences': current_preferences}
+                )
+                if success:
+                    self.logger.info(f"Saved last active workspace: {organization_id}")
+                    return True
+                else:
+                    self.logger.error("Failed to update user preferences")
+                    return False
+            else:
+                self.logger.warning("No database manager available to save preferences")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Error saving last active workspace: {e}")
+            return False
+    
+    def load_last_active_workspace(self) -> Optional[str]:
+        """Load the last active workspace from user preferences"""
+        try:
+            if not self.auth_manager or not self.auth_manager.current_user:
+                return None
+                
+            user_id = self.auth_manager.current_user.id
+            if not user_id:
+                return None
+            
+            # Get user preferences
+            if self.auth_manager.db_manager:
+                profile = self.auth_manager.db_manager.get_user_profile(user_id)
+                if profile and profile.get('preferences'):
+                    preferences = profile.get('preferences', {})
+                    last_workspace = preferences.get('last_active_workspace')
+                    if last_workspace:
+                        self.logger.info(f"Loaded last active workspace: {last_workspace}")
+                        return last_workspace
+                    else:
+                        self.logger.info("No last active workspace found in preferences")
+                        return None
+                else:
+                    self.logger.info("No user profile or preferences found")
+                    return None
+            else:
+                self.logger.warning("No database manager available to load preferences")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Error loading last active workspace: {e}")
+            return None
