@@ -34,174 +34,125 @@ class AccountingPeriod:
     status: str = 'OPEN'
 
 class PeriodClosingManager:
-    """Manages accounting period closing and audit trails."""
+    """Manages accounting period closing and audit trails using SupabaseManager."""
     
     def __init__(self, db_manager, organization_id=None, user_id=None):
-        self.db_manager = db_manager
+        self.db_manager = db_manager  # This is a SupabaseManager instance
         self.organization_id = organization_id
         self.user_id = user_id
         self.logger = logging.getLogger(__name__)
     
-    def create_accounting_period(self, period_name: str, start_date: date, end_date: date, 
-                               period_type: str = 'MONTHLY') -> str:
-        """Create a new accounting period."""
-        period_id = str(uuid.uuid4())
-        
-        # Validate dates
+    def create_accounting_period(self, period_name: str, start_date: date, end_date: date, period_type: str = 'MONTHLY') -> str:
+        """Create a new accounting period using Supabase."""
         if start_date >= end_date:
             raise ValueError("Start date must be before end date")
-        
-        # Check for overlapping periods
         if self._check_period_overlap(start_date, end_date, period_type):
             raise ValueError("Period overlaps with existing period")
-        
-        insert_sql = """
-        INSERT INTO accounting_periods 
-        (id, period_name, start_date, end_date, period_type, status, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        """
-        
-        try:
-            with self.db_manager.get_db_cursor() as cursor:
-                cursor.execute(insert_sql, (
-                    period_id, period_name, start_date, end_date, period_type, 'OPEN'
-                ))
-            
-            self.logger.info(f"Created accounting period: {period_name} ({start_date} to {end_date})")
-            return period_id
-            
-        except Exception as e:
-            self.logger.error(f"Failed to create accounting period: {e}")
-            raise
+        closing_data = {
+            "organization_id": self.organization_id,
+            "period_name": period_name,
+            "start_date": start_date.isoformat() if hasattr(start_date, 'isoformat') else start_date,
+            "end_date": end_date.isoformat() if hasattr(end_date, 'isoformat') else end_date,
+            "is_closed": False,
+            "notes": f"Period type: {period_type}"
+        }
+        result = self.db_manager.create_period_closing(closing_data)
+        if not result:
+            raise Exception("Failed to create period closing (Supabase error)")
+        return result['id']
     
     def close_accounting_period(self, period_id: str, force_close: bool = False) -> bool:
-        """Close an accounting period with validation checks."""
-        try:
-            # Get period details
-            period = self._get_period_by_id(period_id)
-            if not period:
-                raise ValueError("Period not found")
-            
-            if period['status'] != 'OPEN':
-                raise ValueError(f"Period is already {period['status']}")
-            
-            # Perform pre-closing validations
-            validation_results = self._validate_period_for_closing(period_id)
-            
-            if not force_close and validation_results['errors']:
-                raise ValueError(f"Period validation failed: {validation_results['errors']}")
-            
-            # Generate trial balance checksum
-            trial_balance_checksum = self._generate_trial_balance_checksum(
-                period['start_date'], period['end_date']
-            )
-            
-            # Close the period
-            update_sql = """
-            UPDATE accounting_periods 
-            SET status = 'CLOSED', 
-                closed_by = %s, 
-                closed_at = NOW(),
-                trial_balance_checksum = %s
-            WHERE id = %s
-            """
-            
-            with self.db_manager.get_db_cursor() as cursor:
-                cursor.execute(update_sql, (self.user_id, trial_balance_checksum, period_id))
-            
-            # Log the closing action
-            self._log_audit_event(
-                'accounting_periods', period_id, 'UPDATE',
-                {'status': 'OPEN'}, {'status': 'CLOSED', 'closed_by': self.user_id}
-            )
-            
-            self.logger.info(f"Closed accounting period: {period['period_name']}")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Failed to close accounting period: {e}")
-            raise
+        """Close an accounting period using Supabase."""
+        period = self._get_period_by_id(period_id)
+        if not period:
+            raise ValueError("Period not found")
+        if period.get('is_closed'):
+            raise ValueError("Period is already closed")
+        validation_results = self._validate_period_for_closing(period_id)
+        if not force_close and validation_results['errors']:
+            raise ValueError(f"Period validation failed: {validation_results['errors']}")
+        start_date = period.get('start_date')
+        end_date = period.get('end_date')
+        if not start_date or not end_date:
+            raise ValueError("Period start_date or end_date is missing")
+        trial_balance_checksum = self._generate_trial_balance_checksum(start_date, end_date)
+        notes = (period.get('notes') or '') + f" | Trial balance checksum: {trial_balance_checksum}"
+        update_result = self.db_manager.supabase.table('period_closing').update({
+            "is_closed": True,
+            "closed_by": self.user_id,
+            "closed_at": datetime.now().isoformat(),
+            "notes": notes
+        }).eq("id", period_id).execute()
+        if not update_result.data:
+            raise Exception("Failed to close period (Supabase error)")
+        self._log_audit_event('period_closing', period_id, 'UPDATE', {'is_closed': False}, {'is_closed': True, 'closed_by': self.user_id})
+        self.logger.info(f"Closed accounting period: {period.get('period_name')}")
+        return True
     
     def reopen_accounting_period(self, period_id: str, reason: str) -> bool:
-        """Reopen a closed accounting period with proper authorization."""
-        try:
-            period = self._get_period_by_id(period_id)
-            if not period:
-                raise ValueError("Period not found")
-            
-            if period['status'] not in ['CLOSED']:
-                raise ValueError(f"Cannot reopen period with status: {period['status']}")
-            
-            # Check if subsequent periods are closed (they should be reopened first)
-            subsequent_closed = self._check_subsequent_closed_periods(period['end_date'])
-            if subsequent_closed:
-                raise ValueError("Cannot reopen period with subsequent closed periods")
-            
-            update_sql = """
-            UPDATE accounting_periods 
-            SET status = 'OPEN', 
-                closed_by = NULL, 
-                closed_at = NULL,
-                trial_balance_checksum = NULL
-            WHERE id = %s
-            """
-            
-            with self.db_manager.get_db_cursor() as cursor:
-                cursor.execute(update_sql, (period_id,))
-            
-            # Log the reopening action
-            self._log_audit_event(
-                'accounting_periods', period_id, 'UPDATE',
-                {'status': 'CLOSED'}, {'status': 'OPEN', 'reopened_by': self.user_id, 'reason': reason}
-            )
-            
-            self.logger.info(f"Reopened accounting period: {period['period_name']}, reason: {reason}")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Failed to reopen accounting period: {e}")
-            raise
+        """Reopen a closed accounting period using Supabase."""
+        period = self._get_period_by_id(period_id)
+        if not period:
+            raise ValueError("Period not found")
+        if not period.get('is_closed'):
+            raise ValueError("Period is not closed")
+        end_date = period.get('end_date')
+        if not end_date:
+            raise ValueError("Period end_date is missing")
+        subsequent_closed = self._check_subsequent_closed_periods(end_date)
+        if subsequent_closed:
+            raise ValueError("Cannot reopen period with subsequent closed periods")
+        notes = (period.get('notes') or '') + f" | Reopened: {reason}"
+        update_result = self.db_manager.supabase.table('period_closing').update({
+            "is_closed": False,
+            "closed_by": None,
+            "closed_at": None,
+            "notes": notes
+        }).eq("id", period_id).execute()
+        if not update_result.data:
+            raise Exception("Failed to reopen period (Supabase error)")
+        self._log_audit_event('period_closing', period_id, 'UPDATE', {'is_closed': True}, {'is_closed': False, 'reopened_by': self.user_id, 'reason': reason})
+        self.logger.info(f"Reopened accounting period: {period.get('period_name')}, reason: {reason}")
+        return True
     
     def get_period_status_summary(self) -> Dict[str, Any]:
-        """Get summary of all accounting periods and their status."""
-        query_sql = """
-        SELECT 
-            period_name,
-            start_date,
-            end_date,
-            period_type,
-            status,
-            closed_at,
-            trial_balance_checksum IS NOT NULL as has_checksum
-        FROM accounting_periods 
-        ORDER BY start_date DESC
-        """
-        
-        try:
-            with self.db_manager.get_db_cursor() as cursor:
-                cursor.execute(query_sql)
-                periods = cursor.fetchall()
-            
-            # Count by status
-            status_counts = {'OPEN': 0, 'CLOSED': 0, 'LOCKED': 0}
-            for period in periods:
-                status_counts[period['status']] = status_counts.get(period['status'], 0) + 1
-            
-            return {
-                'periods': periods,
-                'status_summary': status_counts,
-                'total_periods': len(periods)
-            }
-            
-        except Exception as e:
-            self.logger.error(f"Failed to get period status summary: {e}")
-            raise
+        """Get summary of all accounting periods and their status using Supabase."""
+        periods = self.db_manager.get_period_closings(self.organization_id)
+        formatted_periods = []
+        for period in periods:
+            if period:
+                formatted_periods.append({
+                    'id': period.get('id'),
+                    'period_name': period.get('period_name'),
+                    'start_date': period.get('start_date'),
+                    'end_date': period.get('end_date'),
+                    'status': 'CLOSED' if period.get('is_closed') else 'OPEN',
+                    'closed_at': period.get('closed_at'),
+                    'closed_by': period.get('closed_by'),
+                    'notes': period.get('notes')
+                })
+        status_counts = {'OPEN': 0, 'CLOSED': 0}
+        for period in formatted_periods:
+            status_counts[period['status']] = status_counts.get(period['status'], 0) + 1
+        return {
+            'periods': formatted_periods,
+            'status_summary': status_counts,
+            'total_periods': len(formatted_periods)
+        }
     
     def _validate_period_for_closing(self, period_id: str) -> Dict[str, Any]:
         """Validate period readiness for closing."""
         period = self._get_period_by_id(period_id)
         errors = []
         warnings = []
+        
+        if not period:
+            errors.append("Period not found")
+            return {
+                'errors': errors,
+                'warnings': warnings,
+                'is_valid': False
+            }
         
         try:
             with self.db_manager.get_db_cursor() as cursor:
@@ -210,31 +161,34 @@ class PeriodClosingManager:
                 SELECT COUNT(*) as unbalanced_entries
                 FROM (
                     SELECT 
-                        h.id,
-                        SUM(COALESCE(l.debit_amount, 0)) - SUM(COALESCE(l.credit_amount, 0)) as balance
-                    FROM journal_entry_headers h
-                    LEFT JOIN journal_entry_lines l ON h.id = l.header_id
-                    WHERE h.entry_date BETWEEN %s AND %s
-                    GROUP BY h.id
-                    HAVING ABS(SUM(COALESCE(l.debit_amount, 0)) - SUM(COALESCE(l.credit_amount, 0))) > 0.01
+                        je.id,
+                        SUM(COALESCE(jel.debit_amount, 0)) - SUM(COALESCE(jel.credit_amount, 0)) as balance
+                    FROM journal_entries je
+                    LEFT JOIN journal_entry_lines jel ON je.id = jel.journal_entry_id
+                    WHERE je.entry_date BETWEEN %s AND %s
+                    GROUP BY je.id
+                    HAVING ABS(SUM(COALESCE(jel.debit_amount, 0)) - SUM(COALESCE(jel.credit_amount, 0))) > 0.01
                 ) unbalanced
                 """
                 
-                cursor.execute(balance_check_sql, (period['start_date'], period['end_date']))
-                unbalanced = cursor.fetchone()['unbalanced_entries']
+                cursor.execute(balance_check_sql, (period.get('start_date'), period.get('end_date')))
+                result = cursor.fetchone()
+                if result:
+                    unbalanced = result.get('unbalanced_entries', 0)
+                    if unbalanced > 0:
+                        errors.append(f"{unbalanced} unbalanced journal entries found")
                 
-                if unbalanced > 0:
-                    errors.append(f"{unbalanced} unbalanced journal entries found")
-                
-                # Check for draft entries
+                # Check for draft entries (assuming there's a status field)
                 draft_check_sql = """
                 SELECT COUNT(*) as draft_entries
-                FROM journal_entry_headers
+                FROM journal_entries
                 WHERE entry_date BETWEEN %s AND %s AND status = 'DRAFT'
                 """
                 
-                cursor.execute(draft_check_sql, (period['start_date'], period['end_date']))
-                draft_entries = cursor.fetchone()['draft_entries']
+                cursor.execute(draft_check_sql, (period.get('start_date'), period.get('end_date')))
+                result = cursor.fetchone()
+                if result:
+                    draft_entries = result.get('draft_entries', 0)
                 
                 if draft_entries > 0:
                     warnings.append(f"{draft_entries} draft journal entries found")
@@ -242,158 +196,148 @@ class PeriodClosingManager:
                 # Check trial balance
                 trial_balance_sql = """
                 SELECT 
-                    SUM(CASE WHEN debit_amount > 0 THEN debit_amount ELSE 0 END) as total_debits,
-                    SUM(CASE WHEN credit_amount > 0 THEN credit_amount ELSE 0 END) as total_credits
-                FROM journal_entry_lines l
-                JOIN journal_entry_headers h ON l.header_id = h.id
-                WHERE h.entry_date BETWEEN %s AND %s AND h.status = 'POSTED'
+                    SUM(CASE WHEN jel.debit_amount > 0 THEN jel.debit_amount ELSE 0 END) as total_debits,
+                    SUM(CASE WHEN jel.credit_amount > 0 THEN jel.credit_amount ELSE 0 END) as total_credits
+                FROM journal_entry_lines jel
+                JOIN journal_entries je ON jel.journal_entry_id = je.id
+                WHERE je.entry_date BETWEEN %s AND %s
                 """
                 
-                cursor.execute(trial_balance_sql, (period['start_date'], period['end_date']))
-                trial_balance = cursor.fetchone()
+                cursor.execute(trial_balance_sql, (period.get('start_date'), period.get('end_date')))
+                result = cursor.fetchone()
                 
-                debit_credit_diff = abs(trial_balance['total_debits'] - trial_balance['total_credits'])
-                if debit_credit_diff > 0.01:
-                    errors.append(f"Trial balance difference: {debit_credit_diff}")
-        
+                if result:
+                    total_debits = result.get('total_debits', 0) or 0
+                    total_credits = result.get('total_credits', 0) or 0
+                    
+                    if abs(total_debits - total_credits) > 0.01:
+                        errors.append(f"Trial balance out of balance: Debits {total_debits}, Credits {total_credits}")
+                    else:
+                        warnings.append(f"Trial balance balanced: Debits {total_debits}, Credits {total_credits}")
+                
         except Exception as e:
-            errors.append(f"Validation error: {str(e)}")
+            self.logger.error(f"Validation error: {e}")
+            errors.append(f"Validation failed: {str(e)}")
         
         return {
             'errors': errors,
             'warnings': warnings,
-            'can_close': len(errors) == 0
+            'is_valid': len(errors) == 0
         }
     
     def _generate_trial_balance_checksum(self, start_date: date, end_date: date) -> str:
-        """Generate checksum for trial balance integrity verification."""
+        """Generate a checksum for trial balance validation."""
         try:
             with self.db_manager.get_db_cursor() as cursor:
-                checksum_sql = """
+                # Get trial balance data
+                sql = """
                 SELECT 
-                    l.account_code,
-                    SUM(COALESCE(l.debit_amount, 0)) as total_debits,
-                    SUM(COALESCE(l.credit_amount, 0)) as total_credits
-                FROM journal_entry_lines l
-                JOIN journal_entry_headers h ON l.header_id = h.id
-                WHERE h.entry_date BETWEEN %s AND %s AND h.status = 'POSTED'
-                GROUP BY l.account_code
-                ORDER BY l.account_code
+                    a.code,
+                    a.name,
+                    SUM(COALESCE(jel.debit_amount, 0)) as total_debits,
+                    SUM(COALESCE(jel.credit_amount, 0)) as total_credits
+                FROM accounts a
+                LEFT JOIN journal_entry_lines jel ON a.id = jel.account_id
+                LEFT JOIN journal_entries je ON jel.journal_entry_id = je.id
+                WHERE je.entry_date BETWEEN %s AND %s
+                GROUP BY a.id, a.code, a.name
+                ORDER BY a.code
                 """
                 
-                cursor.execute(checksum_sql, (start_date, end_date))
-                trial_balance_data = cursor.fetchall()
+                cursor.execute(sql, (start_date, end_date))
+                trial_balance = cursor.fetchall()
                 
-                # Create deterministic string for hashing
-                checksum_string = ""
-                for row in trial_balance_data:
-                    checksum_string += f"{row['account_code']}:{row['total_debits']}:{row['total_credits']}|"
+                # Create checksum string
+                checksum_data = []
+                for row in trial_balance:
+                    checksum_data.append(f"{row['code']}:{row['total_debits']}:{row['total_credits']}")
                 
-                # Generate SHA-256 hash
-                return hashlib.sha256(checksum_string.encode()).hexdigest()
+                checksum_string = "|".join(checksum_data)
+                return hashlib.sha256(checksum_string.encode()).hexdigest()[:16]
                 
         except Exception as e:
             self.logger.error(f"Failed to generate trial balance checksum: {e}")
-            return ""
+            return "ERROR"
     
     def verify_period_integrity(self, period_id: str) -> Dict[str, Any]:
-        """Verify the integrity of a closed period using checksums."""
+        """Verify the integrity of a closed period."""
         period = self._get_period_by_id(period_id)
         if not period:
-            raise ValueError("Period not found")
+            return {'valid': False, 'error': 'Period not found'}
         
-        if period['status'] != 'CLOSED':
-            return {'verified': False, 'reason': 'Period is not closed'}
-        
-        if not period['trial_balance_checksum']:
-            return {'verified': False, 'reason': 'No checksum available'}
-        
-        current_checksum = self._generate_trial_balance_checksum(
-            period['start_date'], period['end_date']
-        )
-        
-        verified = current_checksum == period['trial_balance_checksum']
-        
-        return {
-            'verified': verified,
-            'reason': 'Verified' if verified else 'Checksum mismatch - data may have been modified',
-            'original_checksum': period['trial_balance_checksum'],
-            'current_checksum': current_checksum
-        }
+        try:
+            # Get dates with proper validation
+            start_date = period.get('start_date')
+            end_date = period.get('end_date')
+            
+            if not start_date or not end_date:
+                return {'valid': False, 'error': 'Invalid period dates'}
+            
+            # Recalculate checksum
+            current_checksum = self._generate_trial_balance_checksum(start_date, end_date)
+            
+            # Extract stored checksum from notes
+            stored_checksum = None
+            if period.get('notes'):
+                for line in period.get('notes', '').split('|'):
+                    if 'Trial balance checksum:' in line:
+                        stored_checksum = line.split(':')[-1].strip()
+                        break
+            
+            return {
+                'valid': stored_checksum == current_checksum,
+                'stored_checksum': stored_checksum,
+                'current_checksum': current_checksum,
+                'period_name': period.get('period_name', 'Unknown')
+            }
+            
+        except Exception as e:
+            return {'valid': False, 'error': str(e)}
     
     def _check_period_overlap(self, start_date: date, end_date: date, period_type: str) -> bool:
-        """Check if period overlaps with existing periods."""
-        overlap_sql = """
-        SELECT COUNT(*) as overlapping
-        FROM accounting_periods
-        WHERE period_type = %s
-        AND (
-            (start_date <= %s AND end_date >= %s) OR
-            (start_date <= %s AND end_date >= %s) OR
-            (start_date >= %s AND end_date <= %s)
+        """Check if a new period would overlap with existing periods using Supabase."""
+        # Ensure dates are ISO strings for Supabase filter
+        start_date_str = start_date.isoformat() if hasattr(start_date, 'isoformat') else str(start_date)
+        end_date_str = end_date.isoformat() if hasattr(end_date, 'isoformat') else str(end_date)
+        or_filter = (
+            f"and(start_date.lte.{start_date_str},end_date.gte.{start_date_str}),"
+            f"and(start_date.lte.{end_date_str},end_date.gte.{end_date_str}),"
+            f"and(start_date.gte.{start_date_str},end_date.lte.{end_date_str})"
         )
-        """
-        
-        try:
-            with self.db_manager.get_db_cursor() as cursor:
-                cursor.execute(overlap_sql, (
-                    period_type, start_date, start_date, end_date, end_date, start_date, end_date
-                ))
-                return cursor.fetchone()['overlapping'] > 0
-        except Exception as e:
-            self.logger.error(f"Failed to check period overlap: {e}")
-            return True  # Err on the side of caution
+        result = self.db_manager.supabase.table('period_closing') \
+            .select('id') \
+            .eq('organization_id', self.organization_id) \
+            .or_(or_filter) \
+            .execute()
+        return bool(result.data)
     
     def _check_subsequent_closed_periods(self, period_end_date: date) -> bool:
-        """Check if there are subsequent closed periods."""
-        subsequent_sql = """
-        SELECT COUNT(*) as subsequent_closed
-        FROM accounting_periods
-        WHERE start_date > %s AND status = 'CLOSED'
-        """
-        
-        try:
-            with self.db_manager.get_db_cursor() as cursor:
-                cursor.execute(subsequent_sql, (period_end_date,))
-                return cursor.fetchone()['subsequent_closed'] > 0
-        except Exception as e:
-            self.logger.error(f"Failed to check subsequent periods: {e}")
-            return True
+        """Check if there are closed periods after the given date using Supabase."""
+        result = self.db_manager.supabase.table('period_closing') \
+            .select('id') \
+            .eq('organization_id', self.organization_id) \
+            .gt('start_date', period_end_date) \
+            .eq('is_closed', True) \
+            .execute()
+        return bool(result.data)
     
     def _get_period_by_id(self, period_id: str) -> Optional[Dict]:
-        """Get period details by ID."""
-        query_sql = """
-        SELECT * FROM accounting_periods WHERE id = %s
-        """
-        
-        try:
-            with self.db_manager.get_db_cursor() as cursor:
-                cursor.execute(query_sql, (period_id,))
-                return cursor.fetchone()
-        except Exception as e:
-            self.logger.error(f"Failed to get period by ID: {e}")
-            return None
+        """Get period details by ID using Supabase."""
+        periods = self.db_manager.supabase.table('period_closing').select('*').eq('id', period_id).eq('organization_id', self.organization_id).execute()
+        if periods.data and len(periods.data) > 0:
+            return periods.data[0]
+        return None
     
     def _log_audit_event(self, table_name: str, record_id: str, operation: str, 
                         old_values: Optional[Dict] = None, new_values: Optional[Dict] = None):
-        """Log an audit event."""
-        audit_sql = """
-        INSERT INTO audit_log 
-        (table_name, record_id, operation, old_values, new_values, changed_by, changed_at)
-        VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        """
-        
-        try:
-            with self.db_manager.get_db_cursor() as cursor:
-                cursor.execute(audit_sql, (
-                    table_name, record_id, operation,
-                    json.dumps(old_values) if old_values else None,
-                    json.dumps(new_values) if new_values else None,
-                    self.user_id
-                ))
-        except Exception as e:
-            self.logger.error(f"Failed to log audit event: {e}")
-    
+        """Log an audit event (placeholder for audit trail)."""
+        # This would typically write to an audit log table
+        self.logger.info(f"Audit: {operation} on {table_name} record {record_id}")
+        if old_values:
+            self.logger.debug(f"Old values: {old_values}")
+        if new_values:
+            self.logger.debug(f"New values: {new_values}")
+
 class AuditTrailManager:
     """Manages audit trail queries and reporting."""
     

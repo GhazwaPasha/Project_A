@@ -2545,6 +2545,9 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         try:
             self.logger.info(f"🚀 Starting optimized workspace switch to: {organization_name}")
             
+            # PHASE 0: FREEZE UI IMMEDIATELY - Prevent user interaction during switch
+            self._freeze_ui_during_switch()
+            
             # PHASE 1: IMMEDIATE UI UPDATES (Optimistic) - Non-blocking
             self._perform_immediate_ui_updates(organization_id, organization_name)
             
@@ -2558,11 +2561,11 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
     def _perform_immediate_ui_updates(self, organization_id: str, organization_name: str):
         """Perform immediate UI updates that don't require data loading"""
         try:
-            # Show minimal progress popup
+            # Show progress popup immediately to indicate switching is in progress
             from .components.workspace_switching_progress import WorkspaceSwitchingProgress
             self.progress_popup = WorkspaceSwitchingProgress(self)
             self.progress_popup.show_progress(self)
-            self.progress_popup.update_status("Switching workspace...", 50)
+            self.progress_popup.update_status("Switching workspace...", 25)
             
             # Update window title immediately
             base_title = "Modern Accounting"
@@ -2587,9 +2590,11 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             # Update navigation visibility asynchronously to avoid blocking
             QTimer.singleShot(0, self._update_navigation_visibility)
             
-            # Unfreeze UI - user can now interact while data loads in background
-            self._unfreeze_ui_after_switch()
+            # Update progress to show immediate updates are complete
+            if hasattr(self, 'progress_popup'):
+                self.progress_popup.update_status("Loading data...", 50)
             
+            # NOTE: UI remains frozen - will be unfrozen after background loading completes
             self.logger.info(f"✅ Immediate UI updates completed for {organization_name}")
             
         except Exception as e:
@@ -2611,10 +2616,15 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
                     # Refresh current page with new data
                     self._refresh_current_page_with_cached_data(organization_id)
                     
+                    # UNFREEZE UI - Now that all data loading is complete
+                    self._unfreeze_ui_after_switch()
+                    
                     self.logger.info(f"✅ Background data loading completed for {organization_name}")
                     
                 except Exception as e:
                     self.logger.error(f"Error in loading completion callback: {e}")
+                    # Ensure UI is unfrozen even if there's an error
+                    self._unfreeze_ui_after_switch()
             
             # Ensure all pages are loaded for the new workspace
             self.page_manager.ensure_all_pages_loaded(organization_id)
@@ -2628,6 +2638,8 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             
         except Exception as e:
             self.logger.error(f"Error starting background data loading: {e}")
+            # Ensure UI is unfrozen even if there's an error
+            self._unfreeze_ui_after_switch()
             raise
     
     def _refresh_current_page_with_cached_data(self, organization_id: str):
@@ -2679,7 +2691,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
     def _handle_workspace_switch_error(self, error: Exception):
         """Handle workspace switching errors"""
         try:
-            # Ensure UI is unfrozen
+            # Ensure UI is unfrozen immediately
             self._unfreeze_ui_after_switch()
             
             # Update progress popup with error
@@ -2691,8 +2703,21 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             import traceback
             traceback.print_exc()
             
+            # Show error notification to user
+            self.add_notification(
+                "Workspace Switch Error", 
+                f"Failed to switch workspace: {str(error)}", 
+                "error"
+            )
+            
         except Exception as e:
             self.logger.error(f"Error handling workspace switch error: {e}")
+            # Final fallback - ensure UI is enabled
+            try:
+                self.setEnabled(True)
+                self.setCursor(Qt.CursorShape.ArrowCursor)
+            except:
+                pass
     
     def _get_current_page_name(self) -> str:
         """Get current page name for PageManager"""
@@ -2716,20 +2741,39 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             self.logger.error(f"Error refreshing workspace switcher: {e}")
     
     def _freeze_ui_during_switch(self):
-        """Freeze UI during workspace switch to prevent glitches"""
+        """Freeze UI during workspace switch to prevent glitches and improve performance"""
         try:
             # Disable main window interactions
             self.setEnabled(False)
+            
+            # Disable sidebar to prevent navigation during switch
+            if hasattr(self, 'sidebar'):
+                self.sidebar.setEnabled(False)
+            
+            # Disable content area to prevent page interactions
+            if hasattr(self, 'stack'):
+                self.stack.setEnabled(False)
+            
+            # Disable bottom bar to prevent workspace switcher interactions
+            if hasattr(self, 'bottom_bar'):
+                self.bottom_bar.setEnabled(False)
             
             # Show loading indicator if available
             if hasattr(self, 'connection_indicator'):
                 self.connection_indicator.show_loading_state("Switching workspace...")
             
-            # Disable workspace switcher to prevent rapid switching
+            # Disable workspace switcher specifically to prevent rapid switching
             if hasattr(self, 'bottom_bar') and hasattr(self.bottom_bar, 'workspace_switcher'):
                 self.bottom_bar.workspace_switcher.setEnabled(False)
             
-            print("🔒 UI frozen during workspace switch")
+            # Disable title bar buttons to prevent window operations during switch
+            if hasattr(self, 'title_bar'):
+                self.title_bar.setEnabled(False)
+            
+            # Set cursor to wait cursor to indicate processing
+            self.setCursor(Qt.CursorShape.WaitCursor)
+            
+            self.logger.info("🔒 UI frozen during workspace switch")
             
         except Exception as e:
             self.logger.error(f"Error freezing UI: {e}")
@@ -2740,15 +2784,34 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             # Re-enable main window interactions
             self.setEnabled(True)
             
+            # Re-enable sidebar
+            if hasattr(self, 'sidebar'):
+                self.sidebar.setEnabled(True)
+            
+            # Re-enable content area
+            if hasattr(self, 'stack'):
+                self.stack.setEnabled(True)
+            
+            # Re-enable bottom bar
+            if hasattr(self, 'bottom_bar'):
+                self.bottom_bar.setEnabled(True)
+            
             # Hide loading indicator if available
             if hasattr(self, 'connection_indicator'):
                 self.connection_indicator.hide_loading_state()
             
-            # Re-enable workspace switcher
+            # Re-enable workspace switcher specifically
             if hasattr(self, 'bottom_bar') and hasattr(self.bottom_bar, 'workspace_switcher'):
                 self.bottom_bar.workspace_switcher.setEnabled(True)
             
-            print("🔓 UI unfrozen after workspace switch")
+            # Re-enable title bar buttons
+            if hasattr(self, 'title_bar'):
+                self.title_bar.setEnabled(True)
+            
+            # Restore normal cursor
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            
+            self.logger.info("🔓 UI unfrozen after workspace switch")
             
         except Exception as e:
             self.logger.error(f"Error unfreezing UI: {e}")

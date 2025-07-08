@@ -80,6 +80,12 @@ class WorkspaceSwitcher(QWidget):
                 background: rgba(255, 255, 255, 0.12);
                 border: 1px solid rgba(100, 181, 246, 0.3);
             }}
+            
+            QLabel#WorkspaceLabel:disabled {{
+                color: rgba(255, 255, 255, 0.4);
+                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid rgba(0, 0, 0, 0.2);
+            }}
         """)
 
     def _load_workspaces(self):

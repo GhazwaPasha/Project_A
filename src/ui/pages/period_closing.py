@@ -298,12 +298,34 @@ class PeriodClosingPage(QWidget):
         # Apply global styling to fix label backgrounds
         self._apply_global_styling()
         
-        # Page header
+        # Page header with refresh button
+        header_layout = QHBoxLayout()
         header = PageHeader(
             "Period Closing & Audit Management",
             "Manage accounting periods, perform period closing, and review audit trails"
         )
-        main_layout.addWidget(header)
+        header_layout.addWidget(header)
+        header_layout.addStretch()
+        refresh_button = QPushButton("Refresh")
+        refresh_button.setFixedHeight(32)
+        refresh_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        refresh_button.setStyleSheet("""
+            QPushButton {
+                background: rgba(100, 181, 246, 0.8);
+                border: none;
+                border-radius: 6px;
+                color: white;
+                padding: 0px 18px;
+                font-weight: 600;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background: rgba(100, 181, 246, 1.0);
+            }
+        """)
+        refresh_button.clicked.connect(self._load_data)
+        header_layout.addWidget(refresh_button)
+        main_layout.addLayout(header_layout)
         
         # Create scroll area for the main content
         scroll_area = QScrollArea()
