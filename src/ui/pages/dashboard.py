@@ -107,116 +107,293 @@ class DashboardPage(QWidget):
         accounts = self.system.get_chart_of_accounts(active_only=True)
         account_names = [acc['name'] for acc in accounts]
         # Dropdowns
-        account1_combo = QComboBox()
-        account1_combo.addItems(account_names)
-        account1_combo.setStyleSheet("background: rgba(32,34,37,0.7); color: white; border-radius: 8px; padding: 6px 12px; font-size: 13px;")
-        account2_combo = QComboBox()
-        account2_combo.addItems(account_names)
-        account2_combo.setStyleSheet("background: rgba(32,34,37,0.7); color: white; border-radius: 8px; padding: 6px 12px; font-size: 13px;")
+        self.account1_combo = QComboBox()
+        self.account1_combo.addItems(account_names)
+        self.account1_combo.setStyleSheet("background: rgba(32,34,37,0.7); color: white; border-radius: 8px; padding: 6px 12px; font-size: 13px;")
+        self.account2_combo = QComboBox()
+        self.account2_combo.addItems(account_names)
+        self.account2_combo.setStyleSheet("background: rgba(32,34,37,0.7); color: white; border-radius: 8px; padding: 6px 12px; font-size: 13px;")
         # Layout for dropdowns
         dropdown_layout = QHBoxLayout()
         dropdown_layout.setContentsMargins(0, 0, 0, 8)
         dropdown_layout.setSpacing(16)
         dropdown_layout.addStretch(1)
-        dropdown_layout.addWidget(account1_combo)
+        dropdown_layout.addWidget(self.account1_combo)
         dropdown_layout.addSpacing(8)
         dropdown_layout.addWidget(QLabel("vs"))
         dropdown_layout.addSpacing(8)
-        dropdown_layout.addWidget(account2_combo)
+        dropdown_layout.addWidget(self.account2_combo)
         dropdown_layout.addStretch(1)
         dropdown_widget = QWidget()
         dropdown_widget.setLayout(dropdown_layout)
-        # Chart
-        chart1_plot = pg.PlotWidget(background='w')
-        chart1_plot.setBackground(None)
-        chart1_plot.setStyleSheet('background: transparent;')
-        months = np.arange(6)
-        month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+        # Chart with zoom functionality
+        self.chart1_plot = pg.PlotWidget(background='w')
+        self.chart1_plot.setBackground(None)
+        self.chart1_plot.setStyleSheet('background: transparent;')
+        
+        # Enable zoom and pan functionality
+        self.chart1_plot.setMouseEnabled(x=True, y=True)
+        self.chart1_plot.enableAutoRange(axis='x')
+        self.chart1_plot.enableAutoRange(axis='y')
+        
+        # Add zoom controls (no grid lines)
+        self.chart1_plot.showGrid(x=False, y=False)
+        self.chart1_plot.getAxis('left').setPen(pg.mkPen('w', width=1))
+        self.chart1_plot.getAxis('bottom').setPen(pg.mkPen('w', width=1))
+        # Default month labels (will be overridden by real data)
+        default_month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+        default_months = np.arange(6)
         # Combine dropdowns and chart in a vertical layout
         chart1_container = QWidget()
         chart1_vlayout = QVBoxLayout(chart1_container)
         chart1_vlayout.setContentsMargins(0, 0, 0, 0)
         chart1_vlayout.setSpacing(0)
         chart1_vlayout.addWidget(dropdown_widget)
-        chart1_vlayout.addWidget(chart1_plot)
+        chart1_vlayout.addWidget(self.chart1_plot)
         chart1 = PyQtGraphChartCard(chart1_container)
         chart1.setMinimumHeight(200)
         # Define update_chart after combo boxes are created
+        def _show_no_data_chart(plot_widget, account1, account2):
+            """Show no data message when no real data is available."""
+            plot_widget.clear()
+            plot_widget.setLabel('left', "Balance", color='white', size='10pt')
+            plot_widget.setLabel('bottom', "Date", color='white', size='10pt')
+            plot_widget.addLegend(offset=(10,10), labelTextColor='white', brush=pg.mkBrush(30,32,36,180))
+            
+            # Add text item to show no data message
+            from PyQt6.QtGui import QColor
+            text_item = pg.TextItem(text="No data available\nfor selected accounts\nand date range", 
+                                  color=QColor(255, 255, 255, 153),  # 153 = 0.6 * 255
+                                  anchor=(0.5, 0.5))
+            plot_widget.addItem(text_item)
+            text_item.setPos(0.5, 0.5)
+        
         def update_chart():
-            account1 = account1_combo.currentText()
-            account2 = account2_combo.currentText()
-            data1 = np.array([1000, 1200, 1300, 1250, 1400, 1500]) + hash(account1) % 200
-            data2 = np.array([800, 900, 950, 1000, 1100, 1200]) + hash(account2) % 200
-            chart1_plot.clear()
-            chart1_plot.plot(months, data1, pen=pg.mkPen('#4caf50', width=3), name=account1, symbol='o', symbolBrush='#4caf50')
-            chart1_plot.plot(months, data2, pen=pg.mkPen('#f44336', width=3), name=account2, symbol='o', symbolBrush='#f44336')
-            chart1_plot.getAxis('bottom').setTicks([list(enumerate(month_labels))])
-            chart1_plot.setLabel('left', "Amount", color='white', size='10pt')
-            chart1_plot.setLabel('bottom', "Month", color='white', size='10pt')
-            chart1_plot.addLegend(offset=(10,10), labelTextColor='white', brush=pg.mkBrush(30,32,36,180))
-        account1_combo.currentIndexChanged.connect(update_chart)
-        account2_combo.currentIndexChanged.connect(update_chart)
+            account1 = self.account1_combo.currentText()
+            account2 = self.account2_combo.currentText()
+            from_date, to_date = self.date_selector.get_date_range()
+            from_date_str = from_date.toString("yyyy-MM-dd")
+            to_date_str = to_date.toString("yyyy-MM-dd")
+            
+            try:
+                # Check if accounts are postable or parent accounts
+                accounts = self.system.get_chart_of_accounts(active_only=False)
+                account1_data = next((acc for acc in accounts if acc['name'] == account1), None)
+                account2_data = next((acc for acc in accounts if acc['name'] == account2), None)
+                
+                # Determine account types and get appropriate data
+                account1_is_postable = account1_data.get('is_postable', True) if account1_data else True
+                account2_is_postable = account2_data.get('is_postable', True) if account2_data else True
+                
+                # Get data for both accounts
+                data1 = None
+                data2 = None
+                
+                # For postable accounts, use ledger data
+                if account1_is_postable:
+                    ledger1 = self.system.get_ledger(account1, from_date_str, to_date_str)
+                    if ledger1:
+                        data1 = self._calculate_running_balance_from_ledger(ledger1, account1)
+                
+                if account2_is_postable:
+                    ledger2 = self.system.get_ledger(account2, from_date_str, to_date_str)
+                    if ledger2:
+                        data2 = self._calculate_running_balance_from_ledger(ledger2, account2)
+                
+                # For parent accounts, use balance sheet data
+                if not account1_is_postable and account1_data:
+                    data1 = self._get_parent_account_balance(account1_data, to_date_str)
+                
+                if not account2_is_postable and account2_data:
+                    data2 = self._get_parent_account_balance(account2_data, to_date_str)
+                
+                # If we have data for either account, plot it
+                if data1 or data2:
+                    # Prepare data for plotting
+                    dates = []
+                    values1 = []
+                    values2 = []
+                    
+                    if data1 and isinstance(data1, dict):
+                        # Ledger data - multiple dates
+                        dates1 = sorted(data1.keys())
+                        values1 = [data1[date] for date in dates1]
+                        dates = dates1
+                    elif data1 is not None:
+                        # Balance sheet data - single point
+                        dates = [to_date_str]
+                        values1 = [data1]
+                    
+                    if data2 and isinstance(data2, dict):
+                        # Ledger data - multiple dates
+                        dates2 = sorted(data2.keys())
+                        values2 = [data2[date] for date in dates2]
+                        # Merge dates if needed
+                        if not dates:
+                            dates = dates2
+                        else:
+                            all_dates = sorted(set(dates + dates2))
+                            # Extend values to match all dates
+                            extended_values1 = []
+                            extended_values2 = []
+                            for date in all_dates:
+                                if isinstance(data1, dict):
+                                    extended_values1.append(data1.get(date, values1[-1] if values1 else 0))
+                                else:
+                                    extended_values1.append(data1 if data1 is not None else 0)
+                                extended_values2.append(data2.get(date, values2[-1] if values2 else 0))
+                            dates = all_dates
+                            values1 = extended_values1
+                            values2 = extended_values2
+                    elif data2 is not None:
+                        # Balance sheet data - single point
+                        if not dates:
+                            dates = [to_date_str]
+                        values2 = [data2]
+                    
+                    if dates:
+                        # Update chart with data
+                        self.chart1_plot.clear()
+                        self.chart1_plot.plot(range(len(dates)), values1, pen=pg.mkPen('#4caf50', width=3), name=account1, symbol='o', symbolBrush='#4caf50')
+                        self.chart1_plot.plot(range(len(dates)), values2, pen=pg.mkPen('#f44336', width=3), name=account2, symbol='o', symbolBrush='#f44336')
+                        self.chart1_plot.getAxis('bottom').setTicks([list(enumerate(dates))])
+                        self.chart1_plot.setLabel('left', "Balance", color='white', size='10pt')
+                        self.chart1_plot.setLabel('bottom', "Date", color='white', size='10pt')
+                        self.chart1_plot.addLegend(offset=(10,10), labelTextColor='white', brush=pg.mkBrush(30,32,36,180))
+                        
+                        print(f"✅ Account comparison chart updated with data for {len(dates)} points")
+                        print(f"   Account 1 ({account1}): {'Postable' if account1_is_postable else 'Parent'}, final balance: {values1[-1] if values1 else 0}")
+                        print(f"   Account 2 ({account2}): {'Postable' if account2_is_postable else 'Parent'}, final balance: {values2[-1] if values2 else 0}")
+                    else:
+                        # No data available
+                        print("⚠️ No data available for selected accounts and date range")
+                        _show_no_data_chart(self.chart1_plot, account1, account2)
+                else:
+                    # No data available
+                    print("⚠️ No data available")
+                    _show_no_data_chart(self.chart1_plot, account1, account2)
+                    
+            except Exception as e:
+                print(f"❌ Error updating account comparison chart: {e}")
+                # Show no data message on error
+                _show_no_data_chart(self.chart1_plot, account1, account2)
+        
+        self.update_chart1 = update_chart
+        self.account1_combo.currentIndexChanged.connect(update_chart)
+        self.account2_combo.currentIndexChanged.connect(update_chart)
+        self.date_selector.dateRangeChanged.connect(update_chart)
         update_chart()
 
         # --- Chart 2: Gross Margin (Line Chart, pyqtgraph) ---
         # Dropdown for metric selection
         margin_options = ["Gross Margin", "Net Margin", "Revenue Growth"]
-        margin_combo = QComboBox()
-        margin_combo.addItems(margin_options)
-        margin_combo.setStyleSheet("background: rgba(32,34,37,0.7); color: white; border-radius: 8px; padding: 6px 12px; font-size: 13px;")
+        self.margin_combo = QComboBox()
+        self.margin_combo.addItems(margin_options)
+        self.margin_combo.setStyleSheet("background: rgba(32,34,37,0.7); color: white; border-radius: 8px; padding: 6px 12px; font-size: 13px;")
         margin_dropdown_layout = QHBoxLayout()
         margin_dropdown_layout.setContentsMargins(0, 0, 0, 8)
         margin_dropdown_layout.setSpacing(16)
         margin_dropdown_layout.addStretch(1)
-        margin_dropdown_layout.addWidget(margin_combo)
+        margin_dropdown_layout.addWidget(self.margin_combo)
         margin_dropdown_layout.addStretch(1)
         margin_dropdown_widget = QWidget()
         margin_dropdown_widget.setLayout(margin_dropdown_layout)
         # Chart
-        chart2_plot = pg.PlotWidget(background='w')
-        chart2_plot.setBackground(None)
-        chart2_plot.setStyleSheet('background: transparent;')
-        chart2_plot.showGrid(x=False, y=False)
-        chart2_plot.getAxis('left').setPen(pg.mkPen('w', width=1))
-        chart2_plot.getAxis('bottom').setPen(pg.mkPen('w', width=1))
-        chart2_plot.getAxis('bottom').setTicks([list(enumerate(month_labels))])
-        chart2_plot.setLabel('left', "%", color='white', size='10pt')
-        chart2_plot.setLabel('bottom', "Month", color='white', size='10pt')
+        self.chart2_plot = pg.PlotWidget(background='w')
+        self.chart2_plot.setBackground(None)
+        self.chart2_plot.setStyleSheet('background: transparent;')
+        self.chart2_plot.showGrid(x=False, y=False)
+        self.chart2_plot.getAxis('left').setPen(pg.mkPen('w', width=1))
+        self.chart2_plot.getAxis('bottom').setPen(pg.mkPen('w', width=1))
+        self.chart2_plot.getAxis('bottom').setTicks([list(enumerate(default_month_labels))])
+        self.chart2_plot.setLabel('left', "%", color='white', size='10pt')
+        self.chart2_plot.setLabel('bottom', "Month", color='white', size='10pt')
         # Combine dropdown and chart in a vertical layout
         chart2_container = QWidget()
         chart2_vlayout = QVBoxLayout(chart2_container)
         chart2_vlayout.setContentsMargins(0, 0, 0, 0)
         chart2_vlayout.setSpacing(0)
         chart2_vlayout.addWidget(margin_dropdown_widget)
-        chart2_vlayout.addWidget(chart2_plot)
+        chart2_vlayout.addWidget(self.chart2_plot)
         chart2 = PyQtGraphChartCard(chart2_container)
         chart2.setMinimumHeight(200)
         # Update function for margin chart
         def update_margin_chart():
-            metric = margin_combo.currentText()
-            chart2_plot.clear()
-            if metric == "Gross Margin":
-                data = np.array([0.91, 0.93, 0.92, 0.94, 0.95, 0.96]) * 100
-                color = '#00bcd4'
-                label = "Gross Margin"
-            elif metric == "Net Margin":
-                data = np.array([0.21, 0.23, 0.22, 0.24, 0.25, 0.26]) * 100
-                color = '#4caf50'
-                label = "Net Margin"
-            elif metric == "Revenue Growth":
-                data = np.array([0.02, 0.03, 0.01, 0.04, 0.05, 0.03]) * 100
-                color = '#2196f3'
-                label = "Revenue Growth"
-            else:
-                data = np.zeros(6)
-                color = 'white'
-                label = metric
-            chart2_plot.plot(months, data, pen=pg.mkPen(color, width=3), symbol='o', symbolBrush=color, name=label)
-            chart2_plot.getAxis('bottom').setTicks([list(enumerate(month_labels))])
-            chart2_plot.setLabel('left', "%", color='white', size='10pt')
-            chart2_plot.setLabel('bottom', "Month", color='white', size='10pt')
-            chart2_plot.addLegend(offset=(10,10), labelTextColor='white', brush=pg.mkBrush(30,32,36,180))
-        margin_combo.currentIndexChanged.connect(update_margin_chart)
+            try:
+                metric = self.margin_combo.currentText()
+                from_date, to_date = self.date_selector.get_date_range()
+                from_date_str = from_date.toString("yyyy-MM-dd")
+                to_date_str = to_date.toString("yyyy-MM-dd")
+                
+                # Get real margin trends data
+                margin_data = self.system.get_margin_trends_data(from_date_str, to_date_str)
+                
+                if margin_data and margin_data.get('periods'):
+                    periods = margin_data['periods']
+                    self.chart2_plot.clear()
+                    
+                    if metric == "Gross Margin":
+                        data = margin_data['gross_margins']
+                        color = '#00bcd4'
+                        label = "Gross Margin"
+                    elif metric == "Net Margin":
+                        data = margin_data['net_margins']
+                        color = '#4caf50'
+                        label = "Net Margin"
+                    elif metric == "Revenue Growth":
+                        data = margin_data['revenue_growth']
+                        color = '#2196f3'
+                        label = "Revenue Growth"
+                    else:
+                        data = [0] * len(periods)
+                        color = 'white'
+                        label = metric
+                    
+                    # Plot real data
+                    self.chart2_plot.plot(range(len(periods)), data, pen=pg.mkPen(color, width=3), symbol='o', symbolBrush=color, name=label)
+                    self.chart2_plot.getAxis('bottom').setTicks([list(enumerate(periods))])
+                    self.chart2_plot.setLabel('left', "%", color='white', size='10pt')
+                    self.chart2_plot.setLabel('bottom', "Period", color='white', size='10pt')
+                    self.chart2_plot.addLegend(offset=(10,10), labelTextColor='white', brush=pg.mkBrush(30,32,36,180))
+                    
+                    print(f"✅ Margin chart updated with real data for {len(periods)} periods")
+                    print(f"   Metric: {metric}")
+                    print(f"   Data points: {data}")
+                else:
+                    # No real data available
+                    print("⚠️ No margin data available")
+                    self.chart2_plot.clear()
+                    self.chart2_plot.setLabel('left', "%", color='white', size='10pt')
+                    self.chart2_plot.setLabel('bottom', "Period", color='white', size='10pt')
+                    self.chart2_plot.addLegend(offset=(10,10), labelTextColor='white', brush=pg.mkBrush(30,32,36,180))
+                    
+                    # Add text item to show no data message
+                    from PyQt6.QtGui import QColor
+                    text_item = pg.TextItem(text="No margin data available\nfor selected date range", 
+                                          color=QColor(255, 255, 255, 153),  # 153 = 0.6 * 255
+                                          anchor=(0.5, 0.5))
+                    self.chart2_plot.addItem(text_item)
+                    text_item.setPos(0.5, 0.5)
+                    
+            except Exception as e:
+                print(f"❌ Error updating margin chart: {e}")
+                # Show no data message on error
+                self.chart2_plot.clear()
+                self.chart2_plot.setLabel('left', "%", color='white', size='10pt')
+                self.chart2_plot.setLabel('bottom', "Period", color='white', size='10pt')
+                self.chart2_plot.addLegend(offset=(10,10), labelTextColor='white', brush=pg.mkBrush(30,32,36,180))
+                
+                # Add text item to show no data message
+                from PyQt6.QtGui import QColor
+                text_item = pg.TextItem(text="Error loading margin data", 
+                                      color=QColor(255, 255, 255, 153),  # 153 = 0.6 * 255
+                                      anchor=(0.5, 0.5))
+                self.chart2_plot.addItem(text_item)
+                text_item.setPos(0.5, 0.5)
+        
+        self.update_margin_chart = update_margin_chart
+        self.margin_combo.currentIndexChanged.connect(update_margin_chart)
+        self.date_selector.dateRangeChanged.connect(update_margin_chart)
         update_margin_chart()
 
         # --- Chart 3: Revenue Growth (Line Chart, pyqtgraph) ---
@@ -297,14 +474,70 @@ class DashboardPage(QWidget):
                     painter.setPen(QPen(QColor('white')))
                     painter.drawText(legend_x + legend_box_size + 8, legend_y + legend_box_size, label)
                     legend_y += legend_box_size + 8
-        # Example data
-        donut_labels = ["COGS", "OpEx", "Other", "Net Margin"]
-        donut_values = [650, 400, 140, 810]  # Example split
-        donut_colors = ["#f44336", "#ff9800", "#9c27b0", "#4caf50"]
+        
+        # Create donut chart with real data
+        def update_donut_chart():
+            try:
+                from_date, to_date = self.date_selector.get_date_range()
+                from_date_str = from_date.toString("yyyy-MM-dd")
+                to_date_str = to_date.toString("yyyy-MM-dd")
+                
+                # Get real expense breakdown data
+                expense_breakdown = self.system.get_expense_breakdown_by_groups(from_date_str, to_date_str)
+                
+                if expense_breakdown:
+                    # Extract data for donut chart
+                    donut_labels = [item['name'] for item in expense_breakdown]
+                    donut_values = [item['amount'] for item in expense_breakdown]
+                    donut_colors = [item['color'] for item in expense_breakdown]
+                    
+                    # Update the donut widget
+                    donut_widget.values = donut_values
+                    donut_widget.labels = donut_labels
+                    donut_widget.colors = donut_colors
+                    donut_widget.update()  # Trigger repaint
+                    
+                    print(f"✅ Donut chart updated with {len(expense_breakdown)} expense groups")
+                    for item in expense_breakdown:
+                        print(f"   - {item['name']}: {item['amount']}")
+                else:
+                    # No real data available
+                    print("⚠️ No expense data available")
+                    donut_labels = ["No Data"]
+                    donut_values = [1]
+                    donut_colors = ["#666666"]
+                    
+                    donut_widget.values = donut_values
+                    donut_widget.labels = donut_labels
+                    donut_widget.colors = donut_colors
+                    donut_widget.update()
+                    
+            except Exception as e:
+                print(f"❌ Error updating donut chart: {e}")
+                # Show no data on error
+                donut_labels = ["Error"]
+                donut_values = [1]
+                donut_colors = ["#ff0000"]
+                
+                donut_widget.values = donut_values
+                donut_widget.labels = donut_labels
+                donut_widget.colors = donut_colors
+                donut_widget.update()
+        
+        # Initialize with empty data (will be updated immediately)
+        donut_labels = ["Loading..."]
+        donut_values = [1]
+        donut_colors = ["#666666"]
         donut_widget = DonutChartWidget(donut_values, donut_labels, donut_colors)
         chart4 = PyQtGraphChartCard(donut_widget)
         chart4.setMinimumHeight(320)
         chart4.setMaximumHeight(600)
+        
+        # Connect date range selector to donut chart updates
+        self.date_selector.dateRangeChanged.connect(update_donut_chart)
+        
+        # Initial update
+        update_donut_chart()
 
         # Place widgets in grid (4 columns wide, charts as 2x2 blocks, no overlap)
         # Row 0
@@ -564,6 +797,50 @@ class DashboardPage(QWidget):
         else:
             self.card_liabilities.set_ticker("✅ Clear", "#4CAF50")
             
+    def _calculate_running_balance_from_ledger(self, ledger_entries, account_name):
+        """Calculate running balance from ledger entries."""
+        running_balance = 0.0
+        daily_balances = {}
+        
+        for entry in ledger_entries:
+            date, description, debit_account, credit_account, amount = entry
+            
+            # Determine if this is a debit or credit to our account
+            is_debit = (debit_account == account_name or 
+                      (debit_account and account_name in debit_account))
+            is_credit = (credit_account == account_name or 
+                       (credit_account and account_name in credit_account))
+            
+            if is_debit:
+                running_balance += amount
+            elif is_credit:
+                running_balance -= amount
+            
+            # Store balance for this date
+            daily_balances[date] = running_balance
+        
+        return daily_balances
+    
+    def _get_parent_account_balance(self, account_data, as_of_date):
+        """Get parent account balance using hierarchical aggregation (same as ledger cards)."""
+        try:
+            # Use hierarchical account balances (same method as ledger cards)
+            hierarchical_balances = self.system.get_hierarchical_account_balances(None, as_of_date)
+            
+            # Find the account in the hierarchical balances
+            account_name = account_data['name']
+            balance_info = hierarchical_balances.get(account_name, {})
+            
+            # Return the net balance (aggregated from children)
+            net_balance = balance_info.get('net_balance', 0.0)
+            
+            # For parent accounts, we want the absolute value for display
+            return abs(net_balance)
+            
+        except Exception as e:
+            print(f"❌ Error getting parent account balance for {account_data['name']}: {e}")
+            return 0.0
+    
     def _get_cash_balance(self, from_date=None, to_date=None):
         """Get cash balance using group-based reporting."""
         try:
@@ -714,6 +991,7 @@ class DashboardPage(QWidget):
     def _on_date_range_changed(self, start_date, end_date):
         """Handle date range selection changes."""
         self._update_metrics()
+        # The donut chart will be updated automatically via the dateRangeChanged signal connection
         
     def _open_journal_entry_dialog(self):
         """Switch to the journal tab to add a new entry."""
@@ -751,9 +1029,85 @@ class DashboardPage(QWidget):
         """Refresh dashboard data when organization context changes."""
         try:
             print("🔄 Dashboard: Refreshing data due to organization change...")
-            self._update_metrics()
+            self._load_data()
+            
+            # Refresh chart dropdowns with new organization data
+            self._refresh_chart_dropdowns()
+            
+            # Force refresh all charts with new organization data
+            if hasattr(self, 'date_selector'):
+                from_date, to_date = self.date_selector.get_date_range()
+                print(f"   Date range: {from_date.toString('yyyy-MM-dd')} to {to_date.toString('yyyy-MM-dd')}")
+                
+                # Trigger chart updates with new organization context
+                # The charts will automatically use the new system context
+                print("   ✅ Dashboard refreshed with new organization context")
+                
         except Exception as e:
-            print(f"Error refreshing dashboard data: {e}")
+            print(f"❌ Error refreshing dashboard data: {e}")
+    
+    def refresh_organization_context(self, new_system):
+        """Update the system reference when organization changes."""
+        try:
+            print(f"🔄 Dashboard: Updating system reference for new organization...")
+            self.system = new_system
+            self._load_data()
+            
+            # Refresh chart dropdowns with new organization data
+            self._refresh_chart_dropdowns()
+            
+            print("   ✅ Dashboard system reference updated")
+        except Exception as e:
+            print(f"❌ Error updating dashboard system reference: {e}")
+    
+    def _refresh_chart_dropdowns(self):
+        """Refresh chart dropdowns with new organization data."""
+        try:
+            print("   🔄 Refreshing chart dropdowns...")
+            
+            # Refresh account dropdowns for Chart 1
+            if hasattr(self, 'account1_combo') and hasattr(self, 'account2_combo'):
+                # Get new accounts from the current organization
+                accounts = self.system.get_chart_of_accounts(active_only=True)
+                account_names = [acc['name'] for acc in accounts]
+                
+                # Store current selections
+                current_account1 = self.account1_combo.currentText()
+                current_account2 = self.account2_combo.currentText()
+                
+                # Clear and repopulate dropdowns
+                self.account1_combo.clear()
+                self.account2_combo.clear()
+                self.account1_combo.addItems(account_names)
+                self.account2_combo.addItems(account_names)
+                
+                # Try to restore previous selections if they still exist
+                if current_account1 in account_names:
+                    self.account1_combo.setCurrentText(current_account1)
+                elif account_names:
+                    self.account1_combo.setCurrentIndex(0)
+                
+                if current_account2 in account_names:
+                    self.account2_combo.setCurrentText(current_account2)
+                elif len(account_names) > 1:
+                    self.account2_combo.setCurrentIndex(1)
+                elif account_names:
+                    self.account2_combo.setCurrentIndex(0)
+                
+                print(f"   ✅ Account dropdowns refreshed with {len(account_names)} accounts")
+                
+                # Trigger chart update
+                if hasattr(self, 'update_chart1'):
+                    self.update_chart1()
+            
+            # Refresh margin chart
+            if hasattr(self, 'update_margin_chart'):
+                self.update_margin_chart()
+                
+            print("   ✅ Chart dropdowns refreshed successfully")
+            
+        except Exception as e:
+            print(f"   ❌ Error refreshing chart dropdowns: {e}")
         
     def _apply_styling(self):
         """Apply beautiful glassmorphism styling to the dashboard."""

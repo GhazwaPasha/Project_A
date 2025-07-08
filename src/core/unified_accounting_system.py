@@ -16,6 +16,7 @@ import uuid
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Any, Union, Tuple
 from decimal import Decimal
+import calendar
 
 try:
     from supabase import create_client, Client
@@ -2767,6 +2768,247 @@ class UnifiedAccountingSystem:
         # Only top-level accounts (no parent in this group)
         roots = [acc for acc in accounts if not acc.get('parent_id') or acc.get('parent_id') not in account_by_id]
         return [build_node(acc) for acc in roots]
+
+    def get_account_historical_balances(self, account_name: str, from_date: str, to_date: str) -> list:
+        """
+        Get historical balances for a specific account for each month between from_date and to_date (inclusive).
+        Returns a list of dicts: [{ 'period': 'Jan', 'date': '2024-01-31', 'balance': ... }, ...]
+        """
+        if not self.current_organization_id:
+            return []
+        try:
+            from datetime import datetime, timedelta
+            import calendar
+
+            # Parse input dates
+            start = datetime.strptime(from_date, "%Y-%m-%d")
+            end = datetime.strptime(to_date, "%Y-%m-%d")
+            # Build a list of month-end dates between start and end
+            month_ends = []
+            current = start.replace(day=1)
+            while current <= end:
+                # Get last day of this month
+                last_day = calendar.monthrange(current.year, current.month)[1]
+                month_end = current.replace(day=last_day)
+                # Only include if within range
+                if month_end >= start and month_end <= end:
+                    month_ends.append(month_end)
+                # Move to next month
+                if current.month == 12:
+                    current = current.replace(year=current.year+1, month=1, day=1)
+                else:
+                    current = current.replace(month=current.month+1, day=1)
+            # Always include the end date if not already present
+            if month_ends and month_ends[-1] < end:
+                month_ends.append(end)
+            elif not month_ends:
+                month_ends.append(end)
+            # Get balance as of each month end
+            historical_data = []
+            for dt in month_ends:
+                end_date_str = dt.strftime('%Y-%m-%d')
+                hierarchical_balances = self.get_hierarchical_account_balances(None, end_date_str)
+                balance_info = hierarchical_balances.get(account_name, {})
+                net_balance = balance_info.get('net_balance', 0.0)
+                month_label = dt.strftime('%b')
+                historical_data.append({
+                    'period': month_label,
+                    'date': end_date_str,
+                    'balance': net_balance
+                })
+            return historical_data
+        except Exception as e:
+            print(f"Error getting historical balances for {account_name}: {e}")
+            return []
+
+    def get_account_comparison_data(self, account1_name: str, account2_name: str, from_date: str, to_date: str) -> dict:
+        """
+        Get comparison data for two accounts for each month between from_date and to_date.
+        Returns dict with month_labels, account1, account2.
+        """
+        try:
+            account1_data = self.get_account_historical_balances(account1_name, from_date, to_date)
+            account2_data = self.get_account_historical_balances(account2_name, from_date, to_date)
+            month_labels = [d['period'] for d in account1_data] if account1_data else []
+            account1_balances = [d['balance'] for d in account1_data] if account1_data else []
+            account2_balances = [d['balance'] for d in account2_data] if account2_data else []
+            return {
+                'month_labels': month_labels,
+                'account1': {
+                    'name': account1_name,
+                    'balances': account1_balances
+                },
+                'account2': {
+                    'name': account2_name,
+                    'balances': account2_balances
+                },
+                'months': len(month_labels)
+            }
+        except Exception as e:
+            print(f"Error getting account comparison data: {e}")
+            return {
+                'month_labels': [],
+                'account1': {'name': account1_name, 'balances': []},
+                'account2': {'name': account2_name, 'balances': []},
+                'months': 0
+            }
+
+    def get_expense_breakdown_by_groups(self, from_date: str, to_date: str) -> List[Dict[str, Any]]:
+        """
+        Get expense breakdown by groups for donut chart visualization.
+        Returns list of dicts with group name, total amount, and color.
+        """
+        try:
+            # Get group-based income statement data
+            income_statement = self.generate_group_based_income_statement(from_date, to_date)
+            
+            # Define colors for each expense group
+            group_colors = {
+                'cogs': '#f44336',  # Red for COGS
+                'operating_expense': '#ff9800',  # Orange for Operating
+                'administrative_expense': '#9c27b0',  # Purple for Admin
+                'selling_expense': '#2196f3',  # Blue for Selling
+                'financial_expense': '#ff5722',  # Deep Orange for Financial
+                'other_expense': '#607d8b'  # Blue Grey for Other
+            }
+            
+            expense_breakdown = []
+            
+            # Process expense sections from income statement
+            for section in income_statement.get('expense_sections', []):
+                group_key = section.get('group', '')
+                group_name = section.get('name', '')
+                group_total = section.get('total', 0)
+                
+                # Only include groups with actual amounts
+                if group_total > 0:
+                    expense_breakdown.append({
+                        'group': group_key,
+                        'name': group_name,
+                        'amount': group_total,
+                        'color': group_colors.get(group_key, '#607d8b')  # Default to blue grey
+                    })
+            
+            # Sort by amount (largest first)
+            expense_breakdown.sort(key=lambda x: x['amount'], reverse=True)
+            
+            return expense_breakdown
+            
+        except Exception as e:
+            print(f"Error getting expense breakdown by groups: {e}")
+            # Return empty list on error
+            return []
+
+    def get_margin_trends_data(self, from_date: str, to_date: str) -> Dict[str, Any]:
+        """
+        Get historical margin trends data for chart visualization.
+        Returns data for Gross Margin, Net Margin, and Revenue Growth over the selected period.
+        """
+        try:
+            from datetime import datetime, timedelta
+            import calendar
+            
+            # Parse input dates
+            start = datetime.strptime(from_date, "%Y-%m-%d")
+            end = datetime.strptime(to_date, "%Y-%m-%d")
+            
+            # Calculate monthly periods within the date range
+            monthly_data = []
+            current_date = start.replace(day=1)  # Start of first month
+            
+            while current_date <= end:
+                # Calculate end of current month
+                if current_date.month == 12:
+                    month_end = current_date.replace(year=current_date.year + 1, month=1, day=1) - timedelta(days=1)
+                else:
+                    month_end = current_date.replace(month=current_date.month + 1, day=1) - timedelta(days=1)
+                
+                # Ensure we don't exceed the requested end date
+                if month_end > end:
+                    month_end = end
+                
+                # Get income statement for this month
+                month_start_str = current_date.strftime("%Y-%m-%d")
+                month_end_str = month_end.strftime("%Y-%m-%d")
+                
+                try:
+                    income_statement = self.generate_group_based_income_statement(month_start_str, month_end_str)
+                    
+                    total_revenue = income_statement.get('total_revenue', 0)
+                    total_cogs = income_statement.get('total_cogs', 0)
+                    total_operating_expenses = income_statement.get('total_operating_expenses', 0)
+                    net_income = income_statement.get('net_income', 0)
+                    
+                    # Calculate margins
+                    gross_profit = total_revenue - total_cogs
+                    gross_margin = (gross_profit / total_revenue * 100) if total_revenue > 0 else 0
+                    net_margin = (net_income / total_revenue * 100) if total_revenue > 0 else 0
+                    
+                    monthly_data.append({
+                        'period': current_date.strftime("%Y-%m"),
+                        'gross_margin': gross_margin,
+                        'net_margin': net_margin,
+                        'revenue': total_revenue,
+                        'net_income': net_income
+                    })
+                    
+                except Exception as e:
+                    print(f"Error calculating data for {month_start_str}: {e}")
+                    # Add zero values for this month
+                    monthly_data.append({
+                        'period': current_date.strftime("%Y-%m"),
+                        'gross_margin': 0,
+                        'net_margin': 0,
+                        'revenue': 0,
+                        'net_income': 0
+                    })
+                
+                # Move to next month
+                if current_date.month == 12:
+                    current_date = current_date.replace(year=current_date.year + 1, month=1)
+                else:
+                    current_date = current_date.replace(month=current_date.month + 1)
+            
+            # Calculate revenue growth (month-over-month)
+            revenue_growth = []
+            for i, data in enumerate(monthly_data):
+                if i == 0:
+                    revenue_growth.append(0)  # First month has no growth
+                else:
+                    prev_revenue = monthly_data[i-1]['revenue']
+                    current_revenue = data['revenue']
+                    if prev_revenue > 0:
+                        growth = ((current_revenue - prev_revenue) / prev_revenue) * 100
+                    else:
+                        growth = 0 if current_revenue == 0 else 100  # 100% growth if from 0
+                    revenue_growth.append(growth)
+            
+            # Add revenue growth to monthly data
+            for i, data in enumerate(monthly_data):
+                data['revenue_growth'] = revenue_growth[i]
+            
+            return {
+                'monthly_data': monthly_data,
+                'periods': [data['period'] for data in monthly_data],
+                'gross_margins': [data['gross_margin'] for data in monthly_data],
+                'net_margins': [data['net_margin'] for data in monthly_data],
+                'revenue_growth': [data['revenue_growth'] for data in monthly_data],
+                'revenues': [data['revenue'] for data in monthly_data],
+                'net_incomes': [data['net_income'] for data in monthly_data]
+            }
+            
+        except Exception as e:
+            print(f"Error getting margin trends data: {e}")
+            # Return empty data structure
+            return {
+                'monthly_data': [],
+                'periods': [],
+                'gross_margins': [],
+                'net_margins': [],
+                'revenue_growth': [],
+                'revenues': [],
+                'net_incomes': []
+            }
 
 # ================================
 # ENHANCED FEATURES INTEGRATION
