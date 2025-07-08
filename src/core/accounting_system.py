@@ -244,8 +244,9 @@ class AccountingSystem:
     
     def get_postable_accounts(self) -> List[Dict[str, Any]]:
         """Get only postable accounts."""
-        all_accounts = self.get_all_accounts()
-        return [acc for acc in all_accounts if acc.get('is_postable', True)]
+        # Only get active accounts to exclude deleted ones
+        active_accounts = self.get_chart_of_accounts(active_only=True)
+        return [acc for acc in active_accounts if acc.get('is_postable', True)]
     
     def get_accounts_by_level(self, level: int = 1) -> List[Dict[str, Any]]:
         """Get accounts by hierarchy level."""

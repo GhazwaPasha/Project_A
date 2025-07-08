@@ -261,7 +261,8 @@ class SingleEntryTab(QWidget):
         """Load accounts from the system."""
         try:
             if hasattr(self.system, 'get_chart_of_accounts'):
-                accounts_data = self.system.get_chart_of_accounts(active_only=False)
+                # Only load active accounts to exclude deleted ones
+                accounts_data = self.system.get_chart_of_accounts(active_only=True)
                 postable_accounts = [acc for acc in accounts_data if acc.get('is_postable', True)]
                 self.accounts = [f"{acc['code']} - {acc['name']}" for acc in postable_accounts]
             elif hasattr(self.system, 'get_all_accounts'):

@@ -761,8 +761,88 @@ class UnifiedAccountingSystem:
     
     def get_postable_accounts(self) -> List[Tuple]:
         """Get only postable accounts (leaf accounts that can have transactions)"""
-        all_accounts = self.get_all_accounts()
-        return [acc for acc in all_accounts if acc[5]]  # is_postable is index 5
+        # Only get active accounts to exclude deleted ones
+        active_accounts = self.get_chart_of_accounts(active_only=True)
+        
+        # Create a mapping for parent lookups and hierarchy analysis
+        account_by_id = {acc['id']: acc for acc in active_accounts}
+        children_by_parent = {}
+        
+        # Build children mapping
+        for acc in active_accounts:
+            parent_id = acc.get('parent_id')
+            if parent_id:
+                if parent_id not in children_by_parent:
+                    children_by_parent[parent_id] = []
+                children_by_parent[parent_id].append(acc)
+        
+        def get_parent_code(parent_id):
+            """Get parent account code from parent_id"""
+            if parent_id and parent_id in account_by_id:
+                return account_by_id[parent_id].get('code', '')
+            return ''
+        
+        def calculate_level(acc, visited=None):
+            """Calculate hierarchy level (1-4)"""
+            if visited is None:
+                visited = set()
+            
+            acc_id = acc['id']
+            if acc_id in visited:  # Prevent infinite loops
+                return 1
+            visited.add(acc_id)
+            
+            parent_id = acc.get('parent_id')
+            if not parent_id or parent_id not in account_by_id:
+                return 1  # Root level
+            
+            parent_acc = account_by_id[parent_id]
+            return calculate_level(parent_acc, visited) + 1
+        
+        def is_postable(acc):
+            """
+            Determine if account is postable based on hierarchy rules:
+            - Level 4 accounts (leaf accounts) are typically postable
+            - Accounts with no children are postable
+            - Parent accounts (with children) are typically not postable (header accounts)
+            """
+            acc_id = acc['id']
+            level = calculate_level(acc)
+            has_children = acc_id in children_by_parent
+            
+            # Rules for postability:
+            # 1. If it's a leaf account (no children), it's postable
+            # 2. If it's level 4, it's likely postable even if it has children
+            # 3. For business logic: Level 3+ accounts without children are postable
+            if not has_children:
+                return True
+            elif level >= 3:
+                # Level 3+ with children - depends on business rules
+                # For most accounting systems, having children makes it non-postable
+                return False
+            else:
+                # Level 1-2 with children are definitely header accounts
+                return False
+        
+        result = []
+        for acc in active_accounts:
+            # Convert to tuple format: (name, type, code, parent_code, level, is_postable, description)
+            parent_code = get_parent_code(acc.get('parent_id'))
+            level = calculate_level(acc)
+            postable = is_postable(acc)
+            
+            result.append((
+                acc.get('name', ''),
+                acc.get('account_type', ''),
+                acc.get('code', ''),
+                parent_code,
+                level,
+                postable,
+                acc.get('description', '')
+            ))
+        
+        # Only return postable accounts
+        return [acc for acc in result if acc[5]]  # is_postable is index 5
     
     def get_accounts_by_level(self, level: int = 1) -> List[Tuple]:
         """Get accounts by hierarchy level"""

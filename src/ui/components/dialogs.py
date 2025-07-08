@@ -414,7 +414,8 @@ class JournalEntryDialog(QDialog):
     def _populate_accounts(self, combo):
         """Populate combo box with accounts."""
         if self.system:
-            accounts = self.system.get_chart_of_accounts(active_only=False)
+            # Only load active accounts to exclude deleted ones
+            accounts = self.system.get_chart_of_accounts(active_only=True)
             for account in accounts:
                 combo.addItem(account['name'])
                 

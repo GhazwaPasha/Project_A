@@ -139,11 +139,11 @@ def load_accounts_from_system(system, use_fresh_data=False):
     try:
         if hasattr(system, 'get_chart_of_accounts'):
             if use_fresh_data and hasattr(system, 'get_chart_of_accounts_fresh'):
-                # Use fresh data method for consistency
-                accounts_data = system.get_chart_of_accounts_fresh(active_only=False)
+                # Use fresh data method for consistency - only active accounts
+                accounts_data = system.get_chart_of_accounts_fresh(active_only=True)
             else:
-                # Use regular cache-first method
-                accounts_data = system.get_chart_of_accounts(active_only=False)
+                # Use regular cache-first method - only active accounts
+                accounts_data = system.get_chart_of_accounts(active_only=True)
             # Handle both dict and tuple formats
             if accounts_data and len(accounts_data) > 0:
                 sample_account = accounts_data[0]

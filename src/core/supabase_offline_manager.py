@@ -505,8 +505,23 @@ class EnhancedSupabaseOnlyManager:
 
     def get_postable_accounts(self) -> List[Tuple]:
         """Get only postable accounts"""
-        all_accounts = self.get_all_accounts()
-        return [acc for acc in all_accounts if acc[5]]  # is_postable is index 5
+        # Only get active accounts to exclude deleted ones
+        active_accounts = self.get_chart_of_accounts(active_only=True)
+        
+        # Convert to tuple format and filter for postable accounts
+        result = []
+        for acc in active_accounts:
+            result.append((
+                acc.get('name', ''),
+                acc.get('type', ''),
+                acc.get('code', ''),
+                acc.get('parent_code', ''),
+                acc.get('level', 1),
+                acc.get('is_postable', True),
+                acc.get('description', '')
+            ))
+        
+        return [acc for acc in result if acc[5]]  # is_postable is index 5
 
     def get_accounts_by_level(self, level: int = 1) -> List[Tuple]:
         """Get accounts by hierarchy level"""
