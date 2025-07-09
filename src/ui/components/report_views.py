@@ -573,6 +573,14 @@ class BaseFinancialStatementView(QWidget):
         except Exception as e:
             print(f"Error refreshing currency display: {e}")
 
+    def refresh_data(self):
+        """Refresh financial statement data when organization context changes."""
+        try:
+            print("🔄 Financial Statement: Refreshing data due to organization change...")
+            self._regenerate_with_new_dates()
+        except Exception as e:
+            print(f"Error refreshing financial statement data: {e}")
+
     def _get_date_range_text(self):
         """Get formatted date range text for display."""
         if self.from_date and self.to_date:
@@ -780,7 +788,15 @@ class IncomeStatementView(BaseFinancialStatementView):
             from_date_str = self.from_date.toString("yyyy-MM-dd") if self.from_date else None
             to_date_str = self.to_date.toString("yyyy-MM-dd") if self.to_date else None
             self.show_income_statement(self.system, from_date_str, to_date_str)
-        
+    
+    def refresh_data(self):
+        """Refresh income statement data when organization context changes."""
+        try:
+            print("🔄 Income Statement: Refreshing data due to organization change...")
+            self._regenerate_with_new_dates()
+        except Exception as e:
+            print(f"Error refreshing income statement data: {e}")
+    
     def _generate_html_content(self):
         """Generate HTML content for Income Statement printing using the new hierarchical group-based data."""
         if not self.system:
@@ -868,11 +884,19 @@ class IncomeStatementView(BaseFinancialStatementView):
 
 
 class TrialBalanceView(BaseFinancialStatementView):
-    """Trial Balance detailed view with professional table layout."""
-
+    """Trial Balance detailed view."""
+    
     def __init__(self, parent=None):
-        super().__init__("Trial Balance", "All Accounts")
-        self.set_date_selector_all_time_by_default = True  # Always set selector to "All Time" by default
+        super().__init__("Trial Balance", "As of")
+    
+    def refresh_data(self):
+        """Refresh trial balance data when organization context changes."""
+        try:
+            print("🔄 Trial Balance: Refreshing data due to organization change...")
+            self._regenerate_with_new_dates()
+        except Exception as e:
+            print(f"Error refreshing trial balance data: {e}")
+
 
 class BalanceSheetView(BaseFinancialStatementView):
     """Balance Sheet detailed view with professional tree layout."""
@@ -1073,10 +1097,18 @@ class BalanceSheetView(BaseFinancialStatementView):
     def _regenerate_with_new_dates(self):
         """Regenerate the balance sheet with current date range."""
         if self.system:
-            # For balance sheet, we only use the "to_date" (as of date)
+            # Convert QDate to string if needed
             as_of_date_str = self.to_date.toString("yyyy-MM-dd") if self.to_date else None
             self.show_balance_sheet(self.system, as_of_date_str)
-        
+    
+    def refresh_data(self):
+        """Refresh balance sheet data when organization context changes."""
+        try:
+            print("🔄 Balance Sheet: Refreshing data due to organization change...")
+            self._regenerate_with_new_dates()
+        except Exception as e:
+            print(f"Error refreshing balance sheet data: {e}")
+    
     def _generate_html_content(self):
         """Generate HTML content for Balance Sheet printing using the new hierarchical group-based data."""
         if not self.system:
@@ -1281,10 +1313,19 @@ class CashFlowStatementView(BaseFinancialStatementView):
     def _regenerate_with_new_dates(self):
         """Regenerate the cash flow statement with current date range."""
         if self.system:
+            # Convert QDate to string if needed
             from_date_str = self.from_date.toString("yyyy-MM-dd") if self.from_date else None
             to_date_str = self.to_date.toString("yyyy-MM-dd") if self.to_date else None
             self.show_cash_flow_statement(self.system, from_date_str, to_date_str)
-        
+    
+    def refresh_data(self):
+        """Refresh cash flow statement data when organization context changes."""
+        try:
+            print("🔄 Cash Flow Statement: Refreshing data due to organization change...")
+            self._regenerate_with_new_dates()
+        except Exception as e:
+            print(f"Error refreshing cash flow statement data: {e}")
+    
     def _generate_html_content(self):
         """Generate HTML content for Cash Flow Statement printing."""
         if not self.system:
@@ -1489,10 +1530,19 @@ class StatementOfEquityView(BaseFinancialStatementView):
     def _regenerate_with_new_dates(self):
         """Regenerate the statement of equity with current date range."""
         if self.system:
+            # Convert QDate to string if needed
             from_date_str = self.from_date.toString("yyyy-MM-dd") if self.from_date else None
             to_date_str = self.to_date.toString("yyyy-MM-dd") if self.to_date else None
             self.show_statement_of_equity(self.system, from_date_str, to_date_str)
-        
+    
+    def refresh_data(self):
+        """Refresh statement of equity data when organization context changes."""
+        try:
+            print("🔄 Statement of Equity: Refreshing data due to organization change...")
+            self._regenerate_with_new_dates()
+        except Exception as e:
+            print(f"Error refreshing statement of equity data: {e}")
+    
     def _generate_html_content(self):
         """Generate HTML content for Statement of Equity printing."""
         if not self.system:
@@ -2001,14 +2051,22 @@ class RatioAnalysisView(BaseFinancialStatementView):
         return status_colors.get(status, "#757575")
         
     def show_ratio_analysis(self, ratio_data: dict, summary_points: list):
-        """Load actual ratio data and update the view."""
+        """Display the ratio analysis with the provided data."""
         self.ratio_data = ratio_data
         self.summary_points = summary_points
-        
-        # Reload the currently selected tab with new data
-        self._load_ratio_cards_for_category(self.current_category)
         self._update_summary_section()
-
+        self._load_ratio_cards_for_category(self.current_category)
+    
+    def refresh_data(self):
+        """Refresh ratio analysis data when organization context changes."""
+        try:
+            print("🔄 Ratio Analysis: Refreshing data due to organization change...")
+            # Re-load the current category's ratio cards
+            if hasattr(self, 'current_category'):
+                self._load_ratio_cards_for_category(self.current_category)
+        except Exception as e:
+            print(f"Error refreshing ratio analysis data: {e}")
+    
     def _update_summary_section(self):
         """Update the summary section with dynamic points."""
         # Clear existing points

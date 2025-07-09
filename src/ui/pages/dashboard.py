@@ -153,20 +153,25 @@ class DashboardPage(QWidget):
         chart1 = PyQtGraphChartCard(chart1_container)
         chart1.setMinimumHeight(200)
         # Define update_chart after combo boxes are created
-        def _show_no_data_chart(plot_widget, account1, account2):
-            """Show no data message when no real data is available."""
+        def _show_no_data_chart(plot_widget, message="No data available"):
+            """Show no data message on chart"""
             plot_widget.clear()
-            plot_widget.setLabel('left', "Balance", color='white', size='10pt')
-            plot_widget.setLabel('bottom', "Date", color='white', size='10pt')
+            plot_widget.setLabel('left', "Value", color='white', size='10pt')
+            plot_widget.setLabel('bottom', "Period", color='white', size='10pt')
             plot_widget.addLegend(offset=(10,10), labelTextColor='white', brush=pg.mkBrush(30,32,36,180))
             
             # Add text item to show no data message
             from PyQt6.QtGui import QColor
-            text_item = pg.TextItem(text="No data available\nfor selected accounts\nand date range", 
+            text_item = pg.TextItem(text=message, 
                                   color=QColor(255, 255, 255, 153),  # 153 = 0.6 * 255
                                   anchor=(0.5, 0.5))
             plot_widget.addItem(text_item)
             text_item.setPos(0.5, 0.5)
+        
+        def _show_no_data_chart_accounts(plot_widget, account1, account2):
+            """Show no data message on account comparison chart"""
+            message = f"No data available for\n{account1} vs {account2}\nin selected date range"
+            _show_no_data_chart(plot_widget, message)
         
         def update_chart():
             account1 = self.account1_combo.currentText()
@@ -267,16 +272,16 @@ class DashboardPage(QWidget):
                     else:
                         # No data available
                         print("⚠️ No data available for selected accounts and date range")
-                        _show_no_data_chart(self.chart1_plot, account1, account2)
+                        _show_no_data_chart_accounts(self.chart1_plot, account1, account2)
                 else:
                     # No data available
                     print("⚠️ No data available")
-                    _show_no_data_chart(self.chart1_plot, account1, account2)
+                    _show_no_data_chart_accounts(self.chart1_plot, account1, account2)
                     
             except Exception as e:
                 print(f"❌ Error updating account comparison chart: {e}")
                 # Show no data message on error
-                _show_no_data_chart(self.chart1_plot, account1, account2)
+                _show_no_data_chart_accounts(self.chart1_plot, account1, account2)
         
         self.update_chart1 = update_chart
         self.account1_combo.currentIndexChanged.connect(update_chart)
@@ -322,32 +327,77 @@ class DashboardPage(QWidget):
             try:
                 metric = self.margin_combo.currentText()
                 from_date, to_date = self.date_selector.get_date_range()
+                
+                # Check if date range is valid
+                if from_date is None or to_date is None:
+                    print("⚠️ No date range selected")
+                    self._show_no_data_chart(self.chart2_plot, "No date range selected")
+                    return
+                
                 from_date_str = from_date.toString("yyyy-MM-dd")
                 to_date_str = to_date.toString("yyyy-MM-dd")
                 
-                # Get real margin trends data
-                margin_data = self.system.get_margin_trends_data(from_date_str, to_date_str)
+                # Check if system is available
+                if not self.system:
+                    print("⚠️ No accounting system available")
+                    self._show_no_data_chart(self.chart2_plot, "No accounting system available")
+                    return
                 
-                if margin_data and margin_data.get('periods'):
+                # Get financial ratios data (existing calculation)
+                try:
+                    from src.core.financial_ratios import FinancialRatioCalculator
+                    ratio_calculator = FinancialRatioCalculator(self.system.db_manager, self.system)
+                    ratios_data = ratio_calculator.calculate_all_ratios()
+                    
+                    if not ratios_data or 'error' in ratios_data:
+                        print("⚠️ No financial ratios data available")
+                        self._show_no_data_chart(self.chart2_plot, "No financial data available")
+                        return
+                        
+                except Exception as e:
+                    print(f"❌ Error calculating financial ratios: {e}")
+                    self._show_no_data_chart(self.chart2_plot, "Error calculating ratios")
+                    return
+                
+                # Transform ratios data to margin chart format
+                try:
+                    from src.core.chart_data_transformer import ChartDataTransformer
+                    transformer = ChartDataTransformer(self.system)
+                    margin_data = transformer.transform_ratios_to_margin_chart(ratios_data, from_date_str, to_date_str)
+                except Exception as e:
+                    print(f"❌ Error transforming data: {e}")
+                    self._show_no_data_chart(self.chart2_plot, "Error transforming data")
+                    return
+                
+                if margin_data and margin_data.get('periods') and len(margin_data['periods']) > 0:
                     periods = margin_data['periods']
                     self.chart2_plot.clear()
                     
+                    # Safely get data with defaults
+                    gross_margins = margin_data.get('gross_margins', [])
+                    net_margins = margin_data.get('net_margins', [])
+                    revenue_growth = margin_data.get('revenue_growth', [])
+                    
                     if metric == "Gross Margin":
-                        data = margin_data['gross_margins']
+                        data = gross_margins if gross_margins else [0] * len(periods)
                         color = '#00bcd4'
                         label = "Gross Margin"
                     elif metric == "Net Margin":
-                        data = margin_data['net_margins']
+                        data = net_margins if net_margins else [0] * len(periods)
                         color = '#4caf50'
                         label = "Net Margin"
                     elif metric == "Revenue Growth":
-                        data = margin_data['revenue_growth']
+                        data = revenue_growth if revenue_growth else [0] * len(periods)
                         color = '#2196f3'
                         label = "Revenue Growth"
                     else:
                         data = [0] * len(periods)
                         color = 'white'
                         label = metric
+                    
+                    # Ensure data length matches periods
+                    if len(data) != len(periods):
+                        data = data[:len(periods)] if len(data) > len(periods) else data + [0] * (len(periods) - len(data))
                     
                     # Plot real data
                     self.chart2_plot.plot(range(len(periods)), data, pen=pg.mkPen(color, width=3), symbol='o', symbolBrush=color, name=label)
@@ -362,18 +412,7 @@ class DashboardPage(QWidget):
                 else:
                     # No real data available
                     print("⚠️ No margin data available")
-                    self.chart2_plot.clear()
-                    self.chart2_plot.setLabel('left', "%", color='white', size='10pt')
-                    self.chart2_plot.setLabel('bottom', "Period", color='white', size='10pt')
-                    self.chart2_plot.addLegend(offset=(10,10), labelTextColor='white', brush=pg.mkBrush(30,32,36,180))
-                    
-                    # Add text item to show no data message
-                    from PyQt6.QtGui import QColor
-                    text_item = pg.TextItem(text="No margin data available\nfor selected date range", 
-                                          color=QColor(255, 255, 255, 153),  # 153 = 0.6 * 255
-                                          anchor=(0.5, 0.5))
-                    self.chart2_plot.addItem(text_item)
-                    text_item.setPos(0.5, 0.5)
+                    self._show_no_data_chart(self.chart2_plot, "No margin data available\nfor selected date range")
                     
             except Exception as e:
                 print(f"❌ Error updating margin chart: {e}")
@@ -479,11 +518,75 @@ class DashboardPage(QWidget):
         def update_donut_chart():
             try:
                 from_date, to_date = self.date_selector.get_date_range()
+                
+                # Check if date range is valid
+                if from_date is None or to_date is None:
+                    print("⚠️ No date range selected for donut chart")
+                    donut_labels = ["No Date Range"]
+                    donut_values = [1]
+                    donut_colors = ["#666666"]
+                    donut_widget.values = donut_values
+                    donut_widget.labels = donut_labels
+                    donut_widget.colors = donut_colors
+                    donut_widget.update()
+                    return
+                
                 from_date_str = from_date.toString("yyyy-MM-dd")
                 to_date_str = to_date.toString("yyyy-MM-dd")
                 
-                # Get real expense breakdown data
-                expense_breakdown = self.system.get_expense_breakdown_by_groups(from_date_str, to_date_str)
+                # Check if system is available
+                if not self.system:
+                    print("⚠️ No accounting system available for donut chart")
+                    donut_labels = ["No System"]
+                    donut_values = [1]
+                    donut_colors = ["#666666"]
+                    donut_widget.values = donut_values
+                    donut_widget.labels = donut_labels
+                    donut_widget.colors = donut_colors
+                    donut_widget.update()
+                    return
+                
+                # Get income statement data (existing calculation)
+                try:
+                    income_statement = self.system.generate_income_statement_breakdown(from_date_str, to_date_str)
+                    
+                    if not income_statement:
+                        print("⚠️ No income statement data available")
+                        donut_labels = ["No Data"]
+                        donut_values = [1]
+                        donut_colors = ["#666666"]
+                        donut_widget.values = donut_values
+                        donut_widget.labels = donut_labels
+                        donut_widget.colors = donut_colors
+                        donut_widget.update()
+                        return
+                        
+                except Exception as e:
+                    print(f"❌ Error generating income statement: {e}")
+                    donut_labels = ["Error"]
+                    donut_values = [1]
+                    donut_colors = ["#666666"]
+                    donut_widget.values = donut_values
+                    donut_widget.labels = donut_labels
+                    donut_widget.colors = donut_colors
+                    donut_widget.update()
+                    return
+                
+                # Transform income statement data to expense chart format
+                try:
+                    from src.core.chart_data_transformer import ChartDataTransformer
+                    transformer = ChartDataTransformer(self.system)
+                    expense_breakdown = transformer.transform_income_statement_to_expense_chart(income_statement)
+                except Exception as e:
+                    print(f"❌ Error transforming expense data: {e}")
+                    donut_labels = ["Error"]
+                    donut_values = [1]
+                    donut_colors = ["#666666"]
+                    donut_widget.values = donut_values
+                    donut_widget.labels = donut_labels
+                    donut_widget.colors = donut_colors
+                    donut_widget.update()
+                    return
                 
                 if expense_breakdown:
                     # Extract data for donut chart
@@ -629,6 +732,21 @@ class DashboardPage(QWidget):
     def _load_data(self):
         """Load and display financial data."""
         self._update_metrics()
+        
+    def _show_no_data_chart(self, plot_widget, message="No data available"):
+        """Show no data message on chart"""
+        plot_widget.clear()
+        plot_widget.setLabel('left', "Value", color='white', size='10pt')
+        plot_widget.setLabel('bottom', "Period", color='white', size='10pt')
+        plot_widget.addLegend(offset=(10,10), labelTextColor='white', brush=pg.mkBrush(30,32,36,180))
+        
+        # Add text item to show no data message
+        from PyQt6.QtGui import QColor
+        text_item = pg.TextItem(text=message, 
+                              color=QColor(255, 255, 255, 153),  # 153 = 0.6 * 255
+                              anchor=(0.5, 0.5))
+        plot_widget.addItem(text_item)
+        text_item.setPos(0.5, 0.5)
         
     def _update_metrics(self):
         """Update financial metrics cards with current data using group-based reporting."""
@@ -989,9 +1107,44 @@ class DashboardPage(QWidget):
         return getattr(mw, 'currency_symbol', '$')
         
     def _on_date_range_changed(self, start_date, end_date):
-        """Handle date range selection changes."""
+        """Handle date range selection changes with smart data validation."""
+        # Quick check for data before expensive operations
+        if hasattr(self.system, 'data_validator'):
+            if not self.system.data_validator.has_any_data():
+                # Show empty state immediately
+                self._show_empty_state()
+                return
+        
         self._update_metrics()
         # The donut chart will be updated automatically via the dateRangeChanged signal connection
+    
+    def _show_empty_state(self):
+        """Show appropriate empty state when no data is available."""
+        # Set all metrics to zero
+        self.card_cash.set_value("0.00")
+        self.card_net_income.set_value("0.00")
+        self.card_revenue_growth.set_value("0.00%")
+        self.card_expense_growth.set_value("0.00%")
+        self.card_liabilities.set_value("0.00")
+        self.card_working_capital.set_value("0.00")
+        self.card_gross_margin.set_value("0.00%")
+        self.card_operating_margin.set_value("0.00%")
+        self.card_receivables.set_value("0.00")
+        self.card_payables.set_value("0.00")
+        self.card_quick_ratio.set_value("0.00")
+        self.card_debt_equity.set_value("0.00")
+        self.card_current_ratio.set_value("0.00")
+        self.card_dso.set_value("0")
+        self.card_expenses.set_value("0.00")
+        self.card_revenue.set_value("0.00")
+        
+        # Show no data charts
+        if hasattr(self, 'chart1_plot'):
+            self._show_no_data_chart(self.chart1_plot, "No transactions available\nfor selected date range")
+        if hasattr(self, 'chart2_plot'):
+            self._show_no_data_chart(self.chart2_plot, "No financial data available\nfor selected date range")
+        
+        print("📊 Dashboard: Showing empty state - no data available")
         
     def _open_journal_entry_dialog(self):
         """Switch to the journal tab to add a new entry."""

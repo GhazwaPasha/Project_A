@@ -27,6 +27,7 @@ except ImportError:
 
 from .config import DatabaseConfig
 from .auth_manager import AuthManager
+from .smart_data_validator import smart_data_guard
 
 class OfflineCache:
     """Manages offline SQLite cache and sync operations"""
@@ -412,6 +413,14 @@ class UnifiedAccountingSystem:
         # Offline support
         self.offline_cache = OfflineCache()
         self.is_online = self._test_connectivity()
+        
+        # Initialize database calculations adapter
+        from .database_calculations import DatabaseCalculations
+        self.db_calculations = DatabaseCalculations(self.supabase)
+        
+        # Initialize smart data validator
+        from .smart_data_validator import SmartDataValidator
+        self.data_validator = SmartDataValidator(self)
         
         # Start background connectivity monitoring
         self._start_connectivity_monitor()
@@ -1529,6 +1538,7 @@ class UnifiedAccountingSystem:
     # FINANCIAL CALCULATIONS
     # ================================
     
+    @smart_data_guard('balances')
     def get_hierarchical_account_balances(self, start_date: Optional[str] = None, 
                                         end_date: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
         """
@@ -1664,66 +1674,72 @@ class UnifiedAccountingSystem:
 
     def get_trial_balance(self, start_date: Optional[str] = None, 
                          end_date: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Calculate trial balance with hierarchical aggregation."""
-        hierarchical_balances = self.get_hierarchical_account_balances(start_date, end_date)
-        accounts = self.get_chart_of_accounts(active_only=False)
-        
-        # Create account lookup for metadata
-        account_lookup = {acc['name']: acc for acc in accounts}
-        
-        # Build trial balance result
-        trial_balance = []
-        total_debits = 0.0
-        total_credits = 0.0
-        
-        for account_name, balance_info in hierarchical_balances.items():
-            debit_total = balance_info['debit_total']
-            credit_total = balance_info['credit_total']
-            net_balance = balance_info['net_balance']
+        """Get trial balance using database function."""
+        try:
+            if not self.current_organization_id:
+                return []
             
-            # Only include POSTABLE accounts with non-zero balances
-            if (balance_info['is_postable'] and 
-                (debit_total > 0 or credit_total > 0 or abs(net_balance) >= 0.01)):
+            # Convert string date to date object
+            from datetime import datetime
+            as_of_date = end_date or start_date or datetime.now().strftime('%Y-%m-%d')
+            if isinstance(as_of_date, str):
+                as_of_date_obj = datetime.strptime(as_of_date, "%Y-%m-%d").date()
+            else:
+                as_of_date_obj = as_of_date
+            
+            # Use database function to get trial balance
+            trial_balance_data = self.db_calculations.get_trial_balance(
+                org_id=self.current_organization_id,
+                as_of_date=as_of_date_obj
+            )
+            
+            if not trial_balance_data:
+                return []
+            
+            # Transform database data to expected format
+            return self._transform_trial_balance_data(trial_balance_data)
+            
+        except Exception as e:
+            print(f"Error getting trial balance from database: {e}")
+            return []
+    
+    def _transform_trial_balance_data(self, trial_balance_data: List[Dict]) -> List[Dict[str, Any]]:
+        """Transform database trial balance data to expected format."""
+        try:
+            transformed_data = []
+            
+            for account in trial_balance_data:
+                account_name = account.get('account_name', '')
+                account_type = account.get('account_type', '')
+                debit_balance = float(account.get('debit_balance', 0))
+                credit_balance = float(account.get('credit_balance', 0))
+                net_balance = float(account.get('net_balance', 0))
                 
-                account_info = account_lookup.get(account_name, {})
-                
-                # Calculate proper trial balance columns based on account type
-                account_type = account_info.get('account_type', '').lower()
-                
-                # For trial balance, we need to show the balance in the correct column
-                # Assets and Expenses have normal debit balance
-                # Liabilities, Equity, and Revenue have normal credit balance
-                if account_type in ['asset', 'expense']:
-                    # Normal debit balance accounts
-                    debit_balance = max(0, net_balance) if net_balance > 0 else 0
-                    credit_balance = max(0, -net_balance) if net_balance < 0 else 0
-                else:
-                    # Normal credit balance accounts (liability, equity, revenue)
-                    debit_balance = max(0, -net_balance) if net_balance < 0 else 0
-                    credit_balance = max(0, net_balance) if net_balance > 0 else 0
-                
-                trial_balance.append({
+                # Only include accounts with non-zero balances
+                if abs(net_balance) >= 0.01 or debit_balance > 0 or credit_balance > 0:
+                    transformed_data.append({
                     'name': account_name,
                     'debit_balance': debit_balance,
                     'credit_balance': credit_balance,
                     'net_balance': net_balance,
-                    'account_type': account_info.get('account_type', ''),
-                    'code': account_info.get('code', ''),
-                    'level': balance_info['level'],
-                    'is_postable': balance_info['is_postable'],
-                    'has_children': balance_info['has_children'],
-                    'child_count': balance_info['child_count']
-                })
-                
-                # Update totals for trial balance validation
-                total_debits += debit_balance
-                total_credits += credit_balance
-        
-        # Sort by account code for consistent display
-        trial_balance.sort(key=lambda x: x.get('code', '') or x['name'])
-        
-        return trial_balance
+                        'account_type': account_type,
+                        'code': '',  # Database doesn't return code
+                        'level': 3,  # Default level
+                        'is_postable': True,  # Default to postable
+                        'has_children': False,  # Database data is flat
+                        'child_count': 0
+                    })
+            
+            # Sort by account type, then by name
+            transformed_data.sort(key=lambda x: (x['account_type'], x['name']))
+            
+            return transformed_data
+            
+        except Exception as e:
+            print(f"Error transforming trial balance data: {e}")
+            return []
     
+    @smart_data_guard('ledger')
     def get_ledger(self, account_name: str, start_date: Optional[str] = None, 
                   end_date: Optional[str] = None) -> List[Tuple]:
         """Get ledger entries for specific account"""
@@ -1779,71 +1795,85 @@ class UnifiedAccountingSystem:
 
     def generate_income_statement_breakdown(self, start_date: Optional[str] = None, 
                                           end_date: Optional[str] = None) -> Dict[str, Any]:
-        """Generate income statement with hierarchical balance aggregation."""
+        """Generate income statement using database function."""
         try:
-            # Use hierarchical balances for accurate reporting
-            hierarchical_balances = self.get_hierarchical_account_balances(start_date, end_date)
-            accounts = self.get_chart_of_accounts(active_only=False)
+            if not self.current_organization_id:
+                return {'error': 'No organization ID available'}
             
-            # Create account type lookup and hierarchy mapping
-            account_types = {acc['name']: acc.get('account_type', '').lower() for acc in accounts}
-            account_by_id = {acc['id']: acc for acc in accounts}
+            # Convert string dates to date objects
+            from datetime import datetime
+            if isinstance(start_date, str):
+                start_date_obj = datetime.strptime(start_date, "%Y-%m-%d").date()
+            else:
+                start_date_obj = start_date or datetime.now().date().replace(month=1, day=1)
             
-            # Build hierarchical structure for income statement sections
-            def build_income_hierarchy(account_type_filter):
-                """Build hierarchical tree for income statement accounts."""
-                tree = []
+            if isinstance(end_date, str):
+                end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
+            else:
+                end_date_obj = end_date or datetime.now().date()
+            
+            # Use database function to generate income statement
+            income_statement_data = self.db_calculations.generate_income_statement(
+                org_id=self.current_organization_id,
+                from_date=start_date_obj,
+                to_date=end_date_obj
+            )
+            
+            if not income_statement_data:
+                return {'error': 'Failed to generate income statement from database'}
+            
+            # Transform database data to expected format
+            return self._transform_income_statement_data(income_statement_data, start_date, end_date)
+            
+        except Exception as e:
+            print(f"Error generating income statement from database: {e}")
+            # Fallback to original method
+            return self._generate_income_statement_fallback(start_date, end_date)
+    
+    def _transform_income_statement_data(self, income_statement_data: List[Dict], start_date: str, end_date: str) -> Dict:
+        """Transform database income statement data to expected format."""
+        try:
+            # Group accounts by type
+            revenues = []
+            expenses = []
+            cogs = []
+            
+            for account in income_statement_data:
+                account_type = account.get('account_type', '').lower()
+                amount = float(account.get('amount', 0))
+                account_name = account.get('account_name', '')
                 
-                # Get accounts of the specified type
-                type_accounts = [acc for acc in accounts if acc.get('account_type', '').lower() == account_type_filter]
-                
-                # Build parent-child relationships
-                for account in type_accounts:
-                    if not account.get('parent_id'):  # Root accounts
-                        node = self._build_account_node(account, type_accounts, hierarchical_balances, account_by_id)
-                        if node:  # Only add if has balance or children
-                            tree.append(node)
-                
-                return sorted(tree, key=lambda x: x['code'] or x['name'])
-            
-            # Build hierarchical trees for each section
-            revenues_tree = build_income_hierarchy('revenue')
-            expenses_tree = build_income_hierarchy('expense')
-            
-            # Separate COGS from other expenses
-            cogs_tree = []
-            operating_expenses_tree = []
-            
-            for node in expenses_tree:
-                if 'cost' in node['name'].lower() or 'cogs' in node['name'].lower():
-                    cogs_tree.append(node)
+                if account_type == 'income':
+                    revenues.append((account_name, amount))
+                elif account_type == 'expense':
+                    if 'cost' in account_name.lower() or 'cogs' in account_name.lower():
+                        cogs.append((account_name, abs(amount)))
                 else:
-                    operating_expenses_tree.append(node)
+                        expenses.append((account_name, abs(amount)))
             
             # Calculate totals
-            total_revenue = self._calculate_tree_total(revenues_tree)
-            total_cogs = self._calculate_tree_total(cogs_tree)
-            total_expenses = self._calculate_tree_total(operating_expenses_tree)
+            total_revenue = sum(rev[1] for rev in revenues)
+            total_cogs = sum(cog[1] for cog in cogs)
+            total_expenses = sum(exp[1] for exp in expenses)
             gross_profit = total_revenue - total_cogs
             net_income = gross_profit - total_expenses
             
             return {
-                'revenues': revenues_tree,
-                'cogs': cogs_tree,
-                'expenses': operating_expenses_tree,
+                'revenues': sorted(revenues, key=lambda x: x[0]),
+                'cogs': sorted(cogs, key=lambda x: x[0]),
+                'expenses': sorted(expenses, key=lambda x: x[0]),
                 'total_revenue': total_revenue,
                 'total_cogs': total_cogs,
                 'total_expenses': total_expenses,
                 'gross_profit': gross_profit,
                 'net_income': net_income,
                 'period': f"{start_date or 'All Time'} to {end_date or 'Current'}",
-                'is_hierarchical': True
+                'is_hierarchical': False  # Database data is flat
             }
             
         except Exception as e:
-            print(f"Error generating hierarchical income statement: {e}")
-            # Fallback to original method
-            return self._generate_income_statement_fallback(start_date, end_date)
+            print(f"Error transforming income statement data: {e}")
+            return {'error': f'Data transformation error: {str(e)}'}
     
     def _generate_income_statement_fallback(self, start_date: Optional[str] = None, 
                                           end_date: Optional[str] = None) -> Dict[str, Any]:
@@ -1920,65 +1950,78 @@ class UnifiedAccountingSystem:
         }
 
     def generate_balance_sheet_breakdown(self, as_of_date: str) -> Dict:
-        """Generate balance sheet with hierarchical balance aggregation and proper classifications."""
+        """Generate balance sheet using database function."""
         try:
-            # Use hierarchical balances for accurate reporting
-            hierarchical_balances = self.get_hierarchical_account_balances(None, as_of_date)
-            accounts = self.get_chart_of_accounts(active_only=False)
-            classifications = self.get_account_classifications()
+            if not self.current_organization_id:
+                return {'error': 'No organization ID available'}
             
-            # Create account type lookup and hierarchy mapping
-            account_types = {acc['name']: acc.get('account_type', '').lower() for acc in accounts}
-            account_by_id = {acc['id']: acc for acc in accounts}
+            # Convert string date to date object
+            from datetime import datetime
+            if isinstance(as_of_date, str):
+                as_of_date_obj = datetime.strptime(as_of_date, "%Y-%m-%d").date()
+            else:
+                as_of_date_obj = as_of_date
             
-            # Build hierarchical structure with classifications
-            def build_classified_tree(account_type_filter):
-                """Build hierarchical tree for specific account type with classifications."""
-                tree = []
-                
-                # Get accounts of the specified type
-                type_accounts = [acc for acc in accounts if acc.get('account_type', '').lower() == account_type_filter]
-                
-                # Group by classification
-                classified_accounts = {
-                    'current_asset': [],
-                    'fixed_asset': [],
-                    'other_asset': [],
-                    'current_liability': [],
-                    'long_term_liability': [],
-                    'other_liability': []
+            # Use database function to generate balance sheet
+            balance_sheet_data = self.db_calculations.generate_balance_sheet(
+                org_id=self.current_organization_id,
+                as_of_date=as_of_date_obj
+            )
+            
+            if not balance_sheet_data:
+                return {'error': 'Failed to generate balance sheet from database'}
+            
+            # Transform database data to expected format
+            return self._transform_balance_sheet_data(balance_sheet_data, as_of_date)
+            
+        except Exception as e:
+            print(f"Error generating balance sheet from database: {e}")
+            # Fallback to original method
+            return self._generate_balance_sheet_fallback(as_of_date)
+    
+    def _transform_balance_sheet_data(self, balance_sheet_data: List[Dict], as_of_date: str) -> Dict:
+        """Transform database balance sheet data to expected format."""
+        try:
+            # Group accounts by type
+            assets = []
+            liabilities = []
+            equity = []
+            
+            for account in balance_sheet_data:
+                account_type = account.get('account_type', '').lower()
+                account_info = {
+                    'name': account.get('account_name', ''),
+                    'balance': float(account.get('balance', 0)),
+                    'account_id': account.get('account_id'),
+                    'account_type': account_type
                 }
                 
-                for account in type_accounts:
-                    classification = classifications.get(account['id'], '')
-                    if classification in classified_accounts:
-                        classified_accounts[classification].append(account)
-                    else:
-                        # Default classification based on account type
-                        if account_type_filter == 'asset':
-                            classified_accounts['other_asset'].append(account)
-                        elif account_type_filter == 'liability':
-                            classified_accounts['other_liability'].append(account)
-                
-                # Build trees for each classification
-                for classification, accounts_list in classified_accounts.items():
-                    if accounts_list:
-                        # Build parent-child relationships for this classification
-                        classification_tree = []
-                        for account in accounts_list:
-                            if not account.get('parent_id'):  # Root accounts
-                                node = self._build_account_node(account, accounts_list, hierarchical_balances, account_by_id)
-                                if node:  # Only add if has balance or children
-                                    classification_tree.append(node)
-                        
-                        if classification_tree:
-                            tree.append({
-                                'classification': classification,
-                                'name': self._get_classification_display_name(classification),
-                                'accounts': sorted(classification_tree, key=lambda x: x['code'] or x['name'])
-                            })
-                
-                return tree
+                if account_type == 'asset':
+                    assets.append(account_info)
+                elif account_type == 'liability':
+                    liabilities.append(account_info)
+                elif account_type == 'equity':
+                    equity.append(account_info)
+            
+            # Calculate totals
+            total_assets = sum(acc['balance'] for acc in assets if acc['balance'] > 0)
+            total_liabilities = sum(acc['balance'] for acc in liabilities if acc['balance'] < 0)
+            total_equity = sum(acc['balance'] for acc in equity)
+            
+            return {
+                'assets': assets,
+                'liabilities': liabilities,
+                'equity': equity,
+                'total_assets': total_assets,
+                'total_liabilities': abs(total_liabilities),
+                'total_equity': total_equity,
+                'as_of_date': as_of_date,
+                'is_hierarchical': False  # Database data is flat
+            }
+            
+        except Exception as e:
+            print(f"Error transforming balance sheet data: {e}")
+            return {'error': f'Data transformation error: {str(e)}'}
             
             # Build classified trees
             assets_classified = build_classified_tree('asset')
@@ -2849,246 +2892,8 @@ class UnifiedAccountingSystem:
         roots = [acc for acc in accounts if not acc.get('parent_id') or acc.get('parent_id') not in account_by_id]
         return [build_node(acc) for acc in roots]
 
-    def get_account_historical_balances(self, account_name: str, from_date: str, to_date: str) -> list:
-        """
-        Get historical balances for a specific account for each month between from_date and to_date (inclusive).
-        Returns a list of dicts: [{ 'period': 'Jan', 'date': '2024-01-31', 'balance': ... }, ...]
-        """
-        if not self.current_organization_id:
-            return []
-        try:
-            from datetime import datetime, timedelta
-            import calendar
-
-            # Parse input dates
-            start = datetime.strptime(from_date, "%Y-%m-%d")
-            end = datetime.strptime(to_date, "%Y-%m-%d")
-            # Build a list of month-end dates between start and end
-            month_ends = []
-            current = start.replace(day=1)
-            while current <= end:
-                # Get last day of this month
-                last_day = calendar.monthrange(current.year, current.month)[1]
-                month_end = current.replace(day=last_day)
-                # Only include if within range
-                if month_end >= start and month_end <= end:
-                    month_ends.append(month_end)
-                # Move to next month
-                if current.month == 12:
-                    current = current.replace(year=current.year+1, month=1, day=1)
-                else:
-                    current = current.replace(month=current.month+1, day=1)
-            # Always include the end date if not already present
-            if month_ends and month_ends[-1] < end:
-                month_ends.append(end)
-            elif not month_ends:
-                month_ends.append(end)
-            # Get balance as of each month end
-            historical_data = []
-            for dt in month_ends:
-                end_date_str = dt.strftime('%Y-%m-%d')
-                hierarchical_balances = self.get_hierarchical_account_balances(None, end_date_str)
-                balance_info = hierarchical_balances.get(account_name, {})
-                net_balance = balance_info.get('net_balance', 0.0)
-                month_label = dt.strftime('%b')
-                historical_data.append({
-                    'period': month_label,
-                    'date': end_date_str,
-                    'balance': net_balance
-                })
-            return historical_data
-        except Exception as e:
-            print(f"Error getting historical balances for {account_name}: {e}")
-            return []
-
-    def get_account_comparison_data(self, account1_name: str, account2_name: str, from_date: str, to_date: str) -> dict:
-        """
-        Get comparison data for two accounts for each month between from_date and to_date.
-        Returns dict with month_labels, account1, account2.
-        """
-        try:
-            account1_data = self.get_account_historical_balances(account1_name, from_date, to_date)
-            account2_data = self.get_account_historical_balances(account2_name, from_date, to_date)
-            month_labels = [d['period'] for d in account1_data] if account1_data else []
-            account1_balances = [d['balance'] for d in account1_data] if account1_data else []
-            account2_balances = [d['balance'] for d in account2_data] if account2_data else []
-            return {
-                'month_labels': month_labels,
-                'account1': {
-                    'name': account1_name,
-                    'balances': account1_balances
-                },
-                'account2': {
-                    'name': account2_name,
-                    'balances': account2_balances
-                },
-                'months': len(month_labels)
-            }
-        except Exception as e:
-            print(f"Error getting account comparison data: {e}")
-            return {
-                'month_labels': [],
-                'account1': {'name': account1_name, 'balances': []},
-                'account2': {'name': account2_name, 'balances': []},
-                'months': 0
-            }
-
-    def get_expense_breakdown_by_groups(self, from_date: str, to_date: str) -> List[Dict[str, Any]]:
-        """
-        Get expense breakdown by groups for donut chart visualization.
-        Returns list of dicts with group name, total amount, and color.
-        """
-        try:
-            # Get group-based income statement data
-            income_statement = self.generate_group_based_income_statement(from_date, to_date)
-            
-            # Define colors for each expense group
-            group_colors = {
-                'cogs': '#f44336',  # Red for COGS
-                'operating_expense': '#ff9800',  # Orange for Operating
-                'administrative_expense': '#9c27b0',  # Purple for Admin
-                'selling_expense': '#2196f3',  # Blue for Selling
-                'financial_expense': '#ff5722',  # Deep Orange for Financial
-                'other_expense': '#607d8b'  # Blue Grey for Other
-            }
-            
-            expense_breakdown = []
-            
-            # Process expense sections from income statement
-            for section in income_statement.get('expense_sections', []):
-                group_key = section.get('group', '')
-                group_name = section.get('name', '')
-                group_total = section.get('total', 0)
-                
-                # Only include groups with actual amounts
-                if group_total > 0:
-                    expense_breakdown.append({
-                        'group': group_key,
-                        'name': group_name,
-                        'amount': group_total,
-                        'color': group_colors.get(group_key, '#607d8b')  # Default to blue grey
-                    })
-            
-            # Sort by amount (largest first)
-            expense_breakdown.sort(key=lambda x: x['amount'], reverse=True)
-            
-            return expense_breakdown
-            
-        except Exception as e:
-            print(f"Error getting expense breakdown by groups: {e}")
-            # Return empty list on error
-            return []
-
-    def get_margin_trends_data(self, from_date: str, to_date: str) -> Dict[str, Any]:
-        """
-        Get historical margin trends data for chart visualization.
-        Returns data for Gross Margin, Net Margin, and Revenue Growth over the selected period.
-        """
-        try:
-            from datetime import datetime, timedelta
-            import calendar
-            
-            # Parse input dates
-            start = datetime.strptime(from_date, "%Y-%m-%d")
-            end = datetime.strptime(to_date, "%Y-%m-%d")
-            
-            # Calculate monthly periods within the date range
-            monthly_data = []
-            current_date = start.replace(day=1)  # Start of first month
-            
-            while current_date <= end:
-                # Calculate end of current month
-                if current_date.month == 12:
-                    month_end = current_date.replace(year=current_date.year + 1, month=1, day=1) - timedelta(days=1)
-                else:
-                    month_end = current_date.replace(month=current_date.month + 1, day=1) - timedelta(days=1)
-                
-                # Ensure we don't exceed the requested end date
-                if month_end > end:
-                    month_end = end
-                
-                # Get income statement for this month
-                month_start_str = current_date.strftime("%Y-%m-%d")
-                month_end_str = month_end.strftime("%Y-%m-%d")
-                
-                try:
-                    income_statement = self.generate_group_based_income_statement(month_start_str, month_end_str)
-                    
-                    total_revenue = income_statement.get('total_revenue', 0)
-                    total_cogs = income_statement.get('total_cogs', 0)
-                    total_operating_expenses = income_statement.get('total_operating_expenses', 0)
-                    net_income = income_statement.get('net_income', 0)
-                    
-                    # Calculate margins
-                    gross_profit = total_revenue - total_cogs
-                    gross_margin = (gross_profit / total_revenue * 100) if total_revenue > 0 else 0
-                    net_margin = (net_income / total_revenue * 100) if total_revenue > 0 else 0
-                    
-                    monthly_data.append({
-                        'period': current_date.strftime("%Y-%m"),
-                        'gross_margin': gross_margin,
-                        'net_margin': net_margin,
-                        'revenue': total_revenue,
-                        'net_income': net_income
-                    })
-                    
-                except Exception as e:
-                    print(f"Error calculating data for {month_start_str}: {e}")
-                    # Add zero values for this month
-                    monthly_data.append({
-                        'period': current_date.strftime("%Y-%m"),
-                        'gross_margin': 0,
-                        'net_margin': 0,
-                        'revenue': 0,
-                        'net_income': 0
-                    })
-                
-                # Move to next month
-                if current_date.month == 12:
-                    current_date = current_date.replace(year=current_date.year + 1, month=1)
-                else:
-                    current_date = current_date.replace(month=current_date.month + 1)
-            
-            # Calculate revenue growth (month-over-month)
-            revenue_growth = []
-            for i, data in enumerate(monthly_data):
-                if i == 0:
-                    revenue_growth.append(0)  # First month has no growth
-                else:
-                    prev_revenue = monthly_data[i-1]['revenue']
-                    current_revenue = data['revenue']
-                    if prev_revenue > 0:
-                        growth = ((current_revenue - prev_revenue) / prev_revenue) * 100
-                    else:
-                        growth = 0 if current_revenue == 0 else 100  # 100% growth if from 0
-                    revenue_growth.append(growth)
-            
-            # Add revenue growth to monthly data
-            for i, data in enumerate(monthly_data):
-                data['revenue_growth'] = revenue_growth[i]
-            
-            return {
-                'monthly_data': monthly_data,
-                'periods': [data['period'] for data in monthly_data],
-                'gross_margins': [data['gross_margin'] for data in monthly_data],
-                'net_margins': [data['net_margin'] for data in monthly_data],
-                'revenue_growth': [data['revenue_growth'] for data in monthly_data],
-                'revenues': [data['revenue'] for data in monthly_data],
-                'net_incomes': [data['net_income'] for data in monthly_data]
-            }
-            
-        except Exception as e:
-            print(f"Error getting margin trends data: {e}")
-            # Return empty data structure
-            return {
-                'monthly_data': [],
-                'periods': [],
-                'gross_margins': [],
-                'net_margins': [],
-                'revenue_growth': [],
-                'revenues': [],
-                'net_incomes': []
-            }
+    # Chart-specific calculation methods removed - charts should consume existing data
+    # from financial ratios, ledgers, and income statements instead of duplicating calculations
 
 # ================================
 # ENHANCED FEATURES INTEGRATION

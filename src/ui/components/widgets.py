@@ -484,7 +484,9 @@ class DateRangeSelector(QWidget):
             self.from_date.setDate(QDate(today.year(), 1, 1))
             self.to_date.setDate(today)
         elif button_id == 4:  # All Time
-            self.from_date.setDate(QDate(2020, 1, 1))
+            # Go back 5 years from current date
+            five_years_ago = today.addYears(-5)
+            self.from_date.setDate(five_years_ago)
             self.to_date.setDate(today)
             
         self._on_date_changed()

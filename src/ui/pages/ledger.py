@@ -1298,6 +1298,16 @@ class LedgerPage(QWidget):
         """Refresh account balances for the selected date range with hierarchical aggregation."""
         from_date, to_date = self.date_selector.get_date_range()
         
+        # Quick check for data before expensive operations
+        if hasattr(self.system, 'data_validator'):
+            if not self.system.data_validator.has_any_data():
+                # Show empty state for all cards
+                for card in self.account_cards:
+                    card.update_balance(0.0, 0)
+                    card.setToolTip("No transactions available")
+                print("📊 Ledger: Showing empty state - no data available")
+                return
+        
         try:
             # Use the new hierarchical balance calculation
             if hasattr(self.system, 'get_hierarchical_account_balances'):
