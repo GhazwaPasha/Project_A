@@ -1862,7 +1862,18 @@ class RatioAnalysisView(BaseFinancialStatementView):
         if not ratios:
             # Display a message if no data is available
             no_data_label = QLabel(f"No {category.lower()} ratios available to display.")
-            no_data_label.setStyleSheet("color: white; font-size: 14px;")
+            no_data_label.setStyleSheet("""
+                QLabel {
+                    color: rgba(255, 255, 255, 0.7);
+                    font-size: 16px;
+                    font-weight: 500;
+                    background: rgba(255, 255, 255, 0.05);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 8px;
+                    padding: 40px 20px;
+                    text-align: center;
+                }
+            """)
             no_data_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.cards_layout.addWidget(no_data_label, 0, 0, 1, 2) # Span across 2 columns
             return
@@ -2053,9 +2064,21 @@ class RatioAnalysisView(BaseFinancialStatementView):
     def show_ratio_analysis(self, ratio_data: dict, summary_points: list):
         """Display the ratio analysis with the provided data."""
         self.ratio_data = ratio_data
-        self.summary_points = summary_points
+        self.summary_points = summary_points if summary_points else []
+        
+        # Update summary section
         self._update_summary_section()
+        
+        # Load ratio cards for the current category
         self._load_ratio_cards_for_category(self.current_category)
+        
+        # If no ratio data is available, show a message
+        if not ratio_data:
+            print("⚠️ No ratio data available for display")
+        else:
+            print(f"✅ Loaded ratio data with {len(ratio_data)} categories")
+            for category, ratios in ratio_data.items():
+                print(f"   {category}: {len(ratios)} ratios")
     
     def refresh_data(self):
         """Refresh ratio analysis data when organization context changes."""

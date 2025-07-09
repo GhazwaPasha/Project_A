@@ -629,70 +629,27 @@ class ReportsPage(QWidget):
     
     def _handle_statement_click(self, statement_name):
         """Handle financial statement card clicks."""
-        # Get current date range and convert to string format
-        from_date_obj, to_date_obj = self.date_selector.get_date_range()
-        from_date = from_date_obj.toString("yyyy-MM-dd") if from_date_obj else None
-        to_date = to_date_obj.toString("yyyy-MM-dd") if to_date_obj else None
-        
-        # Navigate to existing tabs for Ledger and Trial Balance
-        if statement_name == "General Ledger":
-            # Navigate to Ledger tab (index 2)
-            main_window = self.window()
-            if hasattr(main_window, 'setCurrentIndexByName'):
-                main_window.setCurrentIndexByName("Ledger")
-        elif statement_name == "Trial Balance":
-            # Navigate to Trial Balance tab (index 3)
-            main_window = self.window()
-            if hasattr(main_window, 'setCurrentIndexByName'):
-                main_window.setCurrentIndexByName("Trial Balance")
-        # Navigate to detailed report views for financial statements
-        elif statement_name == "Income Statement":
-            self.income_statement_view.show_income_statement(self.system, from_date, to_date)
-            self.stacked_widget.setCurrentIndex(1)  # Income Statement view
-        elif statement_name == "Balance Sheet":
-            self.balance_sheet_view.show_balance_sheet(self.system, to_date)
-            self.stacked_widget.setCurrentIndex(2)  # Balance Sheet view
-        elif statement_name == "Cash Flow Statement":
-            self.cash_flow_view.show_cash_flow_statement(self.system, from_date, to_date)
-            self.stacked_widget.setCurrentIndex(3)  # Cash Flow view
-        elif statement_name == "Statement of Equity":
-            self.equity_statement_view.show_statement_of_equity(self.system, from_date, to_date)
-            self.stacked_widget.setCurrentIndex(4)  # Equity Statement view
-        else:            QMessageBox.information(self, "Financial Statement", 
-                                  f"Generating {statement_name}...\nThis feature will be implemented soon!")
-    
-    def _handle_ratio_click(self, ratio_name):
-        """Handle ratio card clicks."""
         try:
-            # Check if system has enhanced ratio calculator
-            if hasattr(self.system, 'ratio_calculator'):
-                if "Liquidity" in ratio_name:
-                    ratios = self.system.ratio_calculator.calculate_liquidity_ratios()
-                    self._show_ratio_results("Liquidity Ratios", ratios)
-                elif "Profitability" in ratio_name:
-                    ratios = self.system.ratio_calculator.calculate_profitability_ratios()
-                    self._show_ratio_results("Profitability Ratios", ratios)
-                elif "Leverage" in ratio_name:
-                    ratios = self.system.ratio_calculator.calculate_leverage_ratios()
-                    self._show_ratio_results("Leverage Ratios", ratios)
-                elif "Efficiency" in ratio_name:
-                    ratios = self.system.ratio_calculator.calculate_efficiency_ratios()
-                    self._show_ratio_results("Efficiency Ratios", ratios)
-                elif "Market" in ratio_name:
-                    ratios = self.system.ratio_calculator.calculate_market_ratios()
-                    self._show_ratio_results("Market Ratios", ratios)
-                elif "Growth" in ratio_name:
-                    ratios = self.system.ratio_calculator.calculate_growth_ratios()
-                    self._show_ratio_results("Growth Ratios", ratios)
-                else:
-                    # Calculate all ratios
-                    all_ratios = self.system.ratio_calculator.calculate_all_ratios()
-                    self._show_ratio_results("All Financial Ratios", all_ratios)
-            else:
-                QMessageBox.information(self, "Financial Ratios", 
-                                      f"Calculating {ratio_name}...\nThis feature is available with enhanced system features!")
+            if "Income Statement" in statement_name:
+                self.stacked_widget.setCurrentWidget(self.income_statement_view)
+                from_date_obj, to_date_obj = self.date_selector.get_date_range()
+                self.income_statement_view.show_income_statement(self.system, from_date_obj.toPyDate(), to_date_obj.toPyDate())
+            elif "Balance Sheet" in statement_name:
+                self.stacked_widget.setCurrentWidget(self.balance_sheet_view)
+                from_date_obj, to_date_obj = self.date_selector.get_date_range()
+                self.balance_sheet_view.show_balance_sheet(self.system, to_date_obj.toPyDate())
+            elif "Cash Flow Statement" in statement_name:
+                self.stacked_widget.setCurrentWidget(self.cash_flow_view)
+                from_date_obj, to_date_obj = self.date_selector.get_date_range()
+                self.cash_flow_view.show_cash_flow_statement(self.system, from_date_obj.toPyDate(), to_date_obj.toPyDate())
+            elif "Statement of Equity" in statement_name:
+                self.stacked_widget.setCurrentWidget(self.equity_statement_view)
+                from_date_obj, to_date_obj = self.date_selector.get_date_range()
+                self.equity_statement_view.show_statement_of_equity(self.system, from_date_obj.toPyDate(), to_date_obj.toPyDate())
+            else:            QMessageBox.information(self, "Financial Statement", 
+                                  f"Generating {statement_name}...\nThis feature will be implemented soon!")
         except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to calculate ratios: {str(e)}")
+            QMessageBox.warning(self, "Error", f"Failed to generate statement: {str(e)}")
     
     def _handle_analysis_click(self, analysis_name):
         """Handle analysis report card clicks."""
@@ -773,6 +730,7 @@ class ReportsPage(QWidget):
             'gross_profit_margin': {'name': 'Gross Profit Margin', 'target': '>30%'},
             'net_profit_margin': {'name': 'Net Profit Margin', 'target': '>10%'},
             'return_on_assets': {'name': 'Return on Assets', 'target': '>5%'},
+            'roa': {'name': 'Return on Assets', 'target': '>5%'},
             'return_on_equity': {'name': 'Return on Equity', 'target': '>12%'},
             'debt_to_equity': {'name': 'Debt-to-Equity Ratio', 'target': '<0.5'},
             'debt_ratio': {'name': 'Debt Ratio', 'target': '<0.4'},
@@ -793,8 +751,10 @@ class ReportsPage(QWidget):
         if not summary_points:
             summary_points.append("Financial ratios indicate a strong and healthy financial position.")
 
-        # Transform each ratio
-        for category, ratios in calculator_output.get('ratios', {}).items():
+        # Transform each ratio from the database structure
+        ratios_data = calculator_output.get('ratios', {})
+        
+        for category, ratios in ratios_data.items():
             ui_category = category.capitalize()
             if ui_category in transformed_data:
                 for key, data in ratios.items():
@@ -809,78 +769,90 @@ class ReportsPage(QWidget):
                         else:
                             status = 'Good'
                             
-                        # Format value based on unit
+                        # Get the value from the database structure
+                        value = data.get('value', 0)
+                        label = data.get('label', definition['name'])
+                        
+                        # Format value based on the ratio type
                         value_str = ""
-                        if data['unit'] == 'percentage':
-                            value_str = f"{data['value']:.2f}%"
-                        elif data['unit'] == 'currency':
-                            value_str = format_currency(data['value'])
-                        elif data['unit'] == 'days':
-                            value_str = f"{data['value']:.0f} days"
+                        if 'margin' in key or 'roa' in key:
+                            value_str = f"{value:.2f}%"
+                        elif 'ratio' in key:
+                            value_str = f"{value:.2f}"
+                        elif 'capital' in key:
+                            value_str = format_currency(value)
                         else:
-                            value_str = f"{data['value']:.2f}"
+                            value_str = f"{value:.2f}"
+
+                        # Generate interpretation based on value and target
+                        interpretation = self._generate_ratio_interpretation(key, value, definition['target'])
 
                         transformed_data[ui_category].append({
-                            'name': definition['name'],
+                            'name': label,
                             'value': value_str,
                             'target': definition['target'],
                             'status': status,
                             'trend': '→',  # Placeholder for trend
-                            'interpretation': data.get('interpretation', '')
+                            'interpretation': interpretation
                         })
 
         return transformed_data, summary_points
-            
-    def _show_ratio_results(self, title, ratios):
-        """Show ratio calculation results in a formatted dialog."""
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem, QDialogButtonBox
+    
+    def _generate_ratio_interpretation(self, ratio_key, value, target):
+        """Generate interpretation text for a ratio based on its value and target."""
+        if 'current_ratio' in ratio_key:
+            if value >= 2.0:
+                return "Excellent liquidity position with strong ability to meet short-term obligations."
+            elif value >= 1.5:
+                return "Good liquidity position with adequate ability to meet short-term obligations."
+            elif value >= 1.0:
+                return "Acceptable liquidity, but monitor closely for potential cash flow issues."
+            else:
+                return "Low liquidity - immediate attention required to improve cash position."
         
-        dialog = QDialog(self)
-        dialog.setWindowTitle(title)
-        dialog.setModal(True)
-        dialog.resize(600, 400)
+        elif 'quick_ratio' in ratio_key:
+            if value >= 1.0:
+                return "Strong short-term liquidity without relying on inventory."
+            elif value >= 0.8:
+                return "Adequate short-term liquidity, but consider inventory management."
+            else:
+                return "Weak short-term liquidity - focus on cash and receivables management."
         
-        layout = QVBoxLayout(dialog)
+        elif 'gross_profit_margin' in ratio_key:
+            if value >= 30:
+                return "Excellent gross profit margin indicating strong pricing power and cost control."
+            elif value >= 20:
+                return "Good gross profit margin with room for improvement in pricing or costs."
+            else:
+                return "Low gross profit margin - review pricing strategy and cost structure."
         
-        # Create table for ratios
-        table = QTableWidget()
-        table.setColumnCount(3)
-        table.setHorizontalHeaderLabels(["Ratio", "Value", "Interpretation"])
+        elif 'net_profit_margin' in ratio_key:
+            if value >= 10:
+                return "Strong net profit margin indicating excellent operational efficiency."
+            elif value >= 5:
+                return "Good net profit margin with potential for operational improvements."
+            else:
+                return "Low net profit margin - focus on cost reduction and revenue growth."
         
-        # Populate table
-        if ratios and 'ratios' in ratios:
-            ratio_list = ratios['ratios']
-            table.setRowCount(len(ratio_list))
-            
-            for row, ratio in enumerate(ratio_list):
-                table.setItem(row, 0, QTableWidgetItem(ratio.get('name', '')))
-                table.setItem(row, 1, QTableWidgetItem(f"{ratio.get('value', 0):.2f}"))
-                table.setItem(row, 2, QTableWidgetItem(ratio.get('interpretation', '')))
+        elif 'debt_to_equity' in ratio_key:
+            if value <= 0.5:
+                return "Conservative debt levels with strong financial flexibility."
+            elif value <= 1.0:
+                return "Moderate debt levels with acceptable financial risk."
+            else:
+                return "High debt levels - consider debt reduction strategies."
+        
+        elif 'roa' in ratio_key:
+            if value >= 8:
+                return "Excellent return on assets indicating efficient use of resources."
+            elif value >= 5:
+                return "Good return on assets with potential for operational improvements."
+            else:
+                return "Low return on assets - focus on asset utilization and profitability."
+        
         else:
-            # Mock data for demonstration
-            mock_ratios = [
-                {"name": "Current Ratio", "value": 2.5, "interpretation": "Good liquidity"},
-                {"name": "Quick Ratio", "value": 1.8, "interpretation": "Strong short-term liquidity"},
-                {"name": "ROE", "value": 0.15, "interpretation": "15% return on equity"},
-            ]
-            table.setRowCount(len(mock_ratios))
+            return f"Ratio value of {value:.2f} compared to target of {target}."
             
-            for row, ratio in enumerate(mock_ratios):
-                table.setItem(row, 0, QTableWidgetItem(ratio['name']))
-                table.setItem(row, 1, QTableWidgetItem(f"{ratio['value']:.2f}"))
-                table.setItem(row, 2, QTableWidgetItem(ratio['interpretation']))
-        
-        # Auto-resize columns
-        table.resizeColumnsToContents()
-        layout.addWidget(table)
-        
-        # Dialog buttons
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
-        buttons.accepted.connect(dialog.accept)
-        layout.addWidget(buttons)
-        
-        dialog.exec()
-        
     def _show_budget_analysis(self, title, analysis):
         """Show budget analysis results."""
         from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox

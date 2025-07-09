@@ -2952,54 +2952,22 @@ class UnifiedAccountingSystem:
         roots = [acc for acc in accounts if not acc.get('parent_id') or acc.get('parent_id') not in account_by_id]
         return [build_node(acc) for acc in roots]
 
-    # Chart-specific calculation methods removed - charts should consume existing data
-    # from financial ratios, ledgers, and income statements instead of duplicating calculations
+    # ================================
+    # ENHANCED FEATURES INTEGRATION
+    # ================================
+    
+    # Financial ratios are now calculated directly from database functions
+    # See src/core/financial_ratios.py for the FinancialRatioCalculator class
+    # which uses optimized database functions for better performance and accuracy
 
 # ================================
 # ENHANCED FEATURES INTEGRATION
 # (These would normally be separate modules, but included here for completeness)
 # ================================
 
-class FinancialRatios:
-    """Calculate financial ratios from accounting data"""
-    
-    def __init__(self, accounting_system: UnifiedAccountingSystem):
-        self.system = accounting_system
-        self.logger = logging.getLogger(__name__)
-    
-    def calculate_liquidity_ratios(self, as_of_date: str) -> Dict[str, float]:
-        """Calculate liquidity ratios"""
-        balance_sheet = self.system.generate_balance_sheet_breakdown(as_of_date)
-        
-        total_assets = balance_sheet.get('total_assets', 0)
-        total_liabilities = balance_sheet.get('total_liabilities', 0)
-        
-        ratios = {}
-        
-        if total_liabilities > 0:
-            ratios['current_ratio'] = total_assets / total_liabilities
-        else:
-            ratios['current_ratio'] = float('inf')  # No liabilities
-        
-        return ratios
-    
-    def calculate_profitability_ratios(self, start_date: str, end_date: str) -> Dict[str, float]:
-        """Calculate profitability ratios"""
-        income_statement = self.system.generate_income_statement_breakdown(start_date, end_date)
-        
-        revenue = income_statement.get('revenue_total', 0)
-        net_income = income_statement.get('net_income', 0)
-        
-        ratios = {}
-        
-        if revenue > 0:
-            ratios['net_profit_margin'] = (net_income / revenue) * 100
-            ratios['gross_profit_margin'] = (revenue - income_statement.get('expense_total', 0)) / revenue * 100
-        else:
-            ratios['net_profit_margin'] = 0
-            ratios['gross_profit_margin'] = 0
-        
-        return ratios
+# Financial ratios are now calculated directly from database functions
+# See src/core/financial_ratios.py for the FinancialRatioCalculator class
+# which uses optimized database functions for better performance and accuracy
 
 
 # Create alias for backward compatibility
