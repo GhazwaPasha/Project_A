@@ -14,6 +14,7 @@ class CacheStrategy(Enum):
     SHORT_TERM = 30  # 30 seconds - for frequently changing data
     MEDIUM_TERM = 300  # 5 minutes - for moderately stable data
     LONG_TERM = 1800  # 30 minutes - for stable data
+    PERMISSIONS = 3600  # 1 hour - for user permissions (rarely change)
     SESSION = -1  # Until session ends - for user-specific data
 
 

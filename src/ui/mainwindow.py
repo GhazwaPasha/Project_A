@@ -1562,6 +1562,9 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             
             print(f"🔍 DEBUG: Personal workspace hidden pages: {personal_workspace_hidden}")
             
+            # Get all permissions in a single call to minimize RPC calls
+            all_permissions = auth_manager.get_all_page_permissions_single_rpc(org_id)
+            
             # Update button visibility based on permissions
             visible_count = 0
             for i, button in enumerate(self.sidebar_buttons):
@@ -1572,17 +1575,12 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
                     should_show = False
                     print(f"🔍 DEBUG: Page {i} hidden for personal workspace")
                 elif page_mappings.get(i):
-                    # Check database permissions for this page
+                    # Use the all permissions result
                     page_key = page_mappings[i]
-                    try:
-                        can_view = auth_manager.can_access_page(page_key, org_id, 'view')
-                        should_show = can_view
-                        print(f"🔍 DEBUG: Page {i} ({page_key}): can_view = {can_view}")
-                        
-                    except Exception as e:
-                        print(f"🔍 DEBUG: Error checking permissions for page {i} ({page_key}): {e}")
-                        # Default to hiding on error, except for dashboard
-                        should_show = (i == 0)  # Dashboard should be visible by default
+                    page_perms = all_permissions.get(page_key, {})
+                    can_view = page_perms.get('view', False)
+                    should_show = can_view
+                    print(f"🔍 DEBUG: Page {i} ({page_key}): can_view = {can_view}")
                         
                 else:
                     # No specific permission mapping - default behavior

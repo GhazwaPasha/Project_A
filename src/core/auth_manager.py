@@ -447,8 +447,8 @@ class AuthManager:
             from .rpc_cache_manager import rpc_cache, CacheStrategy
             cache_key = f"page_access_{self.current_user.id}_{org_id}_{page_key}_{permission_type}"
             
-            # Check cache first
-            cached_result = rpc_cache.get_cached_result(cache_key, CacheStrategy.MEDIUM_TERM)
+            # Check cache first - use longer cache for permissions
+            cached_result = rpc_cache.get_cached_result(cache_key, CacheStrategy.PERMISSIONS)
             if cached_result is not None:
                 print(f"🔍 DEBUG can_access_page: Cache hit for {page_key}")
                 return cached_result
@@ -467,8 +467,8 @@ class AuthManager:
                 has_permission = bool(result.data) if result.data is not None else False
                 print(f"🔍 DEBUG can_access_page: RPC success! Result = {has_permission}")
                 
-                # Cache the result
-                rpc_cache.set_cached_result(cache_key, has_permission, CacheStrategy.MEDIUM_TERM)
+                # Cache the result - use longer cache for permissions
+                rpc_cache.set_cached_result(cache_key, has_permission, CacheStrategy.PERMISSIONS)
                 return has_permission
                 
             except Exception as rpc_error:
@@ -513,8 +513,8 @@ class AuthManager:
                 
                 print(f"🔍 DEBUG can_access_page: Role-based check - {user_role} -> {page_key} -> {permission_type} = {has_permission}")
                 
-                # Cache the result
-                rpc_cache.set_cached_result(cache_key, has_permission, CacheStrategy.MEDIUM_TERM)
+                # Cache the result - use longer cache for permissions
+                rpc_cache.set_cached_result(cache_key, has_permission, CacheStrategy.PERMISSIONS)
                 return has_permission
                 
             except Exception as role_error:
@@ -550,6 +550,68 @@ class AuthManager:
             self.logger.error(f"Failed to get user page permissions: {e}")
             return {}
     
+    def get_all_page_permissions_single_rpc(self, org_id: str) -> Dict[str, Dict[str, bool]]:
+        """Get all page permissions for the current user in a single RPC call"""
+        try:
+            if not self.db_manager:
+                self.logger.warning("No database manager available for permission check")
+                return {}
+            
+            # Create cache key for all permissions
+            from .rpc_cache_manager import rpc_cache, CacheStrategy
+            cache_key = f"all_page_permissions_{self.current_user.id}_{org_id}"
+            
+            # Check cache first - use longer cache for permissions
+            cached_result = rpc_cache.get_cached_result(cache_key, CacheStrategy.PERMISSIONS)
+            if cached_result is not None:
+                self.logger.debug(f"Cache hit for all page permissions")
+                return cached_result
+            
+            self.logger.debug(f"Fetching all page permissions for org {org_id}")
+            
+            # Define all pages that need permission checks
+            pages = [
+                'dashboard', 'accounts', 'journal_entries', 'reports', 
+                'settings', 'user_management', 'team_management', 'organization_settings',
+                'platform_overview', 'global_organizations', 'period_closing'
+            ]
+            
+            # Try to get all permissions in a single RPC call
+            try:
+                result = self.supabase.rpc('get_all_page_permissions', {
+                    'p_org_id': org_id,
+                    'p_pages': pages
+                }).execute()
+                
+                if result.data:
+                    permissions = result.data
+                    # Cache the result for longer since permissions don't change often
+                    rpc_cache.set_cached_result(cache_key, permissions, CacheStrategy.PERMISSIONS)
+                    self.logger.debug(f"Retrieved all page permissions in single RPC call")
+                    return permissions
+                    
+            except Exception as rpc_error:
+                self.logger.debug(f"Single RPC call failed, falling back to individual calls: {rpc_error}")
+            
+            # Fallback: get permissions individually but cache them
+            permissions = {}
+            for page in pages:
+                page_perms = self.get_page_permissions(page, org_id)
+                permissions[page] = {
+                    'view': page_perms.get('view', False),
+                    'create': page_perms.get('create', False),
+                    'edit': page_perms.get('edit', False),
+                    'delete': page_perms.get('delete', False)
+                }
+            
+            # Cache the aggregated result
+            rpc_cache.set_cached_result(cache_key, permissions, CacheStrategy.PERMISSIONS)
+            return permissions
+                
+        except Exception as e:
+            self.logger.error(f"Failed to get all page permissions: {e}")
+            return {}
+
     def batch_check_page_permissions(self, org_id: str, pages: List[str], permission_type: str = 'view') -> Dict[str, bool]:
         """Batch check permissions for multiple pages to reduce RPC calls"""
         try:
@@ -576,12 +638,21 @@ class AuthManager:
                 self.logger.debug(f"All {len(pages)} page permissions found in cache")
                 return results
             
-            # For uncached pages, we could implement a batch RPC call here
-            # For now, we'll check them individually but with better logging
-            self.logger.debug(f"Checking {len(uncached_pages)} uncached page permissions")
+            # Get all permissions in a single call if possible
+            all_permissions = self.get_all_page_permissions_single_rpc(org_id)
             
+            # Use the all permissions result for uncached pages
             for page in uncached_pages:
-                results[page] = self.can_access_page(page, org_id, permission_type)
+                if page in all_permissions:
+                    has_permission = all_permissions[page].get(permission_type, False)
+                    results[page] = has_permission
+                    
+                    # Cache individual result for future use
+                    cache_key = f"page_access_{self.current_user.id}_{org_id}_{page}_{permission_type}"
+                    rpc_cache.set_cached_result(cache_key, has_permission, CacheStrategy.MEDIUM_TERM)
+                else:
+                    # Fallback to individual check
+                    results[page] = self.can_access_page(page, org_id, permission_type)
             
             return results
                 
