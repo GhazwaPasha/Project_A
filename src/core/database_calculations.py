@@ -146,6 +146,8 @@ class DatabaseCalculations:
             if not as_of_date:
                 as_of_date = date.today()
             
+            print(f"🔍 Calling generate_balance_sheet for org {org_id} as of {as_of_date}")
+            
             result = self.supabase.rpc(
                 'generate_balance_sheet',
                 {
@@ -153,6 +155,10 @@ class DatabaseCalculations:
                     'p_as_of_date': as_of_date.isoformat()
                 }
             ).execute()
+            
+            print(f"📊 Balance sheet result: {result.data}")
+            print(f"📊 Result type: {type(result.data)}")
+            print(f"📊 Result length: {len(result.data) if result.data else 0}")
             
             if result.data:
                 return result.data
@@ -165,6 +171,8 @@ class DatabaseCalculations:
     def generate_income_statement(self, org_id: str, from_date: date, to_date: date) -> List[Dict[str, Any]]:
         """Generate income statement using database function."""
         try:
+            print(f"🔍 Calling generate_income_statement for org {org_id} from {from_date} to {to_date}")
+            
             result = self.supabase.rpc(
                 'generate_income_statement',
                 {
@@ -173,6 +181,10 @@ class DatabaseCalculations:
                     'p_to_date': to_date.isoformat()
                 }
             ).execute()
+            
+            print(f"📊 Database result: {result.data}")
+            print(f"📊 Result type: {type(result.data)}")
+            print(f"📊 Result length: {len(result.data) if result.data else 0}")
             
             if result.data:
                 return result.data
@@ -188,6 +200,8 @@ class DatabaseCalculations:
             if not as_of_date:
                 as_of_date = date.today()
             
+            print(f"🔍 Calling get_trial_balance for org {org_id} as of {as_of_date}")
+            
             result = self.supabase.rpc(
                 'get_trial_balance',
                 {
@@ -195,6 +209,10 @@ class DatabaseCalculations:
                     'p_as_of_date': as_of_date.isoformat()
                 }
             ).execute()
+            
+            print(f"📊 Trial balance result: {result.data}")
+            print(f"📊 Result type: {type(result.data)}")
+            print(f"📊 Result length: {len(result.data) if result.data else 0}")
             
             if result.data:
                 return result.data

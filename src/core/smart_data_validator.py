@@ -29,23 +29,58 @@ class SmartDataValidator:
             org_id = self.system.current_organization_id
             
         if not org_id:
+            print(f"⚠️ No organization ID available for data validation")
             return False
             
         cache_key = f"has_data_{org_id}"
         
         with self._cache_lock:
             if cache_key in self._validation_cache:
-                return self._validation_cache[cache_key]
+                cached_result = self._validation_cache[cache_key]
+                print(f"📋 Using cached data validation result for org {org_id}: {cached_result}")
+                return cached_result
         
-        # Quick database check for any transactions
+        # Quick database check for any transactions or account balances
         try:
+            print(f"🔍 Checking for journal entries in org {org_id}")
             result = self.system.supabase.table('journal_entries')\
                 .select('id', count='exact')\
                 .eq('organization_id', org_id)\
                 .limit(1)\
                 .execute()
             
-            has_data = result.count > 0 if result.count is not None else False
+            journal_entries_count = result.count if result.count is not None else 0
+            print(f"📊 Journal entries count: {journal_entries_count}")
+            
+            # Also check for accounts with balances using the database function
+            try:
+                from src.core.database_calculations import DatabaseCalculations
+                db_calc = DatabaseCalculations(self.system.supabase)
+                
+                # Check for any income statement data
+                from datetime import date
+                income_data = db_calc.generate_income_statement(
+                    org_id, 
+                    date.today().replace(month=1, day=1), 
+                    date.today()
+                )
+                
+                has_income_data = bool(income_data and (
+                    (isinstance(income_data, dict) and income_data.get('accounts')) or
+                    (isinstance(income_data, list) and len(income_data) > 0)
+                ))
+                
+                print(f"📊 Has income statement data: {has_income_data}")
+                
+                # Consider having data if either journal entries OR income statement data exists
+                has_data = journal_entries_count > 0 or has_income_data
+                print(f"✅ Has data: {has_data}")
+                
+            except Exception as e:
+                print(f"⚠️ Error checking income statement data: {e}")
+                # Fallback to just journal entries
+                has_data = journal_entries_count > 0
+                print(f"✅ Has data (fallback): {has_data}")
             
             with self._cache_lock:
                 self._validation_cache[cache_key] = has_data
@@ -55,6 +90,7 @@ class SmartDataValidator:
             
         except Exception as e:
             self.logger.error(f"Error checking data existence: {e}")
+            print(f"❌ Error checking data existence: {e}")
             return False
     
     def has_accounts(self, org_id: str = None) -> bool:

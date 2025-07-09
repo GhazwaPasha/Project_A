@@ -1696,8 +1696,14 @@ class UnifiedAccountingSystem:
             if not trial_balance_data:
                 return []
             
-            # Transform database data to expected format
-            return self._transform_trial_balance_data(trial_balance_data)
+            # Check if the data is in the new format (dict with accounts array)
+            if isinstance(trial_balance_data, dict) and 'accounts' in trial_balance_data:
+                # Transform the new format to the expected format
+                accounts_list = trial_balance_data.get('accounts', [])
+                return self._transform_trial_balance_data(accounts_list)
+            else:
+                # Transform database data to expected format (old format)
+                return self._transform_trial_balance_data(trial_balance_data)
             
         except Exception as e:
             print(f"Error getting trial balance from database: {e}")
@@ -1706,9 +1712,18 @@ class UnifiedAccountingSystem:
     def _transform_trial_balance_data(self, trial_balance_data: List[Dict]) -> List[Dict[str, Any]]:
         """Transform database trial balance data to expected format."""
         try:
+            print(f"🔍 Transforming trial balance data: {len(trial_balance_data)} records")
+            if trial_balance_data:
+                print(f"📊 Sample trial balance data: {trial_balance_data[0] if trial_balance_data else 'No data'}")
+            
             transformed_data = []
             
             for account in trial_balance_data:
+                # Handle both string and dict formats
+                if isinstance(account, str):
+                    print(f"⚠️ Skipping string account: {account}")
+                    continue
+                    
                 account_name = account.get('account_name', '')
                 account_type = account.get('account_type', '')
                 debit_balance = float(account.get('debit_balance', 0))
@@ -1718,10 +1733,10 @@ class UnifiedAccountingSystem:
                 # Only include accounts with non-zero balances
                 if abs(net_balance) >= 0.01 or debit_balance > 0 or credit_balance > 0:
                     transformed_data.append({
-                    'name': account_name,
-                    'debit_balance': debit_balance,
-                    'credit_balance': credit_balance,
-                    'net_balance': net_balance,
+                        'name': account_name,
+                        'debit_balance': debit_balance,
+                        'credit_balance': credit_balance,
+                        'net_balance': net_balance,
                         'account_type': account_type,
                         'code': '',  # Database doesn't return code
                         'level': 3,  # Default level
@@ -1733,6 +1748,7 @@ class UnifiedAccountingSystem:
             # Sort by account type, then by name
             transformed_data.sort(key=lambda x: (x['account_type'], x['name']))
             
+            print(f"✅ Transformed {len(transformed_data)} trial balance records")
             return transformed_data
             
         except Exception as e:
@@ -1822,8 +1838,14 @@ class UnifiedAccountingSystem:
             if not income_statement_data:
                 return {'error': 'Failed to generate income statement from database'}
             
-            # Transform database data to expected format
-            return self._transform_income_statement_data(income_statement_data, start_date, end_date)
+            # Check if the data is in the new format (dict with accounts array)
+            if isinstance(income_statement_data, dict) and 'accounts' in income_statement_data:
+                # Transform the new format to the expected format
+                accounts_list = income_statement_data.get('accounts', [])
+                return self._transform_income_statement_data(accounts_list, start_date, end_date)
+            else:
+                # Transform database data to expected format (old format)
+                return self._transform_income_statement_data(income_statement_data, start_date, end_date)
             
         except Exception as e:
             print(f"Error generating income statement from database: {e}")
@@ -1833,6 +1855,10 @@ class UnifiedAccountingSystem:
     def _transform_income_statement_data(self, income_statement_data: List[Dict], start_date: str, end_date: str) -> Dict:
         """Transform database income statement data to expected format."""
         try:
+            print(f"🔍 Transforming income statement data: {len(income_statement_data)} records")
+            if income_statement_data:
+                print(f"📊 Sample data: {income_statement_data[0] if income_statement_data else 'No data'}")
+            
             # Group accounts by type
             revenues = []
             expenses = []
@@ -1843,13 +1869,19 @@ class UnifiedAccountingSystem:
                 amount = float(account.get('amount', 0))
                 account_name = account.get('account_name', '')
                 
-                if account_type == 'income':
+                print(f"📝 Processing account: {account_name} ({account_type}) = {amount}")
+                
+                if account_type == 'revenue':
                     revenues.append((account_name, amount))
                 elif account_type == 'expense':
                     if 'cost' in account_name.lower() or 'cogs' in account_name.lower():
                         cogs.append((account_name, abs(amount)))
-                else:
+                    else:
                         expenses.append((account_name, abs(amount)))
+            
+            print(f"💰 Revenue accounts: {len(revenues)}")
+            print(f"💸 Expense accounts: {len(expenses)}")
+            print(f"📦 COGS accounts: {len(cogs)}")
             
             # Calculate totals
             total_revenue = sum(rev[1] for rev in revenues)
@@ -1971,8 +2003,14 @@ class UnifiedAccountingSystem:
             if not balance_sheet_data:
                 return {'error': 'Failed to generate balance sheet from database'}
             
-            # Transform database data to expected format
-            return self._transform_balance_sheet_data(balance_sheet_data, as_of_date)
+            # Check if the data is in the new format (dict with accounts array)
+            if isinstance(balance_sheet_data, dict) and 'accounts' in balance_sheet_data:
+                # Transform the new format to the expected format
+                accounts_list = balance_sheet_data.get('accounts', [])
+                return self._transform_balance_sheet_data(accounts_list, as_of_date)
+            else:
+                # Transform database data to expected format (old format)
+                return self._transform_balance_sheet_data(balance_sheet_data, as_of_date)
             
         except Exception as e:
             print(f"Error generating balance sheet from database: {e}")
@@ -1982,12 +2020,21 @@ class UnifiedAccountingSystem:
     def _transform_balance_sheet_data(self, balance_sheet_data: List[Dict], as_of_date: str) -> Dict:
         """Transform database balance sheet data to expected format."""
         try:
+            print(f"🔍 Transforming balance sheet data: {len(balance_sheet_data)} records")
+            if balance_sheet_data:
+                print(f"📊 Sample balance sheet data: {balance_sheet_data[0] if balance_sheet_data else 'No data'}")
+            
             # Group accounts by type
             assets = []
             liabilities = []
             equity = []
             
             for account in balance_sheet_data:
+                # Handle both string and dict formats
+                if isinstance(account, str):
+                    print(f"⚠️ Skipping string account: {account}")
+                    continue
+                    
                 account_type = account.get('account_type', '').lower()
                 account_info = {
                     'name': account.get('account_name', ''),
@@ -2007,6 +2054,9 @@ class UnifiedAccountingSystem:
             total_assets = sum(acc['balance'] for acc in assets if acc['balance'] > 0)
             total_liabilities = sum(acc['balance'] for acc in liabilities if acc['balance'] < 0)
             total_equity = sum(acc['balance'] for acc in equity)
+            
+            print(f"💰 Assets: {len(assets)}, Liabilities: {len(liabilities)}, Equity: {len(equity)}")
+            print(f"📊 Totals - Assets: {total_assets}, Liabilities: {abs(total_liabilities)}, Equity: {total_equity}")
             
             return {
                 'assets': assets,
