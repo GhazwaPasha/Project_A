@@ -123,7 +123,7 @@ class ModernSidebarButton(QPushButton):
 class MainWindow(QMainWindow, MicaWindowWithBorders):
     def __init__(self, auth_manager=None, session_manager=None):
         super().__init__()
-        self.setWindowTitle("AI Accountant - Multi-Tenant SaaS")
+        self.setWindowTitle("Accountuitive - Multi-Tenant SaaS")
         self.setMinimumSize(1200, 800)
           # Store authentication context
         self.auth_manager = auth_manager
@@ -523,7 +523,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         icon_label.setPixmap(QIcon(os.path.join("assets", "icons", "dashboard_new.svg")).pixmap(20, 20))
         left_layout.addWidget(icon_label)
         
-        title_label = QLabel("AI Accountant")
+        title_label = QLabel("Accountuitive")
         title_label.setObjectName("WindowTitle")
         left_layout.addWidget(title_label)
         left_layout.addStretch()  # Push title to left
@@ -1447,7 +1447,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         """Add a welcome notification to test the notification system."""
         try:
             self.add_notification(
-                "Welcome to AI Accountant!",
+                "Welcome to Accountuitive!",
                 "Your intelligent accounting companion is ready to help you manage your finances.",
                 "info"
             )

@@ -14,7 +14,7 @@ class SignupDialog(QDialog):
         super().__init__(parent)
         self.auth_manager = auth_manager
         
-        self.setWindowTitle("AI Accountant - Create Account")
+        self.setWindowTitle("Accountuitive - Create Account")
         self.setModal(True)
         self.setFixedSize(450, 550)
         

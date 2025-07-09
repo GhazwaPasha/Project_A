@@ -18,7 +18,7 @@ class LoginWindow(QDialog):
         super().__init__()
         self.auth_manager = auth_manager
         self.settings = QSettings("AI_Accountant", "LoginCredentials")
-        self.setWindowTitle("AI Accountant - Sign In")
+        self.setWindowTitle("Accountuitive - Sign In")
         self.setModal(True)
         self.setFixedSize(450, 550)  # Match signup dialog size
         

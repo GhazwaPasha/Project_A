@@ -222,7 +222,7 @@ class CleanApp:
 
 def main():
     """Main entry point"""
-    print("AI Accountant - Clean Multi-Tenant SaaS")
+    print("Accountuitive - Clean Multi-Tenant SaaS")
     print("=" * 40)
     
     if is_supabase_configured():
