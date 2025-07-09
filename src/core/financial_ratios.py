@@ -191,6 +191,104 @@ class FinancialRatioCalculator:
             'last_updated': datetime.now().isoformat()
         }
     
+    def calculate_historical_ratios(self, start_date: date, end_date: date, 
+                                  period_type: str = 'monthly') -> Dict[str, Any]:
+        """Calculate historical ratios for multiple periods efficiently."""
+        try:
+            historical_data = {}
+            
+            # Generate periods based on period_type
+            periods = self._generate_historical_periods(start_date, end_date, period_type)
+            
+            for period in periods:
+                period_start = period['start_date']
+                period_end = period['end_date']
+                period_key = period['key']
+                
+                # Calculate ratios for this period
+                period_ratios = self.calculate_all_ratios(
+                    as_of_date=period_end,
+                    from_date=period_start,
+                    to_date=period_end
+                )
+                
+                if 'error' not in period_ratios:
+                    historical_data[period_key] = period_ratios
+                else:
+                    print(f"Warning: Failed to calculate ratios for period {period_key}")
+                    historical_data[period_key] = {'error': period_ratios['error']}
+            
+            return {
+                'historical_data': historical_data,
+                'periods': periods,
+                'start_date': start_date.isoformat(),
+                'end_date': end_date.isoformat(),
+                'period_type': period_type
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating historical ratios: {e}")
+            return {'error': f'Historical ratio calculation error: {str(e)}'}
+    
+    def _generate_historical_periods(self, start_date: date, end_date: date, 
+                                   period_type: str) -> List[Dict[str, Any]]:
+        """Generate historical periods for ratio calculation."""
+        periods = []
+        current_date = start_date.replace(day=1)  # Start from beginning of month
+        
+        while current_date <= end_date:
+            # Calculate period end date
+            if period_type == 'monthly':
+                # Last day of current month
+                if current_date.month == 12:
+                    period_end = current_date.replace(year=current_date.year + 1, month=1, day=1) - timedelta(days=1)
+                else:
+                    period_end = current_date.replace(month=current_date.month + 1, day=1) - timedelta(days=1)
+                
+                period_key = current_date.strftime('%Y-%m')
+                
+            elif period_type == 'quarterly':
+                # Calculate quarter end
+                quarter = (current_date.month - 1) // 3 + 1
+                quarter_end_month = quarter * 3
+                if quarter_end_month == 12:
+                    period_end = current_date.replace(year=current_date.year + 1, month=1, day=1) - timedelta(days=1)
+                else:
+                    period_end = current_date.replace(month=quarter_end_month + 1, day=1) - timedelta(days=1)
+                
+                period_key = f"{current_date.year}-Q{quarter}"
+                
+            else:  # yearly
+                period_end = current_date.replace(year=current_date.year + 1, month=1, day=1) - timedelta(days=1)
+                period_key = str(current_date.year)
+            
+            # Ensure period end doesn't exceed the overall end date
+            if period_end > end_date:
+                period_end = end_date
+            
+            periods.append({
+                'key': period_key,
+                'start_date': current_date,
+                'end_date': period_end,
+                'label': period_key
+            })
+            
+            # Move to next period
+            if period_type == 'monthly':
+                if current_date.month == 12:
+                    current_date = current_date.replace(year=current_date.year + 1, month=1)
+                else:
+                    current_date = current_date.replace(month=current_date.month + 1)
+            elif period_type == 'quarterly':
+                if quarter == 4:
+                    current_date = current_date.replace(year=current_date.year + 1, month=1)
+                else:
+                    current_date = current_date.replace(month=quarter * 3 + 1)
+            else:  # yearly
+                current_date = current_date.replace(year=current_date.year + 1)
+        
+        return periods
+    
     def _get_financial_statement_data(self, as_of_date: date) -> Optional[Dict[str, Any]]:
         """Get financial statement data for ratio calculations using group-based categorization."""
         try:

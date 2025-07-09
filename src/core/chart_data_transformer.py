@@ -22,44 +22,77 @@ class ChartDataTransformer:
         """
         try:
             # Validate input parameters
-            if not ratios_data:
-                print("Warning: No ratios data provided")
-                return self._get_empty_margin_data()
-            
             if not start_date or not end_date:
                 print("Warning: Invalid date range provided")
                 return self._get_empty_margin_data()
             
-            # Extract margin data from existing ratios
-            profitability_ratios = ratios_data.get('profitability', {})
+            # Convert dates to datetime objects
+            from datetime import datetime
+            start_dt = datetime.strptime(start_date, '%Y-%m-%d').date()
+            end_dt = datetime.strptime(end_date, '%Y-%m-%d').date()
             
-            if not profitability_ratios:
-                print("Warning: No profitability ratios found")
+            # Calculate historical ratios efficiently
+            from src.core.financial_ratios import FinancialRatioCalculator
+            ratio_calculator = FinancialRatioCalculator(self.accounting_system.db_manager, self.accounting_system)
+            
+            historical_ratios = ratio_calculator.calculate_historical_ratios(
+                start_date=start_dt,
+                end_date=end_dt,
+                period_type='monthly'
+            )
+            
+            if 'error' in historical_ratios:
+                print(f"Warning: Error calculating historical ratios: {historical_ratios['error']}")
                 return self._get_empty_margin_data()
             
-            gross_margin = profitability_ratios.get('gross_profit_margin', {}).get('value', 0)
-            net_margin = profitability_ratios.get('net_profit_margin', {}).get('value', 0)
+            # Extract data from historical ratios
+            historical_data = historical_ratios.get('historical_data', {})
+            periods = historical_ratios.get('periods', [])
             
-            # For historical trends, we need to get ratios for each month
-            # This is a simplified version - in practice, you'd get historical ratios
-            periods = self._generate_periods(start_date, end_date)
-            
-            if not periods:
-                print("Warning: No periods generated")
+            if not historical_data or not periods:
+                print("Warning: No historical data available")
                 return self._get_empty_margin_data()
             
-            # For now, use current ratios for all periods (simplified)
-            # In a full implementation, you'd get historical ratios for each period
-            gross_margins = [gross_margin] * len(periods)
-            net_margins = [net_margin] * len(periods)
+            # Extract margin data for each period
+            gross_margins = []
+            net_margins = []
+            revenue_growth = []
+            period_labels = []
+            
+            for period in periods:
+                period_key = period['key']
+                period_data = historical_data.get(period_key, {})
+                
+                if 'error' not in period_data:
+                    # Extract profitability ratios
+                    ratios = period_data.get('ratios', {})
+                    profitability_ratios = ratios.get('profitability', {})
+                    
+                    # Get margin values
+                    gross_margin_data = profitability_ratios.get('gross_profit_margin', {})
+                    net_margin_data = profitability_ratios.get('net_profit_margin', {})
+                    
+                    gross_margin = gross_margin_data.get('value', 0) if gross_margin_data else 0
+                    net_margin = net_margin_data.get('value', 0) if net_margin_data else 0
+                    
+                    gross_margins.append(gross_margin)
+                    net_margins.append(net_margin)
+                    revenue_growth.append(0)  # Would need historical revenue data for this
+                    period_labels.append(period['label'])
+                else:
+                    # If calculation failed for this period, use zeros
+                    gross_margins.append(0)
+                    net_margins.append(0)
+                    revenue_growth.append(0)
+                    period_labels.append(period['label'])
             
             return {
-                'periods': periods,
+                'periods': period_labels,
                 'gross_margins': gross_margins,
                 'net_margins': net_margins,
-                'revenue_growth': [0] * len(periods),  # Would need historical revenue data
-                'revenues': [0] * len(periods),  # Would need historical revenue data
-                'net_incomes': [0] * len(periods)  # Would need historical income data
+                'revenue_growth': revenue_growth,
+                'revenues': [0] * len(period_labels),  # Would need historical revenue data
+                'net_incomes': [0] * len(period_labels)  # Would need historical income data
             }
             
         except Exception as e:

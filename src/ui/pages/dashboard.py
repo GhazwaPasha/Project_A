@@ -343,27 +343,11 @@ class DashboardPage(QWidget):
                     self._show_no_data_chart(self.chart2_plot, "No accounting system available")
                     return
                 
-                # Get financial ratios data (existing calculation)
-                try:
-                    from src.core.financial_ratios import FinancialRatioCalculator
-                    ratio_calculator = FinancialRatioCalculator(self.system.db_manager, self.system)
-                    ratios_data = ratio_calculator.calculate_all_ratios()
-                    
-                    if not ratios_data or 'error' in ratios_data:
-                        print("⚠️ No financial ratios data available")
-                        self._show_no_data_chart(self.chart2_plot, "No financial data available")
-                        return
-                        
-                except Exception as e:
-                    print(f"❌ Error calculating financial ratios: {e}")
-                    self._show_no_data_chart(self.chart2_plot, "Error calculating ratios")
-                    return
-                
                 # Transform ratios data to margin chart format
                 try:
                     from src.core.chart_data_transformer import ChartDataTransformer
                     transformer = ChartDataTransformer(self.system)
-                    margin_data = transformer.transform_ratios_to_margin_chart(ratios_data, from_date_str, to_date_str)
+                    margin_data = transformer.transform_ratios_to_margin_chart({}, from_date_str, to_date_str)
                 except Exception as e:
                     print(f"❌ Error transforming data: {e}")
                     self._show_no_data_chart(self.chart2_plot, "Error transforming data")
@@ -762,20 +746,16 @@ class DashboardPage(QWidget):
         
         # Calculate derived metrics
         net_income = revenue - expenses
-        gross_margin = (revenue - self._get_cogs(from_date_str, to_date_str)) / revenue * 100 if revenue > 0 else 0
-        operating_margin = net_income / revenue * 100 if revenue > 0 else 0
         
         # Get currency symbol
         symbol = self._get_currency_symbol()
         
-          # Update card values using proper currency formatting
+        # Update card values using proper currency formatting
         self.card_cash.set_value(format_currency(cash))
         self.card_net_income.set_value(format_currency(net_income))
         self.card_liabilities.set_value(format_currency(liabilities))
         self.card_revenue.set_value(format_currency(revenue))
         self.card_expenses.set_value(format_currency(expenses))
-        self.card_gross_margin.set_value(f"{gross_margin:.1f}%")
-        self.card_operating_margin.set_value(f"{operating_margin:.1f}%")
         
         # Calculate and update ratios using the financial ratio calculator
         self._update_ratio_metrics(to_date_str)
@@ -815,6 +795,8 @@ class DashboardPage(QWidget):
                 self.card_quick_ratio.set_value("0.00")
                 self.card_debt_equity.set_value("0.00")
                 self.card_current_ratio.set_value("0.00")
+                self.card_gross_margin.set_value("0.00%")
+                self.card_operating_margin.set_value("0.00%")
                 return
             
             print(f"✅ Ratio calculation successful: {ratio_data.keys()}")
@@ -827,60 +809,69 @@ class DashboardPage(QWidget):
             liquidity_ratios = ratios.get('liquidity', {})
             print(f"💧 Liquidity ratios available: {list(liquidity_ratios.keys())}")
             quick_ratio_data = liquidity_ratios.get('quick_ratio', {})
-            quick_ratio_value = quick_ratio_data.get('value', 0.0)
-            print(f"⚡ Quick Ratio: {quick_ratio_value}")
-            self.card_quick_ratio.set_value(f"{quick_ratio_value:.2f}")
+            if quick_ratio_data:
+                quick_ratio_value = quick_ratio_data.get('value', 0)
+                self.card_quick_ratio.set_value(f"{quick_ratio_value:.2f}")
+                print(f"✅ Quick ratio updated: {quick_ratio_value:.2f}")
+            else:
+                self.card_quick_ratio.set_value("0.00")
+                print("⚠️ No quick ratio data available")
             
             # Update Current Ratio
             current_ratio_data = liquidity_ratios.get('current_ratio', {})
-            current_ratio_value = current_ratio_data.get('value', 0.0)
-            print(f"📈 Current Ratio: {current_ratio_value}")
-            self.card_current_ratio.set_value(f"{current_ratio_value:.2f}")
+            if current_ratio_data:
+                current_ratio_value = current_ratio_data.get('value', 0)
+                self.card_current_ratio.set_value(f"{current_ratio_value:.2f}")
+                print(f"✅ Current ratio updated: {current_ratio_value:.2f}")
+            else:
+                self.card_current_ratio.set_value("0.00")
+                print("⚠️ No current ratio data available")
             
             # Update Debt-to-Equity Ratio
             leverage_ratios = ratios.get('leverage', {})
             print(f"⚖️ Leverage ratios available: {list(leverage_ratios.keys())}")
             debt_equity_data = leverage_ratios.get('debt_to_equity', {})
-            debt_equity_value = debt_equity_data.get('value', 0.0)
-            print(f"🏗️ Debt-to-Equity: {debt_equity_value}")
-            self.card_debt_equity.set_value(f"{debt_equity_value:.2f}")
+            if debt_equity_data:
+                debt_equity_value = debt_equity_data.get('value', 0)
+                self.card_debt_equity.set_value(f"{debt_equity_value:.2f}")
+                print(f"✅ Debt-to-equity ratio updated: {debt_equity_value:.2f}")
+            else:
+                self.card_debt_equity.set_value("0.00")
+                print("⚠️ No debt-to-equity ratio data available")
             
-            # Add trend indicators for ratios
-            self._update_ratio_trend_indicators(quick_ratio_value, current_ratio_value, debt_equity_value)
+            # Update Profitability Ratios (Gross Margin and Operating Margin)
+            profitability_ratios = ratios.get('profitability', {})
+            print(f"💰 Profitability ratios available: {list(profitability_ratios.keys())}")
+            
+            # Update Gross Margin
+            gross_margin_data = profitability_ratios.get('gross_profit_margin', {})
+            if gross_margin_data:
+                gross_margin_value = gross_margin_data.get('value', 0)
+                self.card_gross_margin.set_value(f"{gross_margin_value:.1f}%")
+                print(f"✅ Gross margin updated: {gross_margin_value:.1f}%")
+            else:
+                self.card_gross_margin.set_value("0.00%")
+                print("⚠️ No gross margin data available")
+            
+            # Update Operating Margin (using net profit margin as proxy)
+            net_margin_data = profitability_ratios.get('net_profit_margin', {})
+            if net_margin_data:
+                net_margin_value = net_margin_data.get('value', 0)
+                self.card_operating_margin.set_value(f"{net_margin_value:.1f}%")
+                print(f"✅ Operating margin updated: {net_margin_value:.1f}%")
+            else:
+                self.card_operating_margin.set_value("0.00%")
+                print("⚠️ No operating margin data available")
             
         except Exception as e:
-            print(f"Error updating ratio metrics: {e}")
+            print(f"❌ Error updating ratio metrics: {e}")
             # Set default values on error
             self.card_quick_ratio.set_value("0.00")
             self.card_debt_equity.set_value("0.00")
             self.card_current_ratio.set_value("0.00")
+            self.card_gross_margin.set_value("0.00%")
+            self.card_operating_margin.set_value("0.00%")
             
-    def _update_ratio_trend_indicators(self, quick_ratio, current_ratio, debt_equity):
-        """Update trend indicators for ratio cards."""
-        # Quick Ratio trend (good: >1.0, excellent: >1.5)
-        if quick_ratio >= 1.5:
-            self.card_quick_ratio.set_ticker("🟢 Excellent", "#4CAF50")
-        elif quick_ratio >= 1.0:
-            self.card_quick_ratio.set_ticker("🟡 Good", "#FF9800")
-        else:
-            self.card_quick_ratio.set_ticker("🔴 Low", "#F44336")
-            
-        # Current Ratio trend (good: >1.5, excellent: >2.0)
-        if current_ratio >= 2.0:
-            self.card_current_ratio.set_ticker("🟢 Excellent", "#4CAF50")
-        elif current_ratio >= 1.5:
-            self.card_current_ratio.set_ticker("🟡 Good", "#FF9800")
-        else:
-            self.card_current_ratio.set_ticker("🔴 Low", "#F44336")
-            
-        # Debt-to-Equity trend (good: <0.5, warning: >1.0)
-        if debt_equity <= 0.5:
-            self.card_debt_equity.set_ticker("🟢 Low Risk", "#4CAF50")
-        elif debt_equity <= 1.0:
-            self.card_debt_equity.set_ticker("🟡 Moderate", "#FF9800")
-        else:
-            self.card_debt_equity.set_ticker("🔴 High Risk", "#F44336")
-        
     def _update_trend_indicators(self, cash, revenue, expenses, liabilities, net_income):
         """Update trend indicators for cards."""
         # Net Income trend
