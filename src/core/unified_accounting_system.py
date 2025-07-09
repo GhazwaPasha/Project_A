@@ -1724,7 +1724,7 @@ class UnifiedAccountingSystem:
                     print(f"⚠️ Skipping string account: {account}")
                     continue
                     
-                account_name = account.get('account_name', '')
+                account_name = account.get('account_name', account.get('name', ''))
                 account_type = account.get('account_type', '')
                 debit_balance = float(account.get('debit_balance', 0))
                 credit_balance = float(account.get('credit_balance', 0))
@@ -1866,8 +1866,10 @@ class UnifiedAccountingSystem:
             
             for account in income_statement_data:
                 account_type = account.get('account_type', '').lower()
-                amount = float(account.get('amount', 0))
-                account_name = account.get('account_name', '')
+                # Handle both 'amount' and 'net_amount' fields, prefer 'net_amount' for income statement
+                amount = float(account.get('net_amount', account.get('amount', 0)))
+                # Handle both 'account_name' and 'name' fields
+                account_name = account.get('account_name', account.get('name', ''))
                 
                 print(f"📝 Processing account: {account_name} ({account_type}) = {amount}")
                 
@@ -1882,6 +1884,14 @@ class UnifiedAccountingSystem:
             print(f"💰 Revenue accounts: {len(revenues)}")
             print(f"💸 Expense accounts: {len(expenses)}")
             print(f"📦 COGS accounts: {len(cogs)}")
+            
+            # Debug: Show some sample data
+            if revenues:
+                print(f"📊 Sample revenue: {revenues[0] if revenues else 'None'}")
+            if expenses:
+                print(f"📊 Sample expense: {expenses[0] if expenses else 'None'}")
+            if cogs:
+                print(f"📊 Sample COGS: {cogs[0] if cogs else 'None'}")
             
             # Calculate totals
             total_revenue = sum(rev[1] for rev in revenues)
@@ -2037,7 +2047,7 @@ class UnifiedAccountingSystem:
                     
                 account_type = account.get('account_type', '').lower()
                 account_info = {
-                    'name': account.get('account_name', ''),
+                    'name': account.get('account_name', account.get('name', '')),
                     'balance': float(account.get('balance', 0)),
                     'account_id': account.get('account_id'),
                     'account_type': account_type
