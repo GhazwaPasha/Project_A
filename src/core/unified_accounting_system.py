@@ -1135,12 +1135,20 @@ class UnifiedAccountingSystem:
         if not start_date and not end_date:
             return entries
 
+        def to_date_str(d):
+            if isinstance(d, str):
+                return d
+            elif hasattr(d, 'strftime'):
+                return d.strftime('%Y-%m-%d')
+            return str(d)
+
         filtered = []
         for entry in entries:
             entry_date = entry.get('date', '')
-            if start_date and entry_date < start_date:
+            entry_date_str = to_date_str(entry_date)
+            if start_date and entry_date_str < to_date_str(start_date):
                 continue
-            if end_date and entry_date > end_date:
+            if end_date and entry_date_str > to_date_str(end_date):
                 continue
             filtered.append(entry)
         return filtered
@@ -1723,15 +1731,18 @@ class UnifiedAccountingSystem:
                 if isinstance(account, str):
                     print(f"⚠️ Skipping string account: {account}")
                     continue
-                    
+                
                 account_name = account.get('account_name', account.get('name', ''))
                 account_type = account.get('account_type', '')
-                debit_balance = float(account.get('debit_balance', 0))
-                credit_balance = float(account.get('credit_balance', 0))
-                net_balance = float(account.get('net_balance', 0))
-                
-                # Only include accounts with non-zero balances
-                if abs(net_balance) >= 0.01 or debit_balance > 0 or credit_balance > 0:
+                # Use net_balance if present, else fallback to balance
+                net_balance = float(account.get('net_balance', account.get('balance', 0)))
+                if abs(net_balance) >= 0.01:
+                    if net_balance > 0:
+                        debit_balance = net_balance
+                        credit_balance = 0
+                    else:
+                        debit_balance = 0
+                        credit_balance = abs(net_balance)
                     transformed_data.append({
                         'name': account_name,
                         'debit_balance': debit_balance,

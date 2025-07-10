@@ -619,11 +619,15 @@ class IncomeStatementView(BaseFinancialStatementView):
         # Get data from accounting system using group-based method
         try:
             data = system.generate_group_based_income_statement(from_date, to_date)
+            if isinstance(data, tuple):
+                data = data[0]
         except Exception as e:
             print(f"Error generating group-based income statement: {e}")
             # Fallback to original method
             try:
                 data = system.generate_income_statement_breakdown(from_date, to_date)
+                if isinstance(data, tuple):
+                    data = data[0]
             except Exception as e2:
                 print(f"Error generating fallback income statement: {e2}")
                 return

@@ -404,7 +404,8 @@ class TrialBalancePage(QWidget):
             if not hasattr(self, 'card_balance_status') or not self.card_balance_status:
                 return
                 
-            from_date, to_date = self.date_selector.get_date_range()
+            # Always fetch all data for trial balance (ignore date selector)
+            from_date, to_date = None, None
             trial_data = self._calculate_trial_balance(from_date, to_date)
             self._update_balance_metrics(trial_data)
             self._update_trial_balance_table(trial_data)
