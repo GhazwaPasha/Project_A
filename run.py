@@ -3,6 +3,7 @@
 Clean Multi-Tenant Launcher for New Schema
 Works with the new Supabase-only backend (NEW_SCHEMA.sql)
 """
+import embedded_config  # Embedded configuration
 import sys
 import os
 from PyQt6.QtWidgets import QApplication, QMessageBox

@@ -146,12 +146,14 @@ class SeamlessBorderLayout:
                 background: rgba(0, 0, 0, 0.01);
             }
         """)
-          # Apply Mica effect to the main container 
-        try:
-            from .mica_effect import MicaEffect
-            MicaEffect.apply_mica(main_container, dark_mode=True)
-        except:
-            pass  # Continue without Mica if it fails
+        
+        # DO NOT apply Mica to the border container - let the main window handle Mica
+        # This prevents conflicts with the main window's Mica effect
+        # try:
+        #     from .mica_effect import MicaEffect
+        #     MicaEffect.apply_mica(main_container, dark_mode=True)
+        # except:
+        #     pass  # Continue without Mica if it fails
         
         # Main layout with borders
         main_layout = QVBoxLayout(main_container)

@@ -36,14 +36,13 @@ class CompactConnectionIndicator(QWidget):
     
     def _load_wifi_icon(self):
         """Load the WiFi icon from the assets/icons directory"""
-        # Get the project root directory (3 levels up from src/ui/components/)
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
+        # Import resource manager
+        from ...core.resource_manager import ResourceManager
         
-        # Use WiFi PNG icon only
-        wifi_icon_path = os.path.join(project_root, "assets", "icons", "wifi.png")
+        # Use resource manager to get WiFi icon path
+        wifi_icon_path = ResourceManager.get_icon_path("wifi.png")
         
-        if os.path.exists(wifi_icon_path):
+        if wifi_icon_path and os.path.exists(wifi_icon_path):
             pixmap = QPixmap(wifi_icon_path)
             if not pixmap.isNull():
                 # Scale the icon to proper size for window control button alignment (16x16 pixels)
@@ -51,7 +50,7 @@ class CompactConnectionIndicator(QWidget):
                                    Qt.TransformationMode.SmoothTransformation)
         
         # If no icon found, return None
-        self.logger.warning(f"WiFi icon not found at: {wifi_icon_path}")
+        self.logger.warning(f"WiFi icon not found")
         return None
     
     def _apply_styling(self):

@@ -39,8 +39,11 @@ class NotificationButton(QPushButton):
     def _load_notification_icon(self):
         """Load the new notification SVG icon"""
         try:
-            icon_path = os.path.join("assets", "icons", "notification_modern.svg")
-            if os.path.exists(icon_path):
+            # Import resource manager
+            from ...core.resource_manager import ResourceManager
+            
+            icon_path = ResourceManager.get_icon_path("notification_modern.svg")
+            if icon_path and os.path.exists(icon_path):
                 self.setIcon(QIcon(icon_path))
                 self.setIconSize(QSize(16, 16))  # Match window control button size
             else:

@@ -5,6 +5,9 @@ from PyQt6.QtGui import QIcon, QPalette, QColor
 # Import Supabase offline-capable system
 from ..core.unified_accounting_system import UnifiedAccountingSystem as AccountingSystem
 
+# Import resource manager for proper path handling
+from ..core.resource_manager import ResourceManager
+
 from .components.mica_effect import MicaEffect
 from .components.styles import ModernStyles, GlassmorphismHelper
 from .components.font_manager import font_manager
@@ -27,7 +30,16 @@ from .components.mica_border_solution import MicaWindowWithBorders
 class ModernSidebarButton(QPushButton):
     def __init__(self, icon_path, text, expanded=True, parent=None):
         super().__init__(parent)
-        self.icon = QIcon(icon_path)
+        # Use resource manager to get proper icon path
+        if isinstance(icon_path, str):
+            # If it's a relative path, use resource manager
+            if not os.path.isabs(icon_path):
+                icon_path = ResourceManager.get_icon_path(icon_path)
+            else:
+                # If it's already an absolute path, use resource manager to resolve it
+                icon_path = ResourceManager.get_resource_path(icon_path)
+        
+        self.icon = QIcon(icon_path) if icon_path else QIcon()
         self.text_label = text
         self.expanded = expanded
           # Set icon with responsive sizing
@@ -158,23 +170,26 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         self.dark_mode = True  # Default to dark mode for better Mica effect
         self.currency_symbol = self._load_currency()
         self.mica_applied = False  # Track if Mica has been applied
+        
+        # Track window position for monitor switch detection
+        self._previous_position = None
+        self._previous_screen = None
+        
           # Initialize font manager
         self.font_manager = font_manager
         # Initialize custom fonts
         self._load_custom_fonts()
         
-        # Setup window first
+        # Setup window first - CRITICAL: This must be done before any other UI setup
         self._setup_mica_window()
+        
+        # Setup basic UI structure (without borders yet)
         self._setup_ui()
-        self._load_pages()        # Setup resize borders after UI is created
-        from .components.seamless_border_layout import apply_seamless_borders
-        apply_seamless_borders(self)
+        self._load_pages()
         
-        # AI signal connections removed - now handled by SimpleAIStatusBar
-        
-        # Apply global styling first
+        # Apply global styling BEFORE seamless borders to avoid conflicts
         self._apply_global_consistent_styling()
-          # Apply font settings to the application        self._apply_font_settings()
+        self._apply_font_settings()
         
         # Setup sync status updates - always enabled in new architecture
         self._setup_sync_updates()
@@ -184,8 +199,11 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         # Install event filter for handling clicks outside notification drawer
         self.installEventFilter(self)
         
-        # Use QTimer to apply Mica effect after window is fully shown
-        QTimer.singleShot(100, self._apply_mica_effect_delayed)
+        # CRITICAL: Apply Mica effect FIRST with minimal delay
+        QTimer.singleShot(50, self._apply_mica_effect_delayed)
+        
+        # Apply seamless borders AFTER Mica effect is applied
+        QTimer.singleShot(150, self._apply_seamless_borders_delayed)
         
         # Update navigation visibility after everything is set up
         QTimer.singleShot(200, self._update_navigation_visibility)
@@ -261,6 +279,34 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
                 
                 # Additional refresh after a short delay to ensure visibility
                 QTimer.singleShot(200, self._final_mica_refresh)
+            else:
+                # Retry once if it fails
+                print("⚠️  Mica effect failed, retrying...")
+                QTimer.singleShot(100, self._retry_mica_effect)
+    
+    def _retry_mica_effect(self):
+        """Retry applying Mica effect if it failed initially."""
+        if not self.mica_applied:
+            success = self._apply_mica_effect()
+            if success:
+                self.mica_applied = True
+                self._force_window_refresh()
+                QTimer.singleShot(200, self._final_mica_refresh)
+                print("✅ Mica effect applied successfully on retry")
+            else:
+                print("❌ Mica effect failed on retry, using fallback")
+                # Apply fallback styling
+                fallback_style = self._get_fallback_style()
+                self.setStyleSheet(fallback_style)
+    
+    def _apply_seamless_borders_delayed(self):
+        """Apply seamless borders after Mica effect is applied."""
+        try:
+            from .components.seamless_border_layout import apply_seamless_borders
+            apply_seamless_borders(self)
+            print("✅ Seamless borders applied after Mica effect")
+        except Exception as e:
+            print(f"⚠️  Failed to apply seamless borders: {e}")
     
     def _final_mica_refresh(self):
         """Final refresh to ensure Mica effect is fully visible."""
@@ -288,9 +334,28 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
     def showEvent(self, event):
         """Handle window show event to ensure Mica effect is applied."""
         super().showEvent(event)
+        
+        # Initialize position tracking on first show
+        if self._previous_screen is None:
+            self._previous_screen = self.screen()
+            self._previous_position = self.geometry().center()
+            print(f"📍 Initial position tracking: screen={self._previous_screen.name()}, pos={self._previous_position}")
+        
           # Apply Mica effect if not already applied and window is visible
         if not self.mica_applied and self.isVisible():
+            print("🔄 Window shown, applying Mica effect...")
             QTimer.singleShot(50, self._apply_mica_effect_delayed)
+        elif self.mica_applied and self.isVisible():
+            # Refresh Mica effect when window becomes visible again
+            print("🔄 Window shown, refreshing Mica effect...")
+            QTimer.singleShot(50, self._refresh_mica_when_visible)
+    
+    def _refresh_mica_when_visible(self):
+        """Refresh Mica effect when window becomes visible."""
+        if self.mica_applied and self.isVisible():
+            MicaEffect.refresh_mica(self, self.dark_mode)
+            self.update()
+            print("✅ Mica effect refreshed after window show")
     
     def resizeEvent(self, event):
         """Handle window resize to maintain Mica effect and reposition notification drawer."""
@@ -325,10 +390,28 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         """Handle window move events (for multi-monitor scenarios)."""
         super().moveEvent(event)
         
-        # When window is moved (including between monitors), refresh Mica
-        if self.mica_applied:
-            QTimer.singleShot(100, self._reapply_mica_effect)
+        # Get current screen and position
+        current_screen = self.screen()
+        current_position = self.geometry().center()
         
+        # Check if this is a monitor switch
+        if (self._previous_screen is not None and 
+            self._previous_position is not None and
+            current_screen != self._previous_screen):
+            
+            print(f"🔄 Monitor switch detected: {self._previous_screen.name()} -> {current_screen.name()}")
+            # Handle monitor switch specifically
+            QTimer.singleShot(100, self._handle_monitor_switch)
+        
+        # Update tracking variables
+        self._previous_screen = current_screen
+        self._previous_position = current_position
+        
+        # Regular move event handling
+        if self.mica_applied:
+            print("🔄 Window moved, refreshing Mica effect...")
+            QTimer.singleShot(100, self._refresh_mica_after_move)
+    
     def _setup_mica_window(self):
         """Configure window for Mica effect."""
         # CRITICAL: Set window flags BEFORE setting other attributes
@@ -362,21 +445,30 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         print(f"Window ID: {self.winId()}")
         
         if MicaEffect.is_windows11() and self.isVisible():
-            # Apply Mica effect
-            success = MicaEffect.apply_mica(self, self.dark_mode)
-            
-            if success:
-                # Apply Mica stylesheet only AFTER successful Mica application
-                mica_style = MicaEffect.get_mica_stylesheet(self.dark_mode)
-                self.setStyleSheet(mica_style)
-                print("✅ Mica effect and styling applied successfully")
+            try:
+                # Ensure window is properly prepared for Mica
+                self._prepare_window_for_mica()
                 
-                # Ensure window is positioned properly to show Mica effect
-                self._optimize_for_mica()
-                return True
-            else:
-                print("❌ Failed to apply Mica effect, using fallback styling")
-                # Fallback styling for non-Mica windows
+                # Apply Mica effect
+                success = MicaEffect.apply_mica(self, self.dark_mode)
+                
+                if success:
+                    # Apply Mica stylesheet only AFTER successful Mica application
+                    mica_style = MicaEffect.get_mica_stylesheet(self.dark_mode)
+                    self.setStyleSheet(mica_style)
+                    print("✅ Mica effect and styling applied successfully")
+                    
+                    # Ensure window is positioned properly to show Mica effect
+                    self._optimize_for_mica()
+                    return True
+                else:
+                    print("❌ Failed to apply Mica effect, using fallback styling")
+                    # Fallback styling for non-Mica windows
+                    fallback_style = self._get_fallback_style()
+                    self.setStyleSheet(fallback_style)
+                    return False
+            except Exception as e:
+                print(f"❌ Error applying Mica effect: {e}")
                 fallback_style = self._get_fallback_style()
                 self.setStyleSheet(fallback_style)
                 return False
@@ -388,7 +480,18 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             fallback_style = self._get_fallback_style()
             self.setStyleSheet(fallback_style)
             return False
-            
+    
+    def _prepare_window_for_mica(self):
+        """Prepare window for Mica effect application."""
+        # Ensure window attributes are set correctly
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
+        
+        # Force a repaint to ensure attributes are applied
+        self.update()
+        QApplication.processEvents()
+    
     def _optimize_for_mica(self):
         """Optimize window settings to make Mica effect more visible."""
         # Move window slightly so it's not covering the entire screen
@@ -520,7 +623,14 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         
         # Window icon and title
         icon_label = QLabel()
-        icon_label.setPixmap(QIcon(os.path.join("assets", "icons", "dashboard_new.svg")).pixmap(20, 20))
+        app_icon_path = ResourceManager.get_icon_path("app_logo.svg")
+        if app_icon_path:
+            icon_label.setPixmap(QIcon(app_icon_path).pixmap(20, 20))
+        else:
+            # Fallback to dashboard icon
+            dashboard_icon_path = ResourceManager.get_icon_path("dashboard_new.svg")
+            if dashboard_icon_path:
+                icon_label.setPixmap(QIcon(dashboard_icon_path).pixmap(20, 20))
         left_layout.addWidget(icon_label)
         
         title_label = QLabel("Accountuitive")
@@ -743,7 +853,9 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         layout.setContentsMargins(margin_h, margin_v, margin_h, margin_v)
         layout.setSpacing(spacing)        # Toggle button with modern styling (matched to other icons)
         self.toggle_btn = QPushButton()
-        self.toggle_btn.setIcon(QIcon(os.path.join("assets", "icons", "menu_modern.svg")))
+        menu_icon_path = ResourceManager.get_icon_path("menu_modern.svg")
+        if menu_icon_path:
+            self.toggle_btn.setIcon(QIcon(menu_icon_path))
         toggle_icon_size = ResponsiveHelper.scale_size(24, 20, 28)  # Increased to match other icons
         self.toggle_btn.setIconSize(QSize(toggle_icon_size, toggle_icon_size))
         
@@ -758,22 +870,22 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         self.toggle_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.toggle_btn.clicked.connect(self.toggle_sidebar)
         self._style_toggle_button()        # Add toggle button directly to main layout to maintain alignment
-        layout.addWidget(self.toggle_btn)# Navigation buttons with modern icons - expanded for multi-org support + period closing
+        layout.addWidget(self.toggle_btn)        # Navigation buttons with modern icons - expanded for multi-org support + period closing
         nav_items = [
-            ("Dashboard", os.path.join("assets", "icons", "dashboard_new.svg")),
-            ("Journal", os.path.join("assets", "icons", "journal_new.svg")),
-            ("Ledger", os.path.join("assets", "icons", "ledger_new.svg")),
-            ("Trial Balance", os.path.join("assets", "icons", "trial_balance_new.svg")),
-            ("Reports", os.path.join("assets", "icons", "reports_new.svg")),
-            ("Accounts", os.path.join("assets", "icons", "accounts_new.svg")),
-            ("Reminders", os.path.join("assets", "icons", "ledger_note.svg")),  # Reminders & Tasks
-            ("Period Closing", os.path.join("assets", "icons", "period_closing_modern.svg")),  # Period closing & audit
-            ("Team", os.path.join("assets", "icons", "team_new.svg")),  # Team management
-            ("Org Settings", os.path.join("assets", "icons", "org_settings_new.svg")),  # Organization settings
-            ("User Mgmt", os.path.join("assets", "icons", "user_mgmt_new.svg")),  # User management (admin only)
-            ("Platform", os.path.join("assets", "icons", "platform_new.svg")),  # Platform overview (super admin)
-            ("Global Orgs", os.path.join("assets", "icons", "global_orgs_new.svg")),  # Global organizations (super admin)
-            ("Settings", os.path.join("assets", "icons", "settings_new.svg")),
+            ("Dashboard", "dashboard_new.svg"),
+            ("Journal", "journal_new.svg"),
+            ("Ledger", "ledger_new.svg"),
+            ("Trial Balance", "trial_balance_new.svg"),
+            ("Reports", "reports_new.svg"),
+            ("Accounts", "accounts_new.svg"),
+            ("Reminders", "ledger_note.svg"),  # Reminders & Tasks
+            ("Period Closing", "period_closing_modern.svg"),  # Period closing & audit
+            ("Team", "team_new.svg"),  # Team management
+            ("Org Settings", "org_settings_new.svg"),  # Organization settings
+            ("User Mgmt", "user_mgmt_new.svg"),  # User management (admin only)
+            ("Platform", "platform_new.svg"),  # Platform overview (super admin)
+            ("Global Orgs", "global_orgs_new.svg"),  # Global organizations (super admin)
+            ("Settings", "settings_new.svg"),
         ]# Add navigation buttons directly to main layout for proper alignment
         self.sidebar_buttons = []
         for idx, (label, icon_path) in enumerate(nav_items):
@@ -1143,30 +1255,42 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
                 background: rgba(232, 17, 35, 0.7);
             }
         """
-          # Try to load SVG icons from files first
+          # Try to load SVG icons from files first using resource manager
         try:
-            minimize_icon = QIcon("assets/icons/minimize.svg")
-            maximize_icon = QIcon("assets/icons/maximize.svg")
-            close_icon = QIcon("assets/icons/close.svg")
+            minimize_icon_path = ResourceManager.get_icon_path("minimize.svg")
+            maximize_icon_path = ResourceManager.get_icon_path("maximize.svg")
+            close_icon_path = ResourceManager.get_icon_path("close.svg")
             
-            if not minimize_icon.isNull():
-                minimize_btn.setIcon(minimize_icon)
-                minimize_btn.setIconSize(QSize(16, 16))
-                minimize_btn.setText("")  # Clear text when icon is set
+            if minimize_icon_path:
+                minimize_icon = QIcon(minimize_icon_path)
+                if not minimize_icon.isNull():
+                    minimize_btn.setIcon(minimize_icon)
+                    minimize_btn.setIconSize(QSize(16, 16))
+                    minimize_btn.setText("")  # Clear text when icon is set
+                else:
+                    minimize_btn.setText("─")
             else:
                 minimize_btn.setText("─")
                 
-            if not maximize_icon.isNull():
-                maximize_btn.setIcon(maximize_icon)
-                maximize_btn.setIconSize(QSize(16, 16))
-                maximize_btn.setText("")  # Clear text when icon is set
+            if maximize_icon_path:
+                maximize_icon = QIcon(maximize_icon_path)
+                if not maximize_icon.isNull():
+                    maximize_btn.setIcon(maximize_icon)
+                    maximize_btn.setIconSize(QSize(16, 16))
+                    maximize_btn.setText("")  # Clear text when icon is set
+                else:
+                    maximize_btn.setText("□")
             else:
                 maximize_btn.setText("□")
                 
-            if not close_icon.isNull():
-                close_btn.setIcon(close_icon)
-                close_btn.setIconSize(QSize(16, 16))
-                close_btn.setText("")  # Clear text when icon is set
+            if close_icon_path:
+                close_icon = QIcon(close_icon_path)
+                if not close_icon.isNull():
+                    close_btn.setIcon(close_icon)
+                    close_btn.setIconSize(QSize(16, 16))
+                    close_btn.setText("")  # Clear text when icon is set
+                else:
+                    close_btn.setText("×")
             else:
                 close_btn.setText("×")
                 
@@ -1191,7 +1315,18 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             if self.mica_applied:
                 MicaEffect.refresh_mica(self, self.dark_mode)
                 self.update()
-            else:                self._apply_mica_effect_delayed()
+            else:
+                self._apply_mica_effect_delayed()
+        
+        # F6: Force complete Mica refresh (for debugging monitor switching)
+        if event.key() == Qt.Key.Key_F6:
+            print("🔄 Force Mica refresh triggered (F6)")
+            self.force_mica_refresh()
+        
+        # F7: Trigger monitor switch handling (for debugging)
+        if event.key() == Qt.Key.Key_F7:
+            print("🔄 Monitor switch handling triggered (F7)")
+            self._handle_monitor_switch()
                 
     def eventFilter(self, obj, event):
         """Filter events to handle click-outside-to-close for notification drawer and AI status bar."""
@@ -2813,3 +2948,90 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             
         except Exception as e:
             self.logger.error(f"Error unfreezing UI: {e}")
+
+    def _refresh_mica_after_move(self):
+        """Refresh Mica effect after window move (especially for monitor switching)."""
+        if self.mica_applied and self.isVisible():
+            try:
+                # Force a complete refresh for monitor switching
+                MicaEffect.refresh_mica(self, self.dark_mode)
+                self.update()
+                self.repaint()
+                QApplication.processEvents()
+                print("✅ Mica effect refreshed after window move")
+            except Exception as e:
+                print(f"⚠️  Error refreshing Mica after move: {e}")
+    
+    def _handle_monitor_switch(self):
+        """Handle monitor switching specifically - this is what fixes the Mica issue."""
+        if self.mica_applied and self.isVisible():
+            try:
+                print("🔄 Detected monitor switch, applying special Mica refresh...")
+                
+                # Force window to redraw completely
+                self.hide()
+                QApplication.processEvents()
+                self.show()
+                QApplication.processEvents()
+                
+                # Reapply Mica effect after window is shown again
+                QTimer.singleShot(100, self._reapply_mica_after_monitor_switch)
+                
+            except Exception as e:
+                print(f"⚠️  Error handling monitor switch: {e}")
+    
+    def _reapply_mica_after_monitor_switch(self):
+        """Reapply Mica effect after monitor switch."""
+        if self.mica_applied and self.isVisible():
+            try:
+                # Reapply window attributes
+                self._prepare_window_for_mica()
+                
+                # Reapply Mica effect
+                success = MicaEffect.apply_mica(self, self.dark_mode)
+                if success:
+                    # Reapply Mica stylesheet
+                    mica_style = MicaEffect.get_mica_stylesheet(self.dark_mode)
+                    self.setStyleSheet(mica_style)
+                    
+                    # Force complete refresh
+                    self.update()
+                    self.repaint()
+                    QApplication.processEvents()
+                    
+                    print("✅ Mica effect reapplied after monitor switch")
+                else:
+                    print("❌ Failed to reapply Mica after monitor switch")
+                    
+            except Exception as e:
+                print(f"⚠️  Error reapplying Mica after monitor switch: {e}")
+    
+    def force_mica_refresh(self):
+        """Force a complete Mica refresh for debugging purposes"""
+        if MicaEffect.is_windows11():
+            try:
+                print("🔄 Force refreshing Mica effect...")
+                
+                # Reapply window attributes to ensure they're set correctly
+                self._prepare_window_for_mica()
+                
+                # Force a complete refresh
+                MicaEffect.refresh_mica(self, self.dark_mode)
+                self.update()
+                self.repaint()
+                QApplication.processEvents()
+                
+                # Additional refresh after a short delay
+                QTimer.singleShot(50, lambda: self._final_mica_refresh())
+                
+                print("✅ Mica effect force refreshed")
+                return True
+            except Exception as e:
+                print(f"❌ Error force refreshing Mica: {e}")
+                self.logger.error(f"Failed to force Mica refresh: {e}")
+                return False
+        else:
+            print("⚠️  Windows 11 not detected, cannot refresh Mica")
+            return False
+
+
