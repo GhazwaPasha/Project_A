@@ -130,16 +130,6 @@ class AccountFormCard(QFrame):
         form_layout.addWidget(self.type_combo, row, 1)
         row += 1
         
-        # Group
-        group_label = QLabel("Group")
-        group_label.setStyleSheet(self._get_label_style())
-        self.group_combo = QComboBox()
-        self.group_combo.setStyleSheet(self._get_combo_style())
-        self.group_combo.currentTextChanged.connect(self._on_group_changed)
-        form_layout.addWidget(group_label, row, 0)
-        form_layout.addWidget(self.group_combo, row, 1)
-        row += 1
-        
         # Level
         level_label = QLabel("Level")
         level_label.setStyleSheet(self._get_label_style())
@@ -153,6 +143,16 @@ class AccountFormCard(QFrame):
         self.level_combo.currentIndexChanged.connect(self._on_level_changed)
         form_layout.addWidget(level_label, row, 0)
         form_layout.addWidget(self.level_combo, row, 1)
+        row += 1
+        
+        # Group
+        group_label = QLabel("Group")
+        group_label.setStyleSheet(self._get_label_style())
+        self.group_combo = QComboBox()
+        self.group_combo.setStyleSheet(self._get_combo_style())
+        self.group_combo.currentTextChanged.connect(self._on_group_changed)
+        form_layout.addWidget(group_label, row, 0)
+        form_layout.addWidget(self.group_combo, row, 1)
         row += 1
         
         # Parent Account
