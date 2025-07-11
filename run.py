@@ -39,6 +39,13 @@ class CleanApp:
         self.app = QApplication(sys.argv)
         self.app.setStyle('Fusion')
         
+        # Set application icon globally
+        from src.core.resource_manager import ResourceManager
+        app_icon_path = ResourceManager.get_icon_path("app-icon.png")
+        if app_icon_path:
+            from PyQt6.QtGui import QIcon
+            self.app.setWindowIcon(QIcon(app_icon_path))
+        
     def start(self):
         """Start the application"""
         try:

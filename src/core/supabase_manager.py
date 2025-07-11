@@ -326,13 +326,21 @@ class SupabaseManager:
         """Create a new account."""
         try:
             # Filter out fields that don't exist in the database schema
-            # The 'is_postable' field is calculated dynamically, not stored
-            filtered_data = {k: v for k, v in account_data.items() if k != 'is_postable'}
+            # Note: 'is_postable' field is now stored in the database
+            filtered_data = {k: v for k, v in account_data.items()}
             filtered_data['created_by'] = self.current_user_id
             
             # Convert account_type to lowercase to match database enum
             if 'account_type' in filtered_data:
                 filtered_data['account_type'] = filtered_data['account_type'].lower()
+            
+            # Handle group field - ensure it's properly formatted
+            if 'group' in filtered_data:
+                group_value = filtered_data['group']
+                # Convert empty string to None for database
+                if group_value == '':
+                    filtered_data['group'] = None
+                print(f"🔍 DEBUG: Group field in create: {filtered_data['group']}")
             
             print(f"Debug: SupabaseManager.create_account attempting insert with filtered data: {filtered_data}")
             result = self.supabase.table('accounts').insert(filtered_data).execute()
@@ -349,8 +357,8 @@ class SupabaseManager:
             print(f"🔍 DEBUG: SupabaseManager.update_account - account_id: {account_id}, updates: {updates}")
             
             # Filter out fields that don't exist in the database schema
-            # Note: 'group' field should be included as it exists in the accounts table
-            filtered_updates = {k: v for k, v in updates.items() if k != 'is_postable'}
+            # Note: 'is_postable' field is now stored in the database
+            filtered_updates = {k: v for k, v in updates.items()}
             filtered_updates['updated_at'] = datetime.now().isoformat()
             
             print(f"🔍 DEBUG: SupabaseManager filtered_updates: {filtered_updates}")

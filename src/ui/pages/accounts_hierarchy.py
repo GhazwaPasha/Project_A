@@ -1232,21 +1232,13 @@ class HierarchicalAccountsPage(QWidget):
                     self.tree.setCurrentItem(item)
                 for i in range(item.childCount()):
                     restore_expanded_state(item.child(i))
-                    
+            
             for i in range(self.tree.topLevelItemCount()):
                 restore_expanded_state(self.tree.topLevelItem(i))
                 
             # Expand all if no previous state
             if not expanded_items:
                 self.tree.expandAll()
-
-            # --- Expand all items ---
-            def expand_all_items(item):
-                item.setExpanded(True)
-                for i in range(item.childCount()):
-                    expand_all_items(item.child(i))
-            for i in range(self.tree.topLevelItemCount()):
-                expand_all_items(self.tree.topLevelItem(i))
 
             # --- Intelligent column sizing ---
             self._optimize_column_sizes()
@@ -1671,17 +1663,16 @@ class AccountDetailsPanel(QStackedWidget):
                     traceback.print_exc()
                     raise Exception(f"Failed to create account in database: {create_error}")
             
-            # Switch back to info view
-            self.is_form_active = False
-            self.show_info()
-
             # Emit accounts changed event to refresh all UI components
             accounting_events.accounts_changed.emit()
 
-            # Refresh parent page
+            # Add a small delay to ensure database updates are processed
             parent = self.parent()
-            if hasattr(parent, '_load_data'):
-                parent._load_data()
+            QTimer.singleShot(100, lambda: self._refresh_parent_page(parent))
+
+            # Switch back to info view
+            self.is_form_active = False
+            self.show_info()
 
             # Show success message with sync status
             action = "updated" if self.form_card.edit_mode else "created"
@@ -1746,9 +1737,19 @@ class AccountDetailsPanel(QStackedWidget):
             
     def _on_form_cancelled(self):
         """Handle form cancellation."""
-        self.is_form_active = False
-        self.show_info()
-        
+        self.is_form_active = True
+        self.show_form()
+
+    def _refresh_parent_page(self, parent):
+        """Refresh the parent page with a small delay to ensure database updates are processed."""
+        if hasattr(parent, '_load_data'):
+            parent._load_data()
+            # Force immediate update of the tree view
+            parent.tree.update()
+            parent.tree.viewport().update()
+            # Force a complete repaint
+            parent.tree.repaint()
+    
     def _create_info_widget(self):
         """Create widget to display selected account information with modern card styling."""
         from ..components.styles import ResponsiveHelper

@@ -137,6 +137,11 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         super().__init__()
         self.setWindowTitle("Accountuitive - Multi-Tenant SaaS")
         self.setMinimumSize(1200, 800)
+        
+        # Set application icon
+        app_icon_path = ResourceManager.get_icon_path("app-icon.png")
+        if app_icon_path:
+            self.setWindowIcon(QIcon(app_icon_path))
           # Store authentication context
         self.auth_manager = auth_manager
         self.session_manager = session_manager
@@ -623,7 +628,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         
         # Window icon and title
         icon_label = QLabel()
-        app_icon_path = ResourceManager.get_icon_path("app_logo.svg")
+        app_icon_path = ResourceManager.get_icon_path("app-icon.png")
         if app_icon_path:
             icon_label.setPixmap(QIcon(app_icon_path).pixmap(20, 20))
         else:

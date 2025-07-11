@@ -36,7 +36,7 @@ def test_resource_manager():
         "close.svg",
         "notification_modern.svg",
         "wifi.png",
-        "app_logo.svg"
+        "app-icon.png"
     ]
     
     print("\n📋 Testing icon path resolution:")

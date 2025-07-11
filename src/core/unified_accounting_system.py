@@ -641,21 +641,9 @@ class UnifiedAccountingSystem:
             return None
         
         def is_postable(acc):
-            """Determine if account is postable based on hierarchy rules"""
-            acc_id = acc['id']
-            level = calculate_level(acc)
-            has_children = acc_id in children_by_parent
-            # Rules for postability:
-            # 1. If it's a leaf account (no children), it's postable
-            # 2. For level 3+ accounts without children are postable
-            if not has_children:
-                return True
-            elif level >= 3:
-                # Level 3+ with children - depends on business rules
-                return False
-            else:
-                # Level 1-2 with children are definitely header accounts
-                return False
+            """Determine if account is postable based on stored database value"""
+            # Use the stored is_postable value from the database
+            return acc.get('is_postable', False)
         
         def get_parent_code(acc):
             """Get parent account code"""
@@ -725,29 +713,15 @@ class UnifiedAccountingSystem:
             return calculate_level(parent_acc, visited) + 1
         
         def is_postable(acc):
-            """
-            Determine if account is postable based on hierarchy rules:
-            - Level 4 accounts (leaf accounts) are typically postable
-            - Accounts with no children are postable
-            - Parent accounts (with children) are typically not postable (header accounts)
-            """
             acc_id = acc['id']
             level = calculate_level(acc)
             has_children = acc_id in children_by_parent
-            
-            # Rules for postability:
-            # 1. If it's a leaf account (no children), it's postable
-            # 2. If it's level 4, it's likely postable even if it has children
-            # 3. For business logic: Level 3+ accounts without children are postable
             if not has_children:
                 return True
-            elif level >= 3:
-                # Level 3+ with children - depends on business rules
-                # For most accounting systems, having children makes it non-postable
+            elif level == 1:
                 return False
             else:
-                # Level 1-2 with children are definitely header accounts
-                return False
+                return True
         
         result = []
         for acc in accounts:
@@ -809,29 +783,15 @@ class UnifiedAccountingSystem:
             return calculate_level(parent_acc, visited) + 1
         
         def is_postable(acc):
-            """
-            Determine if account is postable based on hierarchy rules:
-            - Level 4 accounts (leaf accounts) are typically postable
-            - Accounts with no children are postable
-            - Parent accounts (with children) are typically not postable (header accounts)
-            """
             acc_id = acc['id']
             level = calculate_level(acc)
             has_children = acc_id in children_by_parent
-            
-            # Rules for postability:
-            # 1. If it's a leaf account (no children), it's postable
-            # 2. If it's level 4, it's likely postable even if it has children
-            # 3. For business logic: Level 3+ accounts without children are postable
             if not has_children:
                 return True
-            elif level >= 3:
-                # Level 3+ with children - depends on business rules
-                # For most accounting systems, having children makes it non-postable
+            elif level == 1:
                 return False
             else:
-                # Level 1-2 with children are definitely header accounts
-                return False
+                return True
         
         result = []
         for acc in active_accounts:
@@ -866,9 +826,6 @@ class UnifiedAccountingSystem:
         if not self.auth_manager.can_create_accounts(self.current_organization_id):
             raise PermissionError("Insufficient permissions to create accounts")
         
-        # Extract group data before creating account
-        group = account_data.pop('group', None)
-        
         # Add organization context
         account_data['organization_id'] = self.current_organization_id
         account_data['created_by'] = self.current_user_id
@@ -876,6 +833,14 @@ class UnifiedAccountingSystem:
         # Convert account_type to lowercase to match database enum
         if 'account_type' in account_data:
             account_data['account_type'] = account_data['account_type'].lower()
+        
+        # Handle group field - ensure it's properly formatted
+        if 'group' in account_data:
+            group_value = account_data['group']
+            # Convert empty string to None for database
+            if group_value == '':
+                account_data['group'] = None
+            print(f"🔍 DEBUG: Group field in create_account: {account_data['group']}")
         
         # Try online first
         if self.is_online:
@@ -886,13 +851,6 @@ class UnifiedAccountingSystem:
                 print(f"Debug: UnifiedAccountingSystem.create_account online result: {result}")
                 if result:
                     print(f"Debug: Online creation successful, returning: {result}")
-                    
-                    # Save group if provided
-                    if group and group != 'None':
-                        account_id = result.get('id')
-                        if account_id:
-                            self.save_account_group(account_id, group)
-                    
                     return result
                 else:
                     print(f"Debug: Online creation returned None, falling back to queue")
@@ -902,10 +860,6 @@ class UnifiedAccountingSystem:
                 self.is_online = False
         
         # Queue for later sync if offline
-        # Store group data in the account_data for offline sync
-        if group and group != 'None':
-            account_data['group'] = group
-        
         self.offline_cache.queue_operation(
             'INSERT', 'accounts', account_data, 
             self.current_organization_id, self.current_user_id

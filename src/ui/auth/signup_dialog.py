@@ -4,6 +4,7 @@ Simple Windows 11 Signup Dialog
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                             QPushButton, QLineEdit, QComboBox, QCheckBox, QMessageBox)
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QIcon
 
 class SignupDialog(QDialog):
     """Simple Windows 11 signup dialog"""
@@ -17,6 +18,12 @@ class SignupDialog(QDialog):
         self.setWindowTitle("Accountuitive - Create Account")
         self.setModal(True)
         self.setFixedSize(450, 550)
+        
+        # Set application icon
+        from ...core.resource_manager import ResourceManager
+        app_icon_path = ResourceManager.get_icon_path("app-icon.png")
+        if app_icon_path:
+            self.setWindowIcon(QIcon(app_icon_path))
         
         self._setup_ui()
         self._apply_style()

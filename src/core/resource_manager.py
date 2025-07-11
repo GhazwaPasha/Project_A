@@ -104,7 +104,7 @@ class ResourceManager:
             "close.svg",
             "notification_modern.svg",
             "wifi.png",
-            "app_logo.svg"
+            "app-icon.png"
         ]
         
         missing_icons = []
