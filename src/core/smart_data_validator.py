@@ -23,6 +23,10 @@ class SmartDataValidator:
         # Track data state per organization
         self._org_data_state = {}
         
+        # Throttle mechanism to prevent excessive calls
+        self._last_check_time = {}
+        self._check_throttle_seconds = 5  # Only check every 5 seconds
+        
     def has_any_data(self, org_id: str = None) -> bool:
         """Quick check if organization has any meaningful data."""
         if not org_id:
@@ -33,12 +37,28 @@ class SmartDataValidator:
             return False
             
         cache_key = f"has_data_{org_id}"
+        current_time = time.time()
+        
+        # Check throttle - only perform expensive checks every few seconds
+        if org_id in self._last_check_time:
+            time_since_last = current_time - self._last_check_time[org_id]
+            if time_since_last < self._check_throttle_seconds:
+                # Use cached result if available, otherwise return True to avoid blocking
+                with self._cache_lock:
+                    if cache_key in self._validation_cache:
+                        return self._validation_cache[cache_key]
+                return True  # Assume data exists to avoid blocking UI
         
         with self._cache_lock:
             if cache_key in self._validation_cache:
                 cached_result = self._validation_cache[cache_key]
-                print(f"📋 Using cached data validation result for org {org_id}: {cached_result}")
+                # Only log occasionally to reduce spam
+                if current_time % 30 < 1:  # Log roughly every 30 seconds
+                    print(f"📋 Using cached data validation result for org {org_id}: {cached_result}")
                 return cached_result
+        
+        # Update last check time
+        self._last_check_time[org_id] = current_time
         
         # Quick database check for any transactions or account balances
         try:
