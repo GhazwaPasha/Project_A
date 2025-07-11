@@ -463,8 +463,12 @@ class DateRangeSelector(QWidget):
     def _quick_filter_selected(self):
         """Handle quick filter selection."""
         from ..common import QDate
-        
+        from PyQt6.QtWidgets import QPushButton
         button = self.sender()
+        # Only proceed if the sender is a QPushButton
+        if not isinstance(button, QPushButton):
+            return  # Ignore if not a button
+
         button_id = self.quick_buttons.id(button)
         
         today = QDate.currentDate()

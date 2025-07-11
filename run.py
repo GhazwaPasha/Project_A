@@ -76,27 +76,26 @@ class CleanApp:
             login_window = LoginWindow(auth_manager)
             
             # Store session manager reference
-            session_manager = None
+            self.session_manager = None
             
             # Handle successful login and set up session
             def handle_login_success(user_data, organizations):
-                nonlocal session_manager
                 from src.core.session_manager import SessionManager
-                session_manager = SessionManager(auth_manager)
+                self.session_manager = SessionManager(auth_manager)
                 
                 print(f"🔍 Debug: Received {len(organizations)} organizations from auth manager")
                 for i, org in enumerate(organizations):
                     print(f"   Org {i+1}: {org.get('name', 'Unknown')} (ID: {org.get('id', 'Unknown')}) Role: {org.get('user_role', 'Unknown')}")
                 
                 # Initialize session with user data
-                success = session_manager.initialize_session(user_data)
+                success = self.session_manager.initialize_session(user_data)
                 if success:
-                    current_org = session_manager.get_current_organization()
+                    current_org = self.session_manager.get_current_organization()
                     if current_org:
                         print(f"✅ User logged in: {user_data.get('email', 'Unknown')} - Active org: {current_org.get('name', 'Unknown')}")
-                        print(f"   Role in org: {session_manager.get_current_user_role()}")
-                        print(f"   Is super admin: {session_manager.is_super_admin()}")
-                        print(f"   Organization type: {session_manager.get_current_organization_type()}")
+                        print(f"   Role in org: {self.session_manager.get_current_user_role()}")
+                        print(f"   Is super admin: {self.session_manager.is_super_admin()}")
+                        print(f"   Organization type: {self.session_manager.get_current_organization_type()}")
                     else:
                         print(f"✅ User logged in: {user_data.get('email', 'Unknown')} - No active organization")
                 else:
@@ -116,7 +115,7 @@ class CleanApp:
 
                                 if result.data:
                                     print("✅ Found existing personal workspace, reinitializing session...")
-                                    success = session_manager.initialize_session(user_data)
+                                    success = self.session_manager.initialize_session(user_data)
                                     if not success:
                                         print("❌ Failed to initialize session with existing workspace")
                                         print("Debug info:")
@@ -160,19 +159,19 @@ class CleanApp:
             
             if login_window.exec() == login_window.DialogCode.Accepted:
                 # Ensure session manager was created during login
-                if session_manager is None:
+                if self.session_manager is None:
                     print("⚠️  Session manager not created - creating fallback")
                     from src.core.session_manager import SessionManager
-                    session_manager = SessionManager(auth_manager)
+                    self.session_manager = SessionManager(auth_manager)
                     
                     # Try to get organizations again
                     organizations = auth_manager.get_user_organizations()
                     if organizations:
-                        session_manager.set_current_organization(organizations[0])
+                        self.session_manager.set_current_organization(organizations[0])
                         print(f"🔧 Fallback: Set organization {organizations[0].get('name', 'Unknown')}")
                 
                 # Start main app with authentication context
-                return self.start_main_app(auth_manager, session_manager)
+                return self.start_main_app(auth_manager, self.session_manager)
             else:
                 print("Login cancelled by user")
                 return 0
@@ -183,17 +182,34 @@ class CleanApp:
             return 1
 
     def start_main_app(self, auth_manager=None, session_manager=None):
-        """Start the main application window"""
+        """Start the main application window with loading screen"""
         try:
-            # Create main window with auth context
-            main_window = MainWindow(
-                auth_manager=auth_manager,
-                session_manager=session_manager
-            )
+            # Import background loader
+            from src.ui.components.background_loader import BackgroundLoader
             
+            # Create background loader
+            self.background_loader = BackgroundLoader(auth_manager, session_manager)
+            
+            # Connect signals
+            self.background_loader.loading_complete.connect(self.on_main_window_ready)
+            self.background_loader.loading_error.connect(self.on_loading_error)
+            
+            # Start background loading
+            self.background_loader.start_loading()
+            
+            # Start event loop
+            return self.app.exec()
+            
+        except Exception as e:
+            print(f"⚠️  Error starting application: {e}")
+            raise
+    
+    def on_main_window_ready(self, main_window):
+        """Handle when main window is ready"""
+        try:
             # If session manager was created after MainWindow, update it
-            if session_manager and hasattr(main_window, 'set_session_manager'):
-                main_window.set_session_manager(session_manager)
+            if self.session_manager and hasattr(main_window, 'set_session_manager'):
+                main_window.set_session_manager(self.session_manager)
             
             main_window.show()
             
@@ -202,14 +218,22 @@ class CleanApp:
                 main_window.refresh_workspace_switcher()
             
             # Force refresh user profile button to show initials
-            if hasattr(main_window, 'user_profile_button') and session_manager:
-                main_window.user_profile_button.update_user_profile(session_manager)
-            
-            return self.app.exec()
+            if hasattr(main_window, 'user_profile_button') and self.session_manager:
+                main_window.user_profile_button.update_user_profile(self.session_manager)
+                
+            print("✅ Main window loaded successfully!")
             
         except Exception as e:
-            print(f"⚠️  Error starting application: {e}")
-            raise
+            print(f"⚠️  Error showing main window: {e}")
+            self.on_loading_error(str(e))
+    
+    def on_loading_error(self, error_message):
+        """Handle loading error"""
+        print(f"❌ Loading error: {error_message}")
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.critical(None, "Loading Error", 
+                           f"Failed to load the application: {error_message}")
+        self.app.quit()
     
     def show_config_error(self):
         """Show configuration error dialog"""
