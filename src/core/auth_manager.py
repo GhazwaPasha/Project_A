@@ -421,9 +421,9 @@ class AuthManager:
             
             # Call the database function to get permissions
             result = self.supabase.rpc('get_page_permissions', {
-                'page_key': page_key,
-                'org_id': org_id
-            })
+                'p_page_key': page_key,
+                'p_org_id': org_id
+            }).execute()
             
             if result.data:
                 return result.data
@@ -578,6 +578,7 @@ class AuthManager:
             
             # Try to get all permissions in a single RPC call
             try:
+                print(f"🔍 DEBUG get_all_page_permissions_single_rpc: Attempting RPC call for org {org_id}")
                 result = self.supabase.rpc('get_all_page_permissions', {
                     'p_org_id': org_id,
                     'p_pages': pages
@@ -585,15 +586,20 @@ class AuthManager:
                 
                 if result.data:
                     permissions = result.data
+                    print(f"🔍 DEBUG get_all_page_permissions_single_rpc: RPC success! Result = {permissions}")
                     # Cache the result for longer since permissions don't change often
                     rpc_cache.set_cached_result(cache_key, permissions, CacheStrategy.PERMISSIONS)
                     self.logger.debug(f"Retrieved all page permissions in single RPC call")
                     return permissions
+                else:
+                    print(f"🔍 DEBUG get_all_page_permissions_single_rpc: RPC returned no data")
                     
             except Exception as rpc_error:
+                print(f"🔍 DEBUG get_all_page_permissions_single_rpc: RPC failed - {rpc_error}")
                 self.logger.debug(f"Single RPC call failed, falling back to individual calls: {rpc_error}")
             
             # Fallback: get permissions individually but cache them
+            print(f"🔍 DEBUG get_all_page_permissions_single_rpc: Using fallback method")
             permissions = {}
             for page in pages:
                 page_perms = self.get_page_permissions(page, org_id)
@@ -603,9 +609,11 @@ class AuthManager:
                     'edit': page_perms.get('edit', False),
                     'delete': page_perms.get('delete', False)
                 }
+                print(f"🔍 DEBUG get_all_page_permissions_single_rpc: {page} = {permissions[page]}")
             
             # Cache the aggregated result
             rpc_cache.set_cached_result(cache_key, permissions, CacheStrategy.PERMISSIONS)
+            print(f"🔍 DEBUG get_all_page_permissions_single_rpc: Final permissions = {permissions}")
             return permissions
                 
         except Exception as e:
