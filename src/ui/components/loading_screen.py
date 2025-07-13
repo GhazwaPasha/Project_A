@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QSize
-from PyQt6.QtGui import QPixmap, QFont, QPalette, QColor
+from PyQt6.QtGui import QPixmap, QFont, QPalette, QColor, QIcon
 from ...core.resource_manager import ResourceManager
 from .styles import ModernStyles
 
@@ -10,6 +10,10 @@ class LoadingScreen(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        # Set window icon for taskbar
+        app_icon_path = ResourceManager.get_icon_path("app-icon.ico")
+        if app_icon_path:
+            self.setWindowIcon(QIcon(app_icon_path))
         self.setup_ui()
         self.start_animation()
         

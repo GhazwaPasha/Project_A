@@ -6,6 +6,10 @@ Works with the new Supabase-only backend (NEW_SCHEMA.sql)
 import embedded_config  # Embedded configuration
 import sys
 import os
+import ctypes
+if sys.platform == "win32":
+    myappid = "com.accountuitive.app.1.0"
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 # Load environment variables if available
@@ -41,7 +45,7 @@ class CleanApp:
         
         # Set application icon globally
         from src.core.resource_manager import ResourceManager
-        app_icon_path = ResourceManager.get_icon_path("app-icon.png")
+        app_icon_path = ResourceManager.get_icon_path("app-icon.ico")
         if app_icon_path:
             from PyQt6.QtGui import QIcon
             self.app.setWindowIcon(QIcon(app_icon_path))
@@ -210,19 +214,21 @@ class CleanApp:
             # If session manager was created after MainWindow, update it
             if self.session_manager and hasattr(main_window, 'set_session_manager'):
                 main_window.set_session_manager(self.session_manager)
-            
             main_window.show()
-            
+            # Set the icon again after show, using a QTimer for reliability
+            from src.core.resource_manager import ResourceManager
+            from PyQt6.QtGui import QIcon
+            from PyQt6.QtCore import QTimer
+            app_icon_path = ResourceManager.get_icon_path("app-icon.ico")
+            if app_icon_path:
+                QTimer.singleShot(100, lambda: main_window.setWindowIcon(QIcon(app_icon_path)))
             # Refresh workspace switcher after window is shown to ensure it has latest data
             if hasattr(main_window, 'refresh_workspace_switcher'):
                 main_window.refresh_workspace_switcher()
-            
             # Force refresh user profile button to show initials
             if hasattr(main_window, 'user_profile_button') and self.session_manager:
                 main_window.user_profile_button.update_user_profile(self.session_manager)
-                
             print("✅ Main window loaded successfully!")
-            
         except Exception as e:
             print(f"⚠️  Error showing main window: {e}")
             self.on_loading_error(str(e))

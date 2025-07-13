@@ -25,7 +25,7 @@ class LoginWindow(QDialog):
         
         # Set application icon
         from ...core.resource_manager import ResourceManager
-        app_icon_path = ResourceManager.get_icon_path("app-icon.png")
+        app_icon_path = ResourceManager.get_icon_path("app-icon.ico")
         if app_icon_path:
             self.setWindowIcon(QIcon(app_icon_path))
         

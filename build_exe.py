@@ -7,6 +7,29 @@ import sys
 import shutil
 import subprocess
 from pathlib import Path
+from PIL import Image
+
+def convert_png_to_ico():
+    """Convert PNG icon to ICO format for Windows executable"""
+    png_path = 'assets/icons/app-icon.png'
+    ico_path = 'assets/icons/app-icon.ico'
+    
+    try:
+        # Open the PNG image
+        with Image.open(png_path) as img:
+            # Convert to RGBA if not already
+            if img.mode != 'RGBA':
+                img = img.convert('RGBA')
+            
+            # Create ICO file with multiple sizes for better compatibility
+            icon_sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+            img.save(ico_path, format='ICO', sizes=icon_sizes)
+        
+        print("✅ Converted PNG to ICO format")
+        return ico_path
+    except Exception as e:
+        print(f"❌ Failed to convert PNG to ICO: {e}")
+        return None
 
 def create_embedded_config():
     """Create embedded configuration with environment variables from .env file"""
@@ -62,6 +85,7 @@ block_cipher = None
 assets = [
     ('assets/icons/*.svg', 'assets/icons'),
     ('assets/icons/*.png', 'assets/icons'),
+    ('assets/icons/*.ico', 'assets/icons'),
     ('assets/fonts/*.ttf', 'assets/fonts'),
     ('embedded_config.py', '.'),
 ]
@@ -104,7 +128,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='AccountingApp',
+    name='Accountuitive',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -117,11 +141,11 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='assets/icons/app-icon.png'
+    icon='assets/icons/app-icon.ico'
 )
 '''
     
-    with open('AccountingApp.spec', 'w') as f:
+    with open('Accountuitive.spec', 'w') as f:
         f.write(spec_content)
     
     print("✅ Created PyInstaller spec file")
@@ -162,12 +186,20 @@ def build_executable():
         print("📦 Installing PyInstaller...")
         subprocess.run([sys.executable, '-m', 'pip', 'install', 'pyinstaller'])
     
+    # Install Pillow if not installed (for ICO conversion)
+    try:
+        import PIL
+    except ImportError:
+        print("📦 Installing Pillow for icon conversion...")
+        subprocess.run([sys.executable, '-m', 'pip', 'install', 'pillow'])
+    
     # Build the executable
     cmd = [
         sys.executable, '-m', 'PyInstaller',
         '--onefile',
         '--windowed',
-        '--name=AccountingApp',
+        '--name=Accountuitive',
+        '--icon=assets/icons/app-icon.ico',
         '--add-data=assets/icons;assets/icons',
         '--add-data=assets/fonts;assets/fonts',
         '--add-data=embedded_config.py;.',
@@ -191,7 +223,7 @@ def build_executable():
     
     if result.returncode == 0:
         print("✅ Executable built successfully!")
-        print("📁 Location: dist/AccountingApp.exe")
+        print("📁 Location: dist/Accountuitive.exe")
     else:
         print("❌ Build failed:")
         print(result.stderr)
@@ -200,16 +232,21 @@ def main():
     """Main build process"""
     print("🚀 Starting executable build process...")
     
-    # Step 1: Create embedded configuration
+    # Step 1: Convert PNG to ICO
+    ico_path = convert_png_to_ico()
+    if not ico_path:
+        print("⚠️  Warning: Could not convert PNG to ICO. Using default icon.")
+    
+    # Step 2: Create embedded configuration
     create_embedded_config()
     
-    # Step 2: Create spec file
+    # Step 3: Create spec file
     create_spec_file()
     
-    # Step 3: Modify run.py
+    # Step 4: Modify run.py
     modify_run_py()
     
-    # Step 4: Build executable
+    # Step 5: Build executable
     build_executable()
     
     print("\n🎉 Build process completed!")
