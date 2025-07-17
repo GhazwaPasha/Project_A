@@ -913,6 +913,20 @@ class HierarchicalAccountsPage(QWidget):
         # Add spacing
         button_layout.addSpacing(16)
         
+        # Import button
+        import_btn = QPushButton()
+        import_btn.setText("📥 Import")
+        import_btn.setStyleSheet(self._get_import_button_style())
+        import_btn.clicked.connect(self._import_accounts)
+        button_layout.addWidget(import_btn)
+        
+        # Export button
+        export_btn = QPushButton()
+        export_btn.setText("📤 Export")
+        export_btn.setStyleSheet(self._get_export_button_style())
+        export_btn.clicked.connect(self._export_accounts)
+        button_layout.addWidget(export_btn)
+        
         layout.addLayout(button_layout)
     
     def _refresh_data(self):
@@ -1455,6 +1469,292 @@ class HierarchicalAccountsPage(QWidget):
             }
         """
         
+    def _get_import_button_style(self):
+        """Get Windows 11 style import button styling."""
+        return """
+            QPushButton {
+                background: rgba(0, 120, 215, 0.08);
+                border: 1px solid rgba(0, 120, 215, 0.2);
+                border-radius: 8px;
+                padding: 8px 16px;
+                color: rgba(0, 120, 215, 0.9);
+                font-size: 12px;
+                font-weight: 500;
+                text-align: left;
+                icon-size: 16px;
+                min-height: 32px;
+            }
+            QPushButton:hover {
+                background: rgba(0, 120, 215, 0.15);
+                border: 1px solid rgba(0, 120, 215, 0.4);
+                color: rgb(0, 120, 215);
+            }
+            QPushButton:pressed {
+                background: rgba(0, 120, 215, 0.1);
+                border: 1px solid rgba(0, 120, 215, 0.3);
+            }
+            QPushButton:disabled {
+                background: rgba(0, 120, 215, 0.05);
+                border: 1px solid rgba(0, 120, 215, 0.1);
+                color: rgba(0, 120, 215, 0.4);
+            }
+        """
+        
+    def _get_export_button_style(self):
+        """Get Windows 11 style export button styling."""
+        return """
+            QPushButton {
+                background: rgba(0, 204, 106, 0.08);
+                border: 1px solid rgba(0, 204, 106, 0.2);
+                border-radius: 8px;
+                padding: 8px 16px;
+                color: rgba(0, 204, 106, 0.9);
+                font-size: 12px;
+                font-weight: 500;
+                text-align: left;
+                icon-size: 16px;
+                min-height: 32px;
+            }
+            QPushButton:hover {
+                background: rgba(0, 204, 106, 0.15);
+                border: 1px solid rgba(0, 204, 106, 0.4);
+                color: rgb(0, 204, 106);
+            }
+            QPushButton:pressed {
+                background: rgba(0, 204, 106, 0.1);
+                border: 1px solid rgba(0, 204, 106, 0.3);
+            }
+            QPushButton:disabled {
+                background: rgba(0, 204, 106, 0.05);
+                border: 1px solid rgba(0, 204, 106, 0.1);
+                color: rgba(0, 204, 106, 0.4);
+            }
+        """
+    
+    def _apply_styling(self):
+        """Apply glassmorphism styling to the page."""
+        GlassmorphismHelper.apply_main_container_effect(self)
+        self.setStyleSheet(ModernStyles.get_complete_stylesheet())
+
+    def _import_accounts(self):
+        """Import accounts from Excel/CSV file."""
+        try:
+            import pandas as pd
+            
+            file_path, _ = QFileDialog.getOpenFileName(
+                self, "Import Chart of Accounts", "", 
+                "Excel files (*.xlsx *.xls);;CSV files (*.csv);;All files (*.*)"
+            )
+            
+            if not file_path:
+                return
+                
+            # Read the file
+            if file_path.endswith(('.xlsx', '.xls')):
+                df = pd.read_excel(file_path)
+            else:
+                df = pd.read_csv(file_path)
+            
+            # Validate required columns
+            required_columns = ['Name', 'Type', 'Code']
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            
+            if missing_columns:
+                QMessageBox.critical(
+                    self, "Import Error",
+                    f"Missing required columns: {', '.join(missing_columns)}\n\n"
+                    f"Required columns: {', '.join(required_columns)}\n"
+                    f"Optional columns: Parent Code, Description, Group, Is Postable"
+                )
+                return
+            
+            # Show confirmation dialog
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Icon.Question)
+            msg.setText(f"Import {len(df)} accounts?")
+            msg.setInformativeText("This will add new accounts to your chart of accounts. Existing accounts with the same name will be skipped.")
+            msg.setWindowTitle("Confirm Import")
+            msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            msg.setDefaultButton(QMessageBox.StandardButton.No)
+            
+            if msg.exec() != QMessageBox.StandardButton.Yes:
+                return
+            
+            # Get existing account names to avoid duplicates
+            existing_accounts = [acc['name'] for acc in self.system.get_chart_of_accounts(active_only=True)]
+            
+            # Process each row
+            success_count = 0
+            skipped_count = 0
+            error_count = 0
+            errors = []
+            
+            for index, row in df.iterrows():
+                try:
+                    name = str(row['Name']).strip()
+                    account_type = str(row['Type']).strip()
+                    code = str(row.get('Code', '')).strip()
+                    parent_code = str(row.get('Parent Code', '')).strip()
+                    description = str(row.get('Description', '')).strip()
+                    group = str(row.get('Group', '')).strip()
+                    is_postable = row.get('Is Postable', True)
+                    
+                    # Convert is_postable to boolean
+                    if isinstance(is_postable, str):
+                        is_postable = is_postable.lower() in ['true', 'yes', '1', 'y']
+                    
+                    # Skip if account already exists
+                    if name in existing_accounts:
+                        skipped_count += 1
+                        continue
+                    
+                    # Get parent_id if parent_code is provided
+                    parent_id = None
+                    if parent_code:
+                        all_accounts = self.system.get_chart_of_accounts(active_only=True)
+                        for account in all_accounts:
+                            if account.get('code') == parent_code:
+                                parent_id = account.get('id')
+                                break
+                    
+                    # Create account data
+                    account_data = {
+                        'name': name,
+                        'account_type': account_type,
+                        'code': code if code else None,
+                        'parent_id': parent_id,
+                        'is_postable': is_postable,
+                        'description': description,
+                        'group': group
+                    }
+                    
+                    # Create account using the system
+                    if hasattr(self.system, 'base_system'):
+                        result = self.system.base_system.create_account(account_data)
+                    else:
+                        result = self.system.create_account(account_data)
+                    
+                    if result:
+                        success_count += 1
+                        existing_accounts.append(name)  # Add to existing list to avoid duplicates
+                    else:
+                        error_count += 1
+                        errors.append(f"Row {index + 1}: Failed to create account '{name}'")
+                        
+                except Exception as e:
+                    error_count += 1
+                    errors.append(f"Row {index + 1}: {str(e)}")
+            
+            # Show results
+            result_msg = f"Import completed:\n\n"
+            result_msg += f"✅ Successfully imported: {success_count} accounts\n"
+            result_msg += f"⏭️ Skipped (already exist): {skipped_count} accounts\n"
+            result_msg += f"❌ Errors: {error_count} accounts\n"
+            
+            if errors:
+                result_msg += f"\nErrors:\n" + "\n".join(errors[:5])  # Show first 5 errors
+                if len(errors) > 5:
+                    result_msg += f"\n... and {len(errors) - 5} more errors"
+            
+            QMessageBox.information(self, "Import Results", result_msg)
+            
+            # Refresh the tree
+            self._load_data()
+            
+            # Emit accounts changed event to refresh all UI components
+            accounting_events.accounts_changed.emit()
+            
+        except ImportError:
+            QMessageBox.critical(
+                self, "Import Error",
+                "pandas library is required for import functionality.\n"
+                "Please install it using: pip install pandas openpyxl"
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Import Error", f"Failed to import accounts: {str(e)}")
+    
+    def _export_accounts(self):
+        """Export accounts to Excel/CSV file."""
+        try:
+            import pandas as pd
+            
+            file_path, file_type = QFileDialog.getSaveFileName(
+                self, "Export Chart of Accounts", "chart_of_accounts.xlsx",
+                "Excel files (*.xlsx);;CSV files (*.csv)"
+            )
+            
+            if not file_path:
+                return
+            
+            # Get all accounts (including inactive for complete export)
+            accounts = self.system.get_chart_of_accounts(active_only=False)
+            
+            if not accounts:
+                QMessageBox.warning(self, "Export", "No accounts to export.")
+                return
+            
+            # Prepare data for export
+            export_data = []
+            for account in accounts:
+                # Get parent code
+                parent_code = ""
+                if account.get('parent_id'):
+                    for parent_account in accounts:
+                        if parent_account.get('id') == account.get('parent_id'):
+                            parent_code = parent_account.get('code', '')
+                            break
+                
+                export_data.append({
+                    'Name': account.get('name', ''),
+                    'Type': account.get('account_type', '') or account.get('type', ''),
+                    'Code': account.get('code', ''),
+                    'Parent Code': parent_code,
+                    'Description': account.get('description', ''),
+                    'Group': account.get('group', ''),
+                    'Level': account.get('level', 1),
+                    'Is Postable': account.get('is_postable', True),
+                    'Is Active': account.get('is_active', True)
+                })
+            
+            # Create DataFrame
+            df = pd.DataFrame(export_data)
+            
+            # Export based on file type
+            if file_path.endswith('.csv'):
+                df.to_csv(file_path, index=False, encoding='utf-8')
+            else:
+                # Excel export
+                with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
+                    df.to_excel(writer, sheet_name='Chart of Accounts', index=False)
+                    
+                    # Auto-adjust column widths
+                    worksheet = writer.sheets['Chart of Accounts']
+                    for column in worksheet.columns:
+                        max_length = 0
+                        column_letter = column[0].column_letter
+                        for cell in column:
+                            try:
+                                if len(str(cell.value)) > max_length:
+                                    max_length = len(str(cell.value))
+                            except:
+                                pass
+                        adjusted_width = min(max_length + 2, 50)  # Cap at 50
+                        worksheet.column_dimensions[column_letter].width = adjusted_width
+            
+            QMessageBox.information(
+                self, "Export Successful", 
+                f"Successfully exported {len(export_data)} accounts to:\n{file_path}"
+            )
+            
+        except ImportError:
+            QMessageBox.critical(
+                self, "Export Error",
+                "pandas and openpyxl libraries are required for export functionality.\n"
+                "Please install them using: pip install pandas openpyxl"
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", f"Failed to export accounts: {str(e)}")
+    
     def _apply_styling(self):
         """Apply glassmorphism styling to the page."""
         GlassmorphismHelper.apply_main_container_effect(self)
@@ -2120,3 +2420,4 @@ class AccountDetailsPanel(QStackedWidget):
         
         # If it has no children, it's a leaf account and is postable
         return not has_children
+    
