@@ -319,7 +319,6 @@ class DateRangeSelector(QWidget):
     def __init__(self, parent=None, callback=None):
         super().__init__(parent)
         self.callback = callback or (lambda start_date, end_date: None)
-        self._is_updating = False  # Prevent recursive updates
         self._setup_ui()
         
     def _setup_ui(self):
@@ -451,13 +450,8 @@ class DateRangeSelector(QWidget):
         self.quick_buttons.button(0).setChecked(True)  # This Month
         
     def _on_date_changed(self):
-        """Handle date changes - supports both callback and signal patterns with prevention of recursive calls."""
-        if self._is_updating:
-            return  # Prevent recursive updates
-        
+        """Handle date changes - supports both callback and signal patterns."""
         try:
-            self._is_updating = True
-            
             start_date, end_date = self.get_date_range()
             
             # Validate dates
@@ -486,17 +480,10 @@ class DateRangeSelector(QWidget):
                 
         except Exception as e:
             print(f"❌ Error in DateRangeSelector date changed: {e}")
-        finally:
-            self._is_updating = False
         
     def _quick_filter_selected(self):
         """Handle quick filter selection with prevention of recursive calls."""
-        if self._is_updating:
-            return  # Prevent recursive updates
-        
         try:
-            self._is_updating = True
-            
             from ..common import QDate
             from PyQt6.QtWidgets import QPushButton
             button = self.sender()
@@ -508,33 +495,47 @@ class DateRangeSelector(QWidget):
             
             today = QDate.currentDate()
             
-            if button_id == 0:  # This Month
-                self.from_date.setDate(QDate(today.year(), today.month(), 1))
-                self.to_date.setDate(today)
-            elif button_id == 1:  # Last Month
-                last_month = today.addMonths(-1)
-                self.from_date.setDate(QDate(last_month.year(), last_month.month(), 1))
-                self.to_date.setDate(QDate(today.year(), today.month(), 1).addDays(-1))
-            elif button_id == 2:  # This Quarter
-                quarter = ((today.month() - 1) // 3) * 3 + 1
-                self.from_date.setDate(QDate(today.year(), quarter, 1))
-                self.to_date.setDate(today)
-            elif button_id == 3:  # This Year
-                self.from_date.setDate(QDate(today.year(), 1, 1))
-                self.to_date.setDate(today)
-            elif button_id == 4:  # All Time
-                # Go back 5 years from current date
-                five_years_ago = today.addYears(-5)
-                self.from_date.setDate(five_years_ago)
-                self.to_date.setDate(today)
+            # Temporarily disconnect date change signals to prevent recursive calls
+            try:
+                self.from_date.dateChanged.disconnect(self._on_date_changed)
+            except (TypeError, RuntimeError):
+                pass  # Signal not connected or already disconnected
+            try:
+                self.to_date.dateChanged.disconnect(self._on_date_changed)
+            except (TypeError, RuntimeError):
+                pass  # Signal not connected or already disconnected
             
-            # Don't call _on_date_changed here to avoid double emission
-            # The date changes will trigger _on_date_changed automatically
+            try:
+                if button_id == 0:  # This Month
+                    self.from_date.setDate(QDate(today.year(), today.month(), 1))
+                    self.to_date.setDate(today)
+                elif button_id == 1:  # Last Month
+                    last_month = today.addMonths(-1)
+                    self.from_date.setDate(QDate(last_month.year(), last_month.month(), 1))
+                    self.to_date.setDate(QDate(today.year(), today.month(), 1).addDays(-1))
+                elif button_id == 2:  # This Quarter
+                    quarter = ((today.month() - 1) // 3) * 3 + 1
+                    self.from_date.setDate(QDate(today.year(), quarter, 1))
+                    self.to_date.setDate(today)
+                elif button_id == 3:  # This Year
+                    self.from_date.setDate(QDate(today.year(), 1, 1))
+                    self.to_date.setDate(today)
+                elif button_id == 4:  # All Time
+                    # Go back 5 years from current date
+                    five_years_ago = today.addYears(-5)
+                    self.from_date.setDate(five_years_ago)
+                    self.to_date.setDate(today)
+                
+                # Manually trigger the date change handler after setting dates
+                self._on_date_changed()
+                
+            finally:
+                # Reconnect the date change signals
+                self.from_date.dateChanged.connect(self._on_date_changed)
+                self.to_date.dateChanged.connect(self._on_date_changed)
             
         except Exception as e:
             print(f"❌ Error in DateRangeSelector quick filter: {e}")
-        finally:
-            self._is_updating = False
         
     def _get_date_filter_button_style(self):
         """Get Windows 11 style date filter button styling to match level filter."""
@@ -569,12 +570,7 @@ class DateRangeSelector(QWidget):
     
     def set_date_range(self, start_date, end_date):
         """Set the date range programmatically (for AI navigation) with prevention of recursive calls."""
-        if self._is_updating:
-            return False  # Prevent recursive updates
-        
         try:
-            self._is_updating = True
-            
             from ..common import QDate
             
             # Convert to QDate if needed
@@ -592,27 +588,85 @@ class DateRangeSelector(QWidget):
             if not start_qdate.isValid() or not end_qdate.isValid():
                 print(f"❌ Invalid dates provided: {start_date} to {end_date}")
                 return False
+            
+            # Temporarily disconnect date change signals to prevent recursive calls
+            try:
+                self.from_date.dateChanged.disconnect(self._on_date_changed)
+            except (TypeError, RuntimeError):
+                pass  # Signal not connected or already disconnected
+            try:
+                self.to_date.dateChanged.disconnect(self._on_date_changed)
+            except (TypeError, RuntimeError):
+                pass  # Signal not connected or already disconnected
+            
+            try:
+                # Set the dates
+                self.from_date.setDate(start_qdate)
+                self.to_date.setDate(end_qdate)
                 
-            # Set the dates
-            self.from_date.setDate(start_qdate)
-            self.to_date.setDate(end_qdate)
-            
-            # Clear any quick filter selection since this is a custom range
-            for button in self.quick_buttons.buttons():
-                if button:
-                    button.setChecked(False)
-            
-            # Don't trigger the date change callback here to avoid double emission
-            # The date changes will trigger _on_date_changed automatically
-            
-            print(f"✅ Date range set to: {start_qdate.toString('yyyy-MM-dd')} to {end_qdate.toString('yyyy-MM-dd')}")
-            return True
+                # Clear any quick filter selection since this is a custom range
+                for button in self.quick_buttons.buttons():
+                    if button:
+                        button.setChecked(False)
+                
+                # Manually trigger the date change handler after setting dates
+                self._on_date_changed()
+                
+                print(f"✅ Date range set to: {start_qdate.toString('yyyy-MM-dd')} to {end_qdate.toString('yyyy-MM-dd')}")
+                return True
+                
+            finally:
+                # Reconnect the date change signals
+                self.from_date.dateChanged.connect(self._on_date_changed)
+                self.to_date.dateChanged.connect(self._on_date_changed)
             
         except Exception as e:
             print(f"❌ Error setting date range: {e}")
             return False
-        finally:
-            self._is_updating = False
+
+    def closeEvent(self, event):
+        """Clean up resources when widget is closed."""
+        try:
+            # Disconnect signals to prevent callbacks after destruction
+            try:
+                self.from_date.dateChanged.disconnect(self._on_date_changed)
+            except (TypeError, RuntimeError):
+                pass  # Signal not connected or already disconnected
+            
+            try:
+                self.to_date.dateChanged.disconnect(self._on_date_changed)
+            except (TypeError, RuntimeError):
+                pass  # Signal not connected or already disconnected
+            
+            # Disconnect quick filter buttons
+            for button in self.quick_buttons.buttons():
+                if button:
+                    try:
+                        button.clicked.disconnect()
+                    except:
+                        pass
+            
+            print("✅ DateRangeSelector resources cleaned up")
+            
+        except Exception as e:
+            print(f"⚠️ Error during DateRangeSelector cleanup: {e}")
+        
+        super().closeEvent(event)
+
+    def is_valid(self):
+        """Check if the DateRangeSelector is valid and not being destroyed."""
+        try:
+            # Check if the widget and its components are still valid
+            if not self.from_date or not self.to_date:
+                return False
+            
+            # Test if date widgets are still valid
+            self.from_date.objectName()
+            self.to_date.objectName()
+            
+            return True
+        except:
+            return False
 
 
 class ReportCard(QFrame):
@@ -1529,46 +1583,4 @@ class PyQtGraphChartCard(QFrame):
         shadow.setColor(QColor(0, 0, 0, 80))
         self.setGraphicsEffect(shadow)
 
-    def closeEvent(self, event):
-        """Clean up resources when widget is closed."""
-        try:
-            # Disconnect signals to prevent callbacks after destruction
-            try:
-                self.from_date.dateChanged.disconnect()
-            except:
-                pass
-            
-            try:
-                self.to_date.dateChanged.disconnect()
-            except:
-                pass
-            
-            # Disconnect quick filter buttons
-            for button in self.quick_buttons.buttons():
-                if button:
-                    try:
-                        button.clicked.disconnect()
-                    except:
-                        pass
-            
-            print("✅ DateRangeSelector resources cleaned up")
-            
-        except Exception as e:
-            print(f"⚠️ Error during DateRangeSelector cleanup: {e}")
-        
-        super().closeEvent(event)
 
-    def is_valid(self):
-        """Check if the DateRangeSelector is valid and not being destroyed."""
-        try:
-            # Check if the widget and its components are still valid
-            if not self.from_date or not self.to_date:
-                return False
-            
-            # Test if date widgets are still valid
-            self.from_date.objectName()
-            self.to_date.objectName()
-            
-            return True
-        except:
-            return False
