@@ -8,10 +8,8 @@ from ..common import (
     ResponsiveHelper, Qt, QScrollArea, QFrame
 )
 from ...core.utils import format_currency
-from ..components.widgets import MetricCard, ActionCard, PageHeader, DateRangeSelector, PyQtGraphChartCard
+from ..components.widgets import MetricCard, ActionCard, PageHeader, DateRangeSelector
 from ..components.styles import ModernStyles, GlassmorphismHelper
-import pyqtgraph as pg
-import numpy as np
 from PyQt6.QtWidgets import QGridLayout, QComboBox
 from PyQt6.QtGui import QPainter, QColor, QPen, QFont
 from ..components.scrollbar_styles import ModernScrollbarStyles
@@ -27,21 +25,6 @@ class DashboardPage(QWidget):
     def __init__(self, system, parent=None):
         super().__init__(parent)
         self.system = system
-        
-        # Initialize loading states
-        self.chart_loading_states = {
-            'chart1': False,
-            'donut': False
-        }
-        
-        # Initialize chart update timers with proper ownership
-        self.chart1_timer = QTimer(self)  # Set parent to self for auto-deletion
-        self.chart1_timer.setSingleShot(True)
-        self.chart1_timer.timeout.connect(self._perform_chart1_update)
-        
-        self.donut_timer = QTimer(self)  # Set parent to self for auto-deletion
-        self.donut_timer.setSingleShot(True)
-        self.donut_timer.timeout.connect(self._perform_donut_chart_update)
         
         # Cache data validation result to avoid repeated calls
         self._cached_has_data = None
@@ -66,8 +49,7 @@ class DashboardPage(QWidget):
         """Validate that all critical components are properly initialized."""
         try:
             critical_components = [
-                'date_selector', 'chart1_plot', 'donut_widget',
-                'account1_combo', 'account2_combo'
+                'date_selector'
             ]
             
             missing_components = []
@@ -93,8 +75,6 @@ class DashboardPage(QWidget):
     def _disconnect_signals(self):
         """Disconnect all signals safely."""
         signals_to_disconnect = [
-            (self.account1_combo, 'currentIndexChanged'),
-            (self.account2_combo, 'currentIndexChanged'), 
             (self.date_selector, 'dateRangeChanged')
         ]
         
@@ -113,42 +93,12 @@ class DashboardPage(QWidget):
             # Disconnect all signals to prevent callbacks after destruction
             self._disconnect_signals()
             
-            # Disconnect timer signals before stopping them
-            try:
-                if hasattr(self, 'chart1_timer') and self.chart1_timer:
-                    self.chart1_timer.timeout.disconnect()
-                    self.chart1_timer.stop()
-            except:
-                pass
-            
-            try:
-                if hasattr(self, 'donut_timer') and self.donut_timer:
-                    self.donut_timer.timeout.disconnect()
-                    self.donut_timer.stop()
-            except:
-                pass
-            
             try:
                 if hasattr(self, '_debounce_timer') and self._debounce_timer:
                     self._debounce_timer.timeout.disconnect()
                     self._debounce_timer.stop()
             except:
                 pass
-            
-            # Clear chart widgets
-            if hasattr(self, 'chart1_plot') and self.chart1_plot:
-                try:
-                    self.chart1_plot.clear()
-                except:
-                    pass
-            
-            if hasattr(self, 'donut_widget') and self.donut_widget:
-                try:
-                    self.donut_widget.values = []
-                    self.donut_widget.labels = []
-                    self.donut_widget.colors = []
-                except:
-                    pass
             
             print("✅ Dashboard resources cleaned up")
             
@@ -226,17 +176,14 @@ class DashboardPage(QWidget):
         main_layout.addWidget(scroll_area)
         
     def _create_mixed_metrics_layout(self, content_layout):
-        """Create the mixed metrics layout with cards and charts as a 4-column grid, with charts as 2x2 blocks."""
+        """Create the mixed metrics layout with cards in a 4-column grid."""
         grid = QGridLayout()
         grid.setSpacing(ResponsiveHelper.scale_size(20, 16, 28))
 
         # Metric cards
         self.card_cash = MetricCard("Cash & Cash Equivalents", "0.00", "", clickable=True)
         self.card_net_income = MetricCard("Net Income", "0.00", "", clickable=True)
-        self.card_revenue_growth = MetricCard("Revenue Growth", "0.00%", "", clickable=True)
-        self.card_expense_growth = MetricCard("Expense Growth", "0.00%", "", clickable=True)
         self.card_liabilities = MetricCard("Liabilities", "0.00", "", clickable=True)
-        self.card_working_capital = MetricCard("Working Capital", "0.00", "", clickable=True)
         self.card_gross_margin = MetricCard("Gross Margin", "0.00%", "", clickable=True)
         self.card_operating_margin = MetricCard("Operating Margin", "0.00%", "", clickable=True)
         self.card_receivables = MetricCard("Accounts Receivable", "0.00", "", clickable=True)
@@ -244,186 +191,25 @@ class DashboardPage(QWidget):
         self.card_quick_ratio = MetricCard("Quick Ratio", "0.00", "", clickable=True)
         self.card_debt_equity = MetricCard("Debt-to-Equity", "0.00", "", clickable=True)
         self.card_current_ratio = MetricCard("Current Ratio", "0.00", "", clickable=True)
-        self.card_dso = MetricCard("Days Sales Outstanding", "0", "", clickable=True)
         self.card_expenses = MetricCard("Expenses", "0.00", "", clickable=True)
         self.card_revenue = MetricCard("Revenue", "0.00", "", clickable=True)
 
-        # --- Chart 1: Revenue vs Expenses (Line/Area Chart, pyqtgraph) ---
-        # Fetch all accounts for dropdowns (no postable filter)
-        accounts = self.system.get_chart_of_accounts(active_only=True)
-        account_names = [acc['name'] for acc in accounts]
-        # Dropdowns
-        self.account1_combo = QComboBox()
-        self.account1_combo.addItems(account_names)
-        self.account1_combo.setStyleSheet("background: rgba(32,34,37,0.7); color: white; border-radius: 8px; padding: 6px 12px; font-size: 13px;")
-        self.account2_combo = QComboBox()
-        self.account2_combo.addItems(account_names)
-        self.account2_combo.setStyleSheet("background: rgba(32,34,37,0.7); color: white; border-radius: 8px; padding: 6px 12px; font-size: 13px;")
-        # Layout for dropdowns
-        dropdown_layout = QHBoxLayout()
-        dropdown_layout.setContentsMargins(0, 0, 0, 8)
-        dropdown_layout.setSpacing(16)
-        dropdown_layout.addStretch(1)
-        dropdown_layout.addWidget(self.account1_combo)
-        dropdown_layout.addSpacing(8)
-        dropdown_layout.addWidget(QLabel("vs"))
-        dropdown_layout.addSpacing(8)
-        dropdown_layout.addWidget(self.account2_combo)
-        dropdown_layout.addStretch(1)
-        dropdown_widget = QWidget()
-        dropdown_widget.setLayout(dropdown_layout)
-        # Chart with zoom functionality
-        self.chart1_plot = pg.PlotWidget(background='w')
-        self.chart1_plot.setBackground(None)
-        self.chart1_plot.setStyleSheet('background: transparent;')
-        
-        # Enable zoom and pan functionality
-        self.chart1_plot.setMouseEnabled(x=True, y=True)
-        self.chart1_plot.enableAutoRange(axis='x')
-        self.chart1_plot.enableAutoRange(axis='y')
-        
-        # Add zoom controls (no grid lines)
-        self.chart1_plot.showGrid(x=False, y=False)
-        self.chart1_plot.getAxis('left').setPen(pg.mkPen('w', width=1))
-        self.chart1_plot.getAxis('bottom').setPen(pg.mkPen('w', width=1))
-        # Default month labels (will be overridden by real data)
-        default_month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
-        default_months = np.arange(6)
-        # Combine dropdowns and chart in a vertical layout
-        chart1_container = QWidget()
-        chart1_vlayout = QVBoxLayout(chart1_container)
-        chart1_vlayout.setContentsMargins(0, 0, 0, 0)
-        chart1_vlayout.setSpacing(0)
-        chart1_vlayout.addWidget(dropdown_widget)
-        chart1_vlayout.addWidget(self.chart1_plot)
-        chart1 = PyQtGraphChartCard(chart1_container)
-        chart1.setMinimumHeight(200)
-        
-        # Connect signals for chart updates
-        self.account1_combo.currentIndexChanged.connect(self._perform_chart1_update)
-        self.account2_combo.currentIndexChanged.connect(self._perform_chart1_update)
-        self.date_selector.dateRangeChanged.connect(self._on_date_range_changed)
-        
-        # Initial chart update
-        self._perform_chart1_update()
-
-        # --- Chart 2: Gross Margin (Line Chart, pyqtgraph) ---
-        # (Removed margin chart and related dropdown)
-        # --- Chart 3: Revenue Growth (Line Chart, pyqtgraph) ---
-        # (Removed)
-        # --- Chart 4: Income Statement Breakdown (Donut Chart, modern, with percentages) ---
-        class DonutChartWidget(QWidget):
-            def __init__(self, values, labels, colors, parent=None):
-                super().__init__(parent)
-                self.values = values
-                self.labels = labels
-                self.colors = colors
-                self.setMinimumSize(320, 320)
-                self.setMaximumSize(600, 600)
-            def paintEvent(self, event):
-                painter = QPainter(self)
-                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-                available_width = self.width()
-                available_height = self.height()
-                margin = min(available_width, available_height) * 0.08
-                # Donut diameter: fit within both width and height, leaving space for margin
-                donut_diameter = min(available_width, available_height) - 2 * margin
-                # Center donut in widget
-                x0 = (available_width - donut_diameter) / 2
-                y0 = (available_height - donut_diameter) / 2
-                rect = QRectF(x0, y0, donut_diameter, donut_diameter)
-                total = sum(self.values)
-                start_angle = 90 * 16
-                font = QFont()
-                font.setPointSize(int(donut_diameter * 0.07))
-                font.setBold(True)
-                painter.setFont(font)
-                percent_font = QFont()
-                percent_font.setPointSize(int(donut_diameter * 0.03))
-                percent_font.setBold(True)
-                for i, (v, color) in enumerate(zip(self.values, self.colors)):
-                    span_angle = int(360 * 16 * v / total)
-                    painter.setBrush(QColor(color))
-                    painter.setPen(QPen(Qt.PenStyle.NoPen))
-                    painter.drawPie(rect, start_angle, span_angle)
-                    percent = v / total * 100
-                    angle_rad = (start_angle + span_angle / 2) / 16 * 3.14159 / 180
-                    label_radius = (rect.width() / 2 + rect.width() * 0.7) / 2
-                    cx = rect.center().x() + label_radius * np.cos(-angle_rad)
-                    cy = rect.center().y() - label_radius * np.sin(-angle_rad)
-                    painter.setFont(percent_font)
-                    painter.setPen(QPen(QColor('white')))
-                    painter.drawText(QRectF(int(cx-18), int(cy-10), 36, 20), Qt.AlignmentFlag.AlignCenter, f"{percent:.0f}%")
-                    start_angle += span_angle
-                painter.setFont(font)
-                inner_margin = rect.width() * 0.9
-                inner_rect = rect.adjusted(inner_margin, inner_margin, -inner_margin, -inner_margin)
-                painter.save()
-                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
-                painter.setBrush(Qt.BrushStyle.SolidPattern)
-                painter.setPen(QPen(Qt.PenStyle.NoPen))
-                painter.drawEllipse(inner_rect)
-                painter.restore()
-                # Draw legend absolutely in top-right corner
-                legend_box_size = 10
-                legend_font = QFont()
-                legend_font.setPointSize(int(donut_diameter * 0.025))
-                painter.setFont(legend_font)
-                max_label_width = max([painter.fontMetrics().horizontalAdvance(label) for label in self.labels])
-                legend_width = legend_box_size + 8 + max_label_width
-                legend_height = len(self.labels) * (legend_box_size + 8)
-                legend_margin = int(margin)
-                legend_x = available_width - legend_width - legend_margin
-                legend_y = legend_margin
-                for i, (label, v, color) in enumerate(zip(self.labels, self.values, self.colors)):
-                    painter.setBrush(QColor(color))
-                    painter.drawRect(legend_x, legend_y, legend_box_size, legend_box_size)
-                    painter.setPen(QPen(QColor('white')))
-                    painter.drawText(legend_x + legend_box_size + 8, legend_y + legend_box_size, label)
-                    legend_y += legend_box_size + 8
-        
-        # Create donut chart widget
-        donut_labels = ["Loading..."]
-        donut_values = [1]
-        donut_colors = ["#666666"]
-        self.donut_widget = DonutChartWidget(donut_values, donut_labels, donut_colors)
-        chart4 = PyQtGraphChartCard(self.donut_widget)
-        chart4.setMinimumHeight(320)
-        chart4.setMaximumHeight(600)
-        
-        # Connect date range selector to donut chart updates
-        self.date_selector.dateRangeChanged.connect(self._perform_donut_chart_update)
-        
-        # Initial update
-        self._perform_donut_chart_update()
-
-        # Place widgets in grid (4 columns wide, charts as 2x2 blocks, no overlap)
-        # Row 0
+        # Add cards to grid in 4-column layout
         grid.addWidget(self.card_cash, 0, 0)
         grid.addWidget(self.card_net_income, 0, 1)
-        grid.addWidget(chart1, 0, 2, 2, 2)  # Chart 1: 2x2 block at (0,2)
-        # Row 1
-        grid.addWidget(self.card_liabilities, 1, 0)
-        grid.addWidget(self.card_gross_margin, 1, 1)
-        # Row 2
-        grid.addWidget(chart4, 2, 0, 2, 2)  # Donut chart below gross margin, spanning 2x2
-        grid.addWidget(self.card_operating_margin, 2, 2)
-        grid.addWidget(self.card_receivables, 2, 3)
-        # Row 3
-        grid.addWidget(self.card_payables, 3, 2)
-        grid.addWidget(self.card_quick_ratio, 3, 3)
-        # Row 4
-        grid.addWidget(self.card_debt_equity, 4, 0)
-        grid.addWidget(self.card_current_ratio, 4, 1)
-        grid.addWidget(self.card_expenses, 4, 2)
-        grid.addWidget(self.card_revenue, 4, 3)
-        # Removed now-empty row 5
+        grid.addWidget(self.card_liabilities, 0, 2)
+        grid.addWidget(self.card_gross_margin, 0, 3)
+        grid.addWidget(self.card_operating_margin, 1, 0)
+        grid.addWidget(self.card_receivables, 1, 1)
+        grid.addWidget(self.card_payables, 1, 2)
+        grid.addWidget(self.card_quick_ratio, 1, 3)
+        grid.addWidget(self.card_debt_equity, 2, 0)
+        grid.addWidget(self.card_current_ratio, 2, 1)
+        grid.addWidget(self.card_expenses, 2, 2)
+        grid.addWidget(self.card_revenue, 2, 3)
+
         content_layout.addLayout(grid)
-        
-        # Set equal stretch for all columns
-        for col in range(4):
-            grid.setColumnStretch(col, 1)
-    
+
     def _create_actions_section(self, content_layout):
         """Create the quick actions section."""
         # Section title
@@ -484,7 +270,7 @@ class DashboardPage(QWidget):
         content_layout.addLayout(actions_layout)
         
     def _setup_default_accounts(self):
-        """Set up default Revenue and Expense accounts for chart comparison."""
+        """Set up default Revenue and Expense accounts for comparison."""
         try:
             # Check if widget is still valid
             if self._is_destroying:
@@ -532,24 +318,7 @@ class DashboardPage(QWidget):
         self._update_metrics()
         self._setup_default_accounts()
     
-    def _show_no_data_chart(self, plot_widget, message="No data available"):
-        """Show no data message on chart"""
-        plot_widget.clear()
-        plot_widget.setLabel('left', "Value", color='white', size='10pt')
-        plot_widget.setLabel('bottom', "Period", color='white', size='10pt')
-        plot_widget.addLegend(offset=(10,10), labelTextColor='white', brush=pg.mkBrush(30,32,36,180))
-        
-        # Add text item to show no data message
-        text_item = pg.TextItem(text=message, 
-                              color=QColor(255, 255, 255, 153),  # 153 = 0.6 * 255
-                              anchor=(0.5, 0.5))
-        plot_widget.addItem(text_item)
-        text_item.setPos(0.5, 0.5)
-    
-    def _show_no_data_chart_accounts(self, plot_widget, account1, account2):
-        """Show no data message on account comparison chart"""
-        message = f"No data available for\n{account1} vs {account2}\nin selected date range"
-        self._show_no_data_chart(plot_widget, message)
+
     
     def _update_metrics(self):
         """Update financial metrics cards with current data using group-based reporting."""
@@ -936,20 +705,17 @@ class DashboardPage(QWidget):
             print(f"❌ Error in date range changed handler: {e}")
     
     def _debounced_date_range_update(self):
-        """Perform the actual date range update after debouncing."""
+        """Perform the actual date range update with debouncing."""
         try:
             # Check if widget is still valid
             if self._is_destroying or not self._is_widget_valid('date_selector'):
+                print("⚠️ Widget is being destroyed or invalid, skipping date range update")
                 return
             
-            # Get current date range with validation
+            # Get current date range
             from_date, to_date = self.date_selector.get_date_range()
             if from_date is None or to_date is None:
-                print("⚠️ Invalid date range from selector")
-                return
-            
-            # Quick check for data before expensive operations (using cached check)
-            if not self._check_has_data():
+                print("⚠️ Invalid date range, showing empty state")
                 # Show empty state immediately
                 self._show_empty_state()
                 return
@@ -957,14 +723,8 @@ class DashboardPage(QWidget):
             # Update metrics immediately (fast)
             self._update_metrics()
             
-            # Trigger chart updates with loading states
-            self._perform_chart1_update()
-            self._perform_donut_chart_update()
-            
         except Exception as e:
             print(f"❌ Error in debounced date range update: {e}")
-            # Show empty state on error
-            self._show_empty_state()
     
     def _show_empty_state(self):
         """Show appropriate empty state when no data is available."""
@@ -977,10 +737,7 @@ class DashboardPage(QWidget):
             # Set all metrics to zero
             self.card_cash.set_value("0.00")
             self.card_net_income.set_value("0.00")
-            self.card_revenue_growth.set_value("0.00%")
-            self.card_expense_growth.set_value("0.00%")
             self.card_liabilities.set_value("0.00")
-            self.card_working_capital.set_value("0.00")
             self.card_gross_margin.set_value("0.00%")
             self.card_operating_margin.set_value("0.00%")
             self.card_receivables.set_value("0.00")
@@ -988,15 +745,8 @@ class DashboardPage(QWidget):
             self.card_quick_ratio.set_value("0.00")
             self.card_debt_equity.set_value("0.00")
             self.card_current_ratio.set_value("0.00")
-            self.card_dso.set_value("0")
             self.card_expenses.set_value("0.00")
             self.card_revenue.set_value("0.00")
-            
-            # Show no data charts with validation
-            if self._is_widget_valid('chart1_plot'):
-                self._show_no_data_chart(self.chart1_plot, "No transactions available\nfor selected date range")
-            if self._is_widget_valid('donut_widget'):
-                self._show_no_data_chart(self.donut_widget, "No financial data available\nfor selected date range")
             
             print("📊 Dashboard: Showing empty state - no data available")
             
@@ -1038,26 +788,19 @@ class DashboardPage(QWidget):
             print("🔄 Dashboard: Refreshing data due to organization change...")
             self._load_data()
             
-            # Refresh chart dropdowns with new organization data
-            self._refresh_chart_dropdowns()
-            
             # Set up default accounts for new organization
             self._setup_default_accounts()
             
-            # Force refresh all charts with new organization data
+            # Force refresh with new organization data
             if self._is_widget_valid('date_selector'):
                 from_date, to_date = self.date_selector.get_date_range()
                 if from_date and to_date:
                     print(f"   Date range: {from_date.toString('yyyy-MM-dd')} to {to_date.toString('yyyy-MM-dd')}")
-                    
-                    # Trigger chart updates with loading states
-                    self._perform_chart1_update()
-                    self._perform_donut_chart_update()
                     print("   ✅ Dashboard refreshed with new organization context")
                 else:
-                    print("   ⚠️ Invalid date range, skipping chart updates")
+                    print("   ⚠️ Invalid date range, skipping updates")
             else:
-                print("   ⚠️ Date selector is invalid, skipping chart updates")
+                print("   ⚠️ Date selector is invalid, skipping updates")
                 
         except Exception as e:
             print(f"❌ Error refreshing dashboard data: {e}")
@@ -1074,71 +817,12 @@ class DashboardPage(QWidget):
             self.system = new_system
             self._load_data()
             
-            # Refresh chart dropdowns with new organization data
-            self._refresh_chart_dropdowns()
-            
             # Set up default accounts for new organization
             self._setup_default_accounts()
             
             print("   ✅ Dashboard system reference updated")
         except Exception as e:
             print(f"❌ Error updating dashboard system reference: {e}")
-    
-    def _refresh_chart_dropdowns(self):
-        """Refresh chart dropdowns with new organization data."""
-        try:
-            # Check if widget is still valid
-            if self._is_destroying:
-                print("⚠️ Dashboard is being destroyed, skipping dropdown refresh")
-                return
-            
-            print("   🔄 Refreshing chart dropdowns...")
-            
-            # Refresh account dropdowns for Chart 1
-            if self._is_widget_valid('account1_combo') and self._is_widget_valid('account2_combo'):
-                try:
-                    # Get new accounts from the current organization
-                    accounts = self.system.get_chart_of_accounts(active_only=True)
-                    account_names = [acc['name'] for acc in accounts]
-                    
-                    # Store current selections
-                    current_account1 = self.account1_combo.currentText()
-                    current_account2 = self.account2_combo.currentText()
-                    
-                    # Clear and repopulate dropdowns
-                    self.account1_combo.clear()
-                    self.account2_combo.clear()
-                    self.account1_combo.addItems(account_names)
-                    self.account2_combo.addItems(account_names)
-                    
-                    # Try to restore previous selections if they still exist
-                    if current_account1 in account_names:
-                        self.account1_combo.setCurrentText(current_account1)
-                    elif account_names:
-                        self.account1_combo.setCurrentIndex(0)
-                    
-                    if current_account2 in account_names:
-                        self.account2_combo.setCurrentText(current_account2)
-                    elif len(account_names) > 1:
-                        self.account2_combo.setCurrentIndex(1)
-                    elif account_names:
-                        self.account2_combo.setCurrentIndex(0)
-                    
-                    print(f"   ✅ Account dropdowns refreshed with {len(account_names)} accounts")
-                    
-                    # Trigger chart update with loading state
-                    if hasattr(self, '_perform_chart1_update'):
-                        self._perform_chart1_update()
-                        
-                except Exception as e:
-                    print(f"   ❌ Error refreshing account dropdowns: {e}")
-            else:
-                print("   ⚠️ Account combo boxes are invalid, skipping refresh")
-            
-            print("   ✅ Chart dropdowns refreshed successfully")
-            
-        except Exception as e:
-            print(f"   ❌ Error refreshing chart dropdowns: {e}")
         
     def _apply_styling(self):
         """Apply beautiful glassmorphism styling to the dashboard."""
@@ -1147,402 +831,6 @@ class DashboardPage(QWidget):
         
         # Set the complete modern stylesheet
         self.setStyleSheet(ModernStyles.get_complete_stylesheet())
-
-    def _show_chart_loading(self, chart_name):
-        """Show loading state for a specific chart with proper validation."""
-        try:
-            if chart_name == 'chart1' and self._is_widget_valid('chart1_plot'):
-                self.chart1_plot.clear()
-                # Add loading text
-                text_item = pg.TextItem(text="Loading account comparison...", 
-                                      color=pg.mkColor('white'),
-                                      anchor=(0.5, 0.5))
-                self.chart1_plot.addItem(text_item)
-                text_item.setPos(0.5, 0.5)
-                self.chart_loading_states['chart1'] = True
-                
-            elif chart_name == 'donut' and self._is_widget_valid('donut_widget'):
-                # For donut chart, show loading state
-                self.donut_widget.values = [1]
-                self.donut_widget.labels = ["Loading..."]
-                self.donut_widget.colors = ["#666666"]
-                self.donut_widget.update()
-                self.chart_loading_states['donut'] = True
-            else:
-                print(f"⚠️ Chart widget {chart_name} is not valid for loading state")
-                
-        except Exception as e:
-            print(f"❌ Error showing chart loading for {chart_name}: {e}")
-    
-    def _hide_chart_loading(self, chart_name):
-        """Hide loading state for a specific chart with proper validation."""
-        try:
-            if chart_name in self.chart_loading_states:
-                self.chart_loading_states[chart_name] = False
-        except Exception as e:
-            print(f"❌ Error hiding chart loading for {chart_name}: {e}")
-    
-    def _perform_chart1_update(self):
-        """Perform the actual chart1 update with comprehensive error handling."""
-        try:
-            # Check if widget is still valid
-            if self._is_destroying or not self._is_widget_valid('chart1_plot'):
-                print("⚠️ Chart1 widget is invalid, skipping update")
-                return
-            
-            # Validate system availability
-            if not self.system:
-                print("⚠️ No accounting system available for chart1")
-                self._show_no_data_chart_accounts(self.chart1_plot, "No System", "No System")
-                self._hide_chart_loading('chart1')
-                return
-            
-            # Get account selections with validation
-            if not self._is_widget_valid('account1_combo') or not self._is_widget_valid('account2_combo'):
-                print("⚠️ Account combo boxes are invalid")
-                self._show_no_data_chart_accounts(self.chart1_plot, "Invalid", "Invalid")
-                self._hide_chart_loading('chart1')
-                return
-            
-            account1 = self.account1_combo.currentText()
-            account2 = self.account2_combo.currentText()
-            
-            # Get date range with validation
-            if not self._is_widget_valid('date_selector'):
-                print("⚠️ Date selector is invalid")
-                self._show_no_data_chart_accounts(self.chart1_plot, account1, account2)
-                self._hide_chart_loading('chart1')
-                return
-            
-            from_date, to_date = self.date_selector.get_date_range()
-            if from_date is None or to_date is None:
-                print("⚠️ Invalid date range for chart1")
-                self._show_no_data_chart_accounts(self.chart1_plot, account1, account2)
-                self._hide_chart_loading('chart1')
-                return
-            
-            from_date_str = from_date.toString("yyyy-MM-dd")
-            to_date_str = to_date.toString("yyyy-MM-dd")
-            
-            print(f"📊 Chart1 accounts: {account1} vs {account2}")
-            print(f"📅 Date range: {from_date_str} to {to_date_str}")
-            
-            # Only fetch data if accounts are selected
-            if account1 == "Select Account" or account2 == "Select Account":
-                print("⚠️ No accounts selected, showing no data")
-                self._show_no_data_chart_accounts(self.chart1_plot, account1, account2)
-                self._hide_chart_loading('chart1')
-                return
-            
-            # Fetch data only for selected accounts with proper exception handling
-            data1 = None
-            data2 = None
-            
-            # Get account data for account1
-            if account1 and account1 != "Select Account":
-                print(f"🔍 Fetching data for account1: {account1}")
-                try:
-                    accounts = self.system.get_chart_of_accounts(active_only=False)
-                    account1_data = next((acc for acc in accounts if acc['name'] == account1), None)
-                    
-                    if account1_data:
-                        account1_is_postable = account1_data.get('is_postable', True)
-                        
-                        if account1_is_postable:
-                            try:
-                                ledger1 = self.system.get_ledger(account1, from_date_str, to_date_str)
-                                if ledger1:
-                                    data1 = self._calculate_running_balance_from_ledger(ledger1, account1)
-                                    print(f"✅ Got ledger data for {account1}: {len(ledger1)} entries")
-                            except Exception as e:
-                                print(f"❌ Error fetching ledger for {account1}: {e}")
-                        else:
-                            try:
-                                data1 = self._get_parent_account_balance(account1_data, to_date_str)
-                                print(f"✅ Got balance sheet data for {account1}: {data1}")
-                            except Exception as e:
-                                print(f"❌ Error fetching balance for {account1}: {e}")
-                except Exception as e:
-                    print(f"❌ Error processing account1 {account1}: {e}")
-            
-            # Get account data for account2
-            if account2 and account2 != "Select Account":
-                print(f"🔍 Fetching data for account2: {account2}")
-                try:
-                    accounts = self.system.get_chart_of_accounts(active_only=False)
-                    account2_data = next((acc for acc in accounts if acc['name'] == account2), None)
-                    
-                    if account2_data:
-                        account2_is_postable = account2_data.get('is_postable', True)
-                        
-                        if account2_is_postable:
-                            try:
-                                ledger2 = self.system.get_ledger(account2, from_date_str, to_date_str)
-                                if ledger2:
-                                    data2 = self._calculate_running_balance_from_ledger(ledger2, account2)
-                                    print(f"✅ Got ledger data for {account2}: {len(ledger2)} entries")
-                            except Exception as e:
-                                print(f"❌ Error fetching ledger for {account2}: {e}")
-                        else:
-                            try:
-                                data2 = self._get_parent_account_balance(account2_data, to_date_str)
-                                print(f"✅ Got balance sheet data for {account2}: {data2}")
-                            except Exception as e:
-                                print(f"❌ Error fetching balance for {account2}: {e}")
-                except Exception as e:
-                    print(f"❌ Error processing account2 {account2}: {e}")
-            
-            # Update chart with data
-            if data1 or data2:
-                print("📈 Updating chart1 display with data")
-                self._update_chart1_display(data1, data2, account1, account2)
-            else:
-                print("⚠️ No data available for selected accounts")
-                self._show_no_data_chart_accounts(self.chart1_plot, account1, account2)
-                
-        except Exception as e:
-            print(f"❌ Error updating account comparison chart: {e}")
-            try:
-                self._show_no_data_chart_accounts(self.chart1_plot, account1, account2)
-            except:
-                pass
-        
-        print("✅ Chart1 update complete")
-        self._hide_chart_loading('chart1')
-    
-    def _update_chart1_display(self, data1, data2, account1, account2):
-        """Update chart1 display with fetched data, aggregated by month."""
-        try:
-            # Check if widget is still valid
-            if not self._is_widget_valid('chart1_plot'):
-                print("⚠️ Chart1 plot widget is invalid, skipping display update")
-                return
-            
-            def aggregate_monthly(data):
-                if not isinstance(data, dict):
-                    return [], []
-                monthly = defaultdict(float)
-                for date_str, value in data.items():
-                    try:
-                        dt = datetime.strptime(date_str, "%Y-%m-%d")
-                        month_key = dt.strftime("%Y-%m")
-                        monthly[month_key] += value
-                    except (ValueError, TypeError) as e:
-                        print(f"⚠️ Error parsing date {date_str}: {e}")
-                        continue
-                # Sort by month
-                months = sorted(monthly.keys())
-                values = [monthly[m] for m in months]
-                return months, values
-            
-            months1, values1 = aggregate_monthly(data1) if data1 else ([], [])
-            months2, values2 = aggregate_monthly(data2) if data2 else ([], [])
-            
-            # Merge months
-            all_months = sorted(set(months1) | set(months2))
-            def fill_values(months, values):
-                month_to_value = dict(zip(months, values))
-                return [month_to_value.get(m, 0) for m in all_months]
-            values1_filled = fill_values(months1, values1)
-            values2_filled = fill_values(months2, values2)
-            
-            # Format month labels for X axis
-            month_labels = []
-            for m in all_months:
-                try:
-                    month_labels.append(datetime.strptime(m, "%Y-%m").strftime("%b %Y"))
-                except ValueError as e:
-                    print(f"⚠️ Error formatting month {m}: {e}")
-                    month_labels.append(m)
-            
-            if all_months:
-                try:
-                    self.chart1_plot.clear()
-                    self.chart1_plot.plot(range(len(all_months)), values1_filled, pen=pg.mkPen('#4caf50', width=3), name=account1, symbol='o', symbolBrush='#4caf50')
-                    self.chart1_plot.plot(range(len(all_months)), values2_filled, pen=pg.mkPen('#f44336', width=3), name=account2, symbol='o', symbolBrush='#f44336')
-                    self.chart1_plot.getAxis('bottom').setTicks([list(enumerate(month_labels))])
-                    self.chart1_plot.setLabel('left', "Balance", color='white', size='10pt')
-                    self.chart1_plot.setLabel('bottom', "Month", color='white', size='10pt')
-                    self.chart1_plot.addLegend(offset=(10,10), labelTextColor='white', brush=pg.mkBrush(30,32,36,180))
-                    print(f"✅ Account comparison chart updated with data for {len(all_months)} months")
-                    print(f"   Account 1 ({account1}): final balance: {values1_filled[-1] if values1_filled else 0}")
-                    print(f"   Account 2 ({account2}): final balance: {values2_filled[-1] if values2_filled else 0}")
-                except Exception as e:
-                    print(f"❌ Error updating chart display: {e}")
-                    self._show_no_data_chart_accounts(self.chart1_plot, account1, account2)
-            else:
-                print("⚠️ No data available for selected accounts and date range")
-                self._show_no_data_chart_accounts(self.chart1_plot, account1, account2)
-                
-        except Exception as e:
-            print(f"❌ Error in chart display update: {e}")
-            try:
-                self._show_no_data_chart_accounts(self.chart1_plot, account1, account2)
-            except:
-                pass
-    
-    def _perform_donut_chart_update(self):
-        """Perform the actual donut chart update with comprehensive error handling."""
-        try:
-            # Validate system availability
-            if not self.system:
-                print("⚠️ No accounting system available for donut chart")
-                donut_labels = ["No System"]
-                donut_values = [1]
-                donut_colors = ["#666666"]
-                self.donut_widget.values = donut_values
-                self.donut_widget.labels = donut_labels
-                self.donut_widget.colors = donut_colors
-                self.donut_widget.update()
-                self._hide_chart_loading('donut')
-                return
-            
-            # Get date range with validation
-            if not self._is_widget_valid('date_selector'):
-                print("⚠️ Date selector is invalid for donut chart")
-                donut_labels = ["No Date Range"]
-                donut_values = [1]
-                donut_colors = ["#666666"]
-                self.donut_widget.values = donut_values
-                self.donut_widget.labels = donut_labels
-                self.donut_widget.colors = donut_colors
-                self.donut_widget.update()
-                self._hide_chart_loading('donut')
-                return
-            
-            from_date, to_date = self.date_selector.get_date_range()
-            
-            # Check if date range is valid
-            if from_date is None or to_date is None:
-                print("⚠️ No date range selected for donut chart")
-                donut_labels = ["No Date Range"]
-                donut_values = [1]
-                donut_colors = ["#666666"]
-                self.donut_widget.values = donut_values
-                self.donut_widget.labels = donut_labels
-                self.donut_widget.colors = donut_colors
-                self.donut_widget.update()
-                self._hide_chart_loading('donut')
-                return
-            
-            print(f"📅 Date range: {from_date.toString('yyyy-MM-dd')} to {to_date.toString('yyyy-MM-dd')}")
-            
-            from_date_str = from_date.toString("yyyy-MM-dd")
-            to_date_str = to_date.toString("yyyy-MM-dd")
-            
-            # Get expense breakdown data for donut chart
-            try:
-                print("🔄 Getting expense breakdown for donut chart...")
-                
-                # Get expense accounts and their balances for the date range
-                expense_accounts = []
-                try:
-                    accounts = self.system.get_chart_of_accounts(active_only=True)
-                except Exception as e:
-                    print(f"❌ Error fetching accounts for donut chart: {e}")
-                    accounts = []
-                
-                for account in accounts:
-                    try:
-                        if account.get('account_type') == 'expense':
-                            account_name = account['name']
-                            # Get ledger entries for this expense account
-                            try:
-                                ledger_entries = self.system.get_ledger(account_name, from_date_str, to_date_str)
-                                if ledger_entries:
-                                    # Calculate total expense for this account
-                                    total_expense = 0
-                                    for entry in ledger_entries:
-                                        value = 0
-                                        if isinstance(entry, dict):
-                                            v = entry.get('debit', 0)
-                                        elif isinstance(entry, tuple):
-                                            v = entry[1] if len(entry) > 1 else 0
-                                        else:
-                                            v = 0
-                                        try:
-                                            value = float(v)
-                                        except (ValueError, TypeError):
-                                            value = 0
-                                        total_expense += abs(value)
-                                    if total_expense > 0:
-                                        expense_accounts.append({
-                                            'name': account_name,
-                                            'amount': total_expense
-                                        })
-                            except Exception as e:
-                                print(f"❌ Error fetching ledger for {account_name}: {e}")
-                                continue
-                    except Exception as e:
-                        print(f"❌ Error processing account {account.get('name', 'Unknown')}: {e}")
-                        continue
-                
-                print(f"✅ Found {len(expense_accounts)} expense accounts with data")
-                
-                if expense_accounts:
-                    # Sort by amount (highest first) and take top 8
-                    expense_accounts.sort(key=lambda x: x['amount'], reverse=True)
-                    top_expenses = expense_accounts[:8]
-                    
-                    # Prepare donut chart data
-                    donut_labels = []
-                    donut_values = []
-                    donut_colors = []
-                    
-                    # Color palette for expenses
-                    expense_colors = [
-                        '#f44336', '#e91e63', '#9c27b0', '#673ab7',
-                        '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4'
-                    ]
-                    
-                    for i, expense in enumerate(top_expenses):
-                        donut_labels.append(expense['name'])
-                        donut_values.append(expense['amount'])
-                        donut_colors.append(expense_colors[i % len(expense_colors)])
-                    
-                    top_expenses_str = [f"{e['name']}: {e['amount']}" for e in top_expenses]
-                    print(f"📊 Top expenses: {top_expenses_str}")
-                    
-                else:
-                    # No expense data available
-                    print("⚠️ No expense data available for selected date range")
-                    donut_labels = ["No Expenses"]
-                    donut_values = [1]
-                    donut_colors = ["#666666"]
-                
-                # Update donut chart
-                self.donut_widget.values = donut_values
-                self.donut_widget.labels = donut_labels
-                self.donut_widget.colors = donut_colors
-                self.donut_widget.update()
-                
-                print(f"✅ Donut chart updated with {len(donut_values)} expense categories")
-                
-            except Exception as e:
-                print(f"❌ Error updating donut chart: {e}")
-                donut_labels = ["Error"]
-                donut_values = [1]
-                donut_colors = ["#666666"]
-                self.donut_widget.values = donut_values
-                self.donut_widget.labels = donut_labels
-                self.donut_widget.colors = donut_colors
-                self.donut_widget.update()
-        
-        except Exception as e:
-            print(f"❌ Error updating donut chart: {e}")
-            try:
-                donut_labels = ["Error"]
-                donut_values = [1]
-                donut_colors = ["#666666"]
-                self.donut_widget.values = donut_values
-                self.donut_widget.labels = donut_labels
-                self.donut_widget.colors = donut_colors
-                self.donut_widget.update()
-            except Exception as widget_error:
-                print(f"❌ Error updating donut widget in outer error handler: {widget_error}")
-        
-        print("✅ Donut chart update complete")
-        self._hide_chart_loading('donut')
 
     def _check_has_data(self):
         """Check if organization has data with caching to reduce repeated calls."""

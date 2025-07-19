@@ -1550,37 +1550,6 @@ class ChartCard(QFrame):
         self.setGraphicsEffect(shadow)
 
 
-class PyQtGraphChartCard(QFrame):
-    def __init__(self, chart_widget, parent=None):
-        super().__init__(parent)
-        self.setObjectName("PyQtGraphChartCard")
-        self.setStyleSheet(f"""
-            QFrame#PyQtGraphChartCard {{
-                background: rgba(32, 34, 37, 0.1);
-                border: 1px solid rgba(0, 0, 0, 0.3);
-                border-radius: {ResponsiveHelper.scale_size(8, 6, 10)}px;
-                margin: 4px;
-            }}
-            QFrame#PyQtGraphChartCard:hover {{
-                background: rgba(32, 34, 37, 0.15);
-                border: 1px solid rgba(32, 34, 37, 0.4);
-            }}
-            QFrame#PyQtGraphChartCard:pressed {{
-                background: rgba(32, 34, 37, 0.2);
-                border: 1px solid rgba(32, 34, 37, 0.5);
-            }}
-        """)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(0)
-        chart_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        layout.addWidget(chart_widget)
-        # Add drop shadow for better depth
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20)
-        shadow.setXOffset(0)
-        shadow.setYOffset(4)
-        shadow.setColor(QColor(0, 0, 0, 80))
-        self.setGraphicsEffect(shadow)
+
 
 
