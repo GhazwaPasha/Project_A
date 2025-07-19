@@ -28,6 +28,17 @@ except ImportError:
 from .config import DatabaseConfig
 from .auth_manager import AuthManager
 from .smart_data_validator import smart_data_guard
+from PyQt6.QtCore import QObject, pyqtSignal
+
+# Global signal for journal entry changes
+class JournalEntrySignals(QObject):
+    """Global signals for journal entry changes."""
+    entry_created = pyqtSignal(dict)  # Emitted when a new journal entry is created
+    entry_updated = pyqtSignal(dict)  # Emitted when a journal entry is updated
+    entry_deleted = pyqtSignal(int)   # Emitted when a journal entry is deleted
+
+# Global instance
+journal_entry_signals = JournalEntrySignals()
 
 class OfflineCache:
     """Manages offline SQLite cache and sync operations"""
@@ -170,6 +181,32 @@ class OfflineCache:
         except Exception as e:
             self.logger.error(f"Failed to get cached {table_name}: {e}")
             return []
+        finally:
+            conn.close()
+    
+    def clear_cached_data(self, table_name: str, organization_id: str):
+        """Clear cached data for a specific table and organization"""
+        conn = sqlite3.connect(self.cache_db_path)
+        cursor = conn.cursor()
+        
+        try:
+            if table_name == 'accounts':
+                cursor.execute(
+                    'DELETE FROM cached_accounts WHERE organization_id = ?',
+                    (organization_id,)
+                )
+            elif table_name == 'journal_entries':
+                cursor.execute(
+                    'DELETE FROM cached_journal_entries WHERE organization_id = ?',
+                    (organization_id,)
+                )
+            
+            conn.commit()
+            self.logger.info(f"Cleared cached {table_name} for organization {organization_id}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to clear cached {table_name}: {e}")
+            conn.rollback()
         finally:
             conn.close()
     
@@ -1157,6 +1194,14 @@ class UnifiedAccountingSystem:
                     result = self.db_manager.create_journal_entry(journal_entry_data, journal_lines)
                     if result:
                         self.logger.info(f"✅ Journal entry created successfully online: {result.get('entry_number', 'N/A')}")
+                        
+                        # Invalidate cache to ensure UI shows new entry immediately
+                        self.logger.info("🔄 Invalidating cache after successful journal entry creation...")
+                        self._invalidate_journal_cache()
+                        
+                        # Emit signal to notify other parts of the application
+                        journal_entry_signals.entry_created.emit(result)
+                        
                         return result
                     else:
                         self.logger.error("❌ Online creation returned None - falling back to offline")
@@ -1202,6 +1247,14 @@ class UnifiedAccountingSystem:
                 
                 print(f"✅ DEBUG: Returning offline entry with ID: {journal_entry_data.get('id')}")
                 self.logger.info(f"✅ Returning offline entry: {journal_entry_data.get('entry_number', 'N/A')}")
+                
+                # Invalidate cache for offline entries too
+                self.logger.info("🔄 Invalidating cache after offline journal entry creation...")
+                self._invalidate_journal_cache()
+                
+                # Emit signal to notify other parts of the application
+                journal_entry_signals.entry_created.emit(journal_entry_data)
+                
                 return journal_entry_data
                 
             except Exception as e:
@@ -1219,6 +1272,37 @@ class UnifiedAccountingSystem:
             import traceback
             self.logger.error(f"Traceback: {traceback.format_exc()}")
             raise
+    
+    def _invalidate_journal_cache(self):
+        """Invalidate journal-related cache to ensure UI shows new entries immediately."""
+        try:
+            self.logger.info("🔄 Invalidating journal cache...")
+            
+            # Clear journal entries from offline cache
+            if hasattr(self, 'offline_cache'):
+                # Clear the cached journal entries for this organization
+                self.offline_cache.clear_cached_data('journal_entries', self.current_organization_id)
+                self.logger.info("✅ Cleared journal entries from offline cache")
+            
+            # Invalidate RPC cache for journal-related operations
+            try:
+                from .rpc_cache_manager import rpc_cache
+                rpc_cache.invalidate_cache('journal')
+                rpc_cache.invalidate_cache('ledger')
+                self.logger.info("✅ Invalidated RPC cache for journal/ledger operations")
+            except ImportError:
+                self.logger.warning("⚠️ RPC cache manager not available")
+            
+            # Invalidate page manager cache for journal and ledger pages
+            try:
+                # This will be handled by the main window if available
+                self.logger.info("✅ Journal cache invalidation complete")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Page manager cache invalidation not available: {e}")
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error invalidating journal cache: {e}")
+            # Don't fail the journal entry creation for cache invalidation errors
     
     def _transform_journal_entry_data(self, entry_data: Dict[str, Any]) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
         """Transform frontend journal entry data to database format."""

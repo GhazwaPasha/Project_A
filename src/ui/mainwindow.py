@@ -1421,7 +1421,12 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
                 self.logger.info(f"Using organization context: {organization_id}, user: {user_id}")
             
             # Initialize the unified accounting system
-            accounting_system = AccountingSystem(self.auth_manager)
+            from src.core.unified_accounting_system import UnifiedAccountingSystem
+            accounting_system = UnifiedAccountingSystem(self.auth_manager)
+            
+            # Connect journal entry signals for automatic UI refresh
+            from src.core.unified_accounting_system import journal_entry_signals
+            journal_entry_signals.entry_created.connect(self._on_journal_entry_created)
             
             # Set organization context
             if organization_id:
@@ -1434,7 +1439,8 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
                 self.logger.info("✅ Unified accounting system online")
             else:
                 self.logger.warning("📱 Starting in offline mode with cached data")
-              # Wrap with enhanced features if available
+            
+            # Wrap with enhanced features if available
             try:
                 from ..core.enhanced_accounting_system import EnhancedAccountingSystem
                 enhanced_system = EnhancedAccountingSystem(
@@ -1447,15 +1453,55 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
                 init_results = enhanced_system.initialize_enhanced_features()
                 self.logger.info(f"Enhanced features initialization results: {init_results}")
                 
+                # Set the system reference for all pages
+                self.system = enhanced_system
+                self.accounting_system = enhanced_system
+                
                 return enhanced_system
                 
             except Exception as e:
                 self.logger.warning(f"Enhanced features not available, using base system: {e}")
-                return accounting_system
                 
+                # Set the system reference for all pages
+                self.system = accounting_system
+                self.accounting_system = accounting_system
+                
+                return accounting_system
+            
         except Exception as e:
             self.logger.error(f"Accounting system initialization failed: {e}")
+            # Create a fallback system or show error
+            self.system = None
+            self.accounting_system = None
             raise Exception(f"Failed to initialize accounting database: {e}")
+    
+    def _on_journal_entry_created(self, entry_data: dict):
+        """Handle when a new journal entry is created - refresh relevant UI components."""
+        try:
+            self.logger.info(f"🔄 Journal entry created: {entry_data.get('entry_number', 'N/A')} - refreshing UI...")
+            
+            # Invalidate cache for journal-related pages
+            self.invalidate_journal_cache()
+            
+            # Refresh current page if it's journal-related
+            current_page = self.stack.currentWidget()
+            if current_page:
+                page_name = type(current_page).__name__
+                if page_name in ['JournalPage', 'LedgerPage', 'DashboardPage']:
+                    if hasattr(current_page, 'refresh_data'):
+                        current_page.refresh_data()
+                        self.logger.info(f"✅ Refreshed current page: {page_name}")
+            
+            # Show a brief notification to the user
+            self.add_notification(
+                "Journal Entry Created", 
+                f"Entry {entry_data.get('entry_number', 'N/A')} has been saved successfully.", 
+                "success"
+            )
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error handling journal entry creation: {e}")
+            # Don't fail the application for UI refresh errors
     
     def _setup_sync_updates(self):
         """Setup periodic connection status updates."""
@@ -2934,26 +2980,63 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             if hasattr(self, 'bottom_bar'):
                 self.bottom_bar.setEnabled(True)
             
-            # Hide loading indicator if available
-            if hasattr(self, 'connection_indicator'):
-                self.connection_indicator.hide_loading_state()
-            
-            # Re-enable workspace switcher specifically
+            # Re-enable workspace switcher
             if hasattr(self, 'bottom_bar') and hasattr(self.bottom_bar, 'workspace_switcher'):
                 self.bottom_bar.workspace_switcher.setEnabled(True)
             
-            # Re-enable title bar buttons
+            # Re-enable title bar
             if hasattr(self, 'title_bar'):
                 self.title_bar.setEnabled(True)
             
-            # Restore normal cursor
+            # Reset cursor to normal
             self.setCursor(Qt.CursorShape.ArrowCursor)
+            
+            # Hide loading indicator if available
+            if hasattr(self, 'connection_indicator'):
+                self.connection_indicator.hide_loading_state()
             
             self.logger.info("🔓 UI unfrozen after workspace switch")
             
         except Exception as e:
             self.logger.error(f"Error unfreezing UI: {e}")
-
+            # Final fallback - ensure UI is enabled
+            try:
+                self.setEnabled(True)
+                self.setCursor(Qt.CursorShape.ArrowCursor)
+            except:
+                pass
+    
+    def invalidate_journal_cache(self):
+        """Invalidate cache for journal-related pages to ensure new entries are shown immediately."""
+        try:
+            self.logger.info("🔄 Invalidating journal-related page cache...")
+            
+            # Invalidate page manager cache for journal and ledger pages
+            if hasattr(self, 'page_manager'):
+                # Invalidate cache for journal page
+                self.page_manager.invalidate_cache('JournalPage', self.session_manager.get_current_organization_id() if self.session_manager else None)
+                
+                # Invalidate cache for ledger page
+                self.page_manager.invalidate_cache('LedgerPage', self.session_manager.get_current_organization_id() if self.session_manager else None)
+                
+                # Invalidate cache for dashboard page (which shows recent transactions)
+                self.page_manager.invalidate_cache('DashboardPage', self.session_manager.get_current_organization_id() if self.session_manager else None)
+                
+                self.logger.info("✅ Journal-related page cache invalidated")
+            
+            # Also invalidate RPC cache for journal operations
+            try:
+                from src.core.rpc_cache_manager import rpc_cache
+                rpc_cache.invalidate_cache('journal')
+                rpc_cache.invalidate_cache('ledger')
+                self.logger.info("✅ RPC cache invalidated for journal operations")
+            except ImportError:
+                self.logger.warning("⚠️ RPC cache manager not available")
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error invalidating journal cache: {e}")
+            # Don't fail the operation for cache invalidation errors
+    
     def _refresh_mica_after_move(self):
         """Refresh Mica effect after window move (especially for monitor switching)."""
         if self.mica_applied and self.isVisible():

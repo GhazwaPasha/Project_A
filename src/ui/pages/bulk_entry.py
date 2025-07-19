@@ -416,6 +416,9 @@ class BulkEntryPage(QWidget):
                 # Emit the saved signal
                 self.entries_saved.emit()
                 
+                # Invalidate cache to ensure new entries show up immediately in all views
+                self._invalidate_cache_after_bulk_save()
+                
                 # Renumber remaining cards
                 self._renumber_cards()
                 
@@ -442,6 +445,28 @@ class BulkEntryPage(QWidget):
             self._bulk_import_mode = False
             self._skip_validation_updates = False
             self._cleanup_unused_resources()
+    
+    def _invalidate_cache_after_bulk_save(self):
+        """Invalidate cache after bulk entry save to ensure immediate UI updates."""
+        try:
+            print("🔄 Invalidating cache after bulk entry save...")
+            
+            # Get the main window to invalidate its cache
+            main_window = self.window()
+            if main_window and hasattr(main_window, 'invalidate_journal_cache'):
+                main_window.invalidate_journal_cache()
+                print("✅ Main window cache invalidated")
+            else:
+                print("⚠️ Main window cache invalidation not available")
+            
+            # Also refresh the current page data
+            if hasattr(self, 'refresh_data'):
+                self.refresh_data()
+                print("✅ Current page data refreshed")
+                
+        except Exception as e:
+            print(f"❌ Error invalidating cache: {e}")
+            # Don't fail the bulk save for cache invalidation errors
     
     def _clear_all_entries(self):
         """Clear all entry cards."""

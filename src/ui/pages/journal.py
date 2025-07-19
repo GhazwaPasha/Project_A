@@ -949,12 +949,37 @@ class SingleEntryTab(QWidget):
             QMessageBox.information(self, "Success", success_msg)
             self._clear_form()
             
+            # Invalidate cache to ensure new entry shows up immediately in all views
+            self._invalidate_cache_after_entry()
+            
             # Refresh transactions with improved timing
             from PyQt6.QtCore import QTimer
             QTimer.singleShot(100, self._load_transactions)  # Small delay to ensure DB operations complete
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save transaction: {e}")
+    
+    def _invalidate_cache_after_entry(self):
+        """Invalidate cache after journal entry creation to ensure immediate UI updates."""
+        try:
+            print("🔄 Invalidating cache after journal entry creation...")
+            
+            # Get the main window to invalidate its cache
+            main_window = self.window()
+            if main_window and hasattr(main_window, 'invalidate_journal_cache'):
+                main_window.invalidate_journal_cache()
+                print("✅ Main window cache invalidated")
+            else:
+                print("⚠️ Main window cache invalidation not available")
+            
+            # Also refresh the current page data
+            if hasattr(self, 'refresh_data'):
+                self.refresh_data()
+                print("✅ Current page data refreshed")
+                
+        except Exception as e:
+            print(f"❌ Error invalidating cache: {e}")
+            # Don't fail the journal entry creation for cache invalidation errors
     
     def _clear_form(self):
         """Clear all form fields."""
