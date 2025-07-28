@@ -50,6 +50,11 @@ class CleanApp:
             from PyQt6.QtGui import QIcon
             self.app.setWindowIcon(QIcon(app_icon_path))
         
+        # Setup cleanup handler for shared database client
+        import atexit
+        from src.core.shared_database_manager import close_shared_client
+        atexit.register(close_shared_client)
+        
     def start(self):
         """Start the application"""
         try:

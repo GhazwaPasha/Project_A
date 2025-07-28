@@ -495,15 +495,9 @@ class DateRangeSelector(QWidget):
             
             today = QDate.currentDate()
             
-            # Temporarily disconnect date change signals to prevent recursive calls
-            try:
-                self.from_date.dateChanged.disconnect(self._on_date_changed)
-            except (TypeError, RuntimeError):
-                pass  # Signal not connected or already disconnected
-            try:
-                self.to_date.dateChanged.disconnect(self._on_date_changed)
-            except (TypeError, RuntimeError):
-                pass  # Signal not connected or already disconnected
+            # Block signals instead of disconnecting to prevent corruption
+            self.from_date.blockSignals(True)
+            self.to_date.blockSignals(True)
             
             try:
                 if button_id == 0:  # This Month
@@ -530,9 +524,9 @@ class DateRangeSelector(QWidget):
                 self._on_date_changed()
                 
             finally:
-                # Reconnect the date change signals
-                self.from_date.dateChanged.connect(self._on_date_changed)
-                self.to_date.dateChanged.connect(self._on_date_changed)
+                # Always unblock signals
+                self.from_date.blockSignals(False)
+                self.to_date.blockSignals(False)
             
         except Exception as e:
             print(f"❌ Error in DateRangeSelector quick filter: {e}")
@@ -589,15 +583,9 @@ class DateRangeSelector(QWidget):
                 print(f"❌ Invalid dates provided: {start_date} to {end_date}")
                 return False
             
-            # Temporarily disconnect date change signals to prevent recursive calls
-            try:
-                self.from_date.dateChanged.disconnect(self._on_date_changed)
-            except (TypeError, RuntimeError):
-                pass  # Signal not connected or already disconnected
-            try:
-                self.to_date.dateChanged.disconnect(self._on_date_changed)
-            except (TypeError, RuntimeError):
-                pass  # Signal not connected or already disconnected
+            # Block signals instead of disconnecting to prevent corruption
+            self.from_date.blockSignals(True)
+            self.to_date.blockSignals(True)
             
             try:
                 # Set the dates
@@ -609,16 +597,17 @@ class DateRangeSelector(QWidget):
                     if button:
                         button.setChecked(False)
                 
+                print(f"✅ Date range set to: {start_qdate.toString('yyyy-MM-dd')} to {end_qdate.toString('yyyy-MM-dd')}")
+                
                 # Manually trigger the date change handler after setting dates
                 self._on_date_changed()
                 
-                print(f"✅ Date range set to: {start_qdate.toString('yyyy-MM-dd')} to {end_qdate.toString('yyyy-MM-dd')}")
                 return True
                 
             finally:
-                # Reconnect the date change signals
-                self.from_date.dateChanged.connect(self._on_date_changed)
-                self.to_date.dateChanged.connect(self._on_date_changed)
+                # Always unblock signals
+                self.from_date.blockSignals(False)
+                self.to_date.blockSignals(False)
             
         except Exception as e:
             print(f"❌ Error setting date range: {e}")
@@ -655,18 +644,8 @@ class DateRangeSelector(QWidget):
 
     def is_valid(self):
         """Check if the DateRangeSelector is valid and not being destroyed."""
-        try:
-            # Check if the widget and its components are still valid
-            if not self.from_date or not self.to_date:
-                return False
-            
-            # Test if date widgets are still valid
-            self.from_date.objectName()
-            self.to_date.objectName()
-            
-            return True
-        except:
-            return False
+        return (hasattr(self, 'from_date') and hasattr(self, 'to_date') and 
+                self.from_date and self.to_date)
 
 
 class ReportCard(QFrame):
