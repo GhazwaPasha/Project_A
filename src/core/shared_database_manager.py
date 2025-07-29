@@ -91,6 +91,12 @@ class SharedDatabaseManager:
         """Reset the connection usage count."""
         instance = cls()
         instance._connection_count = 0
+    
+    @classmethod
+    def decrement_connection_count(cls):
+        """Decrement the connection usage count."""
+        instance = cls()
+        instance._connection_count = max(0, instance._connection_count - 1)
 
 
 # Convenience function for easy access

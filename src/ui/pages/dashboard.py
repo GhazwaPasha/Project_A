@@ -50,6 +50,10 @@ class DashboardPage(QWidget):
         self._pending_dates = None
         self._context_lock = False
         
+        # Initialize cache and storage
+        self._data_cache = {}
+        self._original_subtitles = {}
+        
         # Validate system before proceeding
         if not self.system:
             print("⚠️ Dashboard: No system provided")
@@ -68,7 +72,25 @@ class DashboardPage(QWidget):
     
     def closeEvent(self, event):
         """Clean up resources when widget is closed."""
-        super().closeEvent(event)
+        try:
+            # Cancel any pending requests
+            if self._pending_request:
+                self._pending_request.cancel()
+                self._pending_request = None
+            
+            # Stop any pending timers
+            if hasattr(self, '_update_timer'):
+                self._update_timer.stop()
+            
+            # Clear cache
+            self._clear_cache()
+            
+            print("🧹 Dashboard cleanup completed")
+            
+        except Exception as e:
+            print(f"❌ Error during dashboard cleanup: {e}")
+        finally:
+            super().closeEvent(event)
 
     def _setup_ui(self):
         """Setup the dashboard UI with scrollable content."""
@@ -220,6 +242,7 @@ class DashboardPage(QWidget):
     def _load_data(self):
         """Load dashboard data with progressive loading."""
         try:
+            print("🔄 _load_data called")
             # Validate system is ready
             if not self.system:
                 print("⚠️ System not ready for data loading")
@@ -239,15 +262,20 @@ class DashboardPage(QWidget):
     def _perform_initial_load(self):
         """Perform the initial data load asynchronously."""
         try:
+            print("🚀 Starting initial dashboard load...")
             self._update_metrics()
+            print("✅ Initial dashboard load completed")
         except Exception as e:
             print(f"❌ Error in initial load: {e}")
+            import traceback
+            traceback.print_exc()
             self._show_error_state("Failed to load initial data")
     
 
     
     def _update_metrics(self):
         """Update financial metrics cards with current data using group-based reporting."""
+        print("📊 _update_metrics called")
         # Create a non-cancellable request for legacy compatibility
         request = CancellableRequest()
         self._update_metrics_with_cancellation(request)
@@ -261,8 +289,12 @@ class DashboardPage(QWidget):
                 return
             
             # Validate system and date selector
-            if not self.system or not hasattr(self, 'date_selector') or not self.date_selector:
-                print("⚠️ System or date selector not available")
+            if not self.system:
+                print("⚠️ System not available")
+                return
+            
+            if not hasattr(self, 'date_selector') or not self.date_selector:
+                print("⚠️ Date selector not available")
                 return
             
             # Get date range with validation
@@ -283,50 +315,137 @@ class DashboardPage(QWidget):
                 return
             
             # Get all dashboard data in a single consolidated call
+            print(f"🔍 Calling consolidated dashboard data function...")
             dashboard_data = self._get_consolidated_dashboard_data_with_cancellation(from_date_str, to_date_str, to_date_str, request)
+            print(f"🔍 Consolidated data result: {dashboard_data is not None}")
             if request.is_cancelled():
                 return
             
             if not dashboard_data:
                 print("⚠️ No dashboard data received")
-                self._show_empty_state()
+                self._show_error_state("Failed to load dashboard data")
                 return
+            else:
+                print(f"✅ Dashboard data received successfully")
+                print(f"   Data keys: {list(dashboard_data.keys()) if isinstance(dashboard_data, dict) else 'Not a dict'}")
             
             # Extract data from consolidated response
             balance_sheet = dashboard_data.get('balance_sheet', {})
             income_statement = dashboard_data.get('income_statement', {})
             ratios_data = dashboard_data.get('ratios', {})
             
-            # Extract financial metrics
-            cash = self._extract_cash_from_balance_sheet(balance_sheet)
-            liabilities = balance_sheet.get('total_liabilities', 0)
-            revenue = income_statement.get('total_revenue', 0)
-            expenses = income_statement.get('total_expenses', 0)
+            # Debug: Print the data we received
+            print(f"🔍 Received dashboard data for period: {from_date_str} to {to_date_str}")
+            print(f"   Balance sheet keys: {list(balance_sheet.keys()) if isinstance(balance_sheet, dict) else 'Not a dict'}")
+            print(f"   Income statement keys: {list(income_statement.keys()) if isinstance(income_statement, dict) else 'Not a dict'}")
+            
+            # Extract financial metrics using the same methods as ledger cards
+            try:
+                cash = self._get_cash_balance(from_date_str, to_date_str)
+                print(f"   Cash extracted: ${cash:.2f}")
+            except Exception as e:
+                print(f"   Error extracting cash: {e}")
+                cash = 0.0
+                
+            try:
+                liabilities = self._get_total_liabilities_group_based(to_date_str)
+                print(f"   Liabilities extracted: ${liabilities:.2f}")
+            except Exception as e:
+                print(f"   Error extracting liabilities: {e}")
+                liabilities = 0.0
+                
+            try:
+                revenue = self._extract_revenue_from_income_statement(income_statement)
+                print(f"   Revenue extracted: ${revenue:.2f}")
+            except Exception as e:
+                print(f"   Error extracting revenue: {e}")
+                revenue = 0.0
+                
+            try:
+                expenses = self._extract_expenses_from_income_statement(income_statement)
+                print(f"   Expenses extracted: ${expenses:.2f}")
+            except Exception as e:
+                print(f"   Error extracting expenses: {e}")
+                expenses = 0.0
             
             # Calculate derived metrics
             net_income = revenue - expenses
             
-            # Extract accounts receivable and payable
-            receivables = self._extract_receivables_from_balance_sheet(balance_sheet)
-            payables = self._extract_payables_from_balance_sheet(balance_sheet)
+            # Extract accounts receivable and payable using the same method as ledger cards
+            try:
+                receivables = self._get_accounts_receivable(to_date_str)
+                print(f"   Receivables extracted: ${receivables:.2f}")
+            except Exception as e:
+                print(f"   Error extracting receivables: {e}")
+                receivables = 0.0
+                
+            try:
+                payables = self._get_accounts_payable(to_date_str)
+                print(f"   Payables extracted: ${payables:.2f}")
+            except Exception as e:
+                print(f"   Error extracting payables: {e}")
+                payables = 0.0
+            
+            # Debug: Print extracted values
+            print(f"   Extracted values: Cash=${cash:.2f}, Revenue=${revenue:.2f}, Expenses=${expenses:.2f}, Liabilities=${liabilities:.2f}")
+            print(f"   Receivables: ${receivables:.2f}, Payables: ${payables:.2f}")
             
             if request.is_cancelled():
                 return
             
-            # Update all card values using consolidated data
-            self.card_cash.set_value(format_currency(cash))
-            self.card_net_income.set_value(format_currency(net_income))
-            self.card_liabilities.set_value(format_currency(liabilities))
-            self.card_revenue.set_value(format_currency(revenue))
-            self.card_expenses.set_value(format_currency(expenses))
-            self.card_receivables.set_value(format_currency(receivables))
-            self.card_payables.set_value(format_currency(payables))
+            # Update all card values using consolidated data with safety checks
+            try:
+                self.card_cash.set_value(format_currency(cash))
+                self.card_net_income.set_value(format_currency(net_income))
+                self.card_liabilities.set_value(format_currency(liabilities))
+                self.card_revenue.set_value(format_currency(revenue))
+                self.card_expenses.set_value(format_currency(expenses))
+                self.card_receivables.set_value(format_currency(receivables))
+                self.card_payables.set_value(format_currency(payables))
+            except Exception as e:
+                print(f"❌ Error updating card values: {e}")
+                if request.is_cancelled():
+                    return
             
-            # Update ratios from consolidated data
-            self._update_ratios_from_consolidated_data(ratios_data)
+            # Set tickers for receivables and payables with safety checks
+            try:
+                if receivables > 0:
+                    self.card_receivables.set_ticker("📈 Outstanding", "#2196F3")
+                else:
+                    self.card_receivables.set_ticker("✅ Clear", "#4CAF50")
+                    
+                if payables > 0:
+                    self.card_payables.set_ticker("📋 Due", "#FF9800")
+                else:
+                    self.card_payables.set_ticker("✅ Clear", "#4CAF50")
+            except Exception as e:
+                print(f"❌ Error setting tickers: {e}")
+                if request.is_cancelled():
+                    return
             
-            # Update trend indicators
-            self._update_trend_indicators(cash, revenue, expenses, liabilities, net_income)
+            # Check cancellation before ratio updates
+            if request.is_cancelled():
+                return
+            
+            # Update ratios from consolidated data with safety checks
+            try:
+                self._update_ratios_from_consolidated_data(ratios_data)
+            except Exception as e:
+                print(f"❌ Error updating ratios: {e}")
+                if request.is_cancelled():
+                    return
+            
+            # Check cancellation before trend updates
+            if request.is_cancelled():
+                return
+            
+            # Update trend indicators with safety checks
+            try:
+                self._update_trend_indicators(cash, revenue, expenses, liabilities, net_income)
+            except Exception as e:
+                print(f"❌ Error updating trend indicators: {e}")
+                if request.is_cancelled():
+                    return
             
             print("✅ Dashboard metrics updated successfully")
             
@@ -426,10 +545,19 @@ class DashboardPage(QWidget):
     def _set_default_ratios(self):
         """Set default values for ratio cards."""
         self.card_quick_ratio.set_value("0.00")
+        self.card_quick_ratio.set_ticker("📊 No Data", "#9E9E9E")
+        
         self.card_debt_equity.set_value("0.00")
+        self.card_debt_equity.set_ticker("📊 No Data", "#9E9E9E")
+        
         self.card_current_ratio.set_value("0.00")
+        self.card_current_ratio.set_ticker("📊 No Data", "#9E9E9E")
+        
         self.card_gross_margin.set_value("0.00%")
+        self.card_gross_margin.set_ticker("📊 No Data", "#9E9E9E")
+        
         self.card_operating_margin.set_value("0.00%")
+        self.card_operating_margin.set_ticker("📊 No Data", "#9E9E9E")
             
     def _update_trend_indicators(self, cash, revenue, expenses, liabilities, net_income):
         """Update trend indicators for cards."""
@@ -770,16 +898,15 @@ class DashboardPage(QWidget):
             # Perform the actual update
             self._update_metrics_with_cancellation(request)
             
-            # Hide loading state
-            self._hide_loading_state()
-            
         except Exception as e:
             print(f"❌ Error in deferred update: {e}")
             # Show error state on failure
-            self._show_error_state("Update failed")
+            if self._is_widget_valid():
+                self._show_error_state("Update failed")
         finally:
-            # Always hide loading state and clear pending request
-            self._hide_loading_state()
+            # Only hide loading state if widget is still valid
+            if self._is_widget_valid():
+                self._hide_loading_state()
             self._pending_request = None
             self._pending_dates = None
     
@@ -790,10 +917,28 @@ class DashboardPage(QWidget):
             if not self.isVisible() or self.parent() is None:
                 return False
             
-            # Try to access object name (will throw if being destroyed)
+            # Test Qt object access
             self.objectName()
+            
+            # Test metric card objects exist and are valid
+            required_cards = [
+                'card_cash', 'card_net_income', 'card_liabilities',
+                'card_revenue', 'card_expenses', 'card_receivables',
+                'card_payables', 'card_quick_ratio', 'card_debt_equity',
+                'card_current_ratio', 'card_gross_margin', 'card_operating_margin'
+            ]
+            
+            for card_attr in required_cards:
+                if not hasattr(self, card_attr):
+                    return False
+                card = getattr(self, card_attr)
+                if card is None:
+                    return False
+                # Test card object access
+                card.objectName()
+                
             return True
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             return False
     
     def _show_empty_state(self):
@@ -899,8 +1044,9 @@ class DashboardPage(QWidget):
         except Exception as e:
             print(f"❌ Error updating dashboard system reference: {e}")
         finally:
-            # Always unlock context
-            self._context_lock = False
+            # Only unlock context if we successfully locked it
+            if hasattr(self, '_context_lock'):
+                self._context_lock = False
         
     def _apply_styling(self):
         """Apply beautiful glassmorphism styling to the dashboard."""
@@ -978,6 +1124,7 @@ class DashboardPage(QWidget):
         
         max_retries = 3
         retry_delay = 1.0  # seconds
+        client = None
         
         for attempt in range(max_retries):
             try:
@@ -990,30 +1137,36 @@ class DashboardPage(QWidget):
                     return None
                 
                 # Use shared database client for better performance
-                from ...core.shared_database_manager import get_shared_client
+                from ...core.shared_database_manager import get_shared_client, SharedDatabaseManager
                 client = get_shared_client()
                 
                 if attempt > 0:
                     print(f"🔄 Retry attempt {attempt + 1}/{max_retries} for consolidated dashboard data")
                 else:
                     print(f"🔍 Getting consolidated dashboard data for period: {from_date} to {to_date}, as of: {as_of_date}")
+                print(f"   Organization ID: {self.system.current_organization_id}")
                 
-                # Single RPC call to get all dashboard data
-                result = client.rpc(
-                    'get_dashboard_data',
-                    {
-                        'p_org_id': self.system.current_organization_id,
-                        'p_from_date': from_date,
-                        'p_to_date': to_date,
-                        'p_as_of_date': as_of_date
-                    }
-                ).execute()
+                # Single RPC call to get all dashboard data with timeout
+                try:
+                    result = client.rpc(
+                        'get_dashboard_data',
+                        {
+                            'p_org_id': self.system.current_organization_id,
+                            'p_from_date': from_date,
+                            'p_to_date': to_date,
+                            'p_as_of_date': as_of_date
+                        }
+                    ).execute()
+                except Exception as db_error:
+                    print(f"❌ Database operation failed: {db_error}")
+                    if attempt < max_retries - 1:
+                        continue
+                    return None
                 
                 if not result.data:
                     print("⚠️ No consolidated data returned from database")
                     if attempt < max_retries - 1:
                         print(f"⏳ Waiting {retry_delay}s before retry...")
-                        import time
                         time.sleep(retry_delay)
                         retry_delay *= 2  # Exponential backoff
                         continue
@@ -1034,17 +1187,32 @@ class DashboardPage(QWidget):
                 print(f"❌ Error getting consolidated dashboard data (attempt {attempt + 1}): {e}")
                 if attempt < max_retries - 1:
                     print(f"⏳ Waiting {retry_delay}s before retry...")
-                    import time
                     time.sleep(retry_delay)
                     retry_delay *= 2  # Exponential backoff
                 else:
                     print(f"❌ All {max_retries} attempts failed")
                     return None
+            finally:
+                # Decrement connection count on completion
+                if client:
+                    try:
+                        SharedDatabaseManager.decrement_connection_count()
+                    except Exception as e:
+                        print(f"⚠️ Error decrementing connection count: {e}")
     
     def _extract_cash_from_balance_sheet(self, balance_sheet):
         """Extract cash balance from balance sheet data."""
         try:
+            if not isinstance(balance_sheet, dict):
+                print("⚠️ Balance sheet is not a dict")
+                return 0.0
+            
+            # Check if balance sheet has accounts array
             accounts = balance_sheet.get('accounts', [])
+            if not isinstance(accounts, list):
+                print("⚠️ Balance sheet accounts is not a list")
+                return 0.0
+            
             cash_total = 0.0
             
             for account in accounts:
@@ -1052,17 +1220,80 @@ class DashboardPage(QWidget):
                     account_name = account.get('name', '').lower()
                     cash_keywords = ['cash', 'bank', 'checking', 'savings', 'petty cash']
                     if any(keyword in account_name for keyword in cash_keywords):
-                        cash_total += abs(account.get('balance', 0))
+                        cash_total += abs(float(account.get('balance', 0)))
             
             return cash_total
         except Exception as e:
             print(f"❌ Error extracting cash from balance sheet: {e}")
             return 0.0
     
+    def _extract_liabilities_from_balance_sheet(self, balance_sheet):
+        """Extract total liabilities from balance sheet data."""
+        try:
+            if not isinstance(balance_sheet, dict):
+                print("⚠️ Balance sheet is not a dict")
+                return 0.0
+            
+            # Check if balance sheet has accounts array
+            accounts = balance_sheet.get('accounts', [])
+            if not isinstance(accounts, list):
+                print("⚠️ Balance sheet accounts is not a list")
+                return 0.0
+            
+            liabilities_total = 0.0
+            
+            for account in accounts:
+                if account.get('account_type') == 'liability':
+                    liabilities_total += abs(float(account.get('balance', 0)))
+            
+            return liabilities_total
+        except Exception as e:
+            print(f"❌ Error extracting liabilities from balance sheet: {e}")
+            return 0.0
+    
+    def _extract_revenue_from_income_statement(self, income_statement):
+        """Extract total revenue from income statement data."""
+        try:
+            if not isinstance(income_statement, dict):
+                print("⚠️ Income statement is not a dict")
+                return 0.0
+            
+            # Get total_revenue directly from the JSON object
+            revenue_total = float(income_statement.get('total_revenue', 0))
+            
+            return revenue_total
+        except Exception as e:
+            print(f"❌ Error extracting revenue from income statement: {e}")
+            return 0.0
+    
+    def _extract_expenses_from_income_statement(self, income_statement):
+        """Extract total expenses from income statement data."""
+        try:
+            if not isinstance(income_statement, dict):
+                print("⚠️ Income statement is not a dict")
+                return 0.0
+            
+            # Get total_expenses directly from the JSON object
+            expenses_total = float(income_statement.get('total_expenses', 0))
+            
+            return expenses_total
+        except Exception as e:
+            print(f"❌ Error extracting expenses from income statement: {e}")
+            return 0.0
+    
     def _extract_receivables_from_balance_sheet(self, balance_sheet):
         """Extract accounts receivable from balance sheet data."""
         try:
+            if not isinstance(balance_sheet, dict):
+                print("⚠️ Balance sheet is not a dict")
+                return 0.0
+            
+            # Check if balance sheet has accounts array
             accounts = balance_sheet.get('accounts', [])
+            if not isinstance(accounts, list):
+                print("⚠️ Balance sheet accounts is not a list")
+                return 0.0
+            
             receivables_total = 0.0
             
             for account in accounts:
@@ -1070,7 +1301,7 @@ class DashboardPage(QWidget):
                     account_name = account.get('name', '').lower()
                     receivable_keywords = ['receivable', 'ar', 'accounts receivable', 'trade receivable']
                     if any(keyword in account_name for keyword in receivable_keywords):
-                        receivables_total += abs(account.get('balance', 0))
+                        receivables_total += abs(float(account.get('balance', 0)))
             
             return receivables_total
         except Exception as e:
@@ -1080,7 +1311,16 @@ class DashboardPage(QWidget):
     def _extract_payables_from_balance_sheet(self, balance_sheet):
         """Extract accounts payable from balance sheet data."""
         try:
+            if not isinstance(balance_sheet, dict):
+                print("⚠️ Balance sheet is not a dict")
+                return 0.0
+            
+            # Check if balance sheet has accounts array
             accounts = balance_sheet.get('accounts', [])
+            if not isinstance(accounts, list):
+                print("⚠️ Balance sheet accounts is not a list")
+                return 0.0
+            
             payables_total = 0.0
             
             for account in accounts:
@@ -1088,7 +1328,7 @@ class DashboardPage(QWidget):
                     account_name = account.get('name', '').lower()
                     payable_keywords = ['payable', 'ap', 'accounts payable', 'trade payable']
                     if any(keyword in account_name for keyword in payable_keywords):
-                        payables_total += abs(account.get('balance', 0))
+                        payables_total += abs(float(account.get('balance', 0)))
             
             return payables_total
         except Exception as e:
@@ -1106,16 +1346,32 @@ class DashboardPage(QWidget):
             if quick_ratio_data:
                 quick_ratio_value = quick_ratio_data.get('value', 0)
                 self.card_quick_ratio.set_value(f"{quick_ratio_value:.2f}")
+                # Set ticker for quick ratio
+                if quick_ratio_value > 1.0:
+                    self.card_quick_ratio.set_ticker("✅ Good", "#4CAF50")
+                elif quick_ratio_value > 0.5:
+                    self.card_quick_ratio.set_ticker("⚠️ Fair", "#FF9800")
+                else:
+                    self.card_quick_ratio.set_ticker("❌ Poor", "#F44336")
             else:
                 self.card_quick_ratio.set_value("0.00")
+                self.card_quick_ratio.set_ticker("📊 No Data", "#9E9E9E")
             
             # Update Current Ratio
             current_ratio_data = liquidity_ratios.get('current_ratio', {})
             if current_ratio_data:
                 current_ratio_value = current_ratio_data.get('value', 0)
                 self.card_current_ratio.set_value(f"{current_ratio_value:.2f}")
+                # Set ticker for current ratio
+                if current_ratio_value > 2.0:
+                    self.card_current_ratio.set_ticker("✅ Excellent", "#4CAF50")
+                elif current_ratio_value > 1.0:
+                    self.card_current_ratio.set_ticker("⚠️ Good", "#4CAF50")
+                else:
+                    self.card_current_ratio.set_ticker("❌ Poor", "#F44336")
             else:
                 self.card_current_ratio.set_value("0.00")
+                self.card_current_ratio.set_ticker("📊 No Data", "#9E9E9E")
             
             # Update Debt-to-Equity Ratio
             leverage_ratios = ratios.get('leverage', {})
@@ -1123,8 +1379,16 @@ class DashboardPage(QWidget):
             if debt_equity_data:
                 debt_equity_value = debt_equity_data.get('value', 0)
                 self.card_debt_equity.set_value(f"{debt_equity_value:.2f}")
+                # Set ticker for debt-to-equity ratio
+                if debt_equity_value < 0.5:
+                    self.card_debt_equity.set_ticker("✅ Low Risk", "#4CAF50")
+                elif debt_equity_value < 1.0:
+                    self.card_debt_equity.set_ticker("⚠️ Moderate", "#FF9800")
+                else:
+                    self.card_debt_equity.set_ticker("❌ High Risk", "#F44336")
             else:
                 self.card_debt_equity.set_value("0.00")
+                self.card_debt_equity.set_ticker("📊 No Data", "#9E9E9E")
             
             # Update Profitability Ratios
             profitability_ratios = ratios.get('profitability', {})
@@ -1134,16 +1398,32 @@ class DashboardPage(QWidget):
             if gross_margin_data:
                 gross_margin_value = gross_margin_data.get('value', 0)
                 self.card_gross_margin.set_value(f"{gross_margin_value:.1f}%")
+                # Set ticker for gross margin
+                if gross_margin_value > 30:
+                    self.card_gross_margin.set_ticker("✅ High", "#4CAF50")
+                elif gross_margin_value > 15:
+                    self.card_gross_margin.set_ticker("⚠️ Moderate", "#FF9800")
+                else:
+                    self.card_gross_margin.set_ticker("❌ Low", "#F44336")
             else:
                 self.card_gross_margin.set_value("0.00%")
+                self.card_gross_margin.set_ticker("📊 No Data", "#9E9E9E")
             
             # Update Operating Margin (using net profit margin)
             net_margin_data = profitability_ratios.get('net_profit_margin', {})
             if net_margin_data:
                 net_margin_value = net_margin_data.get('value', 0)
                 self.card_operating_margin.set_value(f"{net_margin_value:.1f}%")
+                # Set ticker for operating margin
+                if net_margin_value > 10:
+                    self.card_operating_margin.set_ticker("✅ Strong", "#4CAF50")
+                elif net_margin_value > 5:
+                    self.card_operating_margin.set_ticker("⚠️ Good", "#4CAF50")
+                else:
+                    self.card_operating_margin.set_ticker("❌ Weak", "#F44336")
             else:
                 self.card_operating_margin.set_value("0.00%")
+                self.card_operating_margin.set_ticker("📊 No Data", "#9E9E9E")
                 
             print("✅ Ratios updated from consolidated data")
             
@@ -1154,6 +1434,11 @@ class DashboardPage(QWidget):
     def _show_loading_state(self):
         """Show loading indicators on metric cards."""
         try:
+            # Validate widget before showing loading state
+            if not self._is_widget_valid():
+                print("⚠️ Widget not valid, skipping loading state")
+                return
+            
             # Set loading text on all cards
             loading_cards = [
                 self.card_cash, self.card_net_income, self.card_liabilities,
@@ -1162,9 +1447,10 @@ class DashboardPage(QWidget):
                 self.card_current_ratio, self.card_gross_margin, self.card_operating_margin
             ]
             
-            for card in loading_cards:
-                card.set_value("⏳", "")
-                card.set_subtitle("Loading...")
+            for i, card in enumerate(loading_cards):
+                if card is not None:
+                    card.set_value("⏳", "")
+                    card.set_subtitle("Loading...")
             
         except Exception as e:
             print(f"❌ Error showing loading state: {e}")
@@ -1172,23 +1458,20 @@ class DashboardPage(QWidget):
     def _hide_loading_state(self):
         """Hide loading indicators (cards will be updated with real data)."""
         try:
-            # Clear loading subtitles
-            loading_cards = [
-                self.card_cash, self.card_net_income, self.card_liabilities,
-                self.card_revenue, self.card_expenses, self.card_receivables,
-                self.card_payables, self.card_quick_ratio, self.card_debt_equity,
-                self.card_current_ratio, self.card_gross_margin, self.card_operating_margin
-            ]
-            
-            for card in loading_cards:
-                card.set_subtitle("")
-            
+            # Don't clear subtitles here - let the actual data update handle them
+            # The cards will be updated with real data which should set proper subtitles
+            pass
         except Exception as e:
             print(f"❌ Error hiding loading state: {e}")
     
     def _show_error_state(self, error_message="Error loading data"):
         """Show error state on metric cards."""
         try:
+            # Validate widget before showing error state
+            if not self._is_widget_valid():
+                print("⚠️ Widget not valid, skipping error state")
+                return
+            
             # Set error indicators on all cards
             error_cards = [
                 self.card_cash, self.card_net_income, self.card_liabilities,
@@ -1198,8 +1481,9 @@ class DashboardPage(QWidget):
             ]
             
             for card in error_cards:
-                card.set_value("❌", "")
-                card.set_subtitle(error_message)
+                if card is not None:
+                    card.set_value("❌", "")
+                    card.set_subtitle(error_message)
             
         except Exception as e:
             print(f"❌ Error showing error state: {e}")
@@ -1215,11 +1499,10 @@ class DashboardPage(QWidget):
             cache_key = self._get_cache_key(from_date, to_date, as_of_date)
             
             # Check if we have cached data
-            if hasattr(self, '_data_cache') and cache_key in self._data_cache:
+            if cache_key in self._data_cache:
                 cached_entry = self._data_cache[cache_key]
                 
                 # Check if cache is still valid (5 minutes)
-                import time
                 if time.time() - cached_entry['timestamp'] < 300:  # 5 minutes
                     print(f"✅ Using cached dashboard data")
                     return cached_entry['data']
@@ -1240,14 +1523,9 @@ class DashboardPage(QWidget):
             if not data:
                 return
             
-            # Initialize cache if needed
-            if not hasattr(self, '_data_cache'):
-                self._data_cache = {}
-            
             cache_key = self._get_cache_key(from_date, to_date, as_of_date)
             
             # Store data with timestamp
-            import time
             self._data_cache[cache_key] = {
                 'data': data,
                 'timestamp': time.time()
@@ -1269,8 +1547,8 @@ class DashboardPage(QWidget):
     def _clear_cache(self):
         """Clear all cached dashboard data."""
         try:
-            if hasattr(self, '_data_cache'):
-                self._data_cache.clear()
-                print(f"🗑️ Dashboard cache cleared")
+            self._data_cache.clear()
+            self._original_subtitles.clear()
+            print(f"🗑️ Dashboard cache and subtitles cleared")
         except Exception as e:
             print(f"❌ Error clearing cache: {e}")

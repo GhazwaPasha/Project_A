@@ -17,10 +17,10 @@ DECLARE
     ratios_data JSON;
     dashboard_data JSON;
 BEGIN
-    -- Get balance sheet data
+    -- Get balance sheet data (already returns JSON)
     SELECT generate_balance_sheet(p_org_id, p_as_of_date) INTO balance_sheet_data;
     
-    -- Get income statement data  
+    -- Get income statement data (already returns JSON)
     SELECT generate_income_statement(p_org_id, p_from_date, p_to_date) INTO income_statement_data;
     
     -- Get all ratios
@@ -28,8 +28,8 @@ BEGIN
     
     -- Consolidate all data into a single response
     dashboard_data := json_build_object(
-        'balance_sheet', balance_sheet_data,
-        'income_statement', income_statement_data,
+        'balance_sheet', COALESCE(balance_sheet_data, '{}'::json),
+        'income_statement', COALESCE(income_statement_data, '{}'::json),
         'ratios', ratios_data,
         'period', json_build_object(
             'from_date', p_from_date,
