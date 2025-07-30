@@ -32,11 +32,16 @@ class SimpleAIStatusBar(QLineEdit):
         self.unread_notifications_count = 0
         self.background_processes = []
         
+        # Notification display state
+        self.is_showing_notification = False
+        self.notification_display_timer = None
+        
         # Setup UI
         self._setup_ui()
         self._setup_animations()
         self._apply_styling()
         self._setup_status_timers()
+        self._setup_notification_connections()
     
     def _setup_ai_connections(self):
         """Setup AI processor signal connections"""
@@ -96,6 +101,23 @@ class SimpleAIStatusBar(QLineEdit):
         
         # Initial status
         self._update_status()
+    
+    def _setup_notification_connections(self):
+        """Setup connections to notification manager"""
+        try:
+            if (self.parent_window and 
+                hasattr(self.parent_window, 'notification_manager') and 
+                self.parent_window.notification_manager):
+                
+                # Connect to notification added signal
+                self.parent_window.notification_manager.notification_added.connect(
+                    self._on_notification_added
+                )
+                print("✅ AI Status Bar: Connected to notification manager")
+            else:
+                print("⚠️ AI Status Bar: No notification manager available")
+        except Exception as e:
+            print(f"❌ AI Status Bar: Failed to connect to notification manager: {e}")
         
     def _setup_ui(self):
         """Setup the UI components"""
@@ -298,7 +320,7 @@ class SimpleAIStatusBar(QLineEdit):
     
     def _update_status(self):
         """Update status display"""
-        if self.is_expanded or self.is_processing:
+        if self.is_expanded or self.is_processing or self.is_showing_notification:
             return
             
         # Show background processes
@@ -345,7 +367,7 @@ class SimpleAIStatusBar(QLineEdit):
     
     def _reset_to_default(self):
         """Reset to default status"""
-        if not self.is_expanded and not self.is_processing:
+        if not self.is_expanded and not self.is_processing and not self.is_showing_notification:
             self._update_status()
     
     def _check_notifications(self):
@@ -363,7 +385,7 @@ class SimpleAIStatusBar(QLineEdit):
                         
                 if unread_count != self.unread_notifications_count:
                     self.unread_notifications_count = unread_count
-                    if not self.is_expanded and not self.is_processing:
+                    if not self.is_expanded and not self.is_processing and not self.is_showing_notification:
                         self._update_status()
                         
         except Exception:
@@ -379,7 +401,7 @@ class SimpleAIStatusBar(QLineEdit):
         }
         self.background_processes.append(process)
         
-        if not self.is_expanded and not self.is_processing:
+        if not self.is_expanded and not self.is_processing and not self.is_showing_notification:
             self._update_status()
     
     def update_background_process(self, process_id, message=None, progress=None):
@@ -391,7 +413,7 @@ class SimpleAIStatusBar(QLineEdit):
                 if progress:
                     process['progress'] = progress
                     
-                if not self.is_expanded and not self.is_processing:
+                if not self.is_expanded and not self.is_processing and not self.is_showing_notification:
                     self._update_status()
                 break
     
@@ -399,7 +421,7 @@ class SimpleAIStatusBar(QLineEdit):
         """Remove background process"""
         self.background_processes = [p for p in self.background_processes if p['id'] != process_id]
         
-        if not self.background_processes and not self.is_expanded and not self.is_processing:
+        if not self.background_processes and not self.is_expanded and not self.is_processing and not self.is_showing_notification:
             self._update_status()
     
     def handle_ai_response(self, response_text: str):
@@ -438,3 +460,73 @@ class SimpleAIStatusBar(QLineEdit):
             self.ai_processor.update_context('reminders', reminders_data)
         except Exception as e:
             print(f"Could not update reminders context: {e}")
+    
+    def _on_notification_added(self, notification_data):
+        """Handle new notification - show it in status bar if idle"""
+        try:
+            # Only show notification if status bar is in idle state
+            if not self.is_expanded and not self.is_processing and not self.is_showing_notification:
+                self._show_notification_in_status_bar(notification_data)
+        except Exception as e:
+            print(f"Error handling notification in AI status bar: {e}")
+    
+    def _show_notification_in_status_bar(self, notification_data):
+        """Show notification in status bar for a few seconds"""
+        try:
+            # Extract notification info
+            title = notification_data.get('title', 'Notification')
+            message = notification_data.get('message', '')
+            notification_type = notification_data.get('type', 'info')
+            
+            # Create display message based on notification type
+            if notification_type == 'success':
+                icon = "✅"
+            elif notification_type == 'warning':
+                icon = "⚠️"
+            elif notification_type == 'error':
+                icon = "❌"
+            elif notification_type == 'sync':
+                icon = "🔄"
+            else:
+                icon = "📢"
+            
+            # Show the notification
+            display_message = f"{icon} {title}"
+            if message and len(message) > 50:
+                display_message += f": {message[:47]}..."
+            elif message:
+                display_message += f": {message}"
+            
+            # Set the notification text
+            self.setText(display_message)
+            self.is_showing_notification = True
+            
+            # Set up timer to return to normal state
+            if self.notification_display_timer:
+                self.notification_display_timer.stop()
+            
+            self.notification_display_timer = QTimer()
+            self.notification_display_timer.timeout.connect(self._return_to_normal_state)
+            self.notification_display_timer.start(4000)  # Show for 4 seconds
+            
+            print(f"📢 AI Status Bar: Showing notification - {title}")
+            
+        except Exception as e:
+            print(f"Error showing notification in status bar: {e}")
+    
+    def _return_to_normal_state(self):
+        """Return to normal status bar state after showing notification"""
+        try:
+            self.is_showing_notification = False
+            if self.notification_display_timer:
+                self.notification_display_timer.stop()
+                self.notification_display_timer = None
+            
+            # Return to normal state
+            if not self.is_expanded and not self.is_processing:
+                self._update_status()
+            
+            print("📢 AI Status Bar: Returned to normal state")
+            
+        except Exception as e:
+            print(f"Error returning to normal state: {e}")
