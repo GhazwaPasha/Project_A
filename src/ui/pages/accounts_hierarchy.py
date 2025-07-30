@@ -1048,6 +1048,15 @@ class HierarchicalAccountsPage(QWidget):
                 # Emit accounts changed event to refresh all UI components
                 accounting_events.accounts_changed.emit()
                 
+                # Show success notification
+                main_window = self.window()
+                if main_window and hasattr(main_window, 'add_notification'):
+                    main_window.add_notification(
+                        "Account Deleted",
+                        f"Account '{account_data['name']}' has been deleted successfully",
+                        "success"
+                    )
+                
             except Exception as e:
                 error_msg = QMessageBox()
                 error_msg.setIcon(QMessageBox.Icon.Critical)
@@ -2001,12 +2010,22 @@ class AccountDetailsPanel(QStackedWidget):
                 else:
                     success_msg += "\n✅ Saved to database"
             
-            msg = QMessageBox()
-            msg.setIcon(QMessageBox.Icon.Information)
-            msg.setText(success_msg)
-            msg.setWindowTitle("Success")
-            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
-            msg.exec()
+            # Use notification instead of popup
+            main_window = self.window()
+            if main_window and hasattr(main_window, 'add_notification'):
+                main_window.add_notification(
+                    f"Account {action.title()}",
+                    f"Account '{data['name']}' {action} successfully",
+                    "success"
+                )
+            else:
+                # Fallback to popup if notification system not available
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Icon.Information)
+                msg.setText(success_msg)
+                msg.setWindowTitle("Success")
+                msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+                msg.exec()
 
         except Exception as e:
             # Ensure the form remains active so user can retry

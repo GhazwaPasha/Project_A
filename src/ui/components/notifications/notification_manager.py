@@ -58,6 +58,14 @@ class NotificationManager(QObject):
     def add_notification(self, title: str, message: str, notification_type: str = "info", 
                         category: str = "general", metadata: Optional[Dict] = None) -> str:
         """Add a new notification."""
+        # Validate inputs to prevent empty notifications
+        if not title or not title.strip():
+            self.logger.warning("Attempted to add notification with empty title - skipping")
+            return ""
+        if not message or not message.strip():
+            self.logger.warning("Attempted to add notification with empty message - skipping")
+            return ""
+            
         notification_id = f"notif_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
         timestamp = datetime.now().isoformat()
         metadata = metadata or {}

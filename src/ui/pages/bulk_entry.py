@@ -389,28 +389,46 @@ class BulkEntryPage(QWidget):
             # Handle results
             if progress.was_cancelled():
                 plural = "entry" if success_count == 1 else "entries"
-                QMessageBox.information(
-                    self,
-                    "Save Cancelled",
-                    f"Save operation cancelled. {success_count} {plural} were saved successfully before cancellation."
-                )
+                # Use notification instead of popup
+                main_window = self.window()
+                if main_window and hasattr(main_window, 'add_notification'):
+                    main_window.add_notification(
+                        "Save Cancelled",
+                        f"Save operation cancelled. {success_count} {plural} were saved successfully before cancellation.",
+                        "info"
+                    )
+                else:
+                    # Fallback to console logging if notification system not available
+                    print(f"📊 Notification: Save Cancelled - Save operation cancelled. {success_count} {plural} were saved successfully before cancellation. (info)")
             elif failed_entries:
                 failed_msg = "\n".join(f"Entry {i+1}: {err}" for i, err in failed_entries[:5])
                 if len(failed_entries) > 5:
                     failed_msg += f"\n... and {len(failed_entries) - 5} more errors"
                 
-                QMessageBox.warning(
-                    self, 
-                    "Partial Save Completed",
-                    f"Saved {success_count} entries successfully, but {len(failed_entries)} entries failed:\n\n{failed_msg}"
-                )
+                # Use notification instead of popup
+                main_window = self.window()
+                if main_window and hasattr(main_window, 'add_notification'):
+                    main_window.add_notification(
+                        "Partial Save Completed",
+                        f"Saved {success_count} entries successfully, but {len(failed_entries)} entries failed",
+                        "warning"
+                    )
+                else:
+                    # Fallback to console logging if notification system not available
+                    print(f"📊 Notification: Partial Save Completed - Saved {success_count} entries successfully, but {len(failed_entries)} entries failed (warning)")
             else:
                 plural = "entry" if success_count == 1 else "entries"
-                QMessageBox.information(
-                    self,
-                    "Success",
-                    f"Successfully saved {success_count} {plural}!"
-                )
+                # Use notification instead of popup
+                main_window = self.window()
+                if main_window and hasattr(main_window, 'add_notification'):
+                    main_window.add_notification(
+                        "Bulk Save Successful",
+                        f"Successfully saved {success_count} {plural}!",
+                        "success"
+                    )
+                else:
+                    # Fallback to console logging if notification system not available
+                    print(f"📊 Notification: Bulk Save Successful - Successfully saved {success_count} {plural}! (success)")
             
             if success_count > 0:
                 # Emit the saved signal
@@ -439,7 +457,17 @@ class BulkEntryPage(QWidget):
                     self._renumber_cards()
             
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save entries: {e}")
+            # Use notification instead of popup for errors
+            main_window = self.window()
+            if main_window and hasattr(main_window, 'add_notification'):
+                main_window.add_notification(
+                    "Bulk Save Error",
+                    f"Failed to save entries: {e}",
+                    "error"
+                )
+            else:
+                # Fallback to console logging if notification system not available
+                print(f"📊 Notification: Bulk Save Error - Failed to save entries: {e} (error)")
         finally:
             # Ensure cleanup happens regardless of success or failure
             self._bulk_import_mode = False
@@ -733,10 +761,7 @@ class BulkEntryPage(QWidget):
                 QTimer.singleShot(100, self._force_validation_update_after_import)
 
                 # Wait briefly to ensure all updates are processed
-                QTimer.singleShot(200, lambda: [
-                    QMessageBox.information(self, "Import Successful", f"Imported {len(df)} entries from file."),
-                    self._update_summary()
-                ])
+                QTimer.singleShot(200, lambda: self._handle_import_success(len(df)))
                 
             except Exception as e:
                 # Ensure UI updates are re-enabled on error
@@ -1297,6 +1322,25 @@ class BulkEntryPage(QWidget):
         msg_box.setText(message)
         msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
         msg_box.exec()
+    
+    def _handle_import_success(self, entry_count):
+        """Handle successful import with notification."""
+        try:
+            # Use notification instead of popup
+            main_window = self.window()
+            if main_window and hasattr(main_window, 'add_notification'):
+                main_window.add_notification(
+                    "Bulk Import Successful",
+                    f"Imported {entry_count} entries from file",
+                    "success"
+                )
+            else:
+                # Fallback to popup if notification system not available
+                QMessageBox.information(self, "Import Successful", f"Imported {entry_count} entries from file.")
+            
+            self._update_summary()
+        except Exception as e:
+            print(f"Error handling import success: {e}")
     
     def _force_validation_update_after_import(self):
         """Force validation update after import to ensure proper styling and reconnect signals."""

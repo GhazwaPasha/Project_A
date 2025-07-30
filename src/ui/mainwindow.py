@@ -1492,12 +1492,8 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
                         current_page.refresh_data()
                         self.logger.info(f"✅ Refreshed current page: {page_name}")
             
-            # Show a brief notification to the user
-            self.add_notification(
-                "Journal Entry Created", 
-                f"Entry {entry_data.get('entry_number', 'N/A')} has been saved successfully.", 
-                "success"
-            )
+            # Note: Notification is already handled by the journal page itself
+            # to avoid duplicate notifications
             
         except Exception as e:
             self.logger.error(f"❌ Error handling journal entry creation: {e}")
@@ -1623,6 +1619,14 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         
     def add_notification(self, title, message, notification_type="info"):
         """Add a notification using the notification manager"""
+        # Validate inputs to prevent empty notifications
+        if not title or not title.strip():
+            self.logger.warning("Attempted to add notification with empty title - skipping")
+            return
+        if not message or not message.strip():
+            self.logger.warning("Attempted to add notification with empty message - skipping")
+            return
+            
         if hasattr(self, 'notification_manager'):
             self.notification_manager.add_notification(title, message, notification_type)
         else:
@@ -1928,6 +1932,10 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
     
     def notify_sync_failed(self, error_msg):
         """Notify that sync has failed."""
+        # Validate error message to prevent empty notifications
+        if not error_msg or not str(error_msg).strip():
+            error_msg = "Unknown error occurred"
+            
         self.add_sync_notification(
             "Sync Failed",
             f"Failed to synchronize data: {error_msg}",
@@ -2745,11 +2753,19 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
     def _perform_immediate_ui_updates(self, organization_id: str, organization_name: str):
         """Perform immediate UI updates that don't require data loading"""
         try:
-            # Show progress popup immediately to indicate switching is in progress
-            from .components.workspace_switching_progress import WorkspaceSwitchingProgress
-            self.progress_popup = WorkspaceSwitchingProgress(self)
-            self.progress_popup.show_progress(self)
-            self.progress_popup.update_status("Switching workspace...", 25)
+            # Only show progress popup if we're actually switching to a different workspace
+            current_org_id = self.session_manager.get_active_organization_id() if self.session_manager else None
+            if current_org_id != organization_id:
+                # Show progress popup immediately to indicate switching is in progress
+                from .components.workspace_switching_progress import WorkspaceSwitchingProgress
+                # Only create new popup if one doesn't already exist
+                if not hasattr(self, 'progress_popup') or not self.progress_popup:
+                    self.progress_popup = WorkspaceSwitchingProgress(self)
+                    self.progress_popup.show_progress(self)
+                self.progress_popup.update_status("Switching workspace...", 25)
+            else:
+                # Same organization - skip progress popup to avoid unnecessary UI flashing
+                self.progress_popup = None
             
             # Update window title immediately
             base_title = "Modern Accounting"
@@ -2775,7 +2791,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             QTimer.singleShot(0, self._update_navigation_visibility)
             
             # Update progress to show immediate updates are complete
-            if hasattr(self, 'progress_popup'):
+            if hasattr(self, 'progress_popup') and self.progress_popup:
                 self.progress_popup.update_status("Loading data...", 50)
             
             # NOTE: UI remains frozen - will be unfrozen after background loading completes
@@ -2793,7 +2809,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
                 """Callback when background loading is complete"""
                 try:
                     # Update progress popup
-                    if hasattr(self, 'progress_popup'):
+                    if hasattr(self, 'progress_popup') and self.progress_popup:
                         self.progress_popup.update_status("Workspace switch complete!", 100)
                         QTimer.singleShot(500, self.progress_popup.hide_progress)
                     
@@ -2817,7 +2833,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             self.page_manager.switch_workspace(organization_id, organization_name, on_loading_complete)
             
             # Update progress to show background loading
-            if hasattr(self, 'progress_popup'):
+            if hasattr(self, 'progress_popup') and self.progress_popup:
                 self.progress_popup.update_status("Loading data in background...", 75)
             
         except Exception as e:
@@ -2879,7 +2895,7 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
             self._unfreeze_ui_after_switch()
             
             # Update progress popup with error
-            if hasattr(self, 'progress_popup'):
+            if hasattr(self, 'progress_popup') and self.progress_popup:
                 self.progress_popup.update_status("Error occurred during switch", 100)
                 QTimer.singleShot(1000, self.progress_popup.hide_progress)
             

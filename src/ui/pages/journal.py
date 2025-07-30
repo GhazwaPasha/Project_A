@@ -857,7 +857,17 @@ class SingleEntryTab(QWidget):
         """Parse natural language transaction."""
         nl_text = self.nl_input.text().strip()
         if not nl_text:
-            QMessageBox.warning(self, "Missing Input", "Please enter a description to parse.")
+            # Use notification instead of popup for validation errors
+            main_window = self.window()
+            if main_window and hasattr(main_window, 'add_notification'):
+                main_window.add_notification(
+                    "Missing Input",
+                    "Please enter a description to parse.",
+                    "warning"
+                )
+            else:
+                # Fallback to console logging if notification system not available
+                print(f"📊 Notification: Missing Input - Please enter a description to parse. (warning)")
             return
         try:
             from ...core.utils import parse_transaction
@@ -873,7 +883,17 @@ class SingleEntryTab(QWidget):
             self.credit_combo.setCurrentText(parsed['credit_account'])
             self.amount_edit.setText(str(parsed['amount']))
         except Exception as e:
-            QMessageBox.critical(self, "Parse Error", f"Could not parse entry: {e}")
+            # Use notification instead of popup for parse errors
+            main_window = self.window()
+            if main_window and hasattr(main_window, 'add_notification'):
+                main_window.add_notification(
+                    "Parse Error",
+                    f"Could not parse entry: {e}",
+                    "error"
+                )
+            else:
+                # Fallback to console logging if notification system not available
+                print(f"📊 Notification: Parse Error - Could not parse entry: {e} (error)")
 
     def _save_entry(self):
         """Save the journal entry."""
@@ -886,17 +906,47 @@ class SingleEntryTab(QWidget):
             
             # Validation
             if not all([description, debit_account, credit_account, amount]):
-                QMessageBox.warning(self, "Validation Error", "Please fill in all fields.")
+                # Use notification instead of popup for validation errors
+                main_window = self.window()
+                if main_window and hasattr(main_window, 'add_notification'):
+                    main_window.add_notification(
+                        "Validation Error",
+                        "Please fill in all fields.",
+                        "warning"
+                    )
+                else:
+                    # Fallback to console logging if notification system not available
+                    print(f"📊 Notification: Validation Error - Please fill in all fields. (warning)")
                 return
                 
             if debit_account == credit_account:
-                QMessageBox.warning(self, "Validation Error", "Debit and Credit accounts cannot be the same.")
+                # Use notification instead of popup for validation errors
+                main_window = self.window()
+                if main_window and hasattr(main_window, 'add_notification'):
+                    main_window.add_notification(
+                        "Validation Error",
+                        "Debit and Credit accounts cannot be the same.",
+                        "warning"
+                    )
+                else:
+                    # Fallback to console logging if notification system not available
+                    print(f"📊 Notification: Validation Error - Debit and Credit accounts cannot be the same. (warning)")
                 return
                 
             try:
                 float(amount)
             except ValueError:
-                QMessageBox.warning(self, "Validation Error", "Please enter a valid amount.")
+                # Use notification instead of popup for validation errors
+                main_window = self.window()
+                if main_window and hasattr(main_window, 'add_notification'):
+                    main_window.add_notification(
+                        "Validation Error",
+                        "Please enter a valid amount.",
+                        "warning"
+                    )
+                else:
+                    # Fallback to console logging if notification system not available
+                    print(f"📊 Notification: Validation Error - Please enter a valid amount. (warning)")
                 return
             
             # Save to system
@@ -912,6 +962,9 @@ class SingleEntryTab(QWidget):
                 result = self.system.add_journal_entry(entry_data)
                 print(f"🔥 FRONTEND DEBUG: add_journal_entry returned: {result}")
                 print(f"🔥 FRONTEND DEBUG: Result type: {type(result)}")
+                
+                # Initialize entry_number with a default value
+                entry_number = 'N/A'
                 
                 if result:
                     entry_number = result.get('entry_number', 'N/A')
@@ -946,7 +999,18 @@ class SingleEntryTab(QWidget):
                     success_msg += "\n⚠️ Queued for sync when online"
                     # Don't fail the journal entry creation for sync errors
             
-            QMessageBox.information(self, "Success", success_msg)
+            # Use notification instead of popup
+            main_window = self.window()
+            if main_window and hasattr(main_window, 'add_notification'):
+                main_window.add_notification(
+                    "Journal Entry Created",
+                    f"Entry {entry_number} saved successfully",
+                    "success"
+                )
+            else:
+                # Fallback to console logging if notification system not available
+                print(f"📊 Notification: Journal Entry Created - Entry {entry_number} saved successfully (success)")
+            
             self._clear_form()
             
             # Invalidate cache to ensure new entry shows up immediately in all views
@@ -957,7 +1021,17 @@ class SingleEntryTab(QWidget):
             QTimer.singleShot(100, self._load_transactions)  # Small delay to ensure DB operations complete
             
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save transaction: {e}")
+            # Use notification instead of popup for errors
+            main_window = self.window()
+            if main_window and hasattr(main_window, 'add_notification'):
+                main_window.add_notification(
+                    "Journal Entry Error",
+                    f"Failed to save transaction: {e}",
+                    "error"
+                )
+            else:
+                # Fallback to console logging if notification system not available
+                print(f"📊 Notification: Journal Entry Error - Failed to save transaction: {e} (error)")
     
     def _invalidate_cache_after_entry(self):
         """Invalidate cache after journal entry creation to ensure immediate UI updates."""
