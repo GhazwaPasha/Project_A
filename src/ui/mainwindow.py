@@ -567,9 +567,12 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         sidebar_layout.addWidget(self.sidebar)
         content_layout.addWidget(sidebar_container)
         
-        # Main content stack
-        self.stack = QStackedWidget()
+        # Main content stack with animations
+        from .components.animated_stack_widget import AnimatedStackWidget
+        self.stack = AnimatedStackWidget()
         self.stack.setObjectName("MainContentStack")
+        self.stack.setTransitionType("slide")  # Use slide transition by default
+        self.stack.setTransitionDuration(300)  # 300ms duration
         # Add internal padding to content for visual spacing
         content_container = QWidget()
         content_container_layout = QVBoxLayout(content_container)
@@ -790,26 +793,52 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
     
     def _on_page_changed(self, index: int):
         """Handle page changes and update AI context"""
-        self.stack.setCurrentIndex(index)
-        
-        # Update AI context with new page information
-        page_names = ['dashboard', 'journal', 'ledger', 'trial_balance', 'reports', 
-                     'accounts', 'reminders', 'period_closing', 'team_management',
-                     'organization_settings', 'user_management', 'platform_overview',
-                     'global_organizations', 'settings']
-        if 0 <= index < len(page_names):
-            page_name = page_names[index]
-            self._update_ai_page_context(page_name)
-            
-            # Ensure page has fresh data for current workspace
-            if hasattr(self, 'stack') and index < self.stack.count():
-                current_page = self.stack.widget(index)
-                if current_page:
-                    self._ensure_page_data_loaded(current_page, page_name)
-        
-        # Update which sidebar button is checked
+        # Update which sidebar button is checked immediately for responsive UI
         for i, btn in enumerate(self.sidebar_buttons):
             btn.setChecked(i == index)
+        
+        # Set current index (this will trigger the animation)
+        self.stack.setCurrentIndex(index)
+        
+        # Connect to transition completion if not already connected
+        if not hasattr(self, '_transition_connected'):
+            self.stack.transition_completed.connect(self._on_transition_completed)
+            self._transition_connected = True
+    
+    def set_page_transition_type(self, transition_type: str):
+        """Set the page transition type (slide, fade, zoom, none)"""
+        if hasattr(self, 'stack') and hasattr(self.stack, 'setTransitionType'):
+            self.stack.setTransitionType(transition_type)
+            print(f"✅ Page transition type set to: {transition_type}")
+    
+    def set_page_transition_duration(self, duration: int):
+        """Set the page transition duration in milliseconds"""
+        if hasattr(self, 'stack') and hasattr(self.stack, 'setTransitionDuration'):
+            self.stack.setTransitionDuration(duration)
+            print(f"✅ Page transition duration set to: {duration}ms")
+    
+    def _on_transition_completed(self):
+        """Handle transition completion"""
+        try:
+            current_index = self.stack.currentIndex()
+            
+            # Update AI context with new page information
+            page_names = ['dashboard', 'journal', 'ledger', 'trial_balance', 'reports', 
+                         'accounts', 'reminders', 'period_closing', 'team_management',
+                         'organization_settings', 'user_management', 'platform_overview',
+                         'global_organizations', 'settings']
+            if 0 <= current_index < len(page_names):
+                page_name = page_names[current_index]
+                self._update_ai_page_context(page_name)
+                
+                # Ensure page has fresh data for current workspace
+                if hasattr(self, 'stack') and current_index < self.stack.count():
+                    current_page = self.stack.widget(current_index)
+                    if current_page:
+                        self._ensure_page_data_loaded(current_page, page_name)
+                        
+        except Exception as e:
+            print(f"Error handling transition completion: {e}")
     
     def _ensure_page_data_loaded(self, page, page_name: str):
         """Ensure page has fresh data loaded for current workspace"""
@@ -1332,6 +1361,26 @@ class MainWindow(QMainWindow, MicaWindowWithBorders):
         if event.key() == Qt.Key.Key_F7:
             print("🔄 Monitor switch handling triggered (F7)")
             self._handle_monitor_switch()
+        
+        # F8: Test different page transition types
+        if event.key() == Qt.Key.Key_F8:
+            print("🎬 Testing page transitions (F8)")
+            current_type = getattr(self.stack, 'transition_type', 'slide')
+            transition_types = ['slide', 'fade', 'zoom', 'none']
+            current_index = transition_types.index(current_type) if current_type in transition_types else 0
+            next_type = transition_types[(current_index + 1) % len(transition_types)]
+            self.set_page_transition_type(next_type)
+            print(f"   Transition type: {current_type} → {next_type}")
+        
+        # F9: Test different transition durations
+        if event.key() == Qt.Key.Key_F9:
+            print("⏱️ Testing transition durations (F9)")
+            current_duration = getattr(self.stack, 'transition_duration', 300)
+            durations = [150, 300, 500, 800]
+            current_index = durations.index(current_duration) if current_duration in durations else 1
+            next_duration = durations[(current_index + 1) % len(durations)]
+            self.set_page_transition_duration(next_duration)
+            print(f"   Duration: {current_duration}ms → {next_duration}ms")
                 
     def eventFilter(self, obj, event):
         """Filter events to handle click-outside-to-close for notification drawer and AI status bar."""
