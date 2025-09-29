@@ -1,0 +1,27 @@
+Name,Type,Code,Parent Code,Description,Group,Is Postable
+Assets,Asset,1000,,Main asset category,Assets,False
+Current Assets,Asset,1100,1000,Current assets category,Assets,False
+Cash and Cash Equivalents,Asset,1110,1100,Cash and bank accounts,Assets,True
+Accounts Receivable,Asset,1120,1100,Amounts owed by customers,Assets,True
+Inventory,Asset,1130,1100,Goods held for sale,Assets,True
+Fixed Assets,Asset,1200,1000,Long-term assets,Assets,False
+Equipment,Asset,1210,1200,Office and production equipment,Assets,True
+Buildings,Asset,1220,1200,Company buildings,Assets,True
+Liabilities,Liability,2000,,Main liability category,Liabilities,False
+Current Liabilities,Liability,2100,2000,Short-term obligations,Liabilities,False
+Accounts Payable,Liability,2110,2100,Amounts owed to suppliers,Liabilities,True
+Short-term Loans,Liability,2120,2100,Bank loans due within one year,Liabilities,True
+Long-term Liabilities,Liability,2200,2000,Long-term obligations,Liabilities,False
+Long-term Loans,Liability,2210,2200,Bank loans due after one year,Liabilities,True
+Equity,Equity,3000,,Owner's equity,Equity,False
+Common Stock,Equity,3100,3000,Shareholder investments,Equity,True
+Retained Earnings,Equity,3200,3000,Accumulated profits,Equity,True
+Revenue,Revenue,4000,,Income from operations,Revenue,False
+Sales Revenue,Revenue,4100,4000,Income from sales,Revenue,True
+Service Revenue,Revenue,4200,4000,Income from services,Revenue,True
+Expenses,Expense,5000,,Operating expenses,Expenses,False
+Cost of Goods Sold,Expense,5100,5000,Direct costs of sales,Expenses,True
+Operating Expenses,Expense,5200,5000,General operating costs,Expenses,False
+Salaries and Wages,Expense,5210,5200,Employee compensation,Expenses,True
+Rent Expense,Expense,5220,5200,Office and facility rent,Expenses,True
+Utilities Expense,Expense,5230,5200,Electricity, water, internet,Expenses,True 

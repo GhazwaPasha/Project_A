@@ -1,0 +1,28 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="globalOrgsGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#29B6F6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0288D1;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Globe -->
+  <circle cx="12" cy="12" r="9" fill="url(#globalOrgsGrad)" opacity="0.8"/>
+  <!-- Continents -->
+  <path d="M6 8 Q8 6 12 8 Q16 6 18 8 Q16 12 12 10 Q8 12 6 8" fill="#0277BD" opacity="0.7"/>
+  <path d="M8 16 Q10 14 14 16 Q16 18 14 20 Q10 18 8 16" fill="#0277BD" opacity="0.6"/>
+  <!-- Organization nodes -->
+  <circle cx="8" cy="9" r="1.5" fill="#FF7043" opacity="0.9"/>
+  <circle cx="15" cy="7" r="1.5" fill="#66BB6A" opacity="0.9"/>
+  <circle cx="12" cy="15" r="1.5" fill="#FFA726" opacity="0.9"/>
+  <circle cx="6" cy="14" r="1.5" fill="#AB47BC" opacity="0.9"/>
+  <circle cx="17" cy="14" r="1.5" fill="#42A5F5" opacity="0.9"/>
+  <!-- Network connections -->
+  <path d="M8 9 Q12 11 15 7" fill="none" stroke="white" stroke-width="1" opacity="0.6"/>
+  <path d="M15 7 Q16 10 17 14" fill="none" stroke="white" stroke-width="1" opacity="0.6"/>
+  <path d="M12 15 Q9 14 6 14" fill="none" stroke="white" stroke-width="1" opacity="0.6"/>
+  <path d="M8 9 Q7 11 6 14" fill="none" stroke="white" stroke-width="1" opacity="0.6"/>
+  <!-- Grid lines -->
+  <circle cx="12" cy="12" r="9" fill="none" stroke="white" stroke-width="0.5" opacity="0.3"/>
+  <path d="M3 12 L21 12" stroke="white" stroke-width="0.5" opacity="0.3"/>
+  <path d="M12 3 L12 21" stroke="white" stroke-width="0.5" opacity="0.3"/>
+</svg>

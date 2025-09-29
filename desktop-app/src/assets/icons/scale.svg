@@ -1,0 +1,11 @@
+<!-- Classic weight scale icon for Trial Balance -->
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g>
+    <rect x="10" y="3" width="4" height="2" rx="1" fill="#569CD6"/>
+    <rect x="11" y="5" width="2" height="10" rx="1" fill="#569CD6"/>
+    <path d="M6 15c0 2 2 4 6 4s6-2 6-4" stroke="#3794FF" stroke-width="2" fill="none"/>
+    <path d="M6 15c0-2 2-4 6-4s6 2 6 4" stroke="#B5CEA8" stroke-width="2" fill="none"/>
+    <ellipse cx="6" cy="15" rx="2" ry="1.2" fill="#B5CEA8"/>
+    <ellipse cx="18" cy="15" rx="2" ry="1.2" fill="#B5CEA8"/>
+  </g>
+</svg>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+    <!-- Simple square sync arrows -->
+    
+    <!-- Top-right arrow -->
+    <path d="M2 3 L11 3 L11 6 L9 6 L9 5 L4 5 L4 9 L5 9 L5 11 L2 11 Z" 
+          fill="black"/>
+    <polygon points="11,1 14,3 11,5" fill="black"/>
+    
+    <!-- Bottom-left arrow -->  
+    <path d="M14 13 L5 13 L5 10 L7 10 L7 11 L12 11 L12 7 L11 7 L11 5 L14 5 Z" 
+          fill="black"/>
+    <polygon points="5,15 2,13 5,11" fill="black"/>
+</svg>l version="1.0" encoding="UTF-8"?>
+<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+    <image href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACCElEQVR4nH2Sv0prQRjEf/tH4WBUjhiCdhZ5AzvTKBEk2IhVirxAKgslnYUPYJnCRrBWRCRCQPAlrG3tIjlJSMLZfN8tLjnXg9dMt8vO7DAzJkkSBZjNZgA45wghsAjWWqy1APg5eW1tDVVlOBwSx/FCgTRNGY/HWGvxaZqysbFBp9PBe0+1WuXs7Iw0TQFQVQCMMQBEUcTJyQm7u7tMJhP8nHx8fAzAw8MD29vbfHx84L3PfhURVlZWeHp6YjKZsLe3x2g0gpubG93a2tJKpaKVSkVLpZK+vLzob7i4uNBms6mqqr1eT/37+zt3d3e8vb1hjOHy8pJut8vBwQHD4TALK4RAHMcMBoPsDsBfX1/jnOP+/h6Aw8ND9vf3GY/HLC8v58Lz3ufIAPbr6wsRwTmHcw4Rod/vL2whJ+Ccw1qbpf294+8QEUQkd57NZvgfL3/B+vo61tpscNZa4jj+J2CMQUQIIeSWKCIUCgVarRZHR0dsbm6iqry+vvL8/Jx3sLq6iveeYrH4w0G1WqXRaFAulzHGcHt7y9XVVd7B4+MjIsJoNMpyMMYQQmBnZ4d2u83p6SkAnU6HWq2Gt9YynU6p1+tEUZRtfA5VxTnH5+cn5+fndLtdQgjUajV6vR4mSRJVVaIoYmlpaWGQ/X6fQqGAMYYkSXDO/RWYh/W9pv/Be4+IZK4A/gAM1AnaPh4EIQAAAABJRU5ErkJggg==" width="16" height="16"/>
+</svg>

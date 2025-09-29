@@ -1,173 +1,114 @@
-# 🚀 AI Accountant - Multi-Tenant SaaS Platform
+# 🚀 Accountuitive - Multi-Platform Accounting System
 
-A modern, multi-organization accounting application with Supabase authentication and role-based access control.
-
-## 🎯 Quick Start
-
-### **Recommended: Smart Launcher**
-```bash
-python run.py
-```
-- Automatically detects configuration
-- Multi-tenant mode when Supabase is configured
-- Single-tenant fallback mode when not configured
-
-### **Alternative Entry Points**
-```bash
-# Full multi-tenant with authentication
-python main_auth.py
-
-# Original single-tenant mode (backward compatible)
-python main.py
-```
+A modern, multi-platform accounting and financial management system with both web and desktop applications.
 
 ## 📁 Project Structure
 
 ```
 Project_A/
-├── run.py                          # ⭐ Smart launcher (recommended)
-├── main_auth.py                    # Multi-tenant with authentication
-├── main.py                         # Original single-tenant mode
-├── requirements.txt                # Python dependencies
-├── .env.example                    # Environment configuration template
-├── MULTITENANT_SETUP.md           # Detailed setup instructions
-├── src/
-│   ├── core/
-│   │   ├── auth_manager.py         # Supabase authentication
-│   │   ├── session_manager.py     # User sessions & permissions
-│   │   ├── supabase_offline_manager.py # Main backend with offline support
-│   │   └── enhanced_accounting_system.py # Enhanced features
-│   └── ui/
-│       ├── auth/
-│       │   ├── login_window.py     # Modern login dialog
-│       │   ├── signup_dialog.py   # User registration
-│       │   └── organization_selector.py # Org picker
-│       ├── components/             # UI components
-│       ├── pages/                  # Application pages
-│       └── mainwindow.py          # Main application window
-├── tools/
-│   ├── setup_multitenant.py       # Database utilities
-│   ├── manage_super_admin.py      # Super admin management
-│   ├── generate_entries.py        # Test data generation
-│   ├── export_journal.py          # Data export utilities
-│   └── clear_journal.py           # Data cleanup utilities
-│   └── setup_local_postgres.py    # Local database setup
-└── assets/                         # Icons and fonts
+├── 📁 web-app/          # Next.js React Web Application
+├── 📁 desktop-app/      # PyQt6 Desktop Application  
+├── 📁 backend/          # Backend Services & Database
+├── 📁 shared/           # Shared Resources
+├── 📁 tools/            # Development Tools
+└── 📁 tests/            # Test Files
+```
+
+## 🛠️ Technology Stack
+
+### Web App (React/Next.js)
+- **Frontend**: Next.js 14, React 18, TypeScript
+- **Styling**: Tailwind CSS, Radix UI
+- **State Management**: Zustand
+- **Data Fetching**: TanStack Query
+- **Animations**: Framer Motion
+
+### Desktop App (PyQt6)
+- **Frontend**: PyQt6 with custom UI components
+- **Backend**: Supabase (PostgreSQL) with Row Level Security
+- **Offline Support**: SQLite local cache
+- **AI Integration**: Natural language processing
+
+### Backend
+- **Database**: Supabase (PostgreSQL)
+- **Authentication**: Supabase Auth
+- **Multi-tenant**: Organization-based data isolation
+- **API**: FastAPI (optional)
+
+## 🚀 Quick Start
+
+### Web Application
+```bash
+cd web-app
+npm install
+npm run dev
+```
+
+### Desktop Application
+```bash
+cd desktop-app
+pip install -r requirements.txt
+python run.py
+```
+
+### Backend Services
+```bash
+cd backend
+pip install -r requirements.txt
+# Run database migrations
+python scripts/setup_multitenant.py
 ```
 
 ## ✨ Features
 
-### **Multi-Tenant Architecture**
-- 🏢 **Organization-based isolation** - Complete data separation
-- 👥 **Multi-user support** - Users can belong to multiple organizations
-- 🔐 **Role-based access control** - 4 permission levels
-- 🔒 **Row Level Security** - Database-level data protection
+- **Multi-Tenant Architecture** - Organization-based data isolation
+- **Role-Based Access Control** - 4 permission levels
+- **Modern UI** - Glassmorphism design with dark theme
+- **Responsive Design** - Mobile-first approach
+- **Real-time Updates** - Supabase integration
+- **Financial Reporting** - Comprehensive accounting reports
+- **AI Integration** - Natural language processing for transactions
+- **Offline Support** - Desktop app with local caching
 
-### **Authentication System**
-- 🎨 **Modern glassmorphism UI** - Beautiful, responsive design
-- ✅ **Complete signup flow** - User registration with organization creation
-- 🔑 **Supabase Auth integration** - Enterprise-grade authentication
-- 📧 **Email verification** - Secure account activation
-- 🏭 **Organization management** - Create or join organizations
+## 📱 Platforms
 
-### **User Roles**
-| Role | Permissions |
-|------|-------------|
-| **Super Admin** | Full system access, manage all organizations |
-| **Organization Owner** | Full organization control, billing, user management |
-| **Organization Admin** | User management, settings, no billing |
-| **Accountant** | Accounting operations, reports, no user management |
+- **Web**: Any modern browser
+- **Desktop**: Windows, macOS, Linux
+- **Mobile**: Responsive web design
 
-## 🛠️ Setup
+## 🔐 Authentication
 
-### 1. **Install Dependencies**
-```bash
-pip install -r requirements.txt
-```
+- Email/password login
+- Multi-tenant organization support
+- Role-based access control
+- Session management
 
-### 2. **Configure Environment**
-```bash
-# Copy template
-cp .env.example .env
+## 📊 Development
 
-# Edit .env with your Supabase credentials
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
-```
+### Available Scripts
 
-### 3. **Setup Database** (Optional - for multi-tenant features)
-```bash
-python tools/setup_multitenant.py
-```
+**Web App:**
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run start` - Start production server
+- `npm run lint` - Run ESLint
 
-### 4. **Run Application**
-```bash
-python run.py
-```
+**Desktop App:**
+- `python run.py` - Start desktop application
+- `python build_exe.py` - Build executable
 
-## 🎪 Usage Modes
+## 🤝 Contributing
 
-### **Smart Mode** (Recommended)
-- Automatically detects Supabase configuration
-- Enables multi-tenant features when configured
-- Falls back to single-tenant when not configured
-- Best for both development and production
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
 
-### **Multi-Tenant Mode**
-- Full authentication with login/signup
-- Organization management
-- Role-based permissions
-- Data isolation between organizations
+## 📄 License
 
-### **Single-Tenant Mode**
-- Traditional single-user accounting
-- Local database only
-- No authentication required
-- Perfect for personal use
-
-## 🔧 Development
-
-### **Environment Variables**
-```bash
-# Required for multi-tenant mode
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
-
-# Optional
-LOCAL_POSTGRES_HOST=localhost
-LOCAL_POSTGRES_DB=accounting_local
-MISTRAL_API_KEY=your-api-key
-```
-
-### **Database Schema**
-- Organizations, users, roles, organization_members tables
-- Updated accounts and journal_entries with organization context
-- Row Level Security policies for data isolation
-- Audit trails with created_by/updated_by fields
-
-## 🚀 Production Deployment
-
-1. **Setup Supabase project**
-2. **Run database migration**
-3. **Configure environment variables**
-4. **Deploy with `python run.py`**
-
-## 📖 Documentation
-
-- `MULTITENANT_SETUP.md` - Complete multi-tenant setup guide
-- Inline code documentation
-- Type hints throughout codebase
-
-## 🎉 What's New
-
-✅ **Complete signup system** with organization creation  
-✅ **Modern authentication UI** with glassmorphism design  
-✅ **Smart launcher** that adapts to configuration  
-✅ **Clean project structure** with unnecessary files removed  
-✅ **Production-ready** multi-tenant architecture  
+This project is licensed under the MIT License.
 
 ---
 
-**🎊 Your single-tenant accounting app is now a full multi-tenant SaaS platform!**
-
-Start with: `python run.py`
+**Built with ❤️ using Next.js, PyQt6, and Supabase**
