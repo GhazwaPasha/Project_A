@@ -207,6 +207,20 @@ export class DataService {
     return data
   }
 
+  static async deleteAccount(id: number): Promise<boolean> {
+    const { error } = await supabase
+      .from('accounts')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      console.error('Error deleting account:', error)
+      return false
+    }
+
+    return true
+  }
+
   // ================================
   // JOURNAL ENTRIES MANAGEMENT
   // ================================

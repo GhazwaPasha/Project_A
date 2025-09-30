@@ -119,6 +119,8 @@ export type Database = {
           parent_id: number | null
           description: string | null
           is_active: boolean
+          group: string | null
+          is_postable: boolean
           created_at: string
           updated_at: string
           created_by: string | null
@@ -132,6 +134,8 @@ export type Database = {
           parent_id?: number | null
           description?: string | null
           is_active?: boolean
+          group?: string | null
+          is_postable?: boolean
           created_at?: string
           updated_at?: string
           created_by?: string | null
@@ -145,6 +149,8 @@ export type Database = {
           parent_id?: number | null
           description?: string | null
           is_active?: boolean
+          group?: string | null
+          is_postable?: boolean
           created_at?: string
           updated_at?: string
           created_by?: string | null

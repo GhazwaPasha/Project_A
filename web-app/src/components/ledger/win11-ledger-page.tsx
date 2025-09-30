@@ -759,9 +759,7 @@ export function Win11LedgerPage() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="md-body-medium text-on-surface-variant">Balance</span>
-                      <span className={`md-title-large font-medium ${
-                        account.balance >= 0 ? 'text-green-600' : 'text-red-600'
-                      }`}>
+                      <span className="md-title-large font-medium text-white">
                         {formatCurrency(Math.abs(account.balance))}
                       </span>
                     </div>
