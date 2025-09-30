@@ -18,7 +18,8 @@ import {
   CheckSquare,
   Lock,
   ChevronRight,
-  Menu
+  Menu,
+  Bot
 } from 'lucide-react'
 
 const navigation = [
@@ -30,9 +31,7 @@ const navigation = [
   { name: 'Accounts', href: '/dashboard/accounts', icon: FileText },
   { name: 'Reminders', href: '/dashboard/reminders', icon: CheckSquare },
   { name: 'Period Closing', href: '/dashboard/period-closing', icon: Lock },
-]
-
-const adminNavigation = [
+  { name: 'AI Demo', href: '/dashboard/ai-demo', icon: Bot },
   { name: 'Team Management', href: '/dashboard/team', icon: Users },
   { name: 'Organization Settings', href: '/dashboard/organization', icon: Building2 },
   { name: 'User Management', href: '/dashboard/users', icon: Users },
@@ -59,7 +58,7 @@ export function Win11Sidebar({ open, onOpenChange }: Win11SidebarProps) {
       {/* Sidebar */}
       <div className={cn(
         "md-layout-sidebar transform transition-all duration-300 ease-in-out",
-        "fixed inset-y-0 left-0 z-50 lg:relative lg:z-auto",
+        "fixed inset-y-0 left-0 z-50",
         open ? "w-72 translate-x-0" : "w-16 -translate-x-full lg:translate-x-0 lg:w-16"
       )}>
         <div className="flex h-full flex-col">
@@ -95,10 +94,10 @@ export function Win11Sidebar({ open, onOpenChange }: Win11SidebarProps) {
           
           {/* Navigation - Material Design 3 Navigation Drawer */}
           <nav className={cn(
-            "flex-1 py-4 space-y-2",
+            "flex-1 py-4",
             open ? "px-3" : "px-2"
           )}>
-            {/* Main Navigation */}
+            {/* All Navigation Items */}
             <div className="space-y-1">
               {navigation.map((item) => {
                 const isActive = pathname === item.href
@@ -108,7 +107,7 @@ export function Win11Sidebar({ open, onOpenChange }: Win11SidebarProps) {
                      href={item.href}
                      className={cn(
                        "group relative flex items-center transition-all duration-200",
-                       open ? "md-navigation-item justify-start" : "justify-center p-2",
+                       "md-navigation-item justify-start",
                        isActive && "active"
                      )}
                      title={!open ? item.name : undefined}
@@ -134,80 +133,7 @@ export function Win11Sidebar({ open, onOpenChange }: Win11SidebarProps) {
                 )
               })}
             </div>
-            
-            {/* Admin section - Material Design 3 List Section */}
-            {open && (
-              <div className="pt-6">
-                <div className="px-3 py-2">
-                  <h3 className="md-label-small text-on-surface-variant uppercase tracking-wider">
-                    Administration
-                  </h3>
-                </div>
-                <div className="space-y-1">
-                  {adminNavigation.map((item) => {
-                    const isActive = pathname === item.href
-                    return (
-                      <Link
-                        key={item.name}
-                        href={item.href}
-                        className={cn(
-                          "md-navigation-item group relative",
-                          isActive && "active"
-                        )}
-                      >
-                        <div className="flex items-center justify-between w-full">
-                          <div className="flex items-center space-x-3">
-                            <item.icon className="w-4 h-4" />
-                            <span className="md-label-large">{item.name}</span>
-                          </div>
-                          {isActive && (
-                            <ChevronRight className="w-4 h-4" />
-                          )}
-                        </div>
-                      </Link>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
           </nav>
-          
-          {/* Footer - Material Design 3 User Profile Card */}
-          <div className={cn(
-            "p-4",
-            open ? "p-4" : "p-2"
-          )}>
-            <div className={cn(
-              "md-card-filled transition-all duration-200",
-              open ? "p-4" : "p-2"
-            )}>
-              <div className={cn(
-                "flex items-center transition-all duration-200",
-                open ? "space-x-3" : "justify-center"
-              )}>
-                <div className={cn(
-                  "bg-primary rounded-full flex items-center justify-center transition-all duration-200",
-                  open ? "w-10 h-10" : "w-8 h-8"
-                )}>
-                  <span className={cn(
-                    "text-on-primary font-medium transition-all duration-200",
-                    open ? "md-label-large" : "text-sm"
-                  )}>U</span>
-                </div>
-                {open && (
-                  <>
-                    <div className="flex-1 min-w-0">
-                      <p className="md-label-large text-on-surface truncate">User Name</p>
-                      <p className="md-body-small text-on-surface-variant truncate">user@example.com</p>
-                    </div>
-                    <button className="md-button-text p-2 rounded-full hover:bg-surface-container-highest transition-colors duration-200">
-                      <Settings className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </>

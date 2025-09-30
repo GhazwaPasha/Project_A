@@ -359,7 +359,7 @@
     transform: none;
   }
   
-  /* Material Design 3 Input Fields */
+  /* Material Design 3 Expressive Input Fields */
   .md-input {
     background-color: var(--md-sys-color-surface-container-highest);
     color: var(--md-sys-color-on-surface);
@@ -395,6 +395,179 @@
     border-bottom-color: var(--md-sys-color-primary);
     border-bottom-width: 2px;
     box-shadow: none;
+  }
+
+  /* Material Design 3 Expressive Text Field */
+  .md-text-field {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .md-text-field-label {
+    color: var(--md-sys-color-on-surface);
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
+    letter-spacing: 0.1px;
+    margin-bottom: 4px;
+  }
+
+  .md-text-field-input {
+    background-color: var(--md-sys-color-surface-container-highest);
+    color: var(--md-sys-color-on-surface);
+    border: 1px solid var(--md-sys-color-outline);
+    border-radius: 4px;
+    padding: 16px;
+    font-size: 16px;
+    line-height: 24px;
+    font-weight: 400;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 100%;
+    min-height: 56px;
+    box-sizing: border-box;
+  }
+
+  .md-text-field-input:focus {
+    outline: none;
+    border-color: var(--md-sys-color-primary);
+    border-width: 2px;
+    box-shadow: 0 0 0 1px var(--md-sys-color-primary);
+  }
+
+  .md-text-field-input::placeholder {
+    color: var(--md-sys-color-on-surface-variant);
+    font-weight: 400;
+  }
+
+  .md-text-field-input:disabled {
+    background-color: var(--md-sys-color-surface-container-low);
+    color: var(--md-sys-color-on-surface-variant);
+    border-color: var(--md-sys-color-outline-variant);
+    cursor: not-allowed;
+  }
+
+  .md-text-field-input.error {
+    border-color: var(--md-sys-color-error);
+    border-width: 2px;
+  }
+
+  .md-text-field-input.error:focus {
+    border-color: var(--md-sys-color-error);
+    box-shadow: 0 0 0 1px var(--md-sys-color-error);
+  }
+
+  .md-text-field-helper {
+    color: var(--md-sys-color-on-surface-variant);
+    font-size: 12px;
+    line-height: 16px;
+    letter-spacing: 0.4px;
+    margin-top: 4px;
+  }
+
+  .md-text-field-helper.error {
+    color: var(--md-sys-color-error);
+  }
+
+  /* Material Design 3 Expressive Filled Text Field */
+  .md-filled-text-field {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .md-filled-text-field-input {
+    background-color: var(--md-sys-color-surface-container-highest);
+    color: var(--md-sys-color-on-surface);
+    border: none;
+    border-bottom: 1px solid var(--md-sys-color-outline);
+    border-radius: 4px 4px 0 0;
+    padding: 16px 0;
+    font-size: 16px;
+    line-height: 24px;
+    font-weight: 400;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 100%;
+    min-height: 56px;
+    box-sizing: border-box;
+  }
+
+  .md-filled-text-field-input:focus {
+    outline: none;
+    border-bottom-color: var(--md-sys-color-primary);
+    border-bottom-width: 2px;
+    box-shadow: none;
+  }
+
+  .md-filled-text-field-input::placeholder {
+    color: var(--md-sys-color-on-surface-variant);
+    font-weight: 400;
+  }
+
+  .md-filled-text-field-input:disabled {
+    background-color: var(--md-sys-color-surface-container-low);
+    color: var(--md-sys-color-on-surface-variant);
+    border-bottom-color: var(--md-sys-color-outline-variant);
+    cursor: not-allowed;
+  }
+
+  .md-filled-text-field-input.error {
+    border-bottom-color: var(--md-sys-color-error);
+    border-bottom-width: 2px;
+  }
+
+  /* Material Design 3 Expressive Outlined Text Field */
+  .md-outlined-text-field {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .md-outlined-text-field-input {
+    background-color: transparent;
+    color: var(--md-sys-color-on-surface);
+    border: 1px solid var(--md-sys-color-outline);
+    border-radius: 4px;
+    padding: 16px;
+    font-size: 16px;
+    line-height: 24px;
+    font-weight: 400;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 100%;
+    min-height: 56px;
+    box-sizing: border-box;
+  }
+
+  .md-outlined-text-field-input:focus {
+    outline: none;
+    border-color: var(--md-sys-color-primary);
+    border-width: 2px;
+    box-shadow: 0 0 0 1px var(--md-sys-color-primary);
+  }
+
+  .md-outlined-text-field-input::placeholder {
+    color: var(--md-sys-color-on-surface-variant);
+    font-weight: 400;
+  }
+
+  .md-outlined-text-field-input:disabled {
+    background-color: var(--md-sys-color-surface-container-low);
+    color: var(--md-sys-color-on-surface-variant);
+    border-color: var(--md-sys-color-outline-variant);
+    cursor: not-allowed;
+  }
+
+  .md-outlined-text-field-input.error {
+    border-color: var(--md-sys-color-error);
+    border-width: 2px;
+  }
+
+  .md-outlined-text-field-input.error:focus {
+    border-color: var(--md-sys-color-error);
+    box-shadow: 0 0 0 1px var(--md-sys-color-error);
   }
   
   /* Material Design 3 Search Bars */
@@ -474,6 +647,12 @@
     color: var(--md-sys-color-on-primary);
   }
   
+  /* Collapsed sidebar active state - only color the icon, no background */
+  .md-layout-sidebar.w-16 .md-navigation-item.active {
+    background-color: transparent;
+    color: var(--md-sys-color-on-surface-variant);
+  }
+  
   /* Material Design 3 Header */
   .md-header {
     background-color: var(--md-sys-color-surface);
@@ -482,6 +661,142 @@
     box-shadow: 
       0 1px 3px rgba(0, 0, 0, 0.12),
       0 1px 2px rgba(0, 0, 0, 0.24);
+  }
+  
+  /* AI Status Bar Styles */
+  .ai-status-bar {
+    position: relative;
+    width: 380px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .ai-status-bar.expanded {
+    width: 560px;
+  }
+  
+  .ai-status-bar-input {
+    background: linear-gradient(135deg, 
+      rgba(255, 255, 255, 0.12) 0%, 
+      rgba(255, 255, 255, 0.08) 30%, 
+      rgba(255, 255, 255, 0.08) 70%, 
+      rgba(255, 255, 255, 0.04) 100%);
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    backdrop-filter: blur(8px);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .ai-status-bar.expanded .ai-status-bar-input {
+    background: transparent;
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    backdrop-filter: none;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+  
+  .ai-status-bar-input:hover {
+    background: linear-gradient(135deg, 
+      rgba(255, 255, 255, 0.16) 0%, 
+      rgba(255, 255, 255, 0.12) 30%, 
+      rgba(255, 255, 255, 0.12) 70%, 
+      rgba(255, 255, 255, 0.08) 100%);
+    border: 1px solid rgba(0, 0, 0, 0.3);
+  }
+  
+  .ai-status-bar-input:focus-within {
+    background: linear-gradient(135deg, 
+      rgba(255, 255, 255, 0.16) 0%, 
+      rgba(255, 255, 255, 0.12) 30%, 
+      rgba(255, 255, 255, 0.12) 70%, 
+      rgba(255, 255, 255, 0.08) 100%);
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    box-shadow: none;
+  }
+  
+  .ai-status-bar.expanded .ai-status-bar-input:focus-within {
+    background: transparent;
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    box-shadow: none !important;
+    outline: none !important;
+  }
+  
+  .ai-status-bar-input input {
+    background: transparent;
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    outline: none;
+    border: none;
+  }
+  
+  .ai-status-bar-input input::placeholder {
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: 500;
+  }
+  
+  .ai-status-bar-input input:focus {
+    outline: none;
+  }
+  
+  .ai-status-bar-input input:disabled {
+    cursor: not-allowed;
+    opacity: 0.75;
+  }
+  
+  /* AI Status Bar X Button - Force no background */
+  .ai-status-bar button {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  
+  .ai-status-bar button:hover {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  
+  .ai-status-bar button:focus {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+  
+  /* AI Status Bar Animations */
+  @keyframes ai-pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+  
+  .ai-processing {
+    animation: ai-pulse 1.5s ease-in-out infinite;
+  }
+  
+  /* AI Status Bar Responsive */
+  @media (max-width: 768px) {
+    .ai-status-bar {
+      width: 280px !important;
+    }
+    
+    .ai-status-bar.expanded {
+      width: 400px !important;
+    }
+  }
+  
+  @media (max-width: 640px) {
+    .ai-status-bar {
+      width: 240px !important;
+    }
+    
+    .ai-status-bar.expanded {
+      width: 320px !important;
+    }
   }
   
   /* Material Design 3 Typography */
@@ -699,12 +1014,34 @@
     background-color: var(--md-sys-color-background);
   }
   
+  .md-layout {
+    --sidebar-width: 256px;
+    --sidebar-collapsed-width: 64px;
+  }
+  
   .md-layout-sidebar {
-    width: 256px;
+    width: var(--sidebar-width);
     background-color: var(--md-sys-color-surface);
     border-right: 1px solid var(--md-sys-color-outline-variant);
     display: flex;
     flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 40;
+    overflow: hidden;
+    box-sizing: border-box;
+    transition: width 0.3s ease-in-out;
+  }
+  
+  .md-layout-sidebar::-webkit-scrollbar {
+    display: none; /* Safari and Chrome */
+  }
+  
+  /* Collapsed sidebar state */
+  .md-layout-sidebar.w-16 {
+    width: var(--sidebar-collapsed-width);
   }
   
   .md-layout-main {
@@ -712,6 +1049,13 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+    margin-left: var(--sidebar-width);
+    transition: margin-left 0.3s ease-in-out;
+  }
+  
+  /* Collapsed sidebar state */
+  .md-layout-main.sidebar-collapsed {
+    margin-left: var(--sidebar-collapsed-width);
   }
   
   .md-layout-header {
@@ -733,10 +1077,11 @@
     .md-layout-sidebar {
       position: fixed;
       top: 0;
-      left: -256px;
+      left: calc(-1 * var(--sidebar-width));
       height: 100vh;
       z-index: 1000;
       transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      width: var(--sidebar-width) !important;
     }
     
     .md-layout-sidebar.open {
@@ -745,6 +1090,11 @@
     
     .md-layout-main {
       width: 100%;
+      margin-left: 0 !important;
+    }
+    
+    .md-layout-main.sidebar-collapsed {
+      margin-left: 0 !important;
     }
   }
   
@@ -929,6 +1279,15 @@
     background-color: var(--md-sys-color-tertiary-container) !important;
   }
   
+  /* Hide scrollbar utility */
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* Internet Explorer 10+ */
+    scrollbar-width: none;  /* Firefox */
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;  /* Safari and Chrome */
+  }
+
   /* Override muted colors */
   .text-muted-foreground {
     color: var(--md-sys-color-on-surface-variant) !important;

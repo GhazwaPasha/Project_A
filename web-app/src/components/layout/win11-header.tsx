@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { 
   Bell, 
@@ -8,6 +9,7 @@ import {
   Building2,
   MoreVertical
 } from 'lucide-react'
+import { AIStatusBar } from '@/components/ai/ai-status-bar'
 
 interface Win11HeaderProps {}
 
@@ -31,6 +33,11 @@ export function Win11Header({}: Win11HeaderProps) {
           </div>
         </div>
         
+        {/* Center - AI Status Bar */}
+        <div className="flex-1 flex justify-center px-4">
+          <AIStatusBar />
+        </div>
+        
         {/* Right side - Action Buttons */}
         <div className="flex items-center space-x-1">
           {/* Notifications */}
@@ -45,12 +52,13 @@ export function Win11Header({}: Win11HeaderProps) {
           </button>
           
           {/* Settings */}
-          <button 
-            className="md-button-text p-2 rounded-full"
+          <Link 
+            href="/dashboard/settings"
+            className="px-4 py-2 rounded-full bg-primary hover:bg-primary/90 transition-colors duration-200"
             aria-label="Settings"
           >
-            <Settings className="w-4 h-4" />
-          </button>
+            <Settings className="w-4 h-4 text-on-primary" />
+          </Link>
           
           {/* User Profile */}
           <button 
