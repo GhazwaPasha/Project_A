@@ -10,6 +10,7 @@ import {
   MoreVertical
 } from 'lucide-react'
 import { AIStatusBar } from '@/components/ai/ai-status-bar'
+import { OrganizationSwitcher } from '@/components/ui/organization-switcher'
 
 interface Win11HeaderProps {}
 
@@ -26,10 +27,7 @@ export function Win11Header({}: Win11HeaderProps) {
           
           {/* Organization switcher - Material Design 3 Chip */}
           <div className="hidden md:flex">
-            <div className="md-chip selected">
-              <Building2 className="w-4 h-4" />
-              <span className="md-label-medium">Acme Corp</span>
-            </div>
+            <OrganizationSwitcher />
           </div>
         </div>
         

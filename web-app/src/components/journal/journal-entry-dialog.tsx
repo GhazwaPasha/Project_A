@@ -10,7 +10,8 @@ import { Calendar } from '@/components/ui/calendar'
 import { X, AlertCircle, Sparkles } from 'lucide-react'
 import { DataService } from '@/lib/data-service'
 import { Account, JournalEntry, JournalEntryLine } from '@/types'
-import { parseTransaction, findAccountByName } from '@/lib/ai-transaction-parser'
+import { parseTransaction } from '@/lib/ai-transaction-parser'
+import { ProgressBar } from '@/components/ui/progress-bar'
 
 interface JournalEntryDialogProps {
   open: boolean
@@ -38,6 +39,7 @@ export function JournalEntryDialog({
   const [error, setError] = useState<string | null>(null)
   const [aiInput, setAiInput] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
+  const [aiProgress, setAiProgress] = useState(0)
   const [formData, setFormData] = useState<JournalEntryFormData>({
     entryDate: new Date(),
     description: '',
@@ -57,7 +59,23 @@ export function JournalEntryDialog({
     try {
       setLoading(true)
       const accountsData = await DataService.getAccounts(organizationId, true)
-      setAccounts(accountsData)
+      
+      // Debug: Log all accounts with their is_postable status
+      console.log('All accounts fetched:', accountsData.length)
+      console.log('Raw account object (first one):', accountsData[0])
+      console.log('Sample accounts with is_postable:', accountsData.slice(0, 5).map(acc => ({
+        code: acc.code,
+        name: acc.name,
+        is_postable: acc.is_postable,
+        type_of_is_postable: typeof acc.is_postable
+      })))
+      
+      // Filter for postable accounts only
+      const postableAccounts = accountsData.filter(acc => acc.is_postable === true)
+      console.log('Postable accounts after filter:', postableAccounts.length)
+      console.log('Postable accounts:', postableAccounts.map(acc => ({ code: acc.code, name: acc.name })))
+      
+      setAccounts(postableAccounts)
     } catch (err) {
       console.error('Error loading accounts:', err)
       setError('Failed to load accounts')
@@ -82,26 +100,73 @@ export function JournalEntryDialog({
 
     try {
       setAiLoading(true)
+      setAiProgress(0)
       setError(null)
+
+      // Simulate progress during AI parsing
+      const progressInterval = setInterval(() => {
+        setAiProgress(prev => {
+          if (prev >= 90) return prev // Stop at 90% until completion
+          return prev + Math.random() * 15 // Random increment between 0-15
+        })
+      }, 200)
 
       const parsed = await parseTransaction(aiInput, accounts)
       
-      // Find account IDs by name
-      const debitAccount = findAccountByName(accounts, parsed.debit_account)
-      const creditAccount = findAccountByName(accounts, parsed.credit_account)
+      // Complete the progress
+      clearInterval(progressInterval)
+      setAiProgress(100)
+      
+      // Find accounts by code (AI now returns account codes directly)
+      // Debug logging to see what we're comparing
+      console.log('AI returned codes:', parsed.debit_account_code, parsed.credit_account_code)
+      console.log('Available account codes:', accounts.map(acc => acc.code))
+      console.log('Looking for credit account 1350 in:', accounts.filter(acc => String(acc.code).includes('135')))
+      console.log('All account codes:', accounts.map(acc => ({ code: acc.code, name: acc.name })))
+      console.log('Code types:', typeof parsed.debit_account_code, typeof parsed.credit_account_code)
+      console.log('Account code types:', accounts.map(acc => typeof acc.code))
+      console.log('String conversion test:')
+      console.log('Debit code as string:', String(parsed.debit_account_code))
+      console.log('Credit code as string:', String(parsed.credit_account_code))
+      console.log('Account codes as strings:', accounts.map(acc => String(acc.code)))
+      console.log('Exact matches:')
+      console.log('Debit match:', accounts.find(acc => String(acc.code) === String(parsed.debit_account_code)))
+      console.log('Credit match:', accounts.find(acc => String(acc.code) === String(parsed.credit_account_code)))
+
+      // Convert both to strings for comparison to handle type mismatches
+      const debitAccount = accounts.find(acc => String(acc.code) === String(parsed.debit_account_code))
+      const creditAccount = accounts.find(acc => String(acc.code) === String(parsed.credit_account_code))
 
       if (!debitAccount || !creditAccount) {
-        throw new Error('Could not find matching accounts. Please check your account setup.')
+        throw new Error(`Could not find accounts with codes: "${parsed.debit_account_code}" or "${parsed.credit_account_code}". Please check your chart of accounts.`)
       }
 
-      // Update form data
-      setFormData(prev => ({
-        ...prev,
-        description: parsed.description,
-        debitAccountId: debitAccount.id.toString(),
-        creditAccountId: creditAccount.id.toString(),
-        amount: parsed.amount.toString()
-      }))
+      // Update form data (matches desktop app logic exactly)
+      setFormData(prev => {
+        const newData = {
+          ...prev,
+          description: parsed.description,
+          debitAccountId: debitAccount.id.toString(),
+          creditAccountId: creditAccount.id.toString(),
+          amount: parsed.amount.toString()
+        }
+        
+        // Only update date if one was specifically parsed from the input (matches desktop app)
+        if (parsed.date && parsed.date.trim()) {
+          try {
+            const parsedDate = new Date(parsed.date)
+            if (!isNaN(parsedDate.getTime())) {
+              newData.entryDate = parsedDate
+            }
+          } catch (e) {
+            // Invalid date format, preserve current date selection
+            console.warn('Invalid date from AI, preserving current date:', e)
+          }
+        }
+        // Otherwise preserve the current date selection (matches desktop app behavior)
+        
+        return newData
+      })
 
       // Clear AI input
       setAiInput('')
@@ -110,6 +175,7 @@ export function JournalEntryDialog({
       setError(err instanceof Error ? err.message : 'Failed to parse transaction')
     } finally {
       setAiLoading(false)
+      setAiProgress(0)
     }
   }
 
@@ -254,8 +320,6 @@ export function JournalEntryDialog({
               onChange={(date) => date && handleInputChange('entryDate', date)}
               placeholder="Select date"
               className="w-full"
-              autoFocus={false}
-              open={false}
             />
           </div>
 
@@ -273,24 +337,31 @@ export function JournalEntryDialog({
                 className="flex-1"
                 disabled={aiLoading}
               />
-              <Button
-                type="button"
-                onClick={handleAIParse}
-                disabled={aiLoading || !aiInput.trim()}
-                className="md-button bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white border-0 px-6 h-14"
-              >
-                {aiLoading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Parsing...</span>
+              {aiLoading ? (
+                <div className="relative w-32 h-14 bg-surface-container-highest rounded-lg overflow-hidden border border-outline">
+                  <div 
+                    className="absolute inset-0 bg-gradient-to-r from-pink-500 to-purple-600 transition-all duration-300 ease-out"
+                    style={{ width: `${aiProgress}%` }}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-sm font-medium text-white relative z-10">
+                      {aiProgress < 100 ? 'Thinking...' : 'Complete!'}
+                    </span>
                   </div>
-                ) : (
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={handleAIParse}
+                  disabled={!aiInput.trim()}
+                  className="md-button bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white border-0 px-6 h-14"
+                >
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4" />
                     <span>AI Fill</span>
                   </div>
-                )}
-              </Button>
+                </Button>
+              )}
             </div>
           </div>
 

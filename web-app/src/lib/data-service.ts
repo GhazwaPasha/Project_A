@@ -109,6 +109,17 @@ export class DataService {
     return data
   }
 
+  static getCurrentOrganizationId(): string | null {
+    if (typeof window === 'undefined') return null
+    return localStorage.getItem('selectedOrganizationId')
+  }
+
+  static async getCurrentOrganization(): Promise<Organization | null> {
+    const orgId = this.getCurrentOrganizationId()
+    if (!orgId) return null
+    return this.getOrganization(orgId)
+  }
+
   static async getUserRoleInOrganization(userId: string, organizationId: string): Promise<UserRole | null> {
     const { data, error } = await supabase
       .from('organization_members')
@@ -156,24 +167,33 @@ export class DataService {
   // ================================
 
   static async getAccounts(organizationId: string, activeOnly: boolean = true): Promise<Account[]> {
-    let query = supabase
-      .from('accounts')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .order('code')
+    try {
+      // Try with explicit .returns<Account[]>() to bypass type inference
+      const query = supabase
+        .from('accounts')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .order('code')
+      
+      const finalQuery = activeOnly ? query.eq('is_active', true) : query
+      
+      const { data, error } = await finalQuery
 
-    if (activeOnly) {
-      query = query.eq('is_active', true)
-    }
+      if (error) {
+        console.error('Error fetching accounts:', error)
+        console.error('Full error object:', JSON.stringify(error, null, 2))
+        return []
+      }
 
-    const { data, error } = await query
+      console.log('Data service - raw data from Supabase:', data?.[0])
+      console.log('Data service - all fields:', data?.[0] ? Object.keys(data[0]) : 'no data')
+      console.log('Data service - total records:', data?.length)
 
-    if (error) {
-      console.error('Error fetching accounts:', error)
+      return (data as any[]) || []
+    } catch (err) {
+      console.error('Exception in getAccounts:', err)
       return []
     }
-
-    return data || []
   }
 
   static async createAccount(account: Omit<Account, 'id' | 'created_at' | 'updated_at'>): Promise<Account | null> {

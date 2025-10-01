@@ -21,6 +21,7 @@ import {
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { DataService } from '@/lib/data-service'
 import { AccountType } from '@/types'
+import { useOrganization } from '@/hooks/use-organization'
 import { DateFilter, DateRange } from '@/components/ui/date-filter'
 
 // Types for account data
@@ -59,48 +60,29 @@ export function Win11LedgerPage() {
   const [accounts, setAccounts] = useState<AccountData[]>([])
   const [transactions, setTransactions] = useState<TransactionData[]>([])
   const [loading, setLoading] = useState(true)
-  const [currentOrganizationId, setCurrentOrganizationId] = useState<string | null>(null)
+  const { currentOrganization } = useOrganization()
   const [showSearchField, setShowSearchField] = useState(false)
   const [dateRange, setDateRange] = useState<DateRange>({ startDate: null, endDate: null })
 
-  // Load data on component mount
+  // Load data on component mount and when organization changes
   useEffect(() => {
-    loadData()
-  }, [])
+    if (currentOrganization) {
+      loadData()
+    }
+  }, [currentOrganization])
 
   const loadData = async (dateRange?: DateRange) => {
+    if (!currentOrganization) return
+    
     try {
       setLoading(true)
       
-      // Get current user and organization
-      const user = await DataService.getCurrentUser()
-      if (!user) {
-        console.error('No user found')
-        return
-      }
-
-      const userProfile = await DataService.getUserProfile(user.id)
-      if (!userProfile) {
-        console.error('No user profile found')
-        return
-      }
-
-      // For now, use the first organization or default
-      const organizations = await DataService.getUserOrganizations(user.id)
-      if (organizations.length === 0) {
-        console.error('No organizations found')
-        return
-      }
-
-      const organizationId = organizations[0].id
-      setCurrentOrganizationId(organizationId)
-
       // Convert Date objects to ISO string format for the API
       const fromDate = dateRange?.startDate ? dateRange.startDate.toISOString().split('T')[0] : undefined
       const toDate = dateRange?.endDate ? dateRange.endDate.toISOString().split('T')[0] : undefined
 
-      // Load account balances with date filtering
-      const accountBalances = await DataService.getAccountBalances(organizationId, fromDate, toDate)
+      // Load account balances with date filtering for current organization
+      const accountBalances = await DataService.getAccountBalances(currentOrganization.id, fromDate, toDate)
       setAccounts(accountBalances)
     } catch (error) {
       console.error('Error loading data:', error)
@@ -110,7 +92,7 @@ export function Win11LedgerPage() {
   }
 
   const loadAccountTransactions = async (accountId: number, dateRange?: DateRange) => {
-    if (!currentOrganizationId) return
+    if (!currentOrganization) return
     
     try {
       // Convert Date objects to ISO string format for the API
@@ -119,7 +101,7 @@ export function Win11LedgerPage() {
       
       const accountTransactions = await DataService.getAccountTransactions(
         accountId, 
-        currentOrganizationId,
+        currentOrganization.id,
         fromDate,
         toDate
       )

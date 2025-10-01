@@ -20,6 +20,7 @@ import {
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { DataService } from '@/lib/data-service'
 import { AccountType } from '@/types'
+import { useOrganization } from '@/hooks/use-organization'
 
 // Interface for trial balance account data
 interface TrialBalanceAccount {
@@ -129,14 +130,16 @@ export function Win11TrialBalancePage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [accounts, setAccounts] = useState<TrialBalanceAccount[]>([])
   const [loading, setLoading] = useState(true)
-  const [currentOrganizationId, setCurrentOrganizationId] = useState<string | null>(null)
+  const { currentOrganization } = useOrganization()
   const [error, setError] = useState<string | null>(null)
   const [showSearchField, setShowSearchField] = useState(false)
 
-  // Load data on component mount
+  // Load data on component mount and when organization changes
   useEffect(() => {
-    loadTrialBalanceData()
-  }, [])
+    if (currentOrganization) {
+      loadTrialBalanceData()
+    }
+  }, [currentOrganization])
 
   const loadTrialBalanceData = async () => {
     try {
@@ -166,11 +169,8 @@ export function Win11TrialBalancePage() {
         return
       }
 
-      const organizationId = organizations[0].id
-      setCurrentOrganizationId(organizationId)
-
-      // Load trial balance data
-      const trialBalanceData = await DataService.getTrialBalance(organizationId)
+      // Load trial balance data for current organization
+      const trialBalanceData = await DataService.getTrialBalance(currentOrganization.id)
       console.log('Trial balance data loaded:', trialBalanceData)
       console.log('Number of accounts:', trialBalanceData.length)
       setAccounts(trialBalanceData)

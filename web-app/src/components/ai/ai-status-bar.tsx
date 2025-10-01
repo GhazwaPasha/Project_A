@@ -17,7 +17,7 @@ export function AIStatusBar({ className }: AIStatusBarProps) {
   const [statusMessage, setStatusMessage] = useState('Your AI Sidekick - Ready')
   const [isShowingNotification, setIsShowingNotification] = useState(false)
   
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLDivElement>(null)
   const notificationTimeoutRef = useRef<NodeJS.Timeout>()
   const statusTimeoutRef = useRef<NodeJS.Timeout>()
   
@@ -74,14 +74,17 @@ export function AIStatusBar({ className }: AIStatusBarProps) {
   }, [inputValue, processCommand])
 
   // Handle input change
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(e.target.value)
+  const handleInputChange = (e: React.ChangeEvent<HTMLDivElement>) => {
+    setInputValue(e.target.textContent || '')
   }
 
   // Handle key press
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       collapseToNormal()
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit(e as any)
     }
   }
 
@@ -233,55 +236,73 @@ export function AIStatusBar({ className }: AIStatusBarProps) {
       )}
       onClick={handleClick}
     >
-      <form onSubmit={handleSubmit} className="relative">
+      <div className="relative">
         <div
           className={cn(
-            "ai-status-bar-input relative h-9 transition-all duration-300 ease-out",
-            isProcessing && "cursor-not-allowed opacity-75 ai-processing"
+            "ai-status-bar-container relative h-9",
+            "flex items-center px-3 py-1.5",
+            "bg-[#1d1b20]",
+            "border border-gray-600/50 rounded-lg",
+            "hover:bg-[#2a282d]",
+            "hover:border-gray-500/70",
+            "focus-within:bg-[#2a282d]",
+            "focus-within:border-blue-500/70 focus-within:ring-1 focus-within:ring-blue-500/30",
+            isProcessing && "cursor-not-allowed opacity-75",
+            isExpanded ? "w-96" : "w-80"
           )}
+          onClick={handleClick}
         >
-          {/* Input field */}
-          <input
-            ref={inputRef}
-            type="text"
-            value={inputValue}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyPress}
-            onFocus={expandForInput}
-            onBlur={handleFocusOut}
-            onClick={(e) => e.stopPropagation()}
-            placeholder={isExpanded ? "You Say, I do - Search, Reports and Reminders" : statusMessage}
-            disabled={isProcessing}
-            className={cn(
-              "w-full h-full px-3 py-1.5",
-              "selection:bg-blue-400/30",
-              isExpanded ? "text-left" : "text-center",
-              isProcessing && "cursor-not-allowed"
+          {/* Content area */}
+          <div className="flex-1 flex items-center">
+            {isExpanded ? (
+              <div
+                ref={inputRef}
+                contentEditable
+                suppressContentEditableWarning
+                onInput={handleInputChange}
+                onKeyDown={handleKeyPress}
+                onFocus={expandForInput}
+                onBlur={handleFocusOut}
+                className={cn(
+                  "w-full outline-none text-on-surface placeholder:text-on-surface-variant",
+                  "selection:bg-blue-400/30",
+                  isProcessing && "cursor-not-allowed",
+                  !inputValue && "empty"
+                )}
+                style={{ minHeight: '20px' }}
+                data-placeholder="You Say, I do"
+              />
+            ) : (
+              <div className="w-full text-center text-on-surface font-medium text-sm">
+                {statusMessage}
+              </div>
             )}
-          />
+          </div>
           
           {/* Status indicators */}
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center space-x-1">
+          <div className="flex items-center space-x-1 ml-2">
             {isProcessing && (
-              <Loader2 className="w-4 h-4 text-white/70 animate-spin" />
+              <Loader2 className="w-4 h-4 text-on-surface-variant animate-spin" />
             )}
             
             {!isExpanded && !isProcessing && (
-              <Bot className="w-4 h-4 text-white/70" />
+              <Bot className="w-4 h-4 text-on-surface-variant" />
             )}
             
             {isExpanded && !isProcessing && (
-              <button
-                type="button"
-                onClick={collapseToNormal}
-                className="p-0.5 transition-colors bg-transparent hover:bg-transparent"
+              <div
+                onClick={(e) => {
+                  e.stopPropagation()
+                  collapseToNormal()
+                }}
+                className="cursor-pointer p-1 transition-colors rounded hover:bg-on-surface/10 flex items-center justify-center"
               >
-                <X className="w-3 h-3 text-white/70" />
-              </button>
+                <X className="w-3 h-3 text-on-surface-variant" />
+              </div>
             )}
           </div>
         </div>
-      </form>
+      </div>
     </div>
   )
 }

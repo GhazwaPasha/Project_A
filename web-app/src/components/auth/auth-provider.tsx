@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { User } from '@/types'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { setUser, setLoading, logout } = useAuthStore()
+  const { setUser, setLoading, logout, loadUserData } = useAuthStore()
   const supabase = createClient()
 
   useEffect(() => {
@@ -25,6 +25,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             last_sign_in_at: session.user.last_sign_in_at,
           }
           setUser(user)
+          // Load user profile and organizations
+          await loadUserData()
         } else {
           logout()
         }
@@ -50,6 +52,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             last_sign_in_at: session.user.last_sign_in_at,
           }
           setUser(user)
+          // Load user profile and organizations
+          await loadUserData()
         } else {
           logout()
         }
@@ -57,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     )
 
     return () => subscription.unsubscribe()
-  }, [setUser, setLoading, logout, supabase.auth])
+  }, [setUser, setLoading, logout, loadUserData, supabase.auth])
 
   return <>{children}</>
 }

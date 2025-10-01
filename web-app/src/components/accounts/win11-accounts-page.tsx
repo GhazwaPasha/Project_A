@@ -28,6 +28,7 @@ import {
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { DataService } from '@/lib/data-service'
 import { Account, AccountType } from '@/types'
+import { useOrganization } from '@/hooks/use-organization'
 
 // Enhanced account interface with hierarchy support
 interface HierarchicalAccount extends Account {
@@ -63,7 +64,7 @@ export function Win11AccountsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [currentOrganizationId, setCurrentOrganizationId] = useState<string | null>(null)
+  const { currentOrganization } = useOrganization()
   const [formData, setFormData] = useState<AccountFormData>({
     code: '',
     name: '',
@@ -81,48 +82,29 @@ export function Win11AccountsPage() {
   const [isImporting, setIsImporting] = useState(false)
   const [showSearchField, setShowSearchField] = useState(false)
 
-  // Load data on component mount
+  // Load data on component mount and when organization changes
   useEffect(() => {
-    loadData()
-  }, [])
+    if (currentOrganization) {
+      loadData()
+    }
+  }, [currentOrganization])
 
   const loadData = async () => {
+    if (!currentOrganization) return
+    
     try {
       setLoading(true)
       
-      // Get current user and organization
-      const user = await DataService.getCurrentUser()
-      if (!user) {
-        console.error('No user found')
-        return
-      }
-
-      const userProfile = await DataService.getUserProfile(user.id)
-      if (!userProfile) {
-        console.error('No user profile found')
-        return
-      }
-
-      // Get user organizations
-      const organizations = await DataService.getUserOrganizations(user.id)
-      if (organizations.length === 0) {
-        console.error('No organizations found')
-        return
-      }
-
-      const organizationId = organizations[0].id
-      setCurrentOrganizationId(organizationId)
-
-      // Load account balances with hierarchy data
-      const accountBalances = await DataService.getAccountBalances(organizationId)
+      // Load accounts using the unified method for current organization
+      const allAccounts = await DataService.getAccounts(currentOrganization.id, true)
       
       // Convert to hierarchical structure
-      const hierarchicalAccounts = buildAccountHierarchy(accountBalances)
+      const hierarchicalAccounts = buildAccountHierarchy(allAccounts)
       setAccounts(hierarchicalAccounts)
-      setFlatAccounts(accountBalances)
+      setFlatAccounts(allAccounts)
       
       // Auto-expand top-level accounts
-      const topLevelIds = new Set(accountBalances.filter(acc => !acc.parent_id).map(acc => acc.id))
+      const topLevelIds = new Set(allAccounts.filter(acc => !acc.parent_id).map(acc => acc.id))
       setExpandedAccounts(topLevelIds)
       
     } catch (error) {
@@ -224,11 +206,11 @@ export function Win11AccountsPage() {
   }
 
   const handleCreateAccount = async () => {
-    if (!validateForm() || !currentOrganizationId) return
+    if (!validateForm() || !currentOrganization) return
 
     try {
       const newAccount = await DataService.createAccount({
-        organization_id: currentOrganizationId,
+        organization_id: currentOrganization.id,
         code: formData.code,
         name: formData.name,
         account_type: formData.account_type,
@@ -250,7 +232,7 @@ export function Win11AccountsPage() {
   }
 
   const handleUpdateAccount = async () => {
-    if (!validateForm() || !selectedAccount || !currentOrganizationId) return
+    if (!validateForm() || !selectedAccount || !currentOrganization) return
 
     try {
       const updatedAccount = await DataService.updateAccount(selectedAccount.id, {
@@ -275,7 +257,7 @@ export function Win11AccountsPage() {
   }
 
   const handleDeleteAccount = async (accountId: number) => {
-    if (!currentOrganizationId) return
+    if (!currentOrganization) return
 
     if (confirm('Are you sure you want to delete this account? This action cannot be undone.')) {
       try {
@@ -392,7 +374,7 @@ export function Win11AccountsPage() {
   }
 
   const handleImportConfirm = async () => {
-    if (!importFile || !currentOrganizationId || importPreview.length === 0) return
+    if (!importFile || !currentOrganization || importPreview.length === 0) return
 
     setIsImporting(true)
     const errors: string[] = []
@@ -401,7 +383,7 @@ export function Win11AccountsPage() {
 
     try {
       // Get existing account names and codes to avoid duplicates
-      const existingAccounts = await DataService.getAccounts(currentOrganizationId, false)
+      const existingAccounts = await DataService.getAccounts(currentOrganization.id, false)
       const existingNames = new Set(existingAccounts.map(acc => acc.name.toLowerCase()))
       const existingCodes = new Set(existingAccounts.map(acc => acc.code))
 
@@ -451,7 +433,7 @@ export function Win11AccountsPage() {
 
           // Create account
           const accountData = {
-            organization_id: currentOrganizationId,
+            organization_id: currentOrganization.id,
             code,
             name,
             account_type: accountType as AccountType,
@@ -1034,7 +1016,7 @@ export function Win11AccountsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <div className="max-h-96 overflow-y-auto">
+                  <div className="h-[calc(100vh-16rem)] overflow-y-auto">
                     {filteredAccounts.map(account => renderAccountItem(account))}
                   </div>
                 </CardContent>

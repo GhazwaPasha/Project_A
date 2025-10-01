@@ -18,6 +18,7 @@ import { JournalEntryDialog } from './journal-entry-dialog'
 import { BulkEntryDialog } from './bulk-entry-dialog'
 import { DataService } from '@/lib/data-service'
 import { JournalEntry, Account, JournalEntryLine } from '@/types'
+import { useOrganization } from '@/hooks/use-organization'
 
 export function Win11JournalPage() {
   const [searchTerm, setSearchTerm] = useState('')
@@ -27,45 +28,26 @@ export function Win11JournalPage() {
   const [loading, setLoading] = useState(true)
   const [showNewEntryDialog, setShowNewEntryDialog] = useState(false)
   const [showBulkEntryDialog, setShowBulkEntryDialog] = useState(false)
-  const [currentOrganizationId, setCurrentOrganizationId] = useState<string | null>(null)
+  const { currentOrganization } = useOrganization()
   const [showSearchField, setShowSearchField] = useState(false)
 
-  // Load data on component mount
+  // Load data on component mount and when organization changes
   useEffect(() => {
-    loadData()
-  }, [])
+    if (currentOrganization) {
+      loadData()
+    }
+  }, [currentOrganization])
 
   const loadData = async () => {
+    if (!currentOrganization) return
+    
     try {
       setLoading(true)
       
-      // Get current user and organization
-      const user = await DataService.getCurrentUser()
-      if (!user) {
-        console.error('No user found')
-        return
-      }
-
-      const userProfile = await DataService.getUserProfile(user.id)
-      if (!userProfile) {
-        console.error('No user profile found')
-        return
-      }
-
-      // For now, use the first organization or default
-      const organizations = await DataService.getUserOrganizations(user.id)
-      if (organizations.length === 0) {
-        console.error('No organizations found')
-        return
-      }
-
-      const organizationId = organizations[0].id
-      setCurrentOrganizationId(organizationId)
-
-      // Load journal entries with lines and accounts
+      // Load journal entries with lines and accounts for current organization
       const [entries, accountsData] = await Promise.all([
-        DataService.getJournalEntriesWithLines(organizationId),
-        DataService.getAccounts(organizationId, true)
+        DataService.getJournalEntriesWithLines(currentOrganization.id),
+        DataService.getAccounts(currentOrganization.id, true)
       ])
 
       setJournalEntries(entries)
@@ -258,22 +240,22 @@ export function Win11JournalPage() {
       </div>
 
       {/* Journal Entry Dialog */}
-      {currentOrganizationId && (
+      {currentOrganization && (
         <JournalEntryDialog
           open={showNewEntryDialog}
           onOpenChange={setShowNewEntryDialog}
           onEntryCreated={handleNewEntryCreated}
-          organizationId={currentOrganizationId}
+          organizationId={currentOrganization.id}
         />
       )}
 
       {/* Bulk Entry Dialog */}
-      {currentOrganizationId && (
+      {currentOrganization && (
         <BulkEntryDialog
           open={showBulkEntryDialog}
           onOpenChange={setShowBulkEntryDialog}
           onEntriesCreated={handleBulkEntriesCreated}
-          organizationId={currentOrganizationId}
+          organizationId={currentOrganization.id}
         />
       )}
     </div>
