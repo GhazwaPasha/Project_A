@@ -27,6 +27,7 @@ export function AccountSearch({
   const [isOpen, setIsOpen] = React.useState(false)
   const [selectedAccount, setSelectedAccount] = React.useState<Account | null>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
+  const inputId = React.useMemo(() => `account-search-${Math.random().toString(36).substr(2, 9)}`, [])
 
   // Find selected account by ID
   React.useEffect(() => {
@@ -92,6 +93,8 @@ export function AccountSearch({
         <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-4 w-4 text-on-surface-variant" />
         <Input
           ref={inputRef}
+          id={inputId}
+          name="account-search"
           value={searchTerm}
           onChange={handleInputChange}
           onFocus={handleInputFocus}

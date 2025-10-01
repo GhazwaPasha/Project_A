@@ -9,7 +9,11 @@ import {
   JournalEntry, 
   JournalEntryLine,
   UserRole,
-  AccountType 
+  AccountType,
+  InventoryCategory,
+  InventoryItem,
+  InventoryTransaction,
+  InventoryTransactionType
 } from '@/types'
 
 const supabase = createClient()
@@ -856,5 +860,307 @@ export class DataService {
     }, 0)
 
     return balance
+  }
+
+  // ================================
+  // INVENTORY MANAGEMENT
+  // ================================
+
+  // Inventory Categories
+  static async getInventoryCategories(organizationId: string, activeOnly: boolean = false): Promise<InventoryCategory[]> {
+    let query = supabase
+      .from('inventory_categories')
+      .select(`
+        *,
+        inventory_account:accounts!inventory_account_id(*),
+        expense_account:accounts!expense_account_id(*)
+      `)
+      .eq('organization_id', organizationId)
+      .order('name', { ascending: true })
+
+    if (activeOnly) {
+      query = query.eq('is_active', true)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error('Error fetching inventory categories:', error)
+      return []
+    }
+
+    return data
+  }
+
+  static async getInventoryCategory(categoryId: number): Promise<InventoryCategory | null> {
+    const { data, error } = await supabase
+      .from('inventory_categories')
+      .select(`
+        *,
+        inventory_account:accounts!inventory_account_id(*),
+        expense_account:accounts!expense_account_id(*)
+      `)
+      .eq('id', categoryId)
+      .single()
+
+    if (error) {
+      console.error('Error fetching inventory category:', error)
+      return null
+    }
+
+    return data
+  }
+
+  static async createInventoryCategory(category: Omit<InventoryCategory, 'id' | 'created_at' | 'updated_at'>): Promise<InventoryCategory | null> {
+    const { data, error } = await supabase
+      .from('inventory_categories')
+      .insert(category)
+      .select(`
+        *,
+        inventory_account:accounts!inventory_account_id(*),
+        expense_account:accounts!expense_account_id(*)
+      `)
+      .single()
+
+    if (error) {
+      console.error('Error creating inventory category:', error)
+      return null
+    }
+
+    return data
+  }
+
+  static async updateInventoryCategory(categoryId: number, updates: Partial<InventoryCategory>): Promise<InventoryCategory | null> {
+    const { data, error } = await supabase
+      .from('inventory_categories')
+      .update(updates)
+      .eq('id', categoryId)
+      .select(`
+        *,
+        inventory_account:accounts!inventory_account_id(*),
+        expense_account:accounts!expense_account_id(*)
+      `)
+      .single()
+
+    if (error) {
+      console.error('Error updating inventory category:', error)
+      return null
+    }
+
+    return data
+  }
+
+  static async deleteInventoryCategory(categoryId: number): Promise<boolean> {
+    const { error } = await supabase
+      .from('inventory_categories')
+      .delete()
+      .eq('id', categoryId)
+
+    if (error) {
+      console.error('Error deleting inventory category:', error)
+      return false
+    }
+
+    return true
+  }
+
+  // Inventory Items
+  static async getInventoryItems(organizationId: string, activeOnly: boolean = false): Promise<InventoryItem[]> {
+    let query = supabase
+      .from('inventory_items')
+      .select(`
+        *,
+        category:inventory_categories(
+          *,
+          inventory_account:accounts!inventory_account_id(*),
+          expense_account:accounts!expense_account_id(*)
+        )
+      `)
+      .eq('organization_id', organizationId)
+      .order('sku', { ascending: true })
+
+    if (activeOnly) {
+      query = query.eq('is_active', true)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error('Error fetching inventory items:', error)
+      return []
+    }
+
+    return data
+  }
+
+  static async getInventoryItem(itemId: number): Promise<InventoryItem | null> {
+    const { data, error } = await supabase
+      .from('inventory_items')
+      .select(`
+        *,
+        category:inventory_categories(
+          *,
+          inventory_account:accounts!inventory_account_id(*),
+          expense_account:accounts!expense_account_id(*)
+        )
+      `)
+      .eq('id', itemId)
+      .single()
+
+    if (error) {
+      console.error('Error fetching inventory item:', error)
+      return null
+    }
+
+    return data
+  }
+
+  static async createInventoryItem(item: Omit<InventoryItem, 'id' | 'created_at' | 'updated_at' | 'quantity_available' | 'total_value'>): Promise<InventoryItem | null> {
+    const { data, error } = await supabase
+      .from('inventory_items')
+      .insert(item)
+      .select(`
+        *,
+        category:inventory_categories(
+          *,
+          inventory_account:accounts!inventory_account_id(*),
+          expense_account:accounts!expense_account_id(*)
+        )
+      `)
+      .single()
+
+    if (error) {
+      console.error('Error creating inventory item:', error)
+      return null
+    }
+
+    return data
+  }
+
+  static async updateInventoryItem(itemId: number, updates: Partial<InventoryItem>): Promise<InventoryItem | null> {
+    const { data, error } = await supabase
+      .from('inventory_items')
+      .update(updates)
+      .eq('id', itemId)
+      .select(`
+        *,
+        category:inventory_categories(
+          *,
+          inventory_account:accounts!inventory_account_id(*),
+          expense_account:accounts!expense_account_id(*)
+        )
+      `)
+      .single()
+
+    if (error) {
+      console.error('Error updating inventory item:', error)
+      return null
+    }
+
+    return data
+  }
+
+  static async deleteInventoryItem(itemId: number): Promise<boolean> {
+    const { error } = await supabase
+      .from('inventory_items')
+      .delete()
+      .eq('id', itemId)
+
+    if (error) {
+      console.error('Error deleting inventory item:', error)
+      return false
+    }
+
+    return true
+  }
+
+  // Inventory Transactions
+  static async getInventoryTransactions(organizationId: string, itemId?: number, limit?: number): Promise<InventoryTransaction[]> {
+    let query = supabase
+      .from('inventory_transactions')
+      .select(`
+        *,
+        item:inventory_items(
+          *,
+          category:inventory_categories(*)
+        )
+      `)
+      .eq('organization_id', organizationId)
+      .order('transaction_date', { ascending: false })
+      .order('created_at', { ascending: false })
+
+    if (itemId) {
+      query = query.eq('item_id', itemId)
+    }
+
+    if (limit) {
+      query = query.limit(limit)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error('Error fetching inventory transactions:', error)
+      return []
+    }
+
+    return data
+  }
+
+  static async createInventoryTransaction(
+    transaction: Omit<InventoryTransaction, 'id' | 'created_at'>
+  ): Promise<InventoryTransaction | null> {
+    const { data, error } = await supabase
+      .from('inventory_transactions')
+      .insert(transaction)
+      .select(`
+        *,
+        item:inventory_items(
+          *,
+          category:inventory_categories(*)
+        )
+      `)
+      .single()
+
+    if (error) {
+      console.error('Error creating inventory transaction:', error)
+      return null
+    }
+
+    return data
+  }
+
+  // Get low stock items
+  static async getLowStockItems(organizationId: string): Promise<InventoryItem[]> {
+    const { data, error } = await supabase
+      .rpc('get_low_stock_items', { org_id: organizationId })
+
+    if (error) {
+      // Fallback if RPC doesn't exist yet
+      const items = await this.getInventoryItems(organizationId, true)
+      return items.filter(item => 
+        item.reorder_point > 0 && item.quantity_available <= item.reorder_point
+      )
+    }
+
+    return data || []
+  }
+
+  // Get inventory value by category
+  static async getInventoryValueByCategory(organizationId: string): Promise<Array<{category: string, value: number}>> {
+    const items = await this.getInventoryItems(organizationId, true)
+    
+    const categoryMap = new Map<string, number>()
+    
+    items.forEach(item => {
+      const categoryName = item.category?.name || 'Uncategorized'
+      const currentValue = categoryMap.get(categoryName) || 0
+      categoryMap.set(categoryName, currentValue + item.total_value)
+    })
+
+    return Array.from(categoryMap.entries()).map(([category, value]) => ({
+      category,
+      value
+    }))
   }
 }

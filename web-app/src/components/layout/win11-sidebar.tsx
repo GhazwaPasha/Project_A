@@ -19,7 +19,8 @@ import {
   Lock,
   ChevronRight,
   Menu,
-  Bot
+  Bot,
+  Package
 } from 'lucide-react'
 
 const navigation = [
@@ -29,6 +30,7 @@ const navigation = [
   { name: 'Trial Balance', href: '/dashboard/trial-balance', icon: BarChart3 },
   { name: 'Reports', href: '/dashboard/reports', icon: PieChart },
   { name: 'Accounts', href: '/dashboard/accounts', icon: FileText },
+  { name: 'Inventory', href: '/dashboard/inventory', icon: Package },
   { name: 'Reminders', href: '/dashboard/reminders', icon: CheckSquare },
   { name: 'Period Closing', href: '/dashboard/period-closing', icon: Lock },
   { name: 'AI Demo', href: '/dashboard/ai-demo', icon: Bot },
