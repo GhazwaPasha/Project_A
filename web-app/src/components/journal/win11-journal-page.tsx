@@ -16,57 +16,41 @@ import {
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { JournalEntryDialog } from './journal-entry-dialog'
 import { BulkEntryDialog } from './bulk-entry-dialog'
-import { DataService } from '@/lib/data-service'
 import { JournalEntry, Account, JournalEntryLine } from '@/types'
-import { useOrganization } from '@/hooks/use-organization'
+import { useJournalEntries, useAccounts } from '@/hooks/use-organization-data'
 
 export function Win11JournalPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState('cards') // 'cards' or 'table'
-  const [journalEntries, setJournalEntries] = useState<(JournalEntry & { lines: JournalEntryLine[] })[]>([])
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [loading, setLoading] = useState(true)
   const [showNewEntryDialog, setShowNewEntryDialog] = useState(false)
   const [showBulkEntryDialog, setShowBulkEntryDialog] = useState(false)
-  const { currentOrganization } = useOrganization()
   const [showSearchField, setShowSearchField] = useState(false)
 
-  // Load data on component mount and when organization changes
-  useEffect(() => {
-    if (currentOrganization) {
-      loadData()
-    }
-  }, [currentOrganization])
-
-  const loadData = async () => {
-    if (!currentOrganization) return
-    
-    try {
-      setLoading(true)
-      
-      // Load journal entries with lines and accounts for current organization
-      const [entries, accountsData] = await Promise.all([
-        DataService.getJournalEntriesWithLines(currentOrganization.id),
-        DataService.getAccounts(currentOrganization.id, true)
-      ])
-
-      setJournalEntries(entries)
-      setAccounts(accountsData)
-    } catch (error) {
-      console.error('Error loading data:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Use optimized hooks instead of manual data loading
+  const { 
+    data: journalEntries = [], 
+    isLoading: entriesLoading, 
+    error: entriesError,
+    refetch: refetchEntries
+  } = useJournalEntries()
+  
+  const { 
+    data: accounts = [], 
+    isLoading: accountsLoading, 
+    error: accountsError 
+  } = useAccounts()
+  
+  const loading = entriesLoading || accountsLoading
+  const error = entriesError || accountsError
 
   const handleNewEntryCreated = (newEntry: JournalEntry) => {
-    // Reload data to get the new entry with lines
-    loadData()
+    // React Query will automatically refetch the data
+    refetchEntries()
   }
 
   const handleBulkEntriesCreated = (newEntries: JournalEntry[]) => {
-    // Reload data to get the new entries with lines
-    loadData()
+    // React Query will automatically refetch the data
+    refetchEntries()
   }
 
   const getAccountName = (accountId: number): string => {
@@ -240,24 +224,20 @@ export function Win11JournalPage() {
       </div>
 
       {/* Journal Entry Dialog */}
-      {currentOrganization && (
-        <JournalEntryDialog
-          open={showNewEntryDialog}
-          onOpenChange={setShowNewEntryDialog}
-          onEntryCreated={handleNewEntryCreated}
-          organizationId={currentOrganization.id}
-        />
-      )}
+      <JournalEntryDialog
+        open={showNewEntryDialog}
+        onOpenChange={setShowNewEntryDialog}
+        onEntryCreated={handleNewEntryCreated}
+        organizationId="current" // Will be resolved by the dialog
+      />
 
       {/* Bulk Entry Dialog */}
-      {currentOrganization && (
-        <BulkEntryDialog
-          open={showBulkEntryDialog}
-          onOpenChange={setShowBulkEntryDialog}
-          onEntriesCreated={handleBulkEntriesCreated}
-          organizationId={currentOrganization.id}
-        />
-      )}
+      <BulkEntryDialog
+        open={showBulkEntryDialog}
+        onOpenChange={setShowBulkEntryDialog}
+        onEntriesCreated={handleBulkEntriesCreated}
+        organizationId="current" // Will be resolved by the dialog
+      />
     </div>
   )
 }

@@ -1,15 +1,13 @@
 'use client'
 
-import { useAuthStore } from '@/stores/auth-store'
+import { useAuthStore, useCurrentOrganization, useOrganizations, useIsLoading } from '@/stores/auth-store'
 import { Organization } from '@/types'
 
 export function useOrganization() {
-  const { 
-    currentOrganization, 
-    organizations, 
-    switchOrganization, 
-    isLoading 
-  } = useAuthStore()
+  const currentOrganization = useCurrentOrganization()
+  const organizations = useOrganizations()
+  const isLoading = useIsLoading()
+  const { switchOrganization } = useAuthStore()
 
   const switchToOrganization = async (organizationId: string) => {
     return await switchOrganization(organizationId)

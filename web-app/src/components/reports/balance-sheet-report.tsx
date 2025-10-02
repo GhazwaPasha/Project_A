@@ -15,8 +15,8 @@ import {
   ChevronDown
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { DataService } from '@/lib/data-service'
-import { useOrganization } from '@/hooks/use-organization'
+import { useBalanceSheet } from '@/hooks/use-organization-data'
+import { useCurrentOrganization } from '@/stores/auth-store'
 
 interface Account {
   id: number
@@ -53,38 +53,17 @@ interface BalanceSheetReportProps {
 }
 
 export function BalanceSheetReport({ onBack, asOfDate }: BalanceSheetReportProps) {
-  const [data, setData] = useState<BalanceSheetData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
   const [expandedAccounts, setExpandedAccounts] = useState<Set<number>>(new Set())
-  const { currentOrganization } = useOrganization()
-
-  useEffect(() => {
-    if (currentOrganization) {
-      loadBalanceSheet()
-    }
-  }, [currentOrganization, asOfDate])
-
-  const loadBalanceSheet = async () => {
-    if (!currentOrganization) return
-
-    setLoading(true)
-    setError(null)
-
-    try {
-      const balanceSheetData = await DataService.generateBalanceSheet(
-        currentOrganization.id, 
-        asOfDate
-      )
-      setData(balanceSheetData)
-    } catch (error) {
-      console.error('Error loading balance sheet:', error)
-      setError('Failed to load balance sheet data')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const currentOrganization = useCurrentOrganization()
+  
+  // Use optimized hook instead of manual data loading
+  const { 
+    data, 
+    isLoading: loading, 
+    error, 
+    refetch 
+  } = useBalanceSheet(asOfDate)
 
   const handlePrint = () => {
     if (!data) return
@@ -417,7 +396,7 @@ export function BalanceSheetReport({ onBack, asOfDate }: BalanceSheetReportProps
     )
   }
 
-  if (error || !data) {
+  if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--md-sys-color-background)' }}>
         <div className="text-center">
@@ -426,12 +405,31 @@ export function BalanceSheetReport({ onBack, asOfDate }: BalanceSheetReportProps
           </div>
           <h3 className="md-headline-small text-on-surface mb-3">Error Loading Balance Sheet</h3>
           <p className="md-body-large text-on-surface-variant mb-8 max-w-md">
-            {error || 'No data available'}
+            Failed to load balance sheet data
+          </p>
+          <Button onClick={() => refetch()} className="md-button">
+            Try Again
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!data) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--md-sys-color-background)' }}>
+        <div className="text-center">
+          <div className="w-20 h-20 bg-error-container rounded-3xl flex items-center justify-center mb-6 mx-auto">
+            <AlertCircle className="w-10 h-10 text-on-error-container" />
+          </div>
+          <h3 className="md-headline-small text-on-surface mb-3">No Data Available</h3>
+          <p className="md-body-large text-on-surface-variant mb-8 max-w-md">
+            No balance sheet data available for the selected date
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button 
               className="md-button"
-              onClick={loadBalanceSheet}
+              onClick={() => refetch()}
             >
               <RefreshCw className="w-4 h-4 mr-2" />
               Try Again
@@ -512,7 +510,7 @@ export function BalanceSheetReport({ onBack, asOfDate }: BalanceSheetReportProps
               </div>
               <Button 
                 className="md-button-outlined"
-                onClick={loadBalanceSheet}
+                onClick={() => refetch()}
                 title="Refresh"
               >
                 <RefreshCw className="w-4 h-4" />

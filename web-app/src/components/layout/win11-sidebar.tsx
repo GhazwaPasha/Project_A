@@ -65,12 +65,12 @@ export function Win11Sidebar({ open, onOpenChange }: Win11SidebarProps) {
       )}>
         <div className="flex h-full flex-col">
            {/* Header - Material Design 3 App Bar */}
-           <div className="flex h-16 items-center px-2">
+           <div className="flex h-16 items-center justify-center px-2">
              {/* Drawer toggle - styled like navigation items */}
              <button
                className={cn(
                  "group relative flex items-center transition-all duration-200 w-full",
-                 open ? "md-navigation-item justify-start" : "justify-center p-2",
+                 open ? "md-navigation-item justify-start" : "justify-center md-button-text p-2 rounded-full",
                  "hover:bg-transparent"
                )}
                onClick={() => onOpenChange(!open)}
@@ -83,7 +83,7 @@ export function Win11Sidebar({ open, onOpenChange }: Win11SidebarProps) {
                  <div className="flex items-center space-x-3">
                    <Menu className={cn(
                      "transition-all duration-200",
-                     open ? "w-4 h-4" : "w-5 h-5"
+                     open ? "w-4 h-4" : "w-4 h-4"
                    )} />
                    {open && <span className="md-label-large">Accountuitive</span>}
                  </div>
@@ -96,7 +96,7 @@ export function Win11Sidebar({ open, onOpenChange }: Win11SidebarProps) {
           
           {/* Navigation - Material Design 3 Navigation Drawer */}
           <nav className={cn(
-            "flex-1 py-4",
+            "flex-1 py-1",
             open ? "px-3" : "px-2"
           )}>
             {/* All Navigation Items */}

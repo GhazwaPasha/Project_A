@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Win11Sidebar } from './win11-sidebar'
 import { Win11Header } from './win11-header'
 import { cn } from '@/lib/utils'
+import { useBackgroundSync } from '@/hooks/use-background-sync'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -12,6 +13,10 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const layoutRef = useRef<HTMLDivElement>(null)
+  
+  // Disable background sync for now to prevent state persistence issues
+  // TODO: Re-enable with proper configuration once tested
+  // useBackgroundSync()
 
   useEffect(() => {
     const updateSidebarWidth = () => {

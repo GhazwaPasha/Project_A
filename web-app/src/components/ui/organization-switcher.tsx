@@ -5,6 +5,8 @@ import { Building2, ChevronDown, Check, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useOrganization } from '@/hooks/use-organization'
 import { Organization } from '@/types'
+import { useQueryClient } from '@tanstack/react-query'
+import { getOrganizationCache } from '@/lib/organization-cache'
 
 interface OrganizationSwitcherProps {
   className?: string
@@ -13,6 +15,8 @@ interface OrganizationSwitcherProps {
 export function OrganizationSwitcher({ className = '' }: OrganizationSwitcherProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isSwitching, setIsSwitching] = useState(false)
+  const queryClient = useQueryClient()
+  const organizationCache = getOrganizationCache(queryClient)
   const { 
     currentOrganization, 
     organizations, 
@@ -29,10 +33,19 @@ export function OrganizationSwitcher({ className = '' }: OrganizationSwitcherPro
 
     try {
       setIsSwitching(true)
+      
+      // Preload data for the new organization
+      await organizationCache.preloadOrganizationData(organization.id)
+      
+      // Switch organization
       const success = await switchToOrganization(organization.id)
       
       if (success) {
-        // Data will automatically reload due to useEffect dependencies
+        // Invalidate old organization data
+        if (currentOrganization) {
+          organizationCache.invalidateOrganizationData(currentOrganization.id)
+        }
+        
         console.log('Organization switched successfully')
       }
     } catch (error) {

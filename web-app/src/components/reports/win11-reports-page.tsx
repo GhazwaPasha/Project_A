@@ -25,8 +25,7 @@ import {
   Loader2
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { DataService } from '@/lib/data-service'
-import { useOrganization } from '@/hooks/use-organization'
+import { useSmartPrefetch } from '@/hooks/use-smart-prefetch'
 import { useRouter } from 'next/navigation'
 
 // Report types and their configurations
@@ -78,114 +77,35 @@ export function Win11ReportsPage() {
   const [filterType, setFilterType] = useState('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [reports, setReports] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const { currentOrganization } = useOrganization()
   const router = useRouter()
+  const { prefetchOnHover, prefetchCommonData } = useSmartPrefetch()
 
-  // Load reports data
+  // Load reports data on mount
   useEffect(() => {
-    if (currentOrganization) {
-      loadReportsData()
-    }
-  }, [currentOrganization])
+    loadReportsData()
+    prefetchCommonData()
+  }, [])
 
   const loadReportsData = async () => {
-    if (!currentOrganization) return
-
     setLoading(true)
     setError(null)
 
     try {
-      const reportPromises = reportTypes.map(async (reportType) => {
-        try {
-          let data
-          switch (reportType.generator) {
-            case 'generateBalanceSheet':
-              data = await DataService.generateBalanceSheet(currentOrganization.id)
-              return {
-                ...reportType,
-                lastGenerated: data.generatedAt,
-                status: 'Ready',
-                data: data,
-                totalAssets: data.assets.total,
-                totalLiabilities: data.liabilities.total,
-                totalEquity: data.equity.total,
-                isBalanced: data.isBalanced
-              }
-            case 'generateIncomeStatement':
-              data = await DataService.generateIncomeStatement(currentOrganization.id)
-              return {
-                ...reportType,
-                lastGenerated: data.generatedAt,
-                status: 'Ready',
-                data: data,
-                totalRevenue: data.revenue.total,
-                totalExpenses: data.expenses.total,
-                netIncome: data.netIncome,
-                isProfitable: data.netIncome > 0
-              }
-            case 'generateTrialBalance':
-              data = await DataService.generateTrialBalance(currentOrganization.id)
-              return {
-                ...reportType,
-                lastGenerated: data.generatedAt,
-                status: 'Ready',
-                data: data,
-                totalDebits: data.totalDebits,
-                totalCredits: data.totalCredits,
-                isBalanced: data.isBalanced
-              }
-            case 'generateAgedReceivables':
-              data = await DataService.generateAgedReceivables(currentOrganization.id)
-              return {
-                ...reportType,
-                lastGenerated: data.generatedAt,
-                status: 'Ready',
-                data: data,
-                current: data.totals.current,
-                days30: data.totals.days30,
-                days60: data.totals.days60,
-                days90: data.totals.days90,
-                total: data.totals.total
-              }
-            case 'generateAgedPayables':
-              data = await DataService.generateAgedPayables(currentOrganization.id)
-              return {
-                ...reportType,
-                lastGenerated: data.generatedAt,
-                status: 'Ready',
-                data: data,
-                current: data.totals.current,
-                days30: data.totals.days30,
-                days60: data.totals.days60,
-                days90: data.totals.days90,
-                total: data.totals.total
-              }
-            default:
-              return {
-                ...reportType,
-                lastGenerated: new Date().toISOString(),
-                status: 'Error',
-                data: null
-              }
-          }
-        } catch (error) {
-          console.error(`Error loading ${reportType.name}:`, error)
-          return {
-            ...reportType,
-            lastGenerated: new Date().toISOString(),
-            status: 'Error',
-            data: null
-          }
-        }
-      })
-
-      const reportsData = await Promise.all(reportPromises)
+      // For now, just set up the report types without data
+      // The actual data will be loaded when users click on specific reports
+      const reportsData = reportTypes.map(reportType => ({
+        ...reportType,
+        lastGenerated: null,
+        status: 'ready',
+        size: '0 KB'
+      }))
+      
       setReports(reportsData)
-    } catch (error) {
-      console.error('Error loading reports:', error)
+    } catch (err) {
+      console.error('Error loading reports data:', err)
       setError('Failed to load reports data')
     } finally {
       setLoading(false)
@@ -237,11 +157,16 @@ export function Win11ReportsPage() {
   }
 
   const renderReportCard = (report: any) => {
+    const handleMouseEnter = () => {
+      prefetchOnHover(report.id)
+    }
+    
     return (
       <Card 
         key={report.id}
         className="md-card-expressive group hover:md-elevation-1 transition-all duration-200 cursor-pointer"
         onClick={() => handleViewReport(report)}
+        onMouseEnter={handleMouseEnter}
       >
         <CardContent className="p-6">
           <div className="flex items-start justify-between mb-4">

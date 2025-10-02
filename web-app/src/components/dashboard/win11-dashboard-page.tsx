@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { 
@@ -15,8 +15,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 import { formatCurrency, formatPercentage, formatDate } from '@/lib/utils'
-import { DataService } from '@/lib/data-service'
-import { useOrganization } from '@/hooks/use-organization'
+import { useFinancialMetrics, useAccountBalances } from '@/hooks/use-organization-data'
 import { DateFilter, DateRange } from '@/components/ui/date-filter'
 import { 
   LineChart, 
@@ -141,135 +140,121 @@ function calculateFinancialRatios(accountBalances: any[], financialMetrics: Dash
 }
 
 export function Win11DashboardPage() {
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
-  const [chartData, setChartData] = useState<ChartData[]>([])
-  const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([])
-  const [financialRatios, setFinancialRatios] = useState<FinancialRatios | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [dateRange, setDateRange] = useState<DateRange>({ startDate: null, endDate: null })
-  const { currentOrganization } = useOrganization()
-
-  // Load dashboard data
-  useEffect(() => {
-    if (currentOrganization) {
-      loadDashboardData()
-    }
-  }, [currentOrganization, dateRange])
-
-  const loadDashboardData = async () => {
-    if (!currentOrganization) return
-
-    try {
-      setLoading(true)
-      setError(null)
-
-      // Convert Date objects to ISO string format for the API
-      const fromDate = dateRange.startDate ? dateRange.startDate.toISOString().split('T')[0] : undefined
-      const toDate = dateRange.endDate ? dateRange.endDate.toISOString().split('T')[0] : undefined
-
-      // Load financial metrics and account balances in parallel
-      const [financialMetrics, accountBalances] = await Promise.all([
-        DataService.getFinancialMetrics(currentOrganization.id),
-        DataService.getAccountBalances(currentOrganization.id, fromDate, toDate)
-      ])
-
-      // Process financial metrics
-      const processedMetrics: DashboardMetrics = {
-        ...financialMetrics,
-        activeAccounts: accountBalances.filter(acc => acc.balance !== 0).length,
-        totalTransactions: 0 // We removed transactions from dashboard
+  
+  // Use optimized hooks instead of manual data loading
+  const { 
+    data: financialMetrics, 
+    isLoading: metricsLoading, 
+    error: metricsError 
+  } = useFinancialMetrics({
+    fromDate: dateRange.startDate?.toISOString().split('T')[0],
+    toDate: dateRange.endDate?.toISOString().split('T')[0]
+  })
+  
+  const { 
+    data: accountBalances, 
+    isLoading: balancesLoading, 
+    error: balancesError 
+  } = useAccountBalances({
+    fromDate: dateRange.startDate?.toISOString().split('T')[0],
+    toDate: dateRange.endDate?.toISOString().split('T')[0]
+  })
+  
+  const isLoading = metricsLoading || balancesLoading
+  const error = metricsError || balancesError
+  
+  // Memoize expensive calculations
+  const financialRatios = useMemo(() => {
+    if (!accountBalances || !financialMetrics) return null
+    return calculateFinancialRatios(accountBalances, financialMetrics)
+  }, [accountBalances, financialMetrics])
+  
+  const chartData = useMemo(() => {
+    if (!accountBalances) return []
+    return accountBalances
+      .filter(acc => acc.account_type === 'expense' && acc.balance > 0)
+      .slice(0, 10)
+      .map(acc => ({
+        name: acc.name,
+        value: acc.balance,
+        amount: acc.balance
+      }))
+  }, [accountBalances])
+  
+  const monthlyData = useMemo(() => {
+    if (!financialMetrics) return []
+    
+    const monthlyTrendData: MonthlyData[] = []
+    
+    if (dateRange.startDate && dateRange.endDate) {
+      // Generate data for the specified date range
+      const startDate = new Date(dateRange.startDate)
+      const endDate = new Date(dateRange.endDate)
+      const months = []
+      
+      // Get all months in the range
+      const current = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
+      while (current <= endDate) {
+        months.push(new Date(current))
+        current.setMonth(current.getMonth() + 1)
       }
-
-      setMetrics(processedMetrics)
       
-      // Calculate financial ratios from account balances
-      console.log('Account balances for ratios:', accountBalances)
-      console.log('Financial metrics for ratios:', financialMetrics)
-      const calculatedRatios = calculateFinancialRatios(accountBalances, financialMetrics)
-      console.log('Calculated financial ratios:', calculatedRatios)
-      
-      setFinancialRatios(calculatedRatios)
-
-      // Prepare chart data for expenses breakdown
-      const expensesChartData: ChartData[] = accountBalances
-        .filter(acc => acc.account_type === 'expense' && acc.balance > 0)
-        .slice(0, 10)
-        .map(acc => ({
-          name: acc.name,
-          value: acc.balance,
-          amount: acc.balance
-        }))
-
-      setChartData(expensesChartData)
-
-      // Generate monthly data for trend analysis
-      // If date range is specified, generate data for that range, otherwise use last 12 months
-      const monthlyTrendData: MonthlyData[] = []
-      
-      if (dateRange.startDate && dateRange.endDate) {
-        // Generate data for the specified date range
-        const startDate = new Date(dateRange.startDate)
-        const endDate = new Date(dateRange.endDate)
-        const months = []
+      months.forEach(date => {
+        const monthName = date.toLocaleDateString('en-US', { month: 'short' })
+        const baseRevenue = financialMetrics.totalRevenue / Math.max(months.length, 1)
+        const baseExpenses = financialMetrics.totalExpenses / Math.max(months.length, 1)
+        const variation = 0.1 // 10% variation for date-filtered data
         
-        // Get all months in the range
-        const current = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
-        while (current <= endDate) {
-          months.push(new Date(current))
-          current.setMonth(current.getMonth() + 1)
-        }
-        
-        months.forEach(date => {
-          const monthName = date.toLocaleDateString('en-US', { month: 'short' })
-          const baseRevenue = financialMetrics.totalRevenue / Math.max(months.length, 1)
-          const baseExpenses = financialMetrics.totalExpenses / Math.max(months.length, 1)
-          const variation = 0.1 // 10% variation for date-filtered data
-          
-          monthlyTrendData.push({
-            month: monthName,
-            revenue: baseRevenue * (1 + (Math.random() - 0.5) * variation),
-            expenses: baseExpenses * (1 + (Math.random() - 0.5) * variation),
-            netIncome: 0
-          })
+        monthlyTrendData.push({
+          month: monthName,
+          revenue: baseRevenue * (1 + (Math.random() - 0.5) * variation),
+          expenses: baseExpenses * (1 + (Math.random() - 0.5) * variation),
+          netIncome: 0
         })
-      } else {
-        // Generate data for last 12 months
-        const currentDate = new Date()
-        for (let i = 11; i >= 0; i--) {
-          const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1)
-          const monthName = date.toLocaleDateString('en-US', { month: 'short' })
-          
-          const baseRevenue = financialMetrics.totalRevenue / 12
-          const baseExpenses = financialMetrics.totalExpenses / 12
-          const variation = 0.2 // 20% variation
-          
-          monthlyTrendData.push({
-            month: monthName,
-            revenue: baseRevenue * (1 + (Math.random() - 0.5) * variation),
-            expenses: baseExpenses * (1 + (Math.random() - 0.5) * variation),
-            netIncome: 0
-          })
-        }
-      }
-      
-      // Calculate net income for each month
-      monthlyTrendData.forEach(month => {
-        month.netIncome = month.revenue - month.expenses
       })
-      
-      setMonthlyData(monthlyTrendData)
-
-    } catch (err) {
-      console.error('Error loading dashboard data:', err)
-      setError('Failed to load dashboard data. Please try again.')
-    } finally {
-      setLoading(false)
+    } else {
+      // Generate data for last 12 months
+      const currentDate = new Date()
+      for (let i = 11; i >= 0; i--) {
+        const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1)
+        const monthName = date.toLocaleDateString('en-US', { month: 'short' })
+        
+        const baseRevenue = financialMetrics.totalRevenue / 12
+        const baseExpenses = financialMetrics.totalExpenses / 12
+        const variation = 0.2 // 20% variation
+        
+        monthlyTrendData.push({
+          month: monthName,
+          revenue: baseRevenue * (1 + (Math.random() - 0.5) * variation),
+          expenses: baseExpenses * (1 + (Math.random() - 0.5) * variation),
+          netIncome: 0
+        })
+      }
     }
-  }
+    
+    // Calculate net income for each month
+    monthlyTrendData.forEach(month => {
+      month.netIncome = month.revenue - month.expenses
+    })
+    
+    return monthlyTrendData
+  }, [financialMetrics, dateRange])
+  
+  // Process metrics for display
+  const metrics = useMemo(() => {
+    if (!financialMetrics || !accountBalances) return null
+    
+    return {
+      ...financialMetrics,
+      activeAccounts: accountBalances.filter(acc => acc.balance !== 0).length,
+      totalTransactions: 0 // We removed transactions from dashboard
+    }
+  }, [financialMetrics, accountBalances])
 
   const handleRefresh = () => {
-    loadDashboardData()
+    // React Query will handle the refresh automatically
+    window.location.reload()
   }
 
   const handleDateRangeChange = async (newDateRange: DateRange) => {
@@ -283,7 +268,7 @@ export function Win11DashboardPage() {
     return ((current - previous) / previous) * 100
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-6 p-6">
         <div className="flex items-center justify-center h-64">

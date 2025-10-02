@@ -12,8 +12,8 @@ import {
   Loader2
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { DataService } from '@/lib/data-service'
-import { useOrganization } from '@/hooks/use-organization'
+import { useIncomeStatement } from '@/hooks/use-organization-data'
+import { useCurrentOrganization } from '@/stores/auth-store'
 
 interface IncomeStatementData {
   revenue: { total: number; breakdown: Array<{ account: string; amount: number }> }
@@ -31,37 +31,15 @@ interface IncomeStatementReportProps {
 }
 
 export function IncomeStatementReport({ onBack, fromDate, toDate }: IncomeStatementReportProps) {
-  const [data, setData] = useState<IncomeStatementData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const { currentOrganization } = useOrganization()
-
-  useEffect(() => {
-    if (currentOrganization) {
-      loadIncomeStatement()
-    }
-  }, [currentOrganization, fromDate, toDate])
-
-  const loadIncomeStatement = async () => {
-    if (!currentOrganization) return
-
-    setLoading(true)
-    setError(null)
-
-    try {
-      const incomeStatementData = await DataService.generateIncomeStatement(
-        currentOrganization.id, 
-        fromDate,
-        toDate
-      )
-      setData(incomeStatementData)
-    } catch (error) {
-      console.error('Error loading income statement:', error)
-      setError('Failed to load income statement data')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const currentOrganization = useCurrentOrganization()
+  
+  // Use optimized hook instead of manual data loading
+  const { 
+    data, 
+    isLoading: loading, 
+    error, 
+    refetch 
+  } = useIncomeStatement(fromDate, toDate)
 
   const handlePrint = () => {
     if (!data) return
@@ -255,7 +233,7 @@ export function IncomeStatementReport({ onBack, fromDate, toDate }: IncomeStatem
           <h2 className="text-2xl font-bold mb-2">Error Loading Income Statement</h2>
           <p className="text-gray-600 mb-4">{error || 'No data available'}</p>
           <div className="space-x-2">
-            <Button onClick={loadIncomeStatement}>
+            <Button onClick={() => refetch()}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Try Again
             </Button>
@@ -297,7 +275,7 @@ export function IncomeStatementReport({ onBack, fromDate, toDate }: IncomeStatem
             <div className="flex items-center gap-2">
               <Button 
                 className="md-button-outlined"
-                onClick={loadIncomeStatement}
+                onClick={() => refetch()}
                 title="Refresh"
               >
                 <RefreshCw className="w-4 h-4" />

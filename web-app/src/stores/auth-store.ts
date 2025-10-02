@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { subscribeWithSelector, persist } from 'zustand/middleware'
 import { User, Organization, UserProfile } from '@/types'
 
 interface AuthState {
@@ -8,6 +9,7 @@ interface AuthState {
   currentOrganization: Organization | null
   isLoading: boolean
   isAuthenticated: boolean
+  lastOrganizationSwitch: number | null
   
   // Actions
   setUser: (user: User | null) => void
@@ -20,38 +22,50 @@ interface AuthState {
   logout: () => void
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
-  user: null,
-  profile: null,
-  organizations: [],
-  currentOrganization: null,
-  isLoading: false,
-  isAuthenticated: false,
-  
-  setUser: (user) => set({ user, isAuthenticated: !!user }),
-  setProfile: (profile) => set({ profile }),
-  setOrganizations: (organizations) => set({ organizations }),
-  setCurrentOrganization: (currentOrganization) => set({ currentOrganization }),
-  setLoading: (isLoading) => set({ isLoading }),
-  
-  switchOrganization: async (organizationId: string) => {
-    const { organizations } = get()
-    const organization = organizations.find(org => org.id === organizationId)
+export const useAuthStore = create<AuthState>()(
+  persist(
+    subscribeWithSelector((set, get) => ({
+      user: null,
+      profile: null,
+      organizations: [],
+      currentOrganization: null,
+      isLoading: false,
+      isAuthenticated: false,
+      lastOrganizationSwitch: null,
     
-    if (organization) {
-      set({ currentOrganization: organization })
-      localStorage.setItem('selectedOrganizationId', organizationId)
-      return true
-    }
-    return false
-  },
+    setUser: (user) => set({ user, isAuthenticated: !!user }),
+    setProfile: (profile) => set({ profile }),
+    setOrganizations: (organizations) => set({ organizations }),
+    setCurrentOrganization: (currentOrganization) => set({ currentOrganization }),
+    setLoading: (isLoading) => set({ isLoading }),
+    
+    switchOrganization: async (organizationId: string) => {
+      const { organizations } = get()
+      const organization = organizations.find(org => org.id === organizationId)
+      
+      if (organization) {
+        set({ 
+          currentOrganization: organization,
+          lastOrganizationSwitch: Date.now()
+        })
+        localStorage.setItem('selectedOrganizationId', organizationId)
+        return true
+      }
+      return false
+    },
   
   loadUserData: async () => {
-    const { user } = get()
+    const { user, organizations: existingOrgs, currentOrganization: existingOrg } = get()
     if (!user) return
     
+    // If we already have organizations and current org, don't set loading
+    // This prevents the loading state from showing when data is already available
+    const hasExistingData = existingOrgs.length > 0 && existingOrg
+    
     try {
-      set({ isLoading: true })
+      if (!hasExistingData) {
+        set({ isLoading: true })
+      }
       
       // Load user profile and organizations
       const [profile, organizations] = await Promise.all([
@@ -77,14 +91,41 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
   
-  logout: () => {
-    localStorage.removeItem('selectedOrganizationId')
-    set({ 
-      user: null, 
-      profile: null, 
-      organizations: [], 
-      currentOrganization: null, 
-      isAuthenticated: false 
-    })
-  },
-}))
+      logout: () => {
+        localStorage.removeItem('selectedOrganizationId')
+        set({ 
+          user: null, 
+          profile: null, 
+          organizations: [], 
+          currentOrganization: null, 
+          isAuthenticated: false,
+          lastOrganizationSwitch: null,
+          isLoading: false
+        })
+      },
+    })),
+    {
+      name: 'auth-storage',
+      partialize: (state) => ({
+        organizations: state.organizations,
+        currentOrganization: state.currentOrganization,
+      }),
+    }
+  )
+)
+
+// Optimized selectors
+export const useCurrentOrganization = () => 
+  useAuthStore(state => state.currentOrganization)
+
+export const useIsLoading = () => 
+  useAuthStore(state => state.isLoading)
+
+export const useOrganizations = () => 
+  useAuthStore(state => state.organizations)
+
+export const useUser = () => 
+  useAuthStore(state => state.user)
+
+export const useIsAuthenticated = () => 
+  useAuthStore(state => state.isAuthenticated)

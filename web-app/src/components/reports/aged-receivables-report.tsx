@@ -12,8 +12,8 @@ import {
   Loader2
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { DataService } from '@/lib/data-service'
-import { useOrganization } from '@/hooks/use-organization'
+import { useAgedReceivables } from '@/hooks/use-organization-data'
+import { useCurrentOrganization } from '@/stores/auth-store'
 
 interface AgedReceivablesData {
   receivables: Array<{
@@ -40,36 +40,15 @@ interface AgedReceivablesReportProps {
 }
 
 export function AgedReceivablesReport({ onBack, asOfDate }: AgedReceivablesReportProps) {
-  const [data, setData] = useState<AgedReceivablesData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const { currentOrganization } = useOrganization()
-
-  useEffect(() => {
-    if (currentOrganization) {
-      loadAgedReceivables()
-    }
-  }, [currentOrganization, asOfDate])
-
-  const loadAgedReceivables = async () => {
-    if (!currentOrganization) return
-
-    setLoading(true)
-    setError(null)
-
-    try {
-      const agedReceivablesData = await DataService.generateAgedReceivables(
-        currentOrganization.id, 
-        asOfDate
-      )
-      setData(agedReceivablesData)
-    } catch (error) {
-      console.error('Error loading aged receivables:', error)
-      setError('Failed to load aged receivables data')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const currentOrganization = useCurrentOrganization()
+  
+  // Use optimized hook instead of manual data loading
+  const { 
+    data, 
+    isLoading: loading, 
+    error, 
+    refetch 
+  } = useAgedReceivables(asOfDate)
 
   const handlePrint = () => {
     window.print()
@@ -99,7 +78,7 @@ export function AgedReceivablesReport({ onBack, asOfDate }: AgedReceivablesRepor
           <h2 className="text-2xl font-bold mb-2">Error Loading Aged Receivables</h2>
           <p className="text-gray-600 mb-4">{error || 'No data available'}</p>
           <div className="space-x-2">
-            <Button onClick={loadAgedReceivables}>
+            <Button onClick={() => refetch()}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Try Again
             </Button>
@@ -138,7 +117,7 @@ export function AgedReceivablesReport({ onBack, asOfDate }: AgedReceivablesRepor
             <div className="flex items-center gap-2">
               <Button 
                 className="md-button-outlined"
-                onClick={loadAgedReceivables}
+                onClick={() => refetch()}
                 title="Refresh"
               >
                 <RefreshCw className="w-4 h-4" />
