@@ -508,7 +508,7 @@ export class DataService {
     totalEquity: number
   }> {
     const { data, error } = await supabase
-      .rpc('get_financial_metrics', {
+      .rpc('get_financial_metrics_json', {
         p_organization_id: organizationId
       })
 
@@ -531,6 +531,610 @@ export class DataService {
       totalAssets: 0,
       totalLiabilities: 0,
       totalEquity: 0
+    }
+  }
+
+  static async getFinancialRatios(organizationId: string, fromDate?: string, toDate?: string): Promise<{
+    liquidity: {
+      current_ratio: number
+      quick_ratio: number
+      working_capital: number
+    }
+    profitability: {
+      gross_profit_margin: number
+      net_profit_margin: number
+      roa: number
+    }
+  }> {
+    const currentDate = new Date().toISOString().split('T')[0]
+    const startDate = fromDate || currentDate
+    const endDate = toDate || currentDate
+
+    const { data, error } = await supabase
+      .rpc('calculate_all_ratios', {
+        p_org_id: organizationId,
+        p_from_date: startDate,
+        p_to_date: endDate,
+        p_as_of_date: currentDate
+      })
+
+    if (error) {
+      console.error('Error fetching financial ratios:', error)
+      return {
+        liquidity: {
+          current_ratio: 0,
+          quick_ratio: 0,
+          working_capital: 0
+        },
+        profitability: {
+          gross_profit_margin: 0,
+          net_profit_margin: 0,
+          roa: 0
+        }
+      }
+    }
+
+    return data || {
+      liquidity: {
+        current_ratio: 0,
+        quick_ratio: 0,
+        working_capital: 0
+      },
+      profitability: {
+        gross_profit_margin: 0,
+        net_profit_margin: 0,
+        roa: 0
+      }
+    }
+  }
+
+  // ================================
+  // REPORTS GENERATION
+  // ================================
+
+  static async generateBalanceSheet(organizationId: string, asOfDate?: string): Promise<{
+    isGroupBased: boolean
+    assetSections: Array<{
+      name: string
+      group: string
+      accounts: Array<{
+        id: number
+        code: string
+        name: string
+        account_type: string
+        balance: number
+        parent_id: number | null
+      }>
+      total: number
+    }>
+    liabilitySections: Array<{
+      name: string
+      group: string
+      accounts: Array<{
+        id: number
+        code: string
+        name: string
+        account_type: string
+        balance: number
+        parent_id: number | null
+      }>
+      total: number
+    }>
+    equitySections: Array<{
+      name: string
+      group: string
+      accounts: Array<{
+        id: number
+        code: string
+        name: string
+        account_type: string
+        balance: number
+        parent_id: number | null
+      }>
+      total: number
+    }>
+    totalAssets: number
+    totalLiabilities: number
+    totalEquity: number
+    isBalanced: boolean
+    generatedAt: string
+  }> {
+    const currentDate = asOfDate || new Date().toISOString().split('T')[0]
+
+    try {
+      // Get all accounts with their balances
+      const { data: accounts, error: accountsError } = await supabase
+        .from('accounts')
+        .select(`
+          id,
+          code,
+          name,
+          account_type,
+          group,
+          parent_id,
+          is_active
+        `)
+        .eq('organization_id', organizationId)
+        .eq('is_active', true)
+
+      if (accountsError) {
+        console.error('Error fetching accounts:', accountsError)
+        throw accountsError
+      }
+
+      if (!accounts || accounts.length === 0) {
+        return {
+          isGroupBased: true,
+          assetSections: [],
+          liabilitySections: [],
+          equitySections: [],
+          totalAssets: 0,
+          totalLiabilities: 0,
+          totalEquity: 0,
+          isBalanced: false,
+          generatedAt: new Date().toISOString()
+        }
+      }
+
+      // Get account balances
+      const accountIds = accounts.map(acc => acc.id)
+      const { data: balances, error: balancesError } = await supabase
+        .from('journal_entry_lines')
+        .select(`
+          account_id,
+          debit_amount,
+          credit_amount,
+          journal_entries!inner(entry_date, organization_id)
+        `)
+        .in('account_id', accountIds)
+        .eq('journal_entries.organization_id', organizationId)
+        .lte('journal_entries.entry_date', currentDate)
+
+      if (balancesError) {
+        console.error('Error fetching balances:', balancesError)
+        throw balancesError
+      }
+
+      // Calculate balances for each account
+      const accountBalances = new Map<number, number>()
+      if (balances) {
+        balances.forEach(balance => {
+          const currentBalance = accountBalances.get(balance.account_id) || 0
+          const change = (balance.debit_amount || 0) - (balance.credit_amount || 0)
+          accountBalances.set(balance.account_id, currentBalance + change)
+        })
+      }
+
+      // Add balances to accounts
+      const accountsWithBalances = accounts.map(account => ({
+        ...account,
+        balance: accountBalances.get(account.id) || 0
+      }))
+
+      // Group accounts by category
+      const assetAccounts = accountsWithBalances.filter(acc => 
+        acc.group?.includes('asset') || 
+        acc.group === 'current_asset' || 
+        acc.group === 'fixed_asset' ||
+        acc.group === 'other_asset'
+      )
+
+      const liabilityAccounts = accountsWithBalances.filter(acc => 
+        acc.group?.includes('liability') || 
+        acc.group === 'current_liability' || 
+        acc.group === 'long_term_liability' ||
+        acc.group === 'other_liability'
+      )
+
+      const equityAccounts = accountsWithBalances.filter(acc => 
+        acc.group?.includes('equity') || 
+        acc.group === 'owners_equity' || 
+        acc.group === 'retained_earnings' ||
+        acc.group === 'other_equity'
+      )
+
+      // Create sections
+      const assetSections = this.createAccountSections(assetAccounts, 'Assets')
+      const liabilitySections = this.createAccountSections(liabilityAccounts, 'Liabilities')
+      const equitySections = this.createAccountSections(equityAccounts, 'Equity')
+
+      // Calculate totals
+      const totalAssets = assetSections.reduce((sum, section) => sum + section.total, 0)
+      const totalLiabilities = liabilitySections.reduce((sum, section) => sum + section.total, 0)
+      const totalEquity = equitySections.reduce((sum, section) => sum + section.total, 0)
+      const isBalanced = totalAssets === (totalLiabilities + totalEquity)
+
+      return {
+        isGroupBased: true,
+        assetSections,
+        liabilitySections,
+        equitySections,
+        totalAssets,
+        totalLiabilities,
+        totalEquity,
+        isBalanced,
+        generatedAt: new Date().toISOString()
+      }
+
+    } catch (error) {
+      console.error('Error generating balance sheet:', error)
+      return {
+        isGroupBased: true,
+        assetSections: [],
+        liabilitySections: [],
+        equitySections: [],
+        totalAssets: 0,
+        totalLiabilities: 0,
+        totalEquity: 0,
+        isBalanced: false,
+        generatedAt: new Date().toISOString()
+      }
+    }
+  }
+
+  private static createAccountSections(accounts: any[], categoryName: string) {
+    const sections = new Map<string, any[]>()
+
+    accounts.forEach(account => {
+      const group = account.group || 'other'
+      if (!sections.has(group)) {
+        sections.set(group, [])
+      }
+      sections.get(group)!.push(account)
+    })
+
+    return Array.from(sections.entries()).map(([group, accounts]) => {
+      // Create hierarchical tree structure
+      const treeAccounts = this.buildAccountTree(accounts)
+      
+      const total = accounts.reduce((sum, acc) => {
+        // For liabilities, use absolute value
+        if (categoryName === 'Liabilities') {
+          return sum + Math.abs(acc.balance)
+        }
+        return sum + acc.balance
+      }, 0)
+
+      return {
+        name: this.formatGroupName(group),
+        group,
+        accounts: treeAccounts,
+        total
+      }
+    })
+  }
+
+  private static buildAccountTree(accounts: any[]): any[] {
+    // Create a map for quick lookup
+    const accountMap = new Map<number, any>()
+    const rootAccounts: any[] = []
+
+    // First pass: create account objects with children arrays
+    accounts.forEach(account => {
+      accountMap.set(account.id, {
+        id: account.id,
+        code: account.code,
+        name: account.name,
+        account_type: account.account_type,
+        balance: account.balance,
+        parent_id: account.parent_id,
+        children: []
+      })
+    })
+
+    // Second pass: build the tree structure
+    accounts.forEach(account => {
+      const accountObj = accountMap.get(account.id)!
+      
+      if (account.parent_id && accountMap.has(account.parent_id)) {
+        // This account has a parent, add it to parent's children
+        const parent = accountMap.get(account.parent_id)!
+        parent.children.push(accountObj)
+      } else {
+        // This is a root account
+        rootAccounts.push(accountObj)
+      }
+    })
+
+    // Sort accounts by code
+    const sortAccounts = (accs: any[]) => {
+      accs.sort((a, b) => a.code.localeCompare(b.code))
+      accs.forEach(acc => {
+        if (acc.children.length > 0) {
+          sortAccounts(acc.children)
+        }
+      })
+    }
+
+    sortAccounts(rootAccounts)
+    return rootAccounts
+  }
+
+  private static formatGroupName(group: string): string {
+    const nameMap: { [key: string]: string } = {
+      'current_asset': 'Current Assets',
+      'fixed_asset': 'Fixed Assets',
+      'other_asset': 'Other Assets',
+      'current_liability': 'Current Liabilities',
+      'long_term_liability': 'Long-term Liabilities',
+      'other_liability': 'Other Liabilities',
+      'owners_equity': 'Owner\'s Equity',
+      'retained_earnings': 'Retained Earnings',
+      'other_equity': 'Other Equity'
+    }
+    return nameMap[group] || group.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+  }
+
+  static async generateIncomeStatement(organizationId: string, fromDate?: string, toDate?: string): Promise<{
+    revenue: { total: number; breakdown: Array<{ account: string; amount: number }> }
+    expenses: { total: number; breakdown: Array<{ account: string; amount: number }> }
+    netIncome: number
+    grossProfit: number
+    operatingIncome: number
+    generatedAt: string
+  }> {
+    const currentDate = new Date().toISOString().split('T')[0]
+    const startDate = fromDate || currentDate
+    const endDate = toDate || currentDate
+
+    console.log('Generating income statement with frontend calculation:', {
+      organizationId,
+      startDate,
+      endDate
+    })
+
+    try {
+      // Get all accounts
+      const { data: accounts, error: accountsError } = await supabase
+        .from('accounts')
+        .select(`
+          id,
+          code,
+          name,
+          account_type,
+          group,
+          is_active
+        `)
+        .eq('organization_id', organizationId)
+        .eq('is_active', true)
+
+      if (accountsError) {
+        console.error('Error fetching accounts:', accountsError)
+        throw accountsError
+      }
+
+      if (!accounts || accounts.length === 0) {
+        return {
+          revenue: { total: 0, breakdown: [] },
+          expenses: { total: 0, breakdown: [] },
+          netIncome: 0,
+          grossProfit: 0,
+          operatingIncome: 0,
+          generatedAt: new Date().toISOString()
+        }
+      }
+
+      // Get journal entries for the period
+      const { data: journalEntries, error: entriesError } = await supabase
+        .from('journal_entry_lines')
+        .select(`
+          account_id,
+          debit_amount,
+          credit_amount,
+          journal_entries!inner(entry_date, organization_id)
+        `)
+        .eq('journal_entries.organization_id', organizationId)
+        .gte('journal_entries.entry_date', startDate)
+        .lte('journal_entries.entry_date', endDate)
+
+      if (entriesError) {
+        console.error('Error fetching journal entries:', entriesError)
+        throw entriesError
+      }
+
+      // Calculate account balances for the period
+      const accountBalances = new Map<number, number>()
+      if (journalEntries) {
+        journalEntries.forEach(entry => {
+          const currentBalance = accountBalances.get(entry.account_id) || 0
+          const change = (entry.debit_amount || 0) - (entry.credit_amount || 0)
+          accountBalances.set(entry.account_id, currentBalance + change)
+        })
+      }
+
+      // Categorize accounts
+      const revenueAccounts = accounts.filter(acc => 
+        acc.account_type === 'revenue' || 
+        acc.group === 'revenue' ||
+        acc.name.toLowerCase().includes('revenue') ||
+        acc.name.toLowerCase().includes('income') ||
+        acc.name.toLowerCase().includes('sales')
+      )
+
+      const expenseAccounts = accounts.filter(acc => 
+        acc.account_type === 'expense' || 
+        acc.group === 'expense' ||
+        acc.name.toLowerCase().includes('expense') ||
+        acc.name.toLowerCase().includes('cost')
+      )
+
+      // Calculate revenue
+      const revenueBreakdown = revenueAccounts
+        .map(account => ({
+          account: account.name,
+          amount: Math.abs(accountBalances.get(account.id) || 0)
+        }))
+        .filter(item => item.amount > 0)
+        .sort((a, b) => b.amount - a.amount)
+
+      const totalRevenue = revenueBreakdown.reduce((sum, item) => sum + item.amount, 0)
+
+      // Calculate expenses
+      const expenseBreakdown = expenseAccounts
+        .map(account => ({
+          account: account.name,
+          amount: Math.abs(accountBalances.get(account.id) || 0)
+        }))
+        .filter(item => item.amount > 0)
+        .sort((a, b) => b.amount - a.amount)
+
+      const totalExpenses = expenseBreakdown.reduce((sum, item) => sum + item.amount, 0)
+
+      // Calculate derived metrics
+      const netIncome = totalRevenue - totalExpenses
+      const grossProfit = totalRevenue - totalExpenses // Simplified - in real accounting, this would be revenue - COGS
+      const operatingIncome = netIncome // Simplified - in real accounting, this would exclude non-operating items
+
+      return {
+        revenue: {
+          total: totalRevenue,
+          breakdown: revenueBreakdown
+        },
+        expenses: {
+          total: totalExpenses,
+          breakdown: expenseBreakdown
+        },
+        netIncome,
+        grossProfit,
+        operatingIncome,
+        generatedAt: new Date().toISOString()
+      }
+
+    } catch (error) {
+      console.error('Error generating income statement:', error)
+      return {
+        revenue: { total: 0, breakdown: [] },
+        expenses: { total: 0, breakdown: [] },
+        netIncome: 0,
+        grossProfit: 0,
+        operatingIncome: 0,
+        generatedAt: new Date().toISOString()
+      }
+    }
+  }
+
+  static async generateTrialBalance(organizationId: string, asOfDate?: string): Promise<{
+    accounts: Array<{
+      accountId: number
+      accountName: string
+      accountType: string
+      debitBalance: number
+      creditBalance: number
+    }>
+    totalDebits: number
+    totalCredits: number
+    isBalanced: boolean
+    generatedAt: string
+  }> {
+    const currentDate = asOfDate || new Date().toISOString().split('T')[0]
+
+    const { data, error } = await supabase
+      .rpc('get_trial_balance_data', {
+        p_org_id: organizationId,
+        p_as_of_date: currentDate
+      })
+
+    if (error) {
+      console.error('Error generating trial balance:', error)
+      return {
+        accounts: [],
+        totalDebits: 0,
+        totalCredits: 0,
+        isBalanced: false,
+        generatedAt: new Date().toISOString()
+      }
+    }
+
+    return data || {
+      accounts: [],
+      totalDebits: 0,
+      totalCredits: 0,
+      isBalanced: false,
+      generatedAt: new Date().toISOString()
+    }
+  }
+
+  static async generateAgedReceivables(organizationId: string, asOfDate?: string): Promise<{
+    receivables: Array<{
+      customerName: string
+      current: number
+      days30: number
+      days60: number
+      days90: number
+      total: number
+    }>
+    totals: {
+      current: number
+      days30: number
+      days60: number
+      days90: number
+      total: number
+    }
+    generatedAt: string
+  }> {
+    const currentDate = asOfDate || new Date().toISOString().split('T')[0]
+
+    const { data, error } = await supabase
+      .rpc('get_aged_receivables_data', {
+        p_org_id: organizationId,
+        p_as_of_date: currentDate
+      })
+
+    if (error) {
+      console.error('Error generating aged receivables:', error)
+      return {
+        receivables: [],
+        totals: { current: 0, days30: 0, days60: 0, days90: 0, total: 0 },
+        generatedAt: new Date().toISOString()
+      }
+    }
+
+    return data || {
+      receivables: [],
+      totals: { current: 0, days30: 0, days60: 0, days90: 0, total: 0 },
+      generatedAt: new Date().toISOString()
+    }
+  }
+
+  static async generateAgedPayables(organizationId: string, asOfDate?: string): Promise<{
+    payables: Array<{
+      vendorName: string
+      current: number
+      days30: number
+      days60: number
+      days90: number
+      total: number
+    }>
+    totals: {
+      current: number
+      days30: number
+      days60: number
+      days90: number
+      total: number
+    }
+    generatedAt: string
+  }> {
+    const currentDate = asOfDate || new Date().toISOString().split('T')[0]
+
+    const { data, error } = await supabase
+      .rpc('get_aged_payables_data', {
+        p_org_id: organizationId,
+        p_as_of_date: currentDate
+      })
+
+    if (error) {
+      console.error('Error generating aged payables:', error)
+      return {
+        payables: [],
+        totals: { current: 0, days30: 0, days60: 0, days90: 0, total: 0 },
+        generatedAt: new Date().toISOString()
+      }
+    }
+
+    return data || {
+      payables: [],
+      totals: { current: 0, days30: 0, days60: 0, days90: 0, total: 0 },
+      generatedAt: new Date().toISOString()
     }
   }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,136 +17,210 @@ import {
   TrendingDown,
   DollarSign,
   Calendar,
-  Eye,
-  Settings,
   ChevronRight,
   Calculator,
   Building2,
   CreditCard,
-  PiggyBank
+  PiggyBank,
+  Loader2
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { DataService } from '@/lib/data-service'
+import { useOrganization } from '@/hooks/use-organization'
+import { useRouter } from 'next/navigation'
 
-// Mock data for financial reports
-const mockReports = [
+// Report types and their configurations
+const reportTypes = [
   {
-    id: '1',
+    id: 'balance_sheet',
     name: 'Balance Sheet',
     type: 'Financial Statement',
     description: 'Assets, liabilities, and equity as of a specific date',
     icon: Building2,
-    lastGenerated: '2024-12-19',
-    status: 'Ready',
-    totalAssets: 36670.50,
-    totalLiabilities: 4700.75,
-    totalEquity: 31969.75,
-    isBalanced: true
+    generator: 'generateBalanceSheet'
   },
   {
-    id: '2',
+    id: 'income_statement',
     name: 'Income Statement',
     type: 'Financial Statement',
     description: 'Revenue, expenses, and net income for a period',
     icon: TrendingUp,
-    lastGenerated: '2024-12-19',
-    status: 'Ready',
-    totalRevenue: 45000.00,
-    totalExpenses: 5300.50,
-    netIncome: 39699.50,
-    isProfitable: true
+    generator: 'generateIncomeStatement'
   },
   {
-    id: '3',
-    name: 'Cash Flow Statement',
-    type: 'Financial Statement',
-    description: 'Cash inflows and outflows from operations, investing, and financing',
-    icon: CreditCard,
-    lastGenerated: '2024-12-18',
-    status: 'Ready',
-    operatingCashFlow: 12500.00,
-    investingCashFlow: -12500.00,
-    financingCashFlow: 25000.00,
-    netCashFlow: 25000.00
-  },
-  {
-    id: '4',
+    id: 'trial_balance',
     name: 'Trial Balance',
     type: 'Verification Report',
     description: 'List of all accounts with their debit and credit balances',
     icon: Calculator,
-    lastGenerated: '2024-12-19',
-    status: 'Ready',
-    totalDebits: 68320.25,
-    totalCredits: 68320.25,
-    isBalanced: true
+    generator: 'generateTrialBalance'
   },
   {
-    id: '5',
+    id: 'aged_receivables',
     name: 'Aged Receivables',
     type: 'Analysis Report',
     description: 'Customer receivables broken down by age',
     icon: PieChart,
-    lastGenerated: '2024-12-17',
-    status: 'Ready',
-    current: 5000.00,
-    days30: 2500.00,
-    days60: 1000.00,
-    days90: 250.00,
-    total: 8750.00
+    generator: 'generateAgedReceivables'
   },
   {
-    id: '6',
+    id: 'aged_payables',
     name: 'Aged Payables',
     type: 'Analysis Report',
     description: 'Vendor payables broken down by age',
     icon: BarChart3,
-    lastGenerated: '2024-12-17',
-    status: 'Ready',
-    current: 2000.00,
-    days30: 1000.00,
-    days60: 200.75,
-    days90: 0.00,
-    total: 3200.75
-  }
-]
-
-const mockCustomReports = [
-  {
-    id: '7',
-    name: 'Monthly Revenue Summary',
-    type: 'Custom Report',
-    description: 'Revenue breakdown by service category',
-    icon: FileText,
-    lastGenerated: '2024-12-19',
-    status: 'Ready',
-    customFields: ['Service Category', 'Revenue Amount', 'Percentage']
-  },
-  {
-    id: '8',
-    name: 'Expense Analysis',
-    type: 'Custom Report',
-    description: 'Detailed expense analysis by department',
-    icon: PieChart,
-    lastGenerated: '2024-12-18',
-    status: 'Ready',
-    customFields: ['Department', 'Expense Type', 'Amount', 'Variance']
+    generator: 'generateAgedPayables'
   }
 ]
 
 export function Win11ReportsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState('all')
-  const [selectedReport, setSelectedReport] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [reports, setReports] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const allReports = [...mockReports, ...mockCustomReports]
+  const { currentOrganization } = useOrganization()
+  const router = useRouter()
+
+  // Load reports data
+  useEffect(() => {
+    if (currentOrganization) {
+      loadReportsData()
+    }
+  }, [currentOrganization])
+
+  const loadReportsData = async () => {
+    if (!currentOrganization) return
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const reportPromises = reportTypes.map(async (reportType) => {
+        try {
+          let data
+          switch (reportType.generator) {
+            case 'generateBalanceSheet':
+              data = await DataService.generateBalanceSheet(currentOrganization.id)
+              return {
+                ...reportType,
+                lastGenerated: data.generatedAt,
+                status: 'Ready',
+                data: data,
+                totalAssets: data.assets.total,
+                totalLiabilities: data.liabilities.total,
+                totalEquity: data.equity.total,
+                isBalanced: data.isBalanced
+              }
+            case 'generateIncomeStatement':
+              data = await DataService.generateIncomeStatement(currentOrganization.id)
+              return {
+                ...reportType,
+                lastGenerated: data.generatedAt,
+                status: 'Ready',
+                data: data,
+                totalRevenue: data.revenue.total,
+                totalExpenses: data.expenses.total,
+                netIncome: data.netIncome,
+                isProfitable: data.netIncome > 0
+              }
+            case 'generateTrialBalance':
+              data = await DataService.generateTrialBalance(currentOrganization.id)
+              return {
+                ...reportType,
+                lastGenerated: data.generatedAt,
+                status: 'Ready',
+                data: data,
+                totalDebits: data.totalDebits,
+                totalCredits: data.totalCredits,
+                isBalanced: data.isBalanced
+              }
+            case 'generateAgedReceivables':
+              data = await DataService.generateAgedReceivables(currentOrganization.id)
+              return {
+                ...reportType,
+                lastGenerated: data.generatedAt,
+                status: 'Ready',
+                data: data,
+                current: data.totals.current,
+                days30: data.totals.days30,
+                days60: data.totals.days60,
+                days90: data.totals.days90,
+                total: data.totals.total
+              }
+            case 'generateAgedPayables':
+              data = await DataService.generateAgedPayables(currentOrganization.id)
+              return {
+                ...reportType,
+                lastGenerated: data.generatedAt,
+                status: 'Ready',
+                data: data,
+                current: data.totals.current,
+                days30: data.totals.days30,
+                days60: data.totals.days60,
+                days90: data.totals.days90,
+                total: data.totals.total
+              }
+            default:
+              return {
+                ...reportType,
+                lastGenerated: new Date().toISOString(),
+                status: 'Error',
+                data: null
+              }
+          }
+        } catch (error) {
+          console.error(`Error loading ${reportType.name}:`, error)
+          return {
+            ...reportType,
+            lastGenerated: new Date().toISOString(),
+            status: 'Error',
+            data: null
+          }
+        }
+      })
+
+      const reportsData = await Promise.all(reportPromises)
+      setReports(reportsData)
+    } catch (error) {
+      console.error('Error loading reports:', error)
+      setError('Failed to load reports data')
+    } finally {
+      setLoading(false)
+    }
+  }
   
-  const filteredReports = allReports.filter(report => {
+  const filteredReports = reports.filter(report => {
     const matchesSearch = report.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          report.description.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesType = filterType === 'all' || report.type.toLowerCase().includes(filterType.toLowerCase())
     return matchesSearch && matchesType
   })
+
+  const handleViewReport = (report: any) => {
+    // Navigate to the dedicated report page
+    switch (report.id) {
+      case 'balance_sheet':
+        router.push('/dashboard/reports/balance-sheet')
+        break
+      case 'income_statement':
+        router.push('/dashboard/reports/income-statement')
+        break
+      case 'trial_balance':
+        router.push('/dashboard/reports/trial-balance')
+        break
+      case 'aged_receivables':
+        router.push('/dashboard/reports/aged-receivables')
+        break
+      case 'aged_payables':
+        router.push('/dashboard/reports/aged-payables')
+        break
+      default:
+        console.log('Report type not implemented:', report.id)
+    }
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -163,15 +237,11 @@ export function Win11ReportsPage() {
   }
 
   const renderReportCard = (report: any) => {
-    const isSelected = selectedReport === report.id
-    
     return (
       <Card 
         key={report.id}
-        className={`md-card-expressive group hover:md-elevation-1 transition-all duration-200 cursor-pointer ${
-          isSelected ? 'ring-2 ring-primary' : ''
-        }`}
-        onClick={() => setSelectedReport(report.id)}
+        className="md-card-expressive group hover:md-elevation-1 transition-all duration-200 cursor-pointer"
+        onClick={() => handleViewReport(report)}
       >
         <CardContent className="p-6">
           <div className="flex items-start justify-between mb-4">
@@ -184,9 +254,7 @@ export function Win11ReportsPage() {
                 <p className="md-body-small text-on-surface-variant">{report.type}</p>
               </div>
             </div>
-            <ChevronRight className={`w-5 h-5 text-on-surface-variant transition-transform ${
-              isSelected ? 'rotate-90' : ''
-            }`} />
+            <ChevronRight className="w-5 h-5 text-on-surface-variant transition-transform group-hover:translate-x-1" />
           </div>
           
           <p className="md-body-medium text-on-surface-variant mb-4">
@@ -263,12 +331,13 @@ export function Win11ReportsPage() {
                 New Report
               </Button>
               <Button 
-                onClick={() => window.location.reload()}
+                onClick={loadReportsData}
                 variant="outline"
+                disabled={loading}
                 className="h-10 px-4 rounded-2xl border-outline hover:bg-primary-container hover:text-on-primary-container"
               >
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Refresh
+                <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                {loading ? 'Loading...' : 'Refresh'}
               </Button>
               <Button variant="outline" className="h-10 px-4 rounded-2xl border-outline hover:bg-primary-container hover:text-on-primary-container">
                 <Download className="w-4 h-4 mr-2" />
@@ -321,7 +390,33 @@ export function Win11ReportsPage() {
 
       {/* Main Content */}
       <div className="px-6 py-6">
-        {filteredReports.length === 0 ? (
+        {loading ? (
+          /* Loading State */
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="w-20 h-20 bg-primary-container rounded-3xl flex items-center justify-center mb-6">
+              <Loader2 className="w-10 h-10 text-on-primary-container animate-spin" />
+            </div>
+            <h3 className="md-headline-small text-on-surface mb-3">Loading Reports</h3>
+            <p className="md-body-large text-on-surface-variant text-center mb-8 max-w-md">
+              Generating your financial reports with real data...
+            </p>
+          </div>
+        ) : error ? (
+          /* Error State */
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="w-20 h-20 bg-red-100 rounded-3xl flex items-center justify-center mb-6">
+              <BarChart3 className="w-10 h-10 text-red-600" />
+            </div>
+            <h3 className="md-headline-small text-on-surface mb-3">Error Loading Reports</h3>
+            <p className="md-body-large text-on-surface-variant text-center mb-8 max-w-md">
+              {error}
+            </p>
+            <Button onClick={loadReportsData} className="md-button">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Try Again
+            </Button>
+          </div>
+        ) : filteredReports.length === 0 ? (
           /* Empty State */
           <div className="flex flex-col items-center justify-center py-20">
             <div className="w-20 h-20 bg-primary-container rounded-3xl flex items-center justify-center mb-6">
@@ -346,65 +441,6 @@ export function Win11ReportsPage() {
           </div>
         )}
 
-        {/* Report Details Modal/Preview */}
-        {selectedReport && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-            <Card className="md-card-expressive max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="md-title-large text-on-surface">
-                      {allReports.find(r => r.id === selectedReport)?.name}
-                    </CardTitle>
-                    <CardDescription className="md-body-medium text-on-surface-variant">
-                      {allReports.find(r => r.id === selectedReport)?.description}
-                    </CardDescription>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setSelectedReport(null)}
-                    className="h-8 w-8 p-0"
-                  >
-                    ×
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 bg-surface-container rounded-lg">
-                      <h4 className="font-medium text-on-surface mb-2">Report Status</h4>
-                      <span className={`inline-block px-2 py-1 rounded-md text-xs font-medium ${getStatusColor(allReports.find(r => r.id === selectedReport)?.status || '')}`}>
-                        {allReports.find(r => r.id === selectedReport)?.status}
-                      </span>
-                    </div>
-                    <div className="p-4 bg-surface-container rounded-lg">
-                      <h4 className="font-medium text-on-surface mb-2">Last Generated</h4>
-                      <p className="text-sm text-on-surface-variant">
-                        {formatDate(allReports.find(r => r.id === selectedReport)?.lastGenerated || '')}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex space-x-2">
-                    <Button className="flex-1">
-                      <Eye className="w-4 h-4 mr-2" />
-                      View Report
-                    </Button>
-                    <Button variant="outline" className="flex-1">
-                      <Download className="w-4 h-4 mr-2" />
-                      Export
-                    </Button>
-                    <Button variant="outline" className="flex-1">
-                      <Settings className="w-4 h-4 mr-2" />
-                      Settings
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
       </div>
     </div>
   )
