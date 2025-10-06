@@ -31,7 +31,7 @@ const navigation = [
   { name: 'Reports', href: '/dashboard/reports', icon: PieChart },
   { name: 'Accounts', href: '/dashboard/accounts', icon: FileText },
   { name: 'Inventory', href: '/dashboard/inventory', icon: Package },
-  { name: 'Reminders', href: '/dashboard/reminders', icon: CheckSquare },
+  { name: 'Approvals', href: '/dashboard/approvals', icon: CheckSquare },
   { name: 'Period Closing', href: '/dashboard/period-closing', icon: Lock },
   { name: 'AI Demo', href: '/dashboard/ai-demo', icon: Bot },
   { name: 'Team Management', href: '/dashboard/team', icon: Users },

@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { 
   Search, RefreshCw, Plus, Edit, Trash2, Save, X, Package,
-  AlertTriangle, DollarSign, Boxes, Check
+  DollarSign, Boxes, Check, Receipt, ShoppingCart, AlertTriangle
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { DataService } from '@/lib/data-service'
@@ -15,6 +15,16 @@ import { InventoryCategory, InventoryItem, InventoryTransaction, Account } from 
 import { useOrganization } from '@/hooks/use-organization'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AccountSelect } from '@/components/ui/account-select'
+import { VoucherList } from '@/components/vouchers/voucher-list'
+import { VoucherStatsCards } from '@/components/vouchers/voucher-stats-cards'
+import { VoucherFilters } from '@/components/vouchers/voucher-filters'
+import { CreateVoucherDialog } from '@/components/vouchers/create-voucher-dialog'
+import { 
+  useVouchers, 
+  useVoucherStats, 
+  useCanCreateVouchers
+} from '@/hooks/use-vouchers'
+import { VoucherFilters as VoucherFiltersType } from '@/types'
 
 interface EditingItem {
   id: number | null
@@ -37,7 +47,7 @@ interface EditingCategory {
 export function Win11InventoryPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [activeView, setActiveView] = useState<'items' | 'categories' | 'transactions'>('items')
+  const [activeView, setActiveView] = useState<'items' | 'categories' | 'transactions' | 'vouchers' | 'purchase-vouchers' | 'issuance-vouchers'>('items')
   const [categories, setCategories] = useState<InventoryCategory[]>([])
   const [items, setItems] = useState<InventoryItem[]>([])
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([])
@@ -55,7 +65,18 @@ export function Win11InventoryPage() {
     reference: '', 
     transaction_date: new Date().toISOString().split('T')[0]
   })
+  
+  // Voucher system state
+  const [voucherFilters, setVoucherFilters] = useState<VoucherFiltersType>({})
+  const [showCreateVoucherDialog, setShowCreateVoucherDialog] = useState(false)
+  const [createVoucherType, setCreateVoucherType] = useState<'purchase' | 'issuance'>('purchase')
+  
   const { currentOrganization } = useOrganization()
+  
+  // Voucher hooks
+  const canCreate = useCanCreateVouchers()
+  const { data: vouchers = [], isLoading: vouchersLoading, refetch: refetchVouchers } = useVouchers(voucherFilters)
+  const { data: voucherStats, isLoading: voucherStatsLoading } = useVoucherStats()
 
   useEffect(() => {
     if (currentOrganization) loadData()
@@ -224,6 +245,35 @@ export function Win11InventoryPage() {
     }
   }
 
+  // Voucher functions
+  const handleCreateVoucher = (type: 'purchase' | 'issuance') => {
+    setCreateVoucherType(type)
+    setShowCreateVoucherDialog(true)
+  }
+
+  const handleVoucherFiltersChange = (newFilters: VoucherFiltersType) => {
+    setVoucherFilters(newFilters)
+  }
+
+  const handleVoucherSuccess = () => {
+    setShowCreateVoucherDialog(false)
+    refetchVouchers()
+  }
+
+  // Filter vouchers by tab
+  const getFilteredVouchers = () => {
+    switch (activeView) {
+      case 'purchase-vouchers':
+        return vouchers.filter(v => v.voucher_type === 'purchase')
+      case 'issuance-vouchers':
+        return vouchers.filter(v => v.voucher_type === 'issuance')
+      default:
+        return vouchers
+    }
+  }
+
+  const filteredVouchers = getFilteredVouchers()
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -291,25 +341,61 @@ export function Win11InventoryPage() {
         </Card>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <button
           className={`px-4 py-2 font-medium transition-colors ${
             activeView === 'items' ? 'border-b-2 border-primary text-primary' : 'text-on-surface-variant hover:text-on-surface'
           }`}
           onClick={() => setActiveView('items')}
-        >Items</button>
+        >
+          <Package className="h-4 w-4 mr-1 inline" />
+          Items
+        </button>
         <button
           className={`px-4 py-2 font-medium transition-colors ${
             activeView === 'categories' ? 'border-b-2 border-primary text-primary' : 'text-on-surface-variant hover:text-on-surface'
           }`}
           onClick={() => setActiveView('categories')}
-        >Categories</button>
+        >
+          <Boxes className="h-4 w-4 mr-1 inline" />
+          Categories
+        </button>
         <button
           className={`px-4 py-2 font-medium transition-colors ${
             activeView === 'transactions' ? 'border-b-2 border-primary text-primary' : 'text-on-surface-variant hover:text-on-surface'
           }`}
           onClick={() => setActiveView('transactions')}
-        >Transactions</button>
+        >
+          <Check className="h-4 w-4 mr-1 inline" />
+          Transactions
+        </button>
+        <button
+          className={`px-4 py-2 font-medium transition-colors ${
+            activeView === 'vouchers' ? 'border-b-2 border-primary text-primary' : 'text-on-surface-variant hover:text-on-surface'
+          }`}
+          onClick={() => setActiveView('vouchers')}
+        >
+          <Receipt className="h-4 w-4 mr-1 inline" />
+          Vouchers
+        </button>
+        <button
+          className={`px-4 py-2 font-medium transition-colors ${
+            activeView === 'purchase-vouchers' ? 'border-b-2 border-primary text-primary' : 'text-on-surface-variant hover:text-on-surface'
+          }`}
+          onClick={() => setActiveView('purchase-vouchers')}
+        >
+          <ShoppingCart className="h-4 w-4 mr-1 inline" />
+          Purchase
+        </button>
+        <button
+          className={`px-4 py-2 font-medium transition-colors ${
+            activeView === 'issuance-vouchers' ? 'border-b-2 border-primary text-primary' : 'text-on-surface-variant hover:text-on-surface'
+          }`}
+          onClick={() => setActiveView('issuance-vouchers')}
+        >
+          <Package className="h-4 w-4 mr-1 inline" />
+          Issuance
+        </button>
       </div>
 
       {activeView === 'items' && (
@@ -725,6 +811,101 @@ export function Win11InventoryPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Vouchers Tab */}
+      {activeView === 'vouchers' && (
+        <div className="space-y-6">
+          {/* Voucher Stats */}
+          {!voucherStatsLoading && voucherStats && (
+            <VoucherStatsCards stats={voucherStats} />
+          )}
+
+          {/* Approval Dashboard for approvers */}
+
+
+          {/* Create Voucher Buttons */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">All Vouchers</h2>
+            <div className="flex gap-2">
+              <Button onClick={() => handleCreateVoucher('purchase')} className="bg-blue-600 hover:bg-blue-700">
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                New Purchase
+              </Button>
+              <Button onClick={() => handleCreateVoucher('issuance')} className="bg-green-600 hover:bg-green-700">
+                <Package className="h-4 w-4 mr-2" />
+                New Issuance
+              </Button>
+            </div>
+          </div>
+
+          {/* Voucher Filters */}
+          <VoucherFilters 
+            filters={voucherFilters} 
+            onFiltersChange={handleVoucherFiltersChange}
+          />
+
+          {/* Voucher List */}
+          <VoucherList 
+            vouchers={filteredVouchers} 
+            isLoading={vouchersLoading}
+            showActions={true}
+            organizationId={currentOrganization?.id || ''}
+          />
+        </div>
+      )}
+
+      {/* Purchase Vouchers Tab */}
+      {activeView === 'purchase-vouchers' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Purchase Vouchers</h2>
+            {canCreate && (
+              <Button onClick={() => handleCreateVoucher('purchase')} className="bg-blue-600 hover:bg-blue-700">
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                New Purchase Voucher
+              </Button>
+            )}
+          </div>
+          <VoucherList 
+            vouchers={filteredVouchers} 
+            isLoading={vouchersLoading}
+            showActions={true}
+            organizationId={currentOrganization?.id || ''}
+          />
+        </div>
+      )}
+
+      {/* Issuance Vouchers Tab */}
+      {activeView === 'issuance-vouchers' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Issuance Vouchers</h2>
+            {canCreate && (
+              <Button onClick={() => handleCreateVoucher('issuance')} className="bg-green-600 hover:bg-green-700">
+                <Package className="h-4 w-4 mr-2" />
+                New Issuance Voucher
+              </Button>
+            )}
+          </div>
+          <VoucherList 
+            vouchers={filteredVouchers} 
+            isLoading={vouchersLoading}
+            showActions={true}
+            organizationId={currentOrganization?.id || ''}
+          />
+        </div>
+      )}
+
+      {/* Create Voucher Dialog */}
+      {showCreateVoucherDialog && (
+        <CreateVoucherDialog
+          voucherType={createVoucherType}
+          open={showCreateVoucherDialog}
+          onOpenChange={setShowCreateVoucherDialog}
+          onSuccess={handleVoucherSuccess}
+          items={items}
+        />
       )}
     </div>
   )

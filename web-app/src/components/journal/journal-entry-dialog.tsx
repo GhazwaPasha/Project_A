@@ -12,12 +12,13 @@ import { DataService } from '@/lib/data-service'
 import { Account, JournalEntry, JournalEntryLine } from '@/types'
 import { parseTransaction } from '@/lib/ai-transaction-parser'
 import { ProgressBar } from '@/components/ui/progress-bar'
+import { useCurrentOrganization } from '@/stores/auth-store'
 
 interface JournalEntryDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onEntryCreated?: (entry: JournalEntry) => void
-  organizationId: string
+  organizationId?: string // Made optional since we'll use the hook
 }
 
 interface JournalEntryFormData {
@@ -34,6 +35,7 @@ export function JournalEntryDialog({
   onEntryCreated,
   organizationId 
 }: JournalEntryDialogProps) {
+  const currentOrganization = useCurrentOrganization()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,15 +52,20 @@ export function JournalEntryDialog({
 
   // Load accounts when dialog opens
   useEffect(() => {
-    if (open && organizationId) {
+    if (open && currentOrganization) {
       loadAccounts()
     }
-  }, [open, organizationId])
+  }, [open, currentOrganization])
 
   const loadAccounts = async () => {
+    if (!currentOrganization) {
+      setError('No organization selected')
+      return
+    }
+
     try {
       setLoading(true)
-      const accountsData = await DataService.getAccounts(organizationId, true)
+      const accountsData = await DataService.getAccounts(currentOrganization.id, true)
       
       // Debug: Log all accounts with their is_postable status
       console.log('All accounts fetched:', accountsData.length)
@@ -205,6 +212,11 @@ export function JournalEntryDialog({
       return
     }
 
+    if (!currentOrganization) {
+      setError('No organization selected')
+      return
+    }
+
     try {
       setLoading(true)
       setError(null)
@@ -221,7 +233,7 @@ export function JournalEntryDialog({
 
       // Create journal entry
       const journalEntry: Omit<JournalEntry, 'id' | 'created_at' | 'updated_at'> = {
-        organization_id: organizationId,
+        organization_id: currentOrganization.id,
         entry_number: entryNumber,
         entry_date: formData.entryDate.toISOString().split('T')[0],
         description: formData.description.trim(),

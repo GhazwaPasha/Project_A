@@ -4,6 +4,9 @@ export const createClient = () => {
   return createClientComponentClient<Database>()
 }
 
+// Default export for backward compatibility - create client at runtime
+export const supabase = createClient()
+
 export type Database = {
   public: {
     Tables: {

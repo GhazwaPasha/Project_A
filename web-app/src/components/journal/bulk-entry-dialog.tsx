@@ -12,12 +12,13 @@ import { DataService } from '@/lib/data-service'
 import { Account, JournalEntry, JournalEntryLine } from '@/types'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { handleFileImport, ImportedEntry, downloadCSVTemplate } from '@/lib/file-import-utils'
+import { useCurrentOrganization } from '@/stores/auth-store'
 
 interface BulkEntryDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onEntriesCreated?: (entries: JournalEntry[]) => void
-  organizationId: string
+  organizationId?: string // Made optional since we'll use the hook
 }
 
 interface BulkEntryFormData {
@@ -40,6 +41,7 @@ export function BulkEntryDialog({
   onEntriesCreated,
   organizationId 
 }: BulkEntryDialogProps) {
+  const currentOrganization = useCurrentOrganization()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -48,19 +50,24 @@ export function BulkEntryDialog({
 
   // Load accounts when dialog opens
   useEffect(() => {
-    if (open && organizationId) {
+    if (open && currentOrganization) {
       loadAccounts()
       // Start with one empty card
       if (cards.length === 0) {
         addNewCard()
       }
     }
-  }, [open, organizationId])
+  }, [open, currentOrganization])
 
   const loadAccounts = async () => {
+    if (!currentOrganization) {
+      setError('No organization selected')
+      return
+    }
+
     try {
       setLoading(true)
-      const accountsData = await DataService.getAccounts(organizationId, true)
+      const accountsData = await DataService.getAccounts(currentOrganization.id, true)
       setAccounts(accountsData)
     } catch (err) {
       console.error('Error loading accounts:', err)
@@ -122,6 +129,11 @@ export function BulkEntryDialog({
       return
     }
 
+    if (!currentOrganization) {
+      setError('No organization selected')
+      return
+    }
+
     try {
       setLoading(true)
       setError(null)
@@ -141,7 +153,7 @@ export function BulkEntryDialog({
 
         // Create journal entry
         const journalEntry: Omit<JournalEntry, 'id' | 'created_at' | 'updated_at'> = {
-          organization_id: organizationId,
+          organization_id: currentOrganization.id,
           entry_number: entryNumber,
           entry_date: card.data.entryDate.toISOString().split('T')[0],
           description: card.data.description.trim(),
