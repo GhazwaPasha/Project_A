@@ -72,14 +72,14 @@ export function LoginPage() {
             <div className="space-y-3">
               <label htmlFor="email" className="text-sm font-medium block" style={{ color: 'var(--md-sys-color-on-surface)' }}>Email</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
+                <Mail className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
                 <Input
                   id="email"
                   type="email"
                   placeholder="you@company.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 h-12 rounded-xl"
+                  className="md-text-field-input--icon-left h-12 rounded-xl"
                   required
                   autoComplete="email"
                 />
@@ -89,14 +89,14 @@ export function LoginPage() {
             <div className="space-y-3">
               <label htmlFor="password" className="text-sm font-medium block" style={{ color: 'var(--md-sys-color-on-surface)' }}>Password</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
+                <Lock className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
                 <Input
                   id="password"
                   type="password"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 h-12 rounded-xl"
+                  className="md-text-field-input--icon-left h-12 rounded-xl"
                   required
                   autoComplete="current-password"
                 />

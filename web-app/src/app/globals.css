@@ -1472,6 +1472,16 @@
     font-size: 16px !important;
     line-height: 24px !important;
   }
+
+  /* These must use !important: the rule above sets padding on all input[type=...] with !important, which
+     otherwise overrides .md-text-field-input / .md-input and makes text draw under leading icons. */
+  input.md-text-field-input--icon-left {
+    padding-left: 2.5rem !important;
+  }
+
+  input.md-input--icon-left {
+    padding-left: 3rem !important;
+  }
   
   input[type="text"]:focus,
   input[type="search"]:focus,

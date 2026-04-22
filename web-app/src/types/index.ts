@@ -419,6 +419,10 @@ export interface SupplierAccountMappings {
   payable_account?: Account
   cash_account?: Account
   expense_account?: Account
+  inventory_account?: Account
+  freight_account?: Account
+  tax_account?: Account
+  discount_account?: Account
 }
 
 export interface SupplierContact {

@@ -51,14 +51,13 @@ export async function POST(req: Request) {
     await sql.begin(async (tx) => {
       await tx`
         INSERT INTO public.user_profiles (
-          id, email, full_name, is_super_admin, preferences, password_hash
+          id, email, full_name, is_super_admin, preferences
         ) VALUES (
           ${userId},
           ${normalizedEmail},
           ${fullName},
           false,
-          ${JSON.stringify({})}::jsonb,
-          NULL
+          ${JSON.stringify({})}::jsonb
         )
       `
       await tx`

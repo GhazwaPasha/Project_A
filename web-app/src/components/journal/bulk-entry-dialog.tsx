@@ -5,28 +5,35 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { AccountSearch } from '@/components/ui/account-search'
-import { Calendar } from '@/components/ui/calendar'
-import { X, AlertCircle, Plus, Trash2, Save, Upload, Download } from 'lucide-react'
+import { AlertCircle, Plus, Trash2, Upload, Download } from 'lucide-react'
 import { DataService } from '@/lib/data-service'
 import { Account, JournalEntry, JournalEntryLine } from '@/types'
-import { formatCurrency, formatDate } from '@/lib/utils'
-import { handleFileImport, ImportedEntry, downloadCSVTemplate } from '@/lib/file-import-utils'
+import { formatCurrency } from '@/lib/utils'
+import { handleFileImport, downloadCSVTemplate } from '@/lib/file-import-utils'
 import { useCurrentOrganization } from '@/stores/auth-store'
+import {
+  parseMoneyInput,
+  validateJournalLinesForSave,
+  roundMoney,
+  validateDraftLines,
+} from '@/lib/journal-validation'
+import {
+  JournalLinesEditor,
+  createInitialJournalLines,
+  type DraftLine,
+} from '@/components/journal/journal-lines-editor'
 
 interface BulkEntryDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onEntriesCreated?: (entries: JournalEntry[]) => void
-  organizationId?: string // Made optional since we'll use the hook
+  organizationId?: string
 }
 
 interface BulkEntryFormData {
   entryDate: Date
   description: string
-  debitAccountId: string
-  creditAccountId: string
-  amount: string
+  lines: DraftLine[]
 }
 
 interface BulkEntryCard {
@@ -35,11 +42,22 @@ interface BulkEntryCard {
   isValid: boolean
 }
 
-export function BulkEntryDialog({ 
-  open, 
-  onOpenChange, 
+function cardDataFromTwoAccounts(
+  debitId: string,
+  creditId: string,
+  amount: string
+): DraftLine[] {
+  return [
+    { key: crypto.randomUUID(), accountId: debitId, debit: amount, credit: '' },
+    { key: crypto.randomUUID(), accountId: creditId, debit: '', credit: amount },
+  ]
+}
+
+export function BulkEntryDialog({
+  open,
+  onOpenChange,
   onEntriesCreated,
-  organizationId 
+  organizationId: _organizationId,
 }: BulkEntryDialogProps) {
   const currentOrganization = useCurrentOrganization()
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -48,11 +66,9 @@ export function BulkEntryDialog({
   const [cards, setCards] = useState<BulkEntryCard[]>([])
   const [importing, setImporting] = useState(false)
 
-  // Load accounts when dialog opens
   useEffect(() => {
     if (open && currentOrganization) {
-      loadAccounts()
-      // Start with one empty card
+      void loadAccounts()
       if (cards.length === 0) {
         addNewCard()
       }
@@ -64,11 +80,10 @@ export function BulkEntryDialog({
       setError('No organization selected')
       return
     }
-
     try {
       setLoading(true)
       const accountsData = await DataService.getAccounts(currentOrganization.id, true)
-      setAccounts(accountsData)
+      setAccounts(accountsData.filter((a) => a.is_postable === true))
     } catch (err) {
       console.error('Error loading accounts:', err)
       setError('Failed to load accounts')
@@ -78,117 +93,117 @@ export function BulkEntryDialog({
   }
 
   const createEmptyCard = (): BulkEntryCard => ({
-    id: Date.now().toString(),
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     data: {
       entryDate: new Date(),
       description: '',
-      debitAccountId: '',
-      creditAccountId: '',
-      amount: ''
+      lines: createInitialJournalLines(),
     },
-    isValid: false
+    isValid: false,
   })
 
   const addNewCard = () => {
-    const newCard = createEmptyCard()
-    setCards(prev => [...prev, newCard])
+    setCards((prev) => [...prev, createEmptyCard()])
   }
 
   const removeCard = (cardId: string) => {
-    setCards(prev => prev.filter(card => card.id !== cardId))
+    setCards((prev) => prev.filter((card) => card.id !== cardId))
   }
 
   const updateCard = (cardId: string, field: keyof BulkEntryFormData, value: string | Date) => {
-    setCards(prev => prev.map(card => {
-      if (card.id === cardId) {
-        const updatedData = { ...card.data, [field]: value }
-        const isValid = validateCardData(updatedData)
-        return { ...card, data: updatedData, isValid }
-      }
-      return card
-    }))
-  }
-
-  const validateCardData = (data: BulkEntryFormData): boolean => {
-    return !!(
-      data.description.trim() &&
-      data.debitAccountId &&
-      data.creditAccountId &&
-      data.amount &&
-      parseFloat(data.amount) > 0 &&
-      data.debitAccountId !== data.creditAccountId
+    setCards((prev) =>
+      prev.map((card) => {
+        if (card.id !== cardId) return card
+        const data = { ...card.data, [field]: value }
+        return { ...card, data, isValid: validateCardData(data) }
+      })
     )
   }
 
+  const updateCardLines = (cardId: string, lines: DraftLine[]) => {
+    setCards((prev) =>
+      prev.map((card) => {
+        if (card.id !== cardId) return card
+        const data = { ...card.data, lines }
+        return { ...card, data, isValid: validateCardData(data) }
+      })
+    )
+  }
+
+  const validateCardData = (data: BulkEntryFormData): boolean => {
+    if (!data.description.trim()) return false
+    const { ok } = validateDraftLines(data.lines)
+    return ok
+  }
+
+  const getTotalDebits = () => {
+    let sum = 0
+    for (const c of cards) {
+      if (!c.isValid) continue
+      for (const row of c.data.lines) {
+        sum += parseMoneyInput(row.debit)
+      }
+    }
+    return roundMoney(sum)
+  }
 
   const saveAllEntries = async () => {
-    const validCards = cards.filter(card => card.isValid)
-    
+    const validCards = cards.filter((card) => card.isValid)
     if (validCards.length === 0) {
       setError('No valid entries to save.')
       return
     }
-
     if (!currentOrganization) {
       setError('No organization selected')
       return
     }
-
     try {
       setLoading(true)
       setError(null)
-
       const createdEntries: JournalEntry[] = []
-
       for (const card of validCards) {
-        const debitAccount = accounts.find(acc => acc.id.toString() === card.data.debitAccountId)
-        const creditAccount = accounts.find(acc => acc.id.toString() === card.data.creditAccountId)
-
-        if (!debitAccount || !creditAccount) {
-          throw new Error(`Could not find accounts for entry: ${card.data.description}`)
+        const desc = card.data.description.trim()
+        const built: Omit<JournalEntryLine, 'id' | 'journal_entry_id'>[] = []
+        for (const row of card.data.lines) {
+          const dr = parseMoneyInput(row.debit)
+          const cr = parseMoneyInput(row.credit)
+          if (dr === 0 && cr === 0) continue
+          if (!row.accountId.trim()) {
+            setError('Each line with an amount must have an account in every valid entry.')
+            return
+          }
+          const account_id = parseInt(row.accountId, 10)
+          if (!Number.isFinite(account_id)) {
+            setError('Invalid account on a line in one of the cards.')
+            return
+          }
+          built.push({
+            account_id,
+            description: desc,
+            debit_amount: dr,
+            credit_amount: cr,
+            line_order: 0,
+          })
         }
-
-        const amount = parseFloat(card.data.amount)
-        const entryNumber = `JE-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-
-        // Create journal entry
+        const { totalDebits, normalized } = validateJournalLinesForSave(built)
+        const entryNumber = `JE-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
         const journalEntry: Omit<JournalEntry, 'id' | 'created_at' | 'updated_at'> = {
           organization_id: currentOrganization.id,
           entry_number: entryNumber,
           entry_date: card.data.entryDate.toISOString().split('T')[0],
-          description: card.data.description.trim(),
+          description: desc,
           reference: null,
-          total_amount: amount,
+          total_amount: totalDebits,
           is_posted: true,
           created_by: null,
           posted_by: null,
-          posted_at: new Date().toISOString()
+          posted_at: new Date().toISOString(),
         }
-
-        // Create journal entry lines
-        const lines: Omit<JournalEntryLine, 'id' | 'journal_entry_id'>[] = [
-          {
-            account_id: debitAccount.id,
-            description: card.data.description.trim(),
-            debit_amount: amount,
-            credit_amount: 0,
-            line_order: 1
-          },
-          {
-            account_id: creditAccount.id,
-            description: card.data.description.trim(),
-            debit_amount: 0,
-            credit_amount: amount,
-            line_order: 2
-          }
-        ]
-
-        const createdEntry = await DataService.createJournalEntry(journalEntry, lines)
-        if (createdEntry) {
-          createdEntries.push(createdEntry)
+        const created = await DataService.createJournalEntry(journalEntry, normalized)
+        if (created) {
+          createdEntries.push(created)
         }
       }
-
       if (createdEntries.length > 0) {
         onEntriesCreated?.(createdEntries)
         setCards([])
@@ -203,84 +218,77 @@ export function BulkEntryDialog({
   }
 
   const clearAllCards = () => {
-    setCards([])
-    addNewCard()
+    setCards([createEmptyCard()])
   }
 
   const onBulkFileInputChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
-
     try {
       setImporting(true)
       setError(null)
-
       const result = await handleFileImport(file)
-      
       if (!result.success) {
         setError(result.errors.join('; '))
         return
       }
-
       if (result.entries.length === 0) {
         setError('No valid entries found in the file')
         return
       }
-
-      // Convert imported entries to cards
       const newCards: BulkEntryCard[] = result.entries.map((entry, index) => {
-        // Find matching accounts
-        const debitAccount = accounts.find(acc => 
-          acc.name.toLowerCase().includes(entry.debitAccount.toLowerCase()) ||
-          acc.code.toLowerCase().includes(entry.debitAccount.toLowerCase())
+        const debitAccount = accounts.find(
+          (acc) =>
+            acc.name.toLowerCase().includes(entry.debitAccount.toLowerCase()) ||
+            acc.code.toLowerCase().includes(entry.debitAccount.toLowerCase())
         )
-        
-        const creditAccount = accounts.find(acc => 
-          acc.name.toLowerCase().includes(entry.creditAccount.toLowerCase()) ||
-          acc.code.toLowerCase().includes(entry.creditAccount.toLowerCase())
+        const creditAccount = accounts.find(
+          (acc) =>
+            acc.name.toLowerCase().includes(entry.creditAccount.toLowerCase()) ||
+            acc.code.toLowerCase().includes(entry.creditAccount.toLowerCase())
         )
-
-        // Parse date
         let entryDate = new Date()
         try {
-          // Try different date formats
           if (entry.date.includes('/')) {
             const [month, day, year] = entry.date.split('/')
-            entryDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+            entryDate = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10))
           } else if (entry.date.includes('-')) {
             entryDate = new Date(entry.date)
           }
-        } catch (e) {
-          // Use current date as fallback
+        } catch {
           entryDate = new Date()
         }
-
+        const lines =
+          debitAccount && creditAccount
+            ? cardDataFromTwoAccounts(
+                String(debitAccount.id),
+                String(creditAccount.id),
+                String(entry.amount)
+              )
+            : createInitialJournalLines()
+        const data: BulkEntryFormData = {
+          entryDate,
+          description: entry.description,
+          lines,
+        }
         return {
           id: `imported-${Date.now()}-${index}`,
-          data: {
-            entryDate,
-            description: entry.description,
-            debitAccountId: debitAccount?.id.toString() || '',
-            creditAccountId: creditAccount?.id.toString() || '',
-            amount: entry.amount
-          },
-          isValid: !!(debitAccount && creditAccount && entry.description && entry.amount)
+          data,
+          isValid: validateCardData(data),
         }
       })
-
-      setCards(prev => [...prev, ...newCards])
-
-      // Show import summary
+      setCards((prev) => [...prev, ...newCards])
       if (result.errors.length > 0) {
-        setError(`Imported ${result.validRows} of ${result.totalRows} entries. Some rows had errors: ${result.errors.slice(0, 3).join('; ')}${result.errors.length > 3 ? '...' : ''}`)
+        setError(
+          `Imported ${result.validRows} of ${result.totalRows} entries. Warnings: ${result.errors
+            .slice(0, 3)
+            .join('; ')}${result.errors.length > 3 ? '...' : ''}`
+        )
       }
-
     } catch (err) {
-      console.error('Error importing file:', err)
       setError(err instanceof Error ? err.message : 'Failed to import file')
     } finally {
       setImporting(false)
-      // Reset file input
       event.target.value = ''
     }
   }
@@ -289,28 +297,25 @@ export function BulkEntryDialog({
     downloadCSVTemplate()
   }
 
-  const getTotalAmount = () => {
-    return cards
-      .filter(card => card.isValid)
-      .reduce((total, card) => total + parseFloat(card.data.amount || '0'), 0)
-  }
-
-  const validCardsCount = cards.filter(card => card.isValid).length
+  const validCardsCount = cards.filter((card) => card.isValid).length
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] max-h-[95vh] w-full flex flex-col" style={{
-        backgroundColor: 'var(--md-sys-color-surface-container-low)',
-        color: 'var(--md-sys-color-on-surface)',
-        borderRadius: '12px',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24)',
-        border: '1px solid var(--md-sys-color-outline-variant)'
-      }}>
+      <DialogContent
+        className="max-w-[95vw] max-h-[95vh] w-full flex flex-col"
+        style={{
+          backgroundColor: 'var(--md-sys-color-surface-container-low)',
+          color: 'var(--md-sys-color-on-surface)',
+          borderRadius: '12px',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24)',
+          border: '1px solid var(--md-sys-color-outline-variant)',
+        }}
+      >
         <DialogHeader className="flex-shrink-0">
-          <DialogTitle>Bulk Entry</DialogTitle>
-          <div className="flex items-center justify-between mt-2">
+          <DialogTitle>Bulk entry</DialogTitle>
+          <div className="flex items-center justify-between mt-2 flex-wrap gap-2">
             <span className="text-sm text-on-surface-variant">
-              {validCardsCount} valid entries, {formatCurrency(getTotalAmount())} total
+              {validCardsCount} valid, {formatCurrency(getTotalDebits())} total debits
             </span>
             <div className="flex gap-2">
               <Button
@@ -320,7 +325,7 @@ export function BulkEntryDialog({
                 size="sm"
               >
                 <Plus className="w-4 h-4 mr-1" />
-                Add Entry
+                Add entry
               </Button>
               <Button
                 type="button"
@@ -357,14 +362,13 @@ export function BulkEntryDialog({
                 variant="destructive"
               >
                 <Trash2 className="w-4 h-4 mr-1" />
-                Clear All
+                Clear all
               </Button>
             </div>
           </div>
         </DialogHeader>
-        
-        <div className="flex-1 overflow-y-auto space-y-4 scrollbar-hide">
-          {/* Error Message */}
+
+        <div className="flex-1 overflow-y-auto space-y-4 scrollbar-hide min-h-0">
           {error && (
             <div className="flex items-center space-x-3 p-4 bg-error-container rounded-lg border border-error">
               <AlertCircle className="h-5 w-5 text-on-error-container flex-shrink-0" />
@@ -372,12 +376,13 @@ export function BulkEntryDialog({
             </div>
           )}
 
-
-          {/* Entry Cards */}
           <div className="space-y-3">
             {cards.map((card, index) => (
-              <div key={card.id} className="md-card p-4 border border-outline-variant rounded-lg">
-                <div className="flex items-center justify-between mb-4">
+              <div
+                key={card.id}
+                className="md-card p-4 border border-outline-variant rounded-lg"
+              >
+                <div className="flex items-center justify-between mb-3">
                   <h4 className="md-title-small text-on-surface">Entry #{index + 1}</h4>
                   <Button
                     type="button"
@@ -389,9 +394,7 @@ export function BulkEntryDialog({
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
-
-                <div className="grid grid-cols-5 gap-3">
-                  {/* Date Field */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                   <div className="md-text-field">
                     <Label className="md-text-field-label">Date</Label>
                     <Input
@@ -401,72 +404,35 @@ export function BulkEntryDialog({
                       className="w-full"
                     />
                   </div>
-
-                  {/* Description Field */}
-                  <div className="md-text-field">
+                  <div className="md-text-field md:col-span-1">
                     <Label className="md-text-field-label">Description</Label>
                     <Input
-                      placeholder="Enter description"
+                      placeholder="Description"
                       value={card.data.description}
                       onChange={(e) => updateCard(card.id, 'description', e.target.value)}
                       className="w-full"
                     />
                   </div>
-
-                  {/* Debit Account */}
-                  <div className="md-text-field">
-                    <Label className="md-text-field-label">Debit Account</Label>
-                    <AccountSearch
-                      accounts={accounts}
-                      value={card.data.debitAccountId}
-                      onChange={(accountId) => updateCard(card.id, 'debitAccountId', accountId)}
-                      placeholder="Search debit account..."
-                      className="w-full"
-                    />
-                  </div>
-
-                  {/* Credit Account */}
-                  <div className="md-text-field">
-                    <Label className="md-text-field-label">Credit Account</Label>
-                    <AccountSearch
-                      accounts={accounts}
-                      value={card.data.creditAccountId}
-                      onChange={(accountId) => updateCard(card.id, 'creditAccountId', accountId)}
-                      placeholder="Search credit account..."
-                      className="w-full"
-                    />
-                  </div>
-
-                  {/* Amount Field */}
-                  <div className="md-text-field">
-                    <Label className="md-text-field-label">Amount</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="0.00"
-                      value={card.data.amount}
-                      onChange={(e) => updateCard(card.id, 'amount', e.target.value)}
-                      className="w-full"
-                    />
-                  </div>
                 </div>
-
-                {/* Validation Status */}
-                <div className="mt-3 flex items-center justify-between">
-                  <div className={`flex items-center gap-2 text-sm ${
-                    card.isValid ? 'text-success' : 'text-error'
-                  }`}>
-                    <div className={`w-2 h-2 rounded-full ${
-                      card.isValid ? 'bg-success' : 'bg-error'
-                    }`} />
-                    <span>{card.isValid ? 'Valid' : 'Incomplete'}</span>
+                <JournalLinesEditor
+                  accounts={accounts}
+                  lines={card.data.lines}
+                  onLinesChange={(lines) => updateCardLines(card.id, lines)}
+                  disabled={loading}
+                />
+                <div className="mt-2 flex items-center justify-between text-sm">
+                  <div
+                    className={`flex items-center gap-2 ${
+                      card.isValid ? 'text-on-surface-variant' : 'text-on-error'
+                    }`}
+                  >
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        card.isValid ? 'bg-green-500' : 'bg-destructive'
+                      }`}
+                    />
+                    {card.isValid ? 'Valid (balanced lines)' : 'Add description and balanced lines'}
                   </div>
-                  {card.isValid && (
-                    <span className="text-sm text-on-surface-variant">
-                      {formatCurrency(parseFloat(card.data.amount || '0'))}
-                    </span>
-                  )}
                 </div>
               </div>
             ))}
@@ -474,19 +440,19 @@ export function BulkEntryDialog({
         </div>
 
         <DialogFooter className="flex-shrink-0 pt-4 border-t border-outline-variant">
-          <Button 
-            className="md-button-outlined" 
-            onClick={() => onOpenChange(false)} 
+          <Button
+            className="md-button-outlined"
+            onClick={() => onOpenChange(false)}
             disabled={loading}
           >
             Cancel
           </Button>
-          <Button 
-            className="md-button" 
-            onClick={saveAllEntries} 
+          <Button
+            className="md-button"
+            onClick={() => void saveAllEntries()}
             disabled={loading || validCardsCount === 0}
           >
-            {loading ? 'Saving Entries...' : `Save ${validCardsCount} Entries`}
+            {loading ? 'Saving...' : `Save ${validCardsCount} ${validCardsCount === 1 ? 'entry' : 'entries'}`}
           </Button>
         </DialogFooter>
       </DialogContent>

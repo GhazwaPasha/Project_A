@@ -59,13 +59,21 @@ export function Win11JournalPage() {
     return account ? `${account.code} - ${account.name}` : `Account ${accountId}`
   }
 
-  const getDebitAndCreditAccounts = (entry: JournalEntry & { lines: JournalEntryLine[] }) => {
-    const debitLine = entry.lines.find(line => line.debit_amount > 0)
-    const creditLine = entry.lines.find(line => line.credit_amount > 0)
-    
+  const getDebitAndCreditSummary = (entry: JournalEntry & { lines: JournalEntryLine[] }) => {
+    const lineCount = entry.lines?.length ?? 0
+    const drLines = (entry.lines ?? []).filter((l) => l.debit_amount > 0)
+    const crLines = (entry.lines ?? []).filter((l) => l.credit_amount > 0)
+    if (lineCount > 2 || drLines.length + crLines.length > 2) {
+      return {
+        debit: `${drLines.length} debit line(s)`,
+        credit: `${crLines.length} credit line(s)`,
+        detail: `${lineCount} lines — balanced double-entry`,
+      }
+    }
     return {
-      debit: debitLine ? getAccountName(debitLine.account_id) : 'Unknown',
-      credit: creditLine ? getAccountName(creditLine.account_id) : 'Unknown'
+      debit: drLines[0] ? getAccountName(drLines[0].account_id) : '—',
+      credit: crLines[0] ? getAccountName(crLines[0].account_id) : '—',
+      detail: null,
     }
   }
 
@@ -173,7 +181,7 @@ export function Win11JournalPage() {
            /* Transaction List - Compact Two-Line Cards */
            <div className="space-y-2">
              {filteredTransactions.map((entry) => {
-               const { debit, credit } = getDebitAndCreditAccounts(entry)
+               const { debit, credit, detail } = getDebitAndCreditSummary(entry)
                return (
                  <Card key={entry.id} className="md-card-expressive group hover:md-elevation-1 transition-all duration-200">
                    <CardContent className="p-4">
@@ -183,15 +191,20 @@ export function Win11JournalPage() {
                          <h3 className="md-title-medium text-on-surface truncate">{entry.description}</h3>
                        </div>
                        {/* Debit and Credit Accounts - Moved to top right */}
-                       <div className="flex items-center space-x-6 text-sm">
-                         <div className="flex items-center space-x-2">
+                         <div className="flex flex-col items-end gap-1 text-sm min-w-0 max-w-md">
+                         <div className="flex items-center space-x-4 flex-wrap justify-end">
+                         <div className="flex items-center space-x-2 min-w-0">
                            <span className="px-2 py-1 rounded-md text-xs font-medium bg-primary text-on-primary">Debit</span>
-                           <span className="text-on-surface font-medium truncate max-w-32">{debit}</span>
+                           <span className="text-on-surface font-medium truncate max-w-40">{debit}</span>
                          </div>
-                         <div className="flex items-center space-x-2">
+                         <div className="flex items-center space-x-2 min-w-0">
                            <span className="px-2 py-1 rounded-md text-xs font-medium bg-primary text-on-primary">Credit</span>
-                           <span className="text-on-surface font-medium truncate max-w-32">{credit}</span>
+                           <span className="text-on-surface font-medium truncate max-w-40">{credit}</span>
                          </div>
+                         </div>
+                         {detail ? (
+                           <span className="text-xs text-on-surface-variant text-right w-full">{detail}</span>
+                         ) : null}
                        </div>
                      </div>
 

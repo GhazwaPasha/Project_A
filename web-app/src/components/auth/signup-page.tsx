@@ -154,7 +154,7 @@ export function SignupPage() {
             <div className="space-y-3">
               <label htmlFor="fullName" className="text-sm font-medium block" style={{ color: 'var(--md-sys-color-on-surface)' }}>Full Name</label>
               <div className="relative group">
-                <User className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 transition-colors duration-200" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
+                <User className="pointer-events-none absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 transition-colors duration-200" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
                 <input
                   id="fullName"
                   name="fullName"
@@ -162,7 +162,7 @@ export function SignupPage() {
                   placeholder="Enter your full name"
                   value={formData.fullName}
                   onChange={handleInputChange}
-                  className="md-input w-full pl-12 pr-4 py-3 group-hover:border-primary transition-all duration-200"
+                  className="md-input md-input--icon-left w-full pr-4 py-3 group-hover:border-primary transition-all duration-200"
                   required
                 />
               </div>
@@ -171,7 +171,7 @@ export function SignupPage() {
             <div className="space-y-3">
               <label htmlFor="email" className="text-sm font-medium block" style={{ color: 'var(--md-sys-color-on-surface)' }}>Email</label>
               <div className="relative group">
-                <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 transition-colors duration-200" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
+                <Mail className="pointer-events-none absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 transition-colors duration-200" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
                 <input
                   id="email"
                   name="email"
@@ -179,7 +179,7 @@ export function SignupPage() {
                   placeholder="Enter your email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="md-input w-full pl-12 pr-4 py-3 group-hover:border-primary transition-all duration-200"
+                  className="md-input md-input--icon-left w-full pr-4 py-3 group-hover:border-primary transition-all duration-200"
                   required
                 />
               </div>
@@ -189,7 +189,7 @@ export function SignupPage() {
               <div className="space-y-3">
                 <label htmlFor="password" className="text-sm font-medium block" style={{ color: 'var(--md-sys-color-on-surface)' }}>Password</label>
                 <div className="relative group">
-                  <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 transition-colors duration-200" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
+                  <Lock className="pointer-events-none absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 transition-colors duration-200" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
                   <input
                     id="password"
                     name="password"
@@ -197,7 +197,7 @@ export function SignupPage() {
                     placeholder="Password"
                     value={formData.password}
                     onChange={handleInputChange}
-                    className="md-input w-full pl-12 pr-4 py-3 group-hover:border-primary transition-all duration-200"
+                    className="md-input md-input--icon-left w-full pr-4 py-3 group-hover:border-primary transition-all duration-200"
                     required
                   />
                 </div>
@@ -206,7 +206,7 @@ export function SignupPage() {
               <div className="space-y-3">
                 <label htmlFor="confirmPassword" className="text-sm font-medium block" style={{ color: 'var(--md-sys-color-on-surface)' }}>Confirm</label>
                 <div className="relative group">
-                  <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 transition-colors duration-200" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
+                  <Lock className="pointer-events-none absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 transition-colors duration-200" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
                   <input
                     id="confirmPassword"
                     name="confirmPassword"
@@ -214,7 +214,7 @@ export function SignupPage() {
                     placeholder="Confirm"
                     value={formData.confirmPassword}
                     onChange={handleInputChange}
-                    className="md-input w-full pl-12 pr-4 py-3 group-hover:border-primary transition-all duration-200"
+                    className="md-input md-input--icon-left w-full pr-4 py-3 group-hover:border-primary transition-all duration-200"
                     required
                   />
                 </div>
@@ -224,7 +224,7 @@ export function SignupPage() {
             <div className="space-y-3">
               <label htmlFor="organizationName" className="text-sm font-medium block" style={{ color: 'var(--md-sys-color-on-surface)' }}>Organization Name</label>
               <div className="relative group">
-                <Building2 className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 transition-colors duration-200" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
+                <Building2 className="pointer-events-none absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 transition-colors duration-200" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
                 <input
                   id="organizationName"
                   name="organizationName"
@@ -232,7 +232,7 @@ export function SignupPage() {
                   placeholder="Enter organization name"
                   value={formData.organizationName}
                   onChange={handleInputChange}
-                  className="md-input w-full pl-12 pr-4 py-3 group-hover:border-primary transition-all duration-200"
+                  className="md-input md-input--icon-left w-full pr-4 py-3 group-hover:border-primary transition-all duration-200"
                   required
                 />
               </div>

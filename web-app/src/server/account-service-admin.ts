@@ -1,54 +1,52 @@
-import { getSupabaseAdmin } from '@/server/supabase-admin'
+import { getSql } from '@/server/pg'
+import { fetchAccountNetBalance } from '@/server/data/ledger-sql'
 import { getActingUserId } from '@/server/request-context'
 import { Account, AccountType } from '@/types'
 
 export class AccountServiceAdmin {
-  // ===============================================
-  // ACCOUNT CRUD OPERATIONS
-  // ===============================================
-
   static async getAccounts(
     organizationId: string,
     accountType?: AccountType,
     isActive: boolean = true
   ): Promise<Account[]> {
-    let query = getSupabaseAdmin()
-      .from('accounts')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .order('code', { ascending: true })
-
+    const sql = getSql()
+    if (isActive && accountType) {
+      return (await sql<Account[]>`
+        SELECT * FROM public.accounts
+        WHERE organization_id = ${organizationId}::uuid
+          AND is_active = true
+          AND account_type = ${accountType}::public.account_type
+        ORDER BY code
+      `) as Account[]
+    }
     if (isActive) {
-      query = query.eq('is_active', true)
+      return (await sql<Account[]>`
+        SELECT * FROM public.accounts
+        WHERE organization_id = ${organizationId}::uuid AND is_active = true
+        ORDER BY code
+      `) as Account[]
     }
-
     if (accountType) {
-      query = query.eq('account_type', accountType)
+      return (await sql<Account[]>`
+        SELECT * FROM public.accounts
+        WHERE organization_id = ${organizationId}::uuid
+          AND account_type = ${accountType}::public.account_type
+        ORDER BY code
+      `) as Account[]
     }
-
-    const { data, error } = await query
-
-    if (error) {
-      console.error('Error fetching accounts:', error)
-      throw new Error('Failed to fetch accounts')
-    }
-
-    return data || []
+    return (await sql<Account[]>`
+      SELECT * FROM public.accounts
+      WHERE organization_id = ${organizationId}::uuid
+      ORDER BY code
+    `) as Account[]
   }
 
   static async getAccount(id: number): Promise<Account | null> {
-    const { data, error } = await getSupabaseAdmin()
-      .from('accounts')
-      .select('*')
-      .eq('id', id)
-      .single()
-
-    if (error) {
-      console.error('Error fetching account:', error)
-      throw new Error('Failed to fetch account')
-    }
-
-    return data
+    const sql = getSql()
+    const rows = (await sql<Account[]>`
+      SELECT * FROM public.accounts WHERE id = ${id} LIMIT 1
+    `) as Account[]
+    return rows[0] ?? null
   }
 
   static async createAccount(accountData: {
@@ -63,115 +61,85 @@ export class AccountServiceAdmin {
   }): Promise<Account> {
     const acting = getActingUserId()
     if (!acting) throw new Error('User not authenticated')
-
-    const { data, error } = await getSupabaseAdmin()
-      .from('accounts')
-      .insert({
-        ...accountData,
-        is_active: true,
-        created_by: acting,
-      })
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error creating account:', error)
-      throw new Error(`Failed to create account: ${error.message}`)
+    const sql = getSql()
+    const a = { ...accountData, created_by: acting, is_postable: accountData.is_postable ?? true, is_active: true }
+    const rows = (await sql<Account[]>`
+      INSERT INTO public.accounts (
+        organization_id, code, name, account_type, parent_id, description, "group", is_postable, is_active, created_by
+      ) VALUES (
+        ${a.organization_id}::uuid,
+        ${a.code},
+        ${a.name},
+        ${a.account_type}::public.account_type,
+        ${a.parent_id ?? null},
+        ${a.description ?? null},
+        ${a.group ?? null},
+        ${a.is_postable},
+        true,
+        ${a.created_by}::uuid
+      )
+      RETURNING *
+    `) as Account[]
+    if (!rows[0]) {
+      throw new Error('Failed to create account')
     }
-
-    return data
+    return rows[0] as Account
   }
 
   static async updateAccount(id: number, accountData: Partial<Account>): Promise<Account> {
     const acting = getActingUserId()
     if (!acting) throw new Error('User not authenticated')
-
-    const { data, error } = await getSupabaseAdmin()
-      .from('accounts')
-      .update({
-        ...accountData,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error updating account:', error)
-      throw new Error(`Failed to update account: ${error.message}`)
+    const sql = getSql()
+    const u = accountData
+    const rows = (await sql<Account[]>`
+      UPDATE public.accounts
+      SET
+        code = COALESCE(${u.code ?? null}, code),
+        name = COALESCE(${u.name ?? null}, name),
+        account_type = COALESCE(${u.account_type ?? null}::public.account_type, account_type),
+        parent_id = ${u.parent_id === undefined ? null : u.parent_id},
+        description = ${u.description === undefined ? null : u.description},
+        is_active = COALESCE(${u.is_active ?? null}, is_active),
+        "group" = COALESCE(${u.group ?? null}, "group"),
+        is_postable = COALESCE(${u.is_postable ?? null}, is_postable),
+        updated_at = now()
+      WHERE id = ${id}
+      RETURNING *
+    `) as Account[]
+    if (!rows[0]) {
+      throw new Error('Failed to update account')
     }
-
-    return data
+    return rows[0] as Account
   }
 
   static async deleteAccount(id: number): Promise<void> {
-    const { error } = await getSupabaseAdmin()
-      .from('accounts')
-      .delete()
-      .eq('id', id)
-
-    if (error) {
-      console.error('Error deleting account:', error)
-      throw new Error('Failed to delete account')
-    }
+    const sql = getSql()
+    await sql`DELETE FROM public.accounts WHERE id = ${id}`
   }
 
-  // ===============================================
-  // ACCOUNT HIERARCHY OPERATIONS
-  // ===============================================
-
   static async getAccountHierarchy(organizationId: string): Promise<Account[]> {
-    const { data, error } = await getSupabaseAdmin()
-      .from('accounts')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .eq('is_active', true)
-      .order('code', { ascending: true })
-
-    if (error) {
-      console.error('Error fetching account hierarchy:', error)
-      throw new Error('Failed to fetch account hierarchy')
-    }
-
-    return data || []
+    return this.getAccounts(organizationId, undefined, true)
   }
 
   static async getChildAccounts(parentId: number): Promise<Account[]> {
-    const { data, error } = await getSupabaseAdmin()
-      .from('accounts')
-      .select('*')
-      .eq('parent_id', parentId)
-      .eq('is_active', true)
-      .order('code', { ascending: true })
-
-    if (error) {
-      console.error('Error fetching child accounts:', error)
-      throw new Error('Failed to fetch child accounts')
-    }
-
-    return data || []
+    const sql = getSql()
+    return (await sql<Account[]>`
+      SELECT * FROM public.accounts
+      WHERE parent_id = ${parentId} AND is_active = true
+      ORDER BY code
+    `) as Account[]
   }
 
   static async getParentAccounts(organizationId: string): Promise<Account[]> {
-    const { data, error } = await getSupabaseAdmin()
-      .from('accounts')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .is('parent_id', null)
-      .eq('is_active', true)
-      .order('code', { ascending: true })
-
-    if (error) {
-      console.error('Error fetching parent accounts:', error)
-      throw new Error('Failed to fetch parent accounts')
-    }
-
-    return data || []
+    const sql = getSql()
+    return (await sql<Account[]>`
+      SELECT * FROM public.accounts
+      WHERE organization_id = ${organizationId}::uuid
+        AND parent_id IS NULL
+        AND is_active = true
+      ORDER BY code
+    `) as Account[]
   }
-
-  // ===============================================
-  // ACCOUNT SEARCH AND FILTERING
-  // ===============================================
 
   static async searchAccounts(
     organizationId: string,
@@ -179,95 +147,71 @@ export class AccountServiceAdmin {
     accountType?: AccountType,
     limit: number = 50
   ): Promise<Account[]> {
-    let query = getSupabaseAdmin()
-      .from('accounts')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .eq('is_active', true)
-      .or(`code.ilike.%${searchTerm}%,name.ilike.%${searchTerm}%`)
-      .order('code', { ascending: true })
-      .limit(limit)
-
+    const sql = getSql()
+    const term = `%${searchTerm.replace(/[%_\\]/g, (c) => '\\' + c)}%`
     if (accountType) {
-      query = query.eq('account_type', accountType)
+      return (await sql<Account[]>`
+        SELECT * FROM public.accounts
+        WHERE organization_id = ${organizationId}::uuid
+          AND is_active = true
+          AND account_type = ${accountType}::public.account_type
+          AND (code ILIKE ${term} OR name ILIKE ${term})
+        ORDER BY code
+        LIMIT ${limit}
+      `) as Account[]
     }
-
-    const { data, error } = await query
-
-    if (error) {
-      console.error('Error searching accounts:', error)
-      throw new Error('Failed to search accounts')
-    }
-
-    return data || []
+    return (await sql<Account[]>`
+      SELECT * FROM public.accounts
+      WHERE organization_id = ${organizationId}::uuid
+        AND is_active = true
+        AND (code ILIKE ${term} OR name ILIKE ${term})
+      ORDER BY code
+      LIMIT ${limit}
+    `) as Account[]
   }
 
-  static async getAccountsByType(
-    organizationId: string,
-    accountType: AccountType
-  ): Promise<Account[]> {
+  static async getAccountsByType(organizationId: string, accountType: AccountType): Promise<Account[]> {
     return this.getAccounts(organizationId, accountType)
   }
 
   static async getPostableAccounts(organizationId: string): Promise<Account[]> {
-    const { data, error } = await getSupabaseAdmin()
-      .from('accounts')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .eq('is_active', true)
-      .eq('is_postable', true)
-      .order('code', { ascending: true })
-
-    if (error) {
-      console.error('Error fetching postable accounts:', error)
-      throw new Error('Failed to fetch postable accounts')
-    }
-
-    return data || []
+    const sql = getSql()
+    return (await sql<Account[]>`
+      SELECT * FROM public.accounts
+      WHERE organization_id = ${organizationId}::uuid
+        AND is_active = true
+        AND is_postable = true
+      ORDER BY code
+    `) as Account[]
   }
 
-  // ===============================================
-  // ACCOUNT VALIDATION
-  // ===============================================
-
-  static async validateAccountCode(
-    organizationId: string,
-    code: string,
-    excludeId?: number
-  ): Promise<boolean> {
-    let query = getSupabaseAdmin()
-      .from('accounts')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('code', code)
-
-    if (excludeId) {
-      query = query.neq('id', excludeId)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
-      console.error('Error validating account code:', error)
-      throw new Error('Failed to validate account code')
-    }
-
-    return data.length === 0
+  static async validateAccountCode(organizationId: string, code: string, excludeId?: number): Promise<boolean> {
+    const sql = getSql()
+    const rows = excludeId
+      ? await sql<{ c: string }[]>`
+        SELECT 1::text AS c
+        FROM public.accounts
+        WHERE organization_id = ${organizationId}::uuid AND code = ${code} AND id <> ${excludeId}
+        LIMIT 1
+      `
+      : await sql<{ c: string }[]>`
+        SELECT 1::text AS c
+        FROM public.accounts
+        WHERE organization_id = ${organizationId}::uuid AND code = ${code}
+        LIMIT 1
+      `
+    return rows.length === 0
   }
 
-  static async getAccountBalance(
-    accountId: number,
-    asOfDate?: string
-  ): Promise<number> {
-    // This would typically involve calculating from journal entries
-    // For now, return 0 as a placeholder
-    // In a real implementation, you'd query the journal_entries and journal_entry_lines tables
-    return 0
+  static async getAccountBalance(_accountId: number, _asOfDate?: string): Promise<number> {
+    const sql = getSql()
+    const o = (await sql<{ organization_id: string }[]>`
+      SELECT organization_id::text AS organization_id FROM public.accounts
+      WHERE id = ${_accountId} LIMIT 1
+    `)[0]
+    if (!o) return 0
+    return fetchAccountNetBalance(_accountId, o.organization_id)
   }
-
-  // ===============================================
-  // ACCOUNT STATISTICS
-  // ===============================================
 
   static async getAccountStats(organizationId: string): Promise<{
     total_accounts: number
@@ -276,15 +220,12 @@ export class AccountServiceAdmin {
     inactive_accounts: number
     postable_accounts: number
   }> {
-    const { data, error } = await getSupabaseAdmin()
-      .from('accounts')
-      .select('account_type, is_active, is_postable')
-      .eq('organization_id', organizationId)
-
-    if (error) {
-      console.error('Error fetching account stats:', error)
-      throw new Error('Failed to fetch account stats')
-    }
+    const sql = getSql()
+    const data = (await sql<Pick<Account, 'account_type' | 'is_active' | 'is_postable'>[]>`
+      SELECT account_type::text AS account_type, is_active, is_postable
+      FROM public.accounts
+      WHERE organization_id = ${organizationId}::uuid
+    `) as Pick<Account, 'account_type' | 'is_active' | 'is_postable'>[]
 
     const rows = (data ?? []) as Pick<Account, 'account_type' | 'is_active' | 'is_postable'>[]
 
@@ -295,11 +236,11 @@ export class AccountServiceAdmin {
         liability: 0,
         equity: 0,
         revenue: 0,
-        expense: 0
+        expense: 0,
       } as Record<AccountType, number>,
       active_accounts: 0,
       inactive_accounts: 0,
-      postable_accounts: 0
+      postable_accounts: 0,
     }
 
     rows.forEach((account) => {
@@ -317,27 +258,17 @@ export class AccountServiceAdmin {
     return stats
   }
 
-  // ===============================================
-  // CHART OF ACCOUNTS OPERATIONS
-  // ===============================================
-
   static async getChartOfAccounts(organizationId: string): Promise<Account[]> {
     return this.getAccountHierarchy(organizationId)
   }
 
   static async exportChartOfAccounts(organizationId: string): Promise<Account[]> {
-    const { data, error } = await getSupabaseAdmin()
-      .from('accounts')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .order('code', { ascending: true })
-
-    if (error) {
-      console.error('Error exporting chart of accounts:', error)
-      throw new Error('Failed to export chart of accounts')
-    }
-
-    return data || []
+    const sql = getSql()
+    return (await sql<Account[]>`
+      SELECT * FROM public.accounts
+      WHERE organization_id = ${organizationId}::uuid
+      ORDER BY code
+    `) as Account[]
   }
 
   static async importChartOfAccounts(
@@ -346,23 +277,32 @@ export class AccountServiceAdmin {
   ): Promise<Account[]> {
     const acting = getActingUserId()
     if (!acting) throw new Error('User not authenticated')
-
-    const accountsWithOrg = accounts.map(account => ({
-      ...account,
-      organization_id: organizationId,
-      created_by: acting
-    }))
-
-    const { data, error } = await getSupabaseAdmin()
-      .from('accounts')
-      .insert(accountsWithOrg)
-      .select()
-
-    if (error) {
-      console.error('Error importing chart of accounts:', error)
-      throw new Error(`Failed to import chart of accounts: ${error.message}`)
-    }
-
-    return data || []
+    const sql = getSql()
+    const out: Account[] = []
+    await sql.begin(async (tx) => {
+      for (const a of accounts) {
+        const rows = (await tx<Account[]>`
+          INSERT INTO public.accounts (
+            organization_id, code, name, account_type, parent_id, description, "group", is_postable, is_active, created_by
+          ) VALUES (
+            ${organizationId}::uuid,
+            ${a.code},
+            ${a.name},
+            ${a.account_type}::public.account_type,
+            ${a.parent_id},
+            ${a.description},
+            ${a.group},
+            ${a.is_postable ?? true},
+            ${a.is_active},
+            ${acting}::uuid
+          )
+          RETURNING *
+        `) as Account[]
+        if (rows[0]) {
+          out.push(rows[0] as Account)
+        }
+      }
+    })
+    return out
   }
 }
