@@ -1,55 +1,33 @@
 import { useQuery } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
+import { DataService } from '@/lib/data-service'
 import { Account } from '@/types'
 import { useOrganization } from './use-organization'
 
 export function useAccounts() {
   const { currentOrganization } = useOrganization()
 
-  return useQuery({
+  return useQuery<Account[]>({
     queryKey: ['accounts', currentOrganization?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('accounts')
-        .select('*')
-        .eq('organization_id', currentOrganization!.id)
-        .eq('is_active', true)
-        .order('code')
-
-      if (error) {
-        console.error('Error fetching accounts:', error)
-        throw new Error('Failed to fetch accounts')
-      }
-
-      return data as Account[]
+      if (!currentOrganization?.id) return []
+      return DataService.getAccounts(currentOrganization.id, true)
     },
     enabled: !!currentOrganization,
-    staleTime: 60000, // 1 minute
+    staleTime: 60000,
   })
 }
 
 export function useAccountsByType(accountType: string) {
   const { currentOrganization } = useOrganization()
 
-  return useQuery({
+  return useQuery<Account[]>({
     queryKey: ['accounts', currentOrganization?.id, accountType],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('accounts')
-        .select('*')
-        .eq('organization_id', currentOrganization!.id)
-        .eq('account_type', accountType)
-        .eq('is_active', true)
-        .order('code')
-
-      if (error) {
-        console.error('Error fetching accounts by type:', error)
-        throw new Error('Failed to fetch accounts')
-      }
-
-      return data as Account[]
+      if (!currentOrganization?.id) return []
+      const all = await DataService.getAccounts(currentOrganization.id, true)
+      return all.filter((a) => a.account_type === accountType)
     },
     enabled: !!currentOrganization,
-    staleTime: 60000, // 1 minute
+    staleTime: 60000,
   })
 }

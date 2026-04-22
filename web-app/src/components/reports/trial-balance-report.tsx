@@ -71,7 +71,9 @@ export function TrialBalanceReport({ onBack, asOfDate }: TrialBalanceReportProps
         <div className="text-center">
           <Calculator className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold mb-2">Error Loading Trial Balance</h2>
-          <p className="text-gray-600 mb-4">{error || 'No data available'}</p>
+          <p className="text-gray-600 mb-4">
+            {error instanceof Error ? error.message : error ? String(error) : 'No data available'}
+          </p>
           <div className="space-x-2">
             <Button onClick={() => refetch()}>
               <RefreshCw className="w-4 h-4 mr-2" />

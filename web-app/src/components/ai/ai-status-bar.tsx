@@ -22,7 +22,14 @@ export function AIStatusBar({ className }: AIStatusBarProps) {
   const statusTimeoutRef = useRef<NodeJS.Timeout>()
   
   const { processCommand, isProcessing: aiProcessing } = useAIProcessor()
-  const { unreadNotifications, backgroundProcesses, setUnreadNotifications } = useAIStatusBar()
+  const {
+    unreadNotifications,
+    backgroundProcesses,
+    setUnreadNotifications,
+    addBackgroundProcess,
+    updateBackgroundProcess,
+    removeBackgroundProcess,
+  } = useAIStatusBar()
 
   // Handle AI processor state changes
   useEffect(() => {
@@ -183,35 +190,12 @@ export function AIStatusBar({ className }: AIStatusBarProps) {
     }, 4000)
   }
 
-  // Add background process
-  const addBackgroundProcess = (id: string, message: string, progress = '') => {
-    setBackgroundProcesses(prev => [...prev, { id, message, progress, startTime: new Date() }])
+  useEffect(() => {
+    if (backgroundProcesses.length === 0) return
     if (!isExpanded && !isProcessing && !isShowingNotification) {
       updateStatus()
     }
-  }
-
-  // Update background process
-  const updateBackgroundProcess = (id: string, message?: string, progress?: string) => {
-    setBackgroundProcesses(prev => 
-      prev.map(process => 
-        process.id === id 
-          ? { ...process, ...(message && { message }), ...(progress && { progress }) }
-          : process
-      )
-    )
-    if (!isExpanded && !isProcessing && !isShowingNotification) {
-      updateStatus()
-    }
-  }
-
-  // Remove background process
-  const removeBackgroundProcess = (id: string) => {
-    setBackgroundProcesses(prev => prev.filter(process => process.id !== id))
-    if (backgroundProcesses.length === 1 && !isExpanded && !isProcessing && !isShowingNotification) {
-      updateStatus()
-    }
-  }
+  }, [backgroundProcesses, isExpanded, isProcessing, isShowingNotification])
 
   // Expose methods for parent components
   useEffect(() => {

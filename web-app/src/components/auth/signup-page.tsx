@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
+import { authClient } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -24,7 +24,6 @@ export function SignupPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -53,81 +52,40 @@ export function SignupPage() {
     }
 
     try {
-      // Step 1: Sign up user with Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const signUpRes = await authClient.signUp.email({
         email: formData.email,
         password: formData.password,
-        options: {
-          data: {
-            full_name: formData.fullName,
-          }
-        }
+        name: formData.fullName,
       })
-
-      if (authError) {
-        setError(authError.message)
+      if (signUpRes.error) {
+        setError(signUpRes.error.message || 'Registration failed')
         setIsLoading(false)
         return
       }
 
-      if (authData.user) {
-        // Step 2: Create user profile
-        const { error: profileError } = await supabase
-          .from('user_profiles')
-          .insert({
-            id: authData.user.id,
-            email: formData.email,
-            full_name: formData.fullName,
-            is_super_admin: false,
-            preferences: {}
-          })
+      const profileRes = await fetch('/api/auth/complete-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          fullName: formData.fullName,
+          organizationName: formData.organizationName,
+          organizationType: formData.organizationType,
+        }),
+      })
+      const profileData = (await profileRes.json().catch(() => ({}))) as { error?: string }
 
-        if (profileError) {
-          console.error('Error creating user profile:', profileError)
-        }
-
-        // Step 3: Create organization
-        const { data: orgData, error: orgError } = await supabase
-          .from('organizations')
-          .insert({
-            name: formData.organizationName,
-            description: `${formData.organizationType} organization`,
-            settings: {
-              organization_type: formData.organizationType,
-              created_by: authData.user.id
-            }
-          })
-          .select()
-          .single()
-
-        if (orgError) {
-          console.error('Error creating organization:', orgError)
-        }
-
-        // Step 4: Add user as organization owner
-        if (orgData) {
-          const { error: memberError } = await supabase
-            .from('organization_members')
-            .insert({
-              organization_id: orgData.id,
-              user_id: authData.user.id,
-              role: 'organization_owner',
-              is_active: true,
-              joined_at: new Date().toISOString()
-            })
-
-          if (memberError) {
-            console.error('Error adding user to organization:', memberError)
-          }
-        }
-
-        setSuccess(true)
-        
-        // Redirect to dashboard after successful signup
-        setTimeout(() => {
-          router.push('/dashboard')
-        }, 2000)
+      if (!profileRes.ok) {
+        setError(typeof profileData.error === 'string' ? profileData.error : 'Could not finish setup')
+        setIsLoading(false)
+        return
       }
+
+      setSuccess(true)
+      setTimeout(() => {
+        router.push('/dashboard')
+        router.refresh()
+      }, 1200)
     } catch (err) {
       setError('An unexpected error occurred')
       console.error('Signup error:', err)
@@ -148,7 +106,7 @@ export function SignupPage() {
             </div>
             <h3 className="text-2xl font-semibold mb-3" style={{ color: 'var(--md-sys-color-on-surface)' }}>Account Created Successfully!</h3>
             <p className="text-base mb-6" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
-              Please check your email to verify your account. You'll be redirected to the dashboard shortly.
+              You will be redirected to the dashboard shortly.
             </p>
             <div className="flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-2 border-transparent border-t-primary mx-auto"></div>

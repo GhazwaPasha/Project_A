@@ -7,74 +7,83 @@ import {
   VoucherStats,
   VoucherApprovalStats
 } from '@/types'
-import { useOrganization } from './use-organization'
+import { useCurrentOrganization } from '@/contexts/organization-context'
+import { useAuthStore } from '@/stores/auth-store'
+import { queryKeys } from '@/lib/query-keys'
 
 // ===============================================
 // VOUCHER QUERIES
 // ===============================================
 
 export function useVouchers(filters?: VoucherFilters, limit?: number, offset?: number) {
-  const { currentOrganization } = useOrganization()
+  const currentOrganization = useCurrentOrganization()
 
-  return useQuery({
-    queryKey: ['vouchers', currentOrganization?.id, filters, limit, offset],
+  return useQuery<InventoryVoucher[]>({
+    queryKey: queryKeys.vouchers(currentOrganization?.id || '', filters, limit, offset),
     queryFn: () => VoucherService.getVouchers(currentOrganization!.id, filters, limit, offset),
     enabled: !!currentOrganization,
-    staleTime: 30000, // 30 seconds
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
   })
 }
 
 export function useVoucher(id: number) {
-  return useQuery({
-    queryKey: ['voucher', id],
+  return useQuery<InventoryVoucher | null>({
+    queryKey: queryKeys.voucher(id),
     queryFn: () => VoucherService.getVoucher(id),
     enabled: !!id,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
   })
 }
 
 export function useVoucherStats() {
-  const { currentOrganization } = useOrganization()
+  const currentOrganization = useCurrentOrganization()
 
-  return useQuery({
-    queryKey: ['voucher-stats', currentOrganization?.id],
+  return useQuery<VoucherStats>({
+    queryKey: queryKeys.voucherStats(currentOrganization?.id || ''),
     queryFn: () => VoucherService.getVoucherStats(currentOrganization!.id),
     enabled: !!currentOrganization,
-    staleTime: 60000, // 1 minute
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
   })
 }
 
 export function useApprovalStats() {
-  const { currentOrganization } = useOrganization()
-  const { currentUser } = useOrganization()
+  const currentOrganization = useCurrentOrganization()
+  const { user } = useAuthStore()
 
-  return useQuery({
-    queryKey: ['approval-stats', currentOrganization?.id, currentUser?.id],
-    queryFn: () => VoucherService.getApprovalStats(currentOrganization!.id, currentUser!.id),
-    enabled: !!currentOrganization && !!currentUser,
-    staleTime: 60000, // 1 minute
+  return useQuery<VoucherApprovalStats>({
+    queryKey: queryKeys.voucherApprovalStats(currentOrganization?.id || ''),
+    queryFn: () => VoucherService.getApprovalStats(currentOrganization!.id, user!.id),
+    enabled: !!currentOrganization && !!user,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
   })
 }
 
 export function usePendingApprovals() {
-  const { currentOrganization } = useOrganization()
+  const currentOrganization = useCurrentOrganization()
 
-  return useQuery({
+  return useQuery<InventoryVoucher[]>({
     queryKey: ['pending-approvals', currentOrganization?.id],
     queryFn: () => VoucherService.getVouchers(currentOrganization!.id, { status: ['pending_finance'] }),
     enabled: !!currentOrganization,
-    staleTime: 30000, // 30 seconds
-    refetchInterval: 60000, // Refetch every minute
+    staleTime: 30 * 1000, // 30 seconds
+    gcTime: 2 * 60 * 1000, // 2 minutes
+    refetchInterval: 60 * 1000, // Refetch every minute
   })
 }
 
 export function useExpiredVouchers() {
-  const { currentOrganization } = useOrganization()
+  const currentOrganization = useCurrentOrganization()
 
-  return useQuery({
+  return useQuery<InventoryVoucher[]>({
     queryKey: ['expired-vouchers', currentOrganization?.id],
     queryFn: () => VoucherService.getExpiredVouchers(currentOrganization!.id),
     enabled: !!currentOrganization,
-    staleTime: 60000, // 1 minute
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
   })
 }
 
@@ -351,16 +360,13 @@ export function useVoucherStatusIcon(status: string) {
 }
 
 export function useCanApproveVouchers() {
-  const { currentUser } = useOrganization()
-  
-  // This would check the user's role
-  // For now, we'll assume accountants and organization owners can approve
-  return currentUser?.role === 'accountant' || currentUser?.role === 'organization_owner' || currentUser?.role === 'super_admin'
+  const user = useAuthStore((s) => s.user)
+  return !!user
 }
 
 export function useCanCreateVouchers() {
-  const { currentUser } = useOrganization()
+  const { user } = useAuthStore()
   
   // All authenticated users can create vouchers
-  return !!currentUser
+  return !!user
 }

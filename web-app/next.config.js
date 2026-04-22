@@ -1,3 +1,9 @@
+const path = require('path')
+const { loadEnvConfig } = require('@next/env')
+
+const repoRoot = path.join(__dirname, '..')
+loadEnvConfig(repoRoot, process.env.NODE_ENV !== 'production')
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {

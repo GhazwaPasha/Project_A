@@ -256,7 +256,7 @@ export function Win11ReportsPage() {
                 New Report
               </Button>
               <Button 
-                onClick={loadReportsData}
+                onClick={() => void loadReportsData()}
                 variant="outline"
                 disabled={loading}
                 className="h-10 px-4 rounded-2xl border-outline hover:bg-primary-container hover:text-on-primary-container"
@@ -336,7 +336,7 @@ export function Win11ReportsPage() {
             <p className="md-body-large text-on-surface-variant text-center mb-8 max-w-md">
               {error}
             </p>
-            <Button onClick={loadReportsData} className="md-button">
+            <Button onClick={() => void loadReportsData()} className="md-button">
               <RefreshCw className="w-4 h-4 mr-2" />
               Try Again
             </Button>

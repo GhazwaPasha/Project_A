@@ -35,7 +35,6 @@ interface HierarchicalAccount extends Account {
   level: number
   is_postable: boolean
   parent_code?: string
-  group?: string
   group_inherited?: boolean
   balance?: number
   debit_balance?: number
@@ -101,7 +100,8 @@ export function Win11AccountsPage() {
       // Convert to hierarchical structure
       const hierarchicalAccounts = buildAccountHierarchy(allAccounts)
       setAccounts(hierarchicalAccounts)
-      setFlatAccounts(allAccounts)
+      const codeById = new Map(allAccounts.map((a) => [a.id, a.code]))
+      setFlatAccounts(flattenHierarchy(hierarchicalAccounts, codeById))
       
       // Auto-expand top-level accounts
       const topLevelIds = new Set(allAccounts.filter(acc => !acc.parent_id).map(acc => acc.id))
@@ -114,13 +114,20 @@ export function Win11AccountsPage() {
     }
   }
 
-  const buildAccountHierarchy = (flatAccounts: HierarchicalAccount[]): HierarchicalAccount[] => {
+  const buildAccountHierarchy = (flatAccounts: Account[]): HierarchicalAccount[] => {
     const accountMap = new Map<number, HierarchicalAccount>()
     const rootAccounts: HierarchicalAccount[] = []
 
     // First pass: create map and add children array
     flatAccounts.forEach(account => {
-      accountMap.set(account.id, { ...account, children: [], isExpanded: false, isSelected: false })
+      accountMap.set(account.id, {
+        ...account,
+        level: 1,
+        is_postable: account.is_postable,
+        children: [],
+        isExpanded: false,
+        isSelected: false,
+      })
     })
 
     // Second pass: build hierarchy
@@ -146,7 +153,41 @@ export function Win11AccountsPage() {
     }
 
     sortAccounts(rootAccounts)
+
+    const assignLevels = (accs: HierarchicalAccount[], depth: number) => {
+      accs.forEach((a) => {
+        a.level = depth
+        if (a.children && a.children.length > 0) {
+          assignLevels(a.children, depth + 1)
+        }
+      })
+    }
+    assignLevels(rootAccounts, 1)
+
     return rootAccounts
+  }
+
+  const flattenHierarchy = (
+    nodes: HierarchicalAccount[],
+    codeById: Map<number, string>
+  ): HierarchicalAccount[] => {
+    const out: HierarchicalAccount[] = []
+    const walk = (list: HierarchicalAccount[]) => {
+      list.forEach((node) => {
+        const { children, ...rest } = node
+        const parent_code = node.parent_id ? codeById.get(node.parent_id) : undefined
+        out.push({
+          ...rest,
+          parent_code,
+          children: [],
+          isExpanded: false,
+          isSelected: false,
+        })
+        if (children?.length) walk(children)
+      })
+    }
+    walk(nodes)
+    return out
   }
 
   const filteredAccounts = accounts.filter(account => {
@@ -217,6 +258,7 @@ export function Win11AccountsPage() {
         parent_id: formData.parent_id,
         description: null,
         group: formData.group || null,
+        is_active: true,
         is_postable: formData.is_postable,
         created_by: (await DataService.getCurrentUser())?.id || null
       })
@@ -993,7 +1035,7 @@ export function Win11AccountsPage() {
             </div>
             <h3 className="md-headline-small text-on-surface mb-3">No accounts found</h3>
             <p className="md-body-large text-on-surface-variant text-center mb-8 max-w-md">
-              {searchTerm || filterType !== 'all' 
+              {searchTerm
                 ? 'Try adjusting your search or filter criteria.'
                 : 'Get started by creating your first account.'
               }

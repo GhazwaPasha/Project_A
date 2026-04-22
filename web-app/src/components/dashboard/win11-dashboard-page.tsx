@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { formatCurrency, formatPercentage, formatDate } from '@/lib/utils'
 import { useFinancialMetrics, useAccountBalances } from '@/hooks/use-organization-data'
+import type { AccountBalanceRow, FinancialMetricsData } from '@/types'
 import { DateFilter, DateRange } from '@/components/ui/date-filter'
 import { 
   LineChart, 
@@ -81,7 +82,10 @@ interface FinancialRatios {
 }
 
 // Function to calculate financial ratios from account data
-function calculateFinancialRatios(accountBalances: any[], financialMetrics: DashboardMetrics): FinancialRatios {
+function calculateFinancialRatios(
+  accountBalances: AccountBalanceRow[],
+  financialMetrics: FinancialMetricsData
+): FinancialRatios {
   console.log('Calculating ratios with account balances:', accountBalances.length, 'accounts')
   
   // Calculate current assets (accounts with group = 'current_asset')
@@ -288,7 +292,7 @@ export function Win11DashboardPage() {
           <div className="text-center">
             <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">Error Loading Dashboard</h3>
-            <p className="text-gray-600 mb-4">{error}</p>
+            <p className="text-gray-600 mb-4">{error instanceof Error ? error.message : String(error)}</p>
             <Button onClick={handleRefresh} className="win11-button-primary">
               <RefreshCw className="mr-2 h-4 w-4" />
               Try Again

@@ -1,114 +1,64 @@
-# 🚀 Accountuitive - Multi-Platform Accounting System
+# Accountuitive
 
-A modern, multi-platform accounting and financial management system with both web and desktop applications.
+Web-first accounting and financial management: multi-tenant organizations, role-based access, reporting, inventory, vouchers, and suppliers. The product UI is the **Next.js** app in `web-app/`.
 
-## 📁 Project Structure
+## Repository layout
 
 ```
 Project_A/
-├── 📁 web-app/          # Next.js React Web Application
-├── 📁 desktop-app/      # PyQt6 Desktop Application  
-├── 📁 backend/          # Backend Services & Database
-├── 📁 shared/           # Shared Resources
-├── 📁 tools/            # Development Tools
-└── 📁 tests/            # Test Files
+├── web-app/       # Next.js application (primary product)
+├── database/      # SQL schema, migrations, and report function definitions
+├── scripts/       # Python setup and maintenance utilities
+├── services/      # Placeholder for future APIs (see services/README.md)
+├── shared/        # Shared assets and documentation
+└── tools/         # Optional development tools
 ```
 
-## 🛠️ Technology Stack
+## Technology stack (web)
 
-### Web App (React/Next.js)
-- **Frontend**: Next.js 14, React 18, TypeScript
-- **Styling**: Tailwind CSS, Radix UI
-- **State Management**: Zustand
-- **Data Fetching**: TanStack Query
-- **Animations**: Framer Motion
+- **Framework**: Next.js 14, React 18, TypeScript  
+- **Styling**: Tailwind CSS, Radix UI  
+- **State**: Zustand  
+- **Data**: TanStack Query, Supabase client  
 
-### Desktop App (PyQt6)
-- **Frontend**: PyQt6 with custom UI components
-- **Backend**: Supabase (PostgreSQL) with Row Level Security
-- **Offline Support**: SQLite local cache
-- **AI Integration**: Natural language processing
+## Configuration
 
-### Backend
-- **Database**: Supabase (PostgreSQL)
-- **Authentication**: Supabase Auth
-- **Multi-tenant**: Organization-based data isolation
-- **API**: FastAPI (optional)
+1. Copy [.env.example](.env.example) to `.env` at the **repository root** (and configure `web-app` env files as documented in the web app, if applicable).  
+2. Never commit real secrets. If keys were ever committed in history, rotate them in the Supabase (and other) dashboards.
 
-## 🚀 Quick Start
+## Quick start (web)
 
-### Web Application
 ```bash
 cd web-app
 npm install
 npm run dev
 ```
 
-### Desktop Application
+## Database and scripts
+
+SQL artifacts live in [database/](database/). Python utilities (Supabase setup, migrations helpers, etc.) live in [scripts/](scripts/). Install Python dependencies from the repo root:
+
 ```bash
-cd desktop-app
 pip install -r requirements.txt
-python run.py
 ```
 
-### Backend Services
+Examples (run from repository root so paths resolve correctly):
+
 ```bash
-cd backend
-pip install -r requirements.txt
-# Run database migrations
 python scripts/setup_multitenant.py
+python scripts/manage_super_admin.py
 ```
 
-## ✨ Features
+Use `POSTGRES_*` or `DB_*` variables from `.env.example` depending on the script.
 
-- **Multi-Tenant Architecture** - Organization-based data isolation
-- **Role-Based Access Control** - 4 permission levels
-- **Modern UI** - Glassmorphism design with dark theme
-- **Responsive Design** - Mobile-first approach
-- **Real-time Updates** - Supabase integration
-- **Financial Reporting** - Comprehensive accounting reports
-- **AI Integration** - Natural language processing for transactions
-- **Offline Support** - Desktop app with local caching
+## Development
 
-## 📱 Platforms
+**Web app**
 
-- **Web**: Any modern browser
-- **Desktop**: Windows, macOS, Linux
-- **Mobile**: Responsive web design
+- `npm run dev` — development server  
+- `npm run build` — production build  
+- `npm run lint` — ESLint  
 
-## 🔐 Authentication
-
-- Email/password login
-- Multi-tenant organization support
-- Role-based access control
-- Session management
-
-## 📊 Development
-
-### Available Scripts
-
-**Web App:**
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run start` - Start production server
-- `npm run lint` - Run ESLint
-
-**Desktop App:**
-- `python run.py` - Start desktop application
-- `python build_exe.py` - Build executable
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## 📄 License
+## License
 
 This project is licensed under the MIT License.
-
----
-
-**Built with ❤️ using Next.js, PyQt6, and Supabase**

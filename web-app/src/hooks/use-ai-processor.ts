@@ -29,7 +29,7 @@ export function useAIProcessor() {
     setIsProcessing(true)
 
     try {
-      // Parse the command using the same logic as desktop app
+      // Parse natural-language style commands
       const response = await parseCommand(command.toLowerCase())
       
       // Execute the response
@@ -59,7 +59,7 @@ export function useAIProcessor() {
   }
 }
 
-// Command parsing logic (adapted from desktop app)
+// Command parsing (rule-based)
 async function parseCommand(input: string): Promise<AIResponse> {
   // Check for reminder commands
   if (isReminderCommand(input)) {

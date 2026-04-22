@@ -20,39 +20,12 @@ import {
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { DataService } from '@/lib/data-service'
-import { AccountType } from '@/types'
+import type { AccountBalanceRow, AccountTransactionRow, AccountType } from '@/types'
 import { useOrganization } from '@/hooks/use-organization'
 import { DateFilter, DateRange } from '@/components/ui/date-filter'
 
-// Types for account data
-interface AccountData {
-  id: number
-  code: string
-  name: string
-  account_type: AccountType
-  balance: number
-  debit_balance: number
-  credit_balance: number
-  transaction_count: number
-  last_transaction_date: string | null
-  level: number
-  is_postable: boolean
-  parent_id: number | null
-  description: string
-  group: string
-}
-
-interface TransactionData {
-  id: number
-  entry_id: number
-  entry_number: string
-  entry_date: string
-  description: string
-  reference: string | null
-  debit_amount: number
-  credit_amount: number
-  balance: number
-}
+type AccountData = AccountBalanceRow
+type TransactionData = AccountTransactionRow
 
 export function Win11LedgerPage() {
   const [searchTerm, setSearchTerm] = useState('')
@@ -285,7 +258,7 @@ export function Win11LedgerPage() {
         }
       } catch (error) {
         // User cancelled the dialog - do nothing
-        if (error.name === 'AbortError') {
+        if (error instanceof Error && error.name === 'AbortError') {
           console.log('User cancelled the save dialog')
           return
         }
@@ -674,7 +647,7 @@ export function Win11LedgerPage() {
                   <Search className="w-4 h-4" />
                 </Button>
                 <Button 
-                  onClick={loadData}
+                  onClick={() => void loadData()}
                   className="md-button"
                 >
                   <RefreshCw className="w-4 h-4" />

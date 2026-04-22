@@ -1,9 +1,0 @@
-<!-- Magic wand icon for AI fill -->
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect x="10.5" y="3" width="3" height="6" rx="1.5" fill="#569CD6"/>
-  <rect x="3" y="10.5" width="6" height="3" rx="1.5" fill="#4EC9B0"/>
-  <rect x="15" y="10.5" width="6" height="3" rx="1.5" fill="#B5CEA8"/>
-  <rect x="10.5" y="15" width="3" height="6" rx="1.5" fill="#3794FF"/>
-  <rect x="7.05" y="7.05" width="2" height="8" rx="1" transform="rotate(-45 7.05 7.05)" fill="#D4D4D4"/>
-  <circle cx="12" cy="12" r="2.5" fill="#569CD6"/>
-</svg>

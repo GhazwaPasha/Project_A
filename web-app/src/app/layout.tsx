@@ -5,6 +5,8 @@ import { Providers } from '@/components/providers'
 
 const inter = Inter({ subsets: ['latin'] })
 
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   title: 'Accountuitive - Multi-Tenant SaaS Platform',
   description: 'Modern accounting software with multi-tenant support, AI integration, and comprehensive financial reporting.',
@@ -18,7 +20,7 @@ export const viewport: Viewport = {
   themeColor: '#2196F3',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode

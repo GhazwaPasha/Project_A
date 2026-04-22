@@ -187,6 +187,144 @@ export interface InventoryTransaction {
 
 export type UserRole = 'super_admin' | 'organization_owner' | 'accountant' | 'member'
 export type AccountType = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense'
+
+/** Dashboard / ledger row from `getFinancialMetrics`. */
+export type FinancialMetricsData = {
+  totalRevenue: number
+  totalExpenses: number
+  netIncome: number
+  totalAssets: number
+  totalLiabilities: number
+  totalEquity: number
+}
+
+/** Row from `DataService.getAccountBalances` (aggregated balances per account). */
+export type AccountBalanceRow = {
+  id: number
+  code: string
+  name: string
+  account_type: AccountType
+  balance: number
+  debit_balance: number
+  credit_balance: number
+  transaction_count: number
+  last_transaction_date: string | null
+  level: number
+  is_postable: boolean
+  parent_id: number | null
+  description: string
+  group: string
+}
+
+/** Ledger line from `DataService.getAccountTransactions`. */
+export type AccountTransactionRow = {
+  id: number
+  entry_id: number
+  entry_number: string
+  entry_date: string
+  description: string
+  reference: string | null
+  debit_amount: number
+  credit_amount: number
+  balance: number
+}
+
+/** Payload from `generateAgedPayables` (UI shape). */
+export type AgedPayablesReportData = {
+  payables: Array<{
+    vendorName: string
+    current: number
+    days30: number
+    days60: number
+    days90: number
+    total: number
+  }>
+  totals: {
+    current: number
+    days30: number
+    days60: number
+    days90: number
+    total: number
+  }
+  generatedAt: string
+}
+
+/** Payload from `generateAgedReceivables` (UI shape). */
+export type AgedReceivablesReportData = {
+  receivables: Array<{
+    customerName: string
+    current: number
+    days30: number
+    days60: number
+    days90: number
+    total: number
+  }>
+  totals: {
+    current: number
+    days30: number
+    days60: number
+    days90: number
+    total: number
+  }
+  generatedAt: string
+}
+
+/** Payload from `generateTrialBalance` (UI shape). */
+export type TrialBalanceReportData = {
+  accounts: Array<{
+    accountId: number
+    accountName: string
+    accountType: string
+    debitBalance: number
+    creditBalance: number
+  }>
+  totalDebits: number
+  totalCredits: number
+  isBalanced: boolean
+  generatedAt: string
+}
+
+/** Payload from `generateIncomeStatement` (UI shape). */
+export type IncomeStatementReportData = {
+  revenue: { total: number; breakdown: Array<{ account: string; amount: number }> }
+  expenses: { total: number; breakdown: Array<{ account: string; amount: number }> }
+  netIncome: number
+  grossProfit: number
+  operatingIncome: number
+  generatedAt: string
+}
+
+/** Nested account node on balance sheet reports. */
+export type BalanceSheetAccountNode = {
+  id: number
+  code: string
+  name: string
+  account_type: string
+  balance: number
+  parent_id: number | null
+  children: BalanceSheetAccountNode[]
+}
+
+export type BalanceSheetSection = {
+  name: string
+  group: string
+  accounts: BalanceSheetAccountNode[]
+  total: number
+}
+
+/** Payload from `generateBalanceSheet` (UI shape). */
+export type BalanceSheetReportData = {
+  isGroupBased: boolean
+  assetSections: BalanceSheetSection[]
+  liabilitySections: BalanceSheetSection[]
+  equitySections: BalanceSheetSection[]
+  totalAssets: number
+  totalLiabilities: number
+  totalEquity: number
+  isBalanced: boolean
+  generatedAt: string
+}
+
 export type EntryType = 'debit' | 'credit'
 export type InventoryTransactionType = 'in' | 'out' | 'adjustment'
 
@@ -197,6 +335,201 @@ export type InventoryTransactionType = 'in' | 'out' | 'adjustment'
 export type VoucherType = 'purchase' | 'issuance'
 export type VoucherStatus = 'draft' | 'pending_finance' | 'approved' | 'receiving' | 'issuing' | 'posted' | 'completed' | 'rejected' | 'expired' | 'cancelled'
 export type PaymentType = 'credit' | 'cash' | 'check' | 'card' | 'bank_transfer' | 'partial'
+
+// ===============================================
+// SUPPLIER SYSTEM TYPES
+// ===============================================
+
+export type SupplierStatus = 'active' | 'inactive' | 'suspended'
+export type PaymentTerms = 'net_15' | 'net_30' | 'net_45' | 'net_60' | 'due_on_receipt' | 'cash_on_delivery' | 'prepaid'
+
+export interface Supplier {
+  id: number
+  organization_id: string
+  supplier_code: string
+  name: string
+  description?: string
+  
+  // Contact information
+  contact_person?: string
+  email?: string
+  phone?: string
+  fax?: string
+  
+  // Address information
+  billing_address_line1?: string
+  billing_address_line2?: string
+  billing_city?: string
+  billing_state?: string
+  billing_postal_code?: string
+  billing_country?: string
+  
+  shipping_address_line1?: string
+  shipping_address_line2?: string
+  shipping_city?: string
+  shipping_state?: string
+  shipping_postal_code?: string
+  shipping_country?: string
+  
+  // Business information
+  tax_id?: string
+  registration_number?: string
+  currency: string
+  credit_limit?: number
+  current_balance?: number
+  payment_terms?: PaymentTerms
+  
+  // Status and metadata
+  status: SupplierStatus
+  is_preferred: boolean
+  notes?: string
+  
+  // Audit fields
+  created_at: string
+  updated_at: string
+  created_by?: string
+  updated_by?: string
+  
+  // Relations
+  account_mappings?: SupplierAccountMappings
+  contacts?: SupplierContact[]
+}
+
+export interface SupplierAccountMappings {
+  id: number
+  supplier_id: number
+  organization_id: string
+
+  // Account mappings (see supplier_account_mappings / SupplierServiceAdmin)
+  payable_account_id: number
+  cash_account_id?: number
+  expense_account_id?: number
+  inventory_account_id?: number
+  freight_account_id?: number
+  tax_account_id?: number
+  discount_account_id?: number
+
+  // Metadata
+  created_at: string
+  updated_at: string
+  created_by?: string
+  updated_by?: string
+
+  // Relations
+  payable_account?: Account
+  cash_account?: Account
+  expense_account?: Account
+}
+
+export interface SupplierContact {
+  id: number
+  supplier_id: number
+  
+  // Contact details
+  name: string
+  title?: string
+  email?: string
+  phone?: string
+  mobile?: string
+  fax?: string
+  
+  // Contact type flags
+  is_primary: boolean
+  is_billing: boolean
+  is_shipping: boolean
+  is_technical: boolean
+  
+  // Metadata
+  created_at: string
+  updated_at: string
+  created_by?: string
+}
+
+export interface SupplierFormData {
+  // Basic information
+  supplier_code: string
+  name: string
+  legal_name?: string
+  description?: string
+  
+  // Contact information
+  contact_person?: string
+  email?: string
+  phone?: string
+  fax?: string
+  website?: string
+  
+  // Address information
+  billing_address_line1?: string
+  billing_address_line2?: string
+  billing_city?: string
+  billing_state?: string
+  billing_postal_code?: string
+  billing_country?: string
+  
+  shipping_address_line1?: string
+  shipping_address_line2?: string
+  shipping_city?: string
+  shipping_state?: string
+  shipping_postal_code?: string
+  shipping_country?: string
+  
+  // Business information
+  tax_id?: string
+  registration_number?: string
+  currency: string
+  
+  // Payment terms
+  payment_terms: PaymentTerms
+  credit_limit: number
+  
+  // Status and metadata
+  status: SupplierStatus
+  is_preferred: boolean
+  notes?: string
+  
+  // Account mappings
+  account_mappings: {
+    payable_account_id: number
+    cash_account_id?: number
+    expense_account_id?: number
+    inventory_account_id?: number
+    freight_account_id?: number
+    tax_account_id?: number
+    discount_account_id?: number
+  }
+  
+  // Contacts
+  contacts: Array<{
+    name: string
+    title?: string
+    email?: string
+    phone?: string
+    mobile?: string
+    fax?: string
+    is_primary: boolean
+    is_billing: boolean
+    is_shipping: boolean
+    is_technical: boolean
+  }>
+}
+
+export interface SupplierFilters {
+  status?: SupplierStatus[]
+  search?: string
+  is_preferred?: boolean
+  payment_terms?: PaymentTerms[]
+}
+
+/** Minimal supplier row for voucher supplier dropdowns (`getSuppliersForVoucher`). */
+export type SupplierVoucherPicker = {
+  id: number
+  supplier_code: string
+  name: string
+  payable_account_id: number
+  cash_account_id?: number
+  expense_account_id?: number
+}
 
 export interface InventoryVoucher {
   id: number
@@ -360,6 +693,7 @@ export interface VoucherFormData {
   vendor_contact?: string
   purchase_order_number?: string
   expected_delivery_date?: string
+  supplier_id?: number  // New field for supplier integration
   payment_type: PaymentType
   payment_account_id?: number
   deposit_amount?: number

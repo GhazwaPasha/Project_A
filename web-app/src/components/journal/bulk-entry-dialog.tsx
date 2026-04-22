@@ -207,7 +207,7 @@ export function BulkEntryDialog({
     addNewCard()
   }
 
-  const handleFileImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const onBulkFileInputChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
 
@@ -335,7 +335,7 @@ export function BulkEntryDialog({
                 <input
                   type="file"
                   accept=".csv,.xlsx,.xls"
-                  onChange={handleFileImport}
+                  onChange={onBulkFileInputChange}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   disabled={importing}
                 />

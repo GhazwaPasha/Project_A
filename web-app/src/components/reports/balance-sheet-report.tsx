@@ -16,7 +16,8 @@ import {
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useBalanceSheet } from '@/hooks/use-organization-data'
-import { useCurrentOrganization } from '@/stores/auth-store'
+import { useCurrentOrganization } from '@/contexts/organization-context'
+import { useComponentLoadingState } from '@/hooks/use-loading-state'
 
 interface Account {
   id: number
@@ -57,13 +58,18 @@ export function BalanceSheetReport({ onBack, asOfDate }: BalanceSheetReportProps
   const [expandedAccounts, setExpandedAccounts] = useState<Set<number>>(new Set())
   const currentOrganization = useCurrentOrganization()
   
+  // Use component loading state for better UX
+  const { isLoading: componentLoading } = useComponentLoadingState('balance-sheet', ['organization', 'accounts'])
+  
   // Use optimized hook instead of manual data loading
   const { 
     data, 
-    isLoading: loading, 
+    isLoading: queryLoading, 
     error, 
     refetch 
   } = useBalanceSheet(asOfDate)
+  
+  const loading = componentLoading || queryLoading
 
   const handlePrint = () => {
     if (!data) return
@@ -473,9 +479,11 @@ export function BalanceSheetReport({ onBack, asOfDate }: BalanceSheetReportProps
               <div
                 onClick={() => {
                   // Expand all sections and accounts
-                  const allSections = new Set(data?.assetSections.map(s => s.name) || [])
-                  allSections.add(...(data?.liabilitySections.map(s => s.name) || []))
-                  allSections.add(...(data?.equitySections.map(s => s.name) || []))
+                  const allSections = new Set<string>([
+                    ...(data?.assetSections.map((s) => s.name) ?? []),
+                    ...(data?.liabilitySections.map((s) => s.name) ?? []),
+                    ...(data?.equitySections.map((s) => s.name) ?? []),
+                  ])
                   setExpandedSections(allSections)
                   
                   // Expand all parent accounts

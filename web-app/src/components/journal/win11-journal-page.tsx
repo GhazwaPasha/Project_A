@@ -16,6 +16,7 @@ import {
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { JournalEntryDialog } from './journal-entry-dialog'
 import { BulkEntryDialog } from './bulk-entry-dialog'
+import { JournalCommandPanel } from './journal-command-panel'
 import { JournalEntry, Account, JournalEntryLine } from '@/types'
 import { useJournalEntries, useAccounts } from '@/hooks/use-organization-data'
 
@@ -76,6 +77,9 @@ export function Win11JournalPage() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--md-sys-color-background)' }}>
+      <div className="px-6 pt-6">
+        <JournalCommandPanel />
+      </div>
       {/* Fixed Header */}
       <div className="sticky top-0 z-30 backdrop-blur-sm border-b border-outline-variant" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>
         <div className="px-6 py-4">

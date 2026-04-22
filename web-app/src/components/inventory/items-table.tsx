@@ -56,7 +56,7 @@ export function ItemsTable({ items, onEdit, onRefresh }: ItemsTableProps) {
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{item.name}</span>
                       {isLowStock && (
-                        <AlertTriangle className="h-4 w-4 text-error" title="Low stock" />
+                        <AlertTriangle className="h-4 w-4 text-error" aria-label="Low stock" />
                       )}
                     </div>
                   </td>

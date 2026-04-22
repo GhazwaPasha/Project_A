@@ -20,7 +20,8 @@ import {
   ChevronRight,
   Menu,
   Bot,
-  Package
+  Package,
+  Truck
 } from 'lucide-react'
 
 const navigation = [
@@ -31,6 +32,7 @@ const navigation = [
   { name: 'Reports', href: '/dashboard/reports', icon: PieChart },
   { name: 'Accounts', href: '/dashboard/accounts', icon: FileText },
   { name: 'Inventory', href: '/dashboard/inventory', icon: Package },
+  { name: 'Suppliers', href: '/suppliers', icon: Truck },
   { name: 'Approvals', href: '/dashboard/approvals', icon: CheckSquare },
   { name: 'Period Closing', href: '/dashboard/period-closing', icon: Lock },
   { name: 'AI Demo', href: '/dashboard/ai-demo', icon: Bot },
@@ -96,7 +98,7 @@ export function Win11Sidebar({ open, onOpenChange }: Win11SidebarProps) {
           
           {/* Navigation - Material Design 3 Navigation Drawer */}
           <nav className={cn(
-            "flex-1 py-1",
+            "flex-1 py-1 overflow-y-auto scrollbar-hide",
             open ? "px-3" : "px-2"
           )}>
             {/* All Navigation Items */}

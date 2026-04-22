@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useCurrentOrganization } from '@/stores/auth-store'
+import { useCurrentOrganization } from '@/contexts/organization-context'
+import { queryKeys } from '@/lib/query-keys'
 import { useCallback } from 'react'
 import { DataService } from '@/lib/data-service'
 
@@ -12,27 +13,27 @@ export const useSmartPrefetch = () => {
     
     const prefetchMap = {
       'balance-sheet': () => queryClient.prefetchQuery({
-        queryKey: ['balance-sheet', currentOrganization.id],
+        queryKey: queryKeys.balanceSheet(currentOrganization.id),
         queryFn: () => DataService.generateBalanceSheet(currentOrganization.id),
         staleTime: 5 * 60 * 1000,
       }),
       'income-statement': () => queryClient.prefetchQuery({
-        queryKey: ['income-statement', currentOrganization.id],
+        queryKey: queryKeys.incomeStatement(currentOrganization.id),
         queryFn: () => DataService.generateIncomeStatement(currentOrganization.id),
         staleTime: 5 * 60 * 1000,
       }),
       'trial-balance': () => queryClient.prefetchQuery({
-        queryKey: ['trial-balance', currentOrganization.id],
+        queryKey: queryKeys.trialBalance(currentOrganization.id),
         queryFn: () => DataService.generateTrialBalance(currentOrganization.id),
         staleTime: 5 * 60 * 1000,
       }),
       'aged-receivables': () => queryClient.prefetchQuery({
-        queryKey: ['aged-receivables', currentOrganization.id],
+        queryKey: queryKeys.agedReceivables(currentOrganization.id),
         queryFn: () => DataService.generateAgedReceivables(currentOrganization.id),
         staleTime: 5 * 60 * 1000,
       }),
       'aged-payables': () => queryClient.prefetchQuery({
-        queryKey: ['aged-payables', currentOrganization.id],
+        queryKey: queryKeys.agedPayables(currentOrganization.id),
         queryFn: () => DataService.generateAgedPayables(currentOrganization.id),
         staleTime: 5 * 60 * 1000,
       }),

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +13,9 @@ import { formatCurrency } from '@/lib/utils'
 import { DataService } from '@/lib/data-service'
 import { InventoryCategory, InventoryItem, InventoryTransaction, Account } from '@/types'
 import { useOrganization } from '@/hooks/use-organization'
+import { usePageLoadingState } from '@/hooks/use-loading-state'
+import { useInventoryCategories, useInventoryItems } from '@/hooks/use-inventory'
+import { useAccounts } from '@/hooks/use-accounts'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AccountSelect } from '@/components/ui/account-select'
 import { VoucherList } from '@/components/vouchers/voucher-list'
@@ -45,9 +48,11 @@ interface EditingCategory {
 }
 
 export function Win11InventoryPage() {
-  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [activeView, setActiveView] = useState<'items' | 'categories' | 'transactions' | 'vouchers' | 'purchase-vouchers' | 'issuance-vouchers'>('items')
+  
+  // Use page loading state instead of manual loading
+  const { isLoading: pageLoading, hasError, isSuccess } = usePageLoadingState('inventory')
   const [categories, setCategories] = useState<InventoryCategory[]>([])
   const [items, setItems] = useState<InventoryItem[]>([])
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([])
@@ -78,30 +83,44 @@ export function Win11InventoryPage() {
   const { data: vouchers = [], isLoading: vouchersLoading, refetch: refetchVouchers } = useVouchers(voucherFilters)
   const { data: voucherStats, isLoading: voucherStatsLoading } = useVoucherStats()
 
-  useEffect(() => {
-    if (currentOrganization) loadData()
-  }, [currentOrganization])
 
-  const loadData = async () => {
+  // Use React Query hooks instead of manual data loading
+  const { data: categoriesData, isLoading: categoriesLoading, refetch: refetchCategories } = useInventoryCategories()
+  const { data: itemsData, isLoading: itemsLoading, refetch: refetchItems } = useInventoryItems()
+  const { data: accountsData, isLoading: accountsLoading, refetch: refetchAccounts } = useAccounts()
+
+  // Update local state when data changes
+  useEffect(() => {
+    if (categoriesData) setCategories(categoriesData)
+  }, [categoriesData])
+
+  useEffect(() => {
+    if (itemsData) setItems(itemsData)
+  }, [itemsData])
+
+  useEffect(() => {
+    if (accountsData) setAccounts(accountsData)
+  }, [accountsData])
+
+  const reloadTransactions = useCallback(async () => {
     if (!currentOrganization) return
     try {
-      setLoading(true)
-      const [categoriesData, itemsData, transactionsData, accountsData] = await Promise.all([
-        DataService.getInventoryCategories(currentOrganization.id, true),
-        DataService.getInventoryItems(currentOrganization.id, true),
-        DataService.getInventoryTransactions(currentOrganization.id, undefined, 100),
-        DataService.getAccounts(currentOrganization.id, true)
-      ])
-      setCategories(categoriesData)
-      setItems(itemsData)
-      setTransactions(transactionsData)
-      setAccounts(accountsData)
-    } catch (error) {
-      console.error('Error loading inventory data:', error)
-    } finally {
-      setLoading(false)
+      const txs = await DataService.getInventoryTransactions(currentOrganization.id, undefined, 100)
+      setTransactions(txs)
+    } catch (e) {
+      console.error(e)
     }
-  }
+  }, [currentOrganization])
+
+  useEffect(() => {
+    void reloadTransactions()
+  }, [reloadTransactions])
+
+  const refreshInventoryData = useCallback(async () => {
+    await Promise.all([refetchCategories(), refetchItems(), refetchAccounts(), reloadTransactions()])
+  }, [refetchCategories, refetchItems, refetchAccounts, reloadTransactions])
+
+  const loading = pageLoading || categoriesLoading || itemsLoading || accountsLoading
 
   const totalValue = items.reduce((sum, item) => sum + item.total_value, 0)
   const totalItems = items.length
@@ -158,7 +177,7 @@ export function Win11InventoryPage() {
       else if (editingItem.id) await DataService.updateInventoryItem(editingItem.id, itemData)
       setEditingItem(null)
       setIsCreatingItem(false)
-      loadData()
+      await refreshInventoryData()
     } catch (error) {
       console.error('Error saving item:', error)
     }
@@ -167,7 +186,7 @@ export function Win11InventoryPage() {
   const deleteItem = async (itemId: number) => {
     if (!confirm('Delete this item?')) return
     await DataService.deleteInventoryItem(itemId)
-    loadData()
+    void refreshInventoryData()
   }
 
   const startCreatingCategory = () => {
@@ -203,7 +222,7 @@ export function Win11InventoryPage() {
       else if (editingCategory.id) await DataService.updateInventoryCategory(editingCategory.id, categoryData)
       setEditingCategory(null)
       setIsCreatingCategory(false)
-      loadData()
+      await refreshInventoryData()
     } catch (error) {
       console.error('Error saving category:', error)
     }
@@ -212,7 +231,7 @@ export function Win11InventoryPage() {
   const deleteCategory = async (categoryId: number) => {
     if (!confirm('Delete this category?')) return
     await DataService.deleteInventoryCategory(categoryId)
-    loadData()
+    void refreshInventoryData()
   }
 
   const createTransaction = async () => {
@@ -239,7 +258,7 @@ export function Win11InventoryPage() {
         item_id: '', transaction_type: 'in', quantity: '', unit_cost: '',
         description: '', reference: '', transaction_date: new Date().toISOString().split('T')[0]
       })
-      loadData()
+      await refreshInventoryData()
     } catch (error) {
       console.error('Error creating transaction:', error)
     }
@@ -289,7 +308,7 @@ export function Win11InventoryPage() {
           <h1 className="text-2xl font-semibold win11-text-primary">Inventory Management</h1>
           <p className="win11-text-secondary">Track stock levels, categories, and movements</p>
         </div>
-        <Button variant="outline" onClick={loadData}>
+        <Button variant="outline" onClick={() => void refreshInventoryData()}>
           <RefreshCw className="mr-2 h-4 w-4" />Refresh
         </Button>
       </div>

@@ -1,0 +1,28 @@
+{
+  "name": "golden_balanced_expense",
+  "input": {
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "description": "Office supplies",
+    "entry_date": "2026-04-22",
+    "reference": "INV-1001",
+    "lines": [
+      {
+        "account_id": 5001,
+        "debit_amount": 120.0,
+        "credit_amount": 0,
+        "description": "Expense"
+      },
+      {
+        "account_id": 1001,
+        "debit_amount": 0,
+        "credit_amount": 120.0,
+        "description": "Cash"
+      }
+    ]
+  },
+  "expect": {
+    "event_type": "journal.proposed",
+    "balanced": true,
+    "line_count": 2
+  }
+}

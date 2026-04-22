@@ -16,12 +16,7 @@ import {
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Calendar } from '@/components/ui/calendar'
-import { 
-  Popover, 
-  PopoverContent, 
-  PopoverTrigger 
-} from '@/components/ui/popover'
-import { CalendarIcon, Filter, X } from 'lucide-react'
+import { Filter, X } from 'lucide-react'
 import { format } from 'date-fns'
 
 interface VoucherFiltersProps {
@@ -159,48 +154,24 @@ export function VoucherFilters({ filters, onFiltersChange }: VoucherFiltersProps
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label>From Date</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start text-left font-normal"
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {filters.date_from ? format(new Date(filters.date_from), 'PPP') : 'Select date'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={filters.date_from ? new Date(filters.date_from) : undefined}
-                  onSelect={(date) => handleFilterChange('date_from', date ? format(date, 'yyyy-MM-dd') : undefined)}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <Calendar
+              selected={filters.date_from ? new Date(filters.date_from) : undefined}
+              onChange={(date) =>
+                handleFilterChange('date_from', date ? format(date, 'yyyy-MM-dd') : undefined)
+              }
+              placeholder="From date"
+            />
           </div>
 
           <div className="space-y-2">
             <Label>To Date</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start text-left font-normal"
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {filters.date_to ? format(new Date(filters.date_to), 'PPP') : 'Select date'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={filters.date_to ? new Date(filters.date_to) : undefined}
-                  onSelect={(date) => handleFilterChange('date_to', date ? format(date, 'yyyy-MM-dd') : undefined)}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <Calendar
+              selected={filters.date_to ? new Date(filters.date_to) : undefined}
+              onChange={(date) =>
+                handleFilterChange('date_to', date ? format(date, 'yyyy-MM-dd') : undefined)
+              }
+              placeholder="To date"
+            />
           </div>
         </div>
 

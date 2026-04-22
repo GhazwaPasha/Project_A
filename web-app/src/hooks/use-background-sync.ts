@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useCurrentOrganization } from '@/stores/auth-store'
+import { useCurrentOrganization } from '@/contexts/organization-context'
+import { queryKeys } from '@/lib/query-keys'
 import { useEffect, useRef } from 'react'
 
 export const useBackgroundSync = (options?: { enabled?: boolean }) => {
@@ -19,8 +20,12 @@ export const useBackgroundSync = (options?: { enabled?: boolean }) => {
         
         // Only sync if it's been more than 5 minutes since last sync
         if (timeSinceLastSync > 5 * 60 * 1000) {
+          // Invalidate specific query types instead of all queries
           queryClient.invalidateQueries({
-            predicate: (query) => query.queryKey.includes(currentOrganization.id)
+            queryKey: queryKeys.allFinancialQueries(currentOrganization.id)
+          })
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.allReportQueries(currentOrganization.id)
           })
           lastSyncTimeRef.current = now
         }
@@ -41,8 +46,12 @@ export const useBackgroundSync = (options?: { enabled?: boolean }) => {
         
         // Only sync if it's been more than 5 minutes since last sync
         if (timeSinceLastSync > 5 * 60 * 1000) {
+          // Invalidate specific query types instead of all queries
           queryClient.invalidateQueries({
-            predicate: (query) => query.queryKey.includes(currentOrganization.id)
+            queryKey: queryKeys.allFinancialQueries(currentOrganization.id)
+          })
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.allReportQueries(currentOrganization.id)
           })
           lastSyncTimeRef.current = now
         }

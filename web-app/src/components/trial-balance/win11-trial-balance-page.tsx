@@ -169,6 +169,11 @@ export function Win11TrialBalancePage() {
         return
       }
 
+      if (!currentOrganization) {
+        setError('No organization selected.')
+        return
+      }
+
       // Load trial balance data for current organization
       const trialBalanceData = await DataService.getTrialBalance(currentOrganization.id)
       console.log('Trial balance data loaded:', trialBalanceData)
@@ -274,7 +279,7 @@ export function Win11TrialBalancePage() {
         }
       } catch (error) {
         // User cancelled the dialog - do nothing
-        if (error.name === 'AbortError') {
+        if (error instanceof Error && error.name === 'AbortError') {
           console.log('User cancelled the save dialog')
           return
         }

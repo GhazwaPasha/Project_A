@@ -148,7 +148,7 @@ export function JournalEntryDialog({
         throw new Error(`Could not find accounts with codes: "${parsed.debit_account_code}" or "${parsed.credit_account_code}". Please check your chart of accounts.`)
       }
 
-      // Update form data (matches desktop app logic exactly)
+      // Update form data from parsed line
       setFormData(prev => {
         const newData = {
           ...prev,
@@ -158,7 +158,7 @@ export function JournalEntryDialog({
           amount: parsed.amount.toString()
         }
         
-        // Only update date if one was specifically parsed from the input (matches desktop app)
+        // Only update date when the parser extracted an explicit date from the input
         if (parsed.date && parsed.date.trim()) {
           try {
             const parsedDate = new Date(parsed.date)
@@ -170,7 +170,7 @@ export function JournalEntryDialog({
             console.warn('Invalid date from AI, preserving current date:', e)
           }
         }
-        // Otherwise preserve the current date selection (matches desktop app behavior)
+        // Otherwise preserve the current date selection
         
         return newData
       })
@@ -322,35 +322,23 @@ export function JournalEntryDialog({
             </div>
           )}
 
-          {/* Date Field */}
-          <div className="md-text-field">
-            <Label htmlFor="entryDate" className="md-text-field-label">
-              Entry Date
-            </Label>
-            <Calendar
-              selected={formData.entryDate}
-              onChange={(date) => date && handleInputChange('entryDate', date)}
-              placeholder="Select date"
-              className="w-full"
-            />
-          </div>
 
           {/* AI Input Field - Full Width */}
           <div className="md-text-field">
             <Label htmlFor="aiInput" className="md-text-field-label">
-              AI Assistant <span className="text-primary">✨</span>
+              AI Assistant
             </Label>
             <div className="flex gap-2">
               <Input
                 id="aiInput"
-                placeholder="Go ahead, type your transaction as you'd say it out loud (e.g., 'Paid electricity bill $150')"
+                placeholder="Tell me your transaction like I am your accountant"
                 value={aiInput}
                 onChange={(e) => setAiInput(e.target.value)}
                 className="flex-1"
                 disabled={aiLoading}
               />
               {aiLoading ? (
-                <div className="relative w-32 h-14 bg-surface-container-highest rounded-lg overflow-hidden border border-outline">
+                <div className="relative w-32 h-10 bg-surface-container-highest rounded-lg overflow-hidden border border-outline">
                   <div 
                     className="absolute inset-0 bg-gradient-to-r from-pink-500 to-purple-600 transition-all duration-300 ease-out"
                     style={{ width: `${aiProgress}%` }}
@@ -366,7 +354,7 @@ export function JournalEntryDialog({
                   type="button"
                   onClick={handleAIParse}
                   disabled={!aiInput.trim()}
-                  className="md-button bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white border-0 px-6 h-14"
+                  className="md-button bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white border-0 px-6 h-10"
                 >
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4" />
@@ -423,21 +411,37 @@ export function JournalEntryDialog({
             </div>
           </div>
 
-          {/* Amount Field - Full Width */}
-          <div className="md-text-field">
-            <Label htmlFor="amount" className="md-text-field-label">
-              Amount <span className="text-error">*</span>
-            </Label>
-            <Input
-              id="amount"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              value={formData.amount}
-              onChange={(e) => handleInputChange('amount', e.target.value)}
-              className="w-full"
-            />
+          {/* Amount and Date Fields */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Amount Field */}
+            <div className="md-text-field">
+              <Label htmlFor="amount" className="md-text-field-label">
+                Amount <span className="text-error">*</span>
+              </Label>
+              <Input
+                id="amount"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                value={formData.amount}
+                onChange={(e) => handleInputChange('amount', e.target.value)}
+                className="w-full"
+              />
+            </div>
+
+            {/* Date Field */}
+            <div className="md-text-field">
+              <Label htmlFor="entryDate" className="md-text-field-label">
+                Entry Date
+              </Label>
+              <Calendar
+                selected={formData.entryDate}
+                onChange={(date) => date && handleInputChange('entryDate', date)}
+                placeholder="Select date"
+                className="w-full"
+              />
+            </div>
           </div>
 
           {/* Entry Summary */}

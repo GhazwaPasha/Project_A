@@ -1,17 +1,17 @@
 'use client'
 
-import { useAuthStore, useCurrentOrganization, useOrganizations, useIsLoading } from '@/stores/auth-store'
+import { useOrganizationContext } from '@/contexts/organization-context'
 import { Organization } from '@/types'
 
 export function useOrganization() {
-  const currentOrganization = useCurrentOrganization()
-  const organizations = useOrganizations()
-  const isLoading = useIsLoading()
-  const { switchOrganization } = useAuthStore()
-
-  const switchToOrganization = async (organizationId: string) => {
-    return await switchOrganization(organizationId)
-  }
+  const {
+    currentOrganization,
+    organizations,
+    switchOrganization,
+    isLoading,
+    error,
+    clearError
+  } = useOrganizationContext()
 
   const getOrganizationById = (organizationId: string): Organization | undefined => {
     return organizations.find(org => org.id === organizationId)
@@ -20,9 +20,11 @@ export function useOrganization() {
   return {
     currentOrganization,
     organizations,
-    switchToOrganization,
+    switchToOrganization: switchOrganization,
     getOrganizationById,
     isLoading,
-    hasOrganizations: organizations.length > 0
+    hasOrganizations: organizations.length > 0,
+    error,
+    clearError
   }
 }
