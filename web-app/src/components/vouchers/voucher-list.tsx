@@ -68,6 +68,7 @@ export function VoucherList({
   compact = false,
   organizationId = ''
 }: VoucherListProps) {
+  const safeVouchers = vouchers ?? []
   const [selectedVoucher, setSelectedVoucher] = useState<InventoryVoucher | null>(null)
   const [showApprovalDialog, setShowApprovalDialog] = useState(false)
   const [showRenewDialog, setShowRenewDialog] = useState(false)
@@ -176,7 +177,7 @@ export function VoucherList({
     )
   }
 
-  if (vouchers.length === 0) {
+  if (safeVouchers.length === 0) {
     return (
       <Card>
         <CardContent className="p-8 text-center">
@@ -193,7 +194,7 @@ export function VoucherList({
   if (compact) {
     return (
       <div className="space-y-2">
-        {vouchers.map((voucher) => (
+        {safeVouchers.map((voucher) => (
           <Card key={voucher.id} className="p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -231,7 +232,7 @@ export function VoucherList({
   return (
     <>
       <div className="space-y-4">
-        {vouchers.map((voucher) => (
+        {safeVouchers.map((voucher) => (
           <Card key={voucher.id} className="hover:shadow-md transition-shadow">
             <CardContent className="p-6">
               <div className="flex items-start justify-between">

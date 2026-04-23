@@ -6,7 +6,9 @@ import Link from 'next/link'
 import { authClient } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Loader2, Mail, Lock, Building2 } from 'lucide-react'
+import { Loader2, Mail, Lock } from 'lucide-react'
+import { AuthScaffold } from '@/components/auth/auth-scaffold'
+import { authFormFont } from '@/lib/auth-form-font'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -24,13 +26,13 @@ export function LoginPage() {
       const res = await authClient.signIn.email({
         email,
         password,
-        callbackURL: '/dashboard',
+        callbackURL: '/home',
       })
       if (res.error) {
         setError(res.error.message || 'Invalid email or password')
         return
       }
-      router.push('/dashboard')
+      router.push('/home')
       router.refresh()
     } catch {
       setError('An unexpected error occurred')
@@ -40,26 +42,18 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, var(--md-sys-color-primary-container) 0%, var(--md-sys-color-surface-container-low) 50%, var(--md-sys-color-tertiary-container) 100%)' }}>
-      <div className="absolute inset-0 bg-gradient-to-br from-transparent via-white/5 to-transparent"></div>
-
-      <div className="absolute top-20 left-20 w-32 h-32 rounded-full blur-xl animate-pulse opacity-60" style={{ background: 'radial-gradient(circle, var(--md-sys-color-primary) 0%, transparent 70%)' }}></div>
-      <div className="absolute bottom-20 right-20 w-40 h-40 rounded-full blur-2xl animate-pulse delay-1000 opacity-40" style={{ background: 'radial-gradient(circle, var(--md-sys-color-tertiary) 0%, transparent 70%)' }}></div>
-      <div className="absolute top-1/2 left-1/4 w-24 h-24 rounded-full blur-lg animate-pulse delay-500 opacity-50" style={{ background: 'radial-gradient(circle, var(--md-sys-color-secondary) 0%, transparent 70%)' }}></div>
-
-      <div className="w-full max-w-sm relative z-10">
-        <div className="text-center mb-12 animate-fade-in">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl mb-6 md-elevation-3 group hover:md-elevation-4 transition-all duration-300" style={{ background: 'linear-gradient(135deg, var(--md-sys-color-primary) 0%, var(--md-sys-color-tertiary) 100%)' }}>
-            <Building2 className="h-10 w-10 text-white group-hover:scale-110 transition-transform duration-300" />
-          </div>
-          <h1 className="text-5xl font-bold mb-2" style={{ color: 'var(--md-sys-color-on-surface)' }}>Accountuitive</h1>
-          <p className="text-lg" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Multi-Tenant SaaS Platform</p>
-        </div>
-
-        <div className="md-card-expressive interactive p-8 md-elevation-3 group">
+    <AuthScaffold>
+      <div className="w-full max-w-sm">
+        <div
+          className={`md-card-expressive interactive p-8 md-elevation-3 group auth-form-card ${authFormFont.className}`}
+        >
           <div className="text-center mb-8">
-            <h2 className="text-3xl font-semibold mb-3" style={{ color: 'var(--md-sys-color-on-surface)' }}>Welcome Back</h2>
-            <p className="text-base" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Sign in to your account to continue</p>
+            <h2
+              className="text-center text-2xl font-semibold sm:text-3xl"
+              style={{ color: 'var(--md-sys-color-on-surface)' }}
+            >
+              Sign in
+            </h2>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">
@@ -117,12 +111,12 @@ export function LoginPage() {
 
           <p className="text-center text-sm mt-6" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
             No account?{' '}
-            <Link href="/signup" className="font-medium underline" style={{ color: 'var(--md-sys-color-primary)' }}>
+            <Link href="/signup" className="font-medium underline" style={{ color: 'var(--auth-form-link)' }}>
               Create one
             </Link>
           </p>
         </div>
       </div>
-    </div>
+    </AuthScaffold>
   )
 }

@@ -242,7 +242,7 @@ function extractTargetPage(input: string): string {
   const pagePatterns = {
     'reports': ['income statement', 'profit loss', 'p&l', 'pnl', 'balance sheet', 'financial position', 'cash flow', 'cashflow', 'trial balance', 'trial', 'report', 'statement'],
     'ledger': ['ledger', 'account ledger', 'show account', 'open account', 'cash', 'bank', 'sales', 'expense', 'revenue'],
-    'dashboard': ['dashboard', 'home', 'overview', 'main'],
+    'home': ['dashboard', 'home', 'overview', 'main'],
     'journal': ['journal', 'entries', 'transactions'],
     'accounts': ['chart of accounts', 'accounts', 'account list'],
     'trial_balance': ['trial balance page'],
@@ -257,7 +257,7 @@ function extractTargetPage(input: string): string {
     }
   }
   
-  return 'dashboard'
+  return 'home'
 }
 
 function extractParameters(input: string, targetPage: string): Record<string, any> {
@@ -370,18 +370,19 @@ async function executeNavigation(data: NavigationParams) {
   
   // Map page names to routes
   const routeMap: Record<string, string> = {
-    'dashboard': '/dashboard',
-    'journal': '/dashboard/journal',
-    'ledger': '/dashboard/ledger',
-    'accounts': '/dashboard/accounts',
-    'trial_balance': '/dashboard/trial-balance',
-    'reports': '/dashboard/reports',
-    'reminders': '/dashboard/reminders',
-    'period_closing': '/dashboard/period-closing',
-    'settings': '/dashboard/settings'
+    'home': '/home',
+    'dashboard': '/home',
+    'journal': '/journal',
+    'ledger': '/ledger',
+    'accounts': '/accounts',
+    'trial_balance': '/trial-balance',
+    'reports': '/reports',
+    'reminders': '/reminders',
+    'period_closing': '/period-closing',
+    'settings': '/settings'
   }
   
-  const route = routeMap[page] || '/dashboard'
+  const route = routeMap[page] || '/home'
   
   // Navigate to the page
   if (typeof window !== 'undefined') {

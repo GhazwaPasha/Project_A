@@ -1,7 +1,42 @@
 import { getSql } from '@/server/pg'
+import { getOrganizationMemberRole, isUserProfileSuperAdmin } from '@/server/organization-access'
+import { hasOrgDataPermission, type OrgDataPermission } from '@/lib/organization-permissions'
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+/** Membership + specific data permission (or platform super admin). */
+async function requireDataPermission(
+  userId: string,
+  organizationId: string | null | undefined,
+  perm: OrgDataPermission
+): Promise<void> {
+  if (!organizationId || !UUID_RE.test(organizationId)) {
+    throw new Error('Forbidden')
+  }
+  if (await isUserProfileSuperAdmin(userId)) return
+  const role = await getOrganizationMemberRole(organizationId, userId)
+  if (!role) throw new Error('Forbidden')
+  if (!hasOrgDataPermission(role, perm)) throw new Error('Forbidden')
+}
+
+/** Pass if the member has at least one of the permissions (e.g. accounts list for journal vs inventory). */
+async function requireAnyDataPermission(
+  userId: string,
+  organizationId: string | null | undefined,
+  perms: OrgDataPermission[]
+): Promise<void> {
+  if (!organizationId || !UUID_RE.test(organizationId)) {
+    throw new Error('Forbidden')
+  }
+  if (await isUserProfileSuperAdmin(userId)) return
+  const role = await getOrganizationMemberRole(organizationId, userId)
+  if (!role) throw new Error('Forbidden')
+  for (const p of perms) {
+    if (hasOrgDataPermission(role, p)) return
+  }
+  throw new Error('Forbidden')
+}
 
 export async function assertOrgMembership(userId: string, organizationId: string) {
   const sql = getSql()
@@ -16,13 +51,6 @@ export async function assertOrgMembership(userId: string, organizationId: string
   if (rows.length === 0) {
     throw new Error('Forbidden')
   }
-}
-
-async function requireOrg(userId: string, organizationId: string | null | undefined) {
-  if (!organizationId || !UUID_RE.test(organizationId)) {
-    throw new Error('Forbidden')
-  }
-  await assertOrgMembership(userId, organizationId)
 }
 
 function orgFromRecord(obj: unknown, key = 'organization_id'): string | null {
@@ -155,19 +183,23 @@ export async function authorizeAppDataCall(
   if (method === 'getOrganization' && service === 'DataService') {
     const orgId = String(args[0])
     if (UUID_RE.test(orgId)) {
-      await assertOrgMembership(userId, orgId)
+      await requireDataPermission(userId, orgId, 'org.read')
     }
     return
   }
 
   if (key === 'DataService.getUserRoleInOrganization') {
     if (String(args[0]) !== userId) throw new Error('Forbidden')
-    await requireOrg(userId, String(args[1]))
+    await requireDataPermission(userId, String(args[1]), 'org.read')
     return
   }
 
-  const dataOrgFirst = new Set([
-    'DataService.getAccounts',
+  if (key === 'DataService.getAccounts') {
+    await requireAnyDataPermission(userId, String(args[0]), ['financial.read', 'inventory.read'])
+    return
+  }
+
+  const dataFinancial = new Set([
     'DataService.getJournalEntries',
     'DataService.getJournalEntriesWithLines',
     'DataService.getTrialBalance',
@@ -179,76 +211,93 @@ export async function authorizeAppDataCall(
     'DataService.generateAgedReceivables',
     'DataService.generateAgedPayables',
     'DataService.getAccountBalances',
+  ])
+  if (dataFinancial.has(key)) {
+    await requireDataPermission(userId, String(args[0]), 'financial.read')
+    return
+  }
+
+  const dataInventory = new Set([
     'DataService.getInventoryCategories',
     'DataService.getInventoryItems',
     'DataService.getInventoryTransactions',
     'DataService.getLowStockItems',
     'DataService.getInventoryValueByCategory',
   ])
-  if (dataOrgFirst.has(key)) {
-    await requireOrg(userId, String(args[0]))
+  if (dataInventory.has(key)) {
+    await requireDataPermission(userId, String(args[0]), 'inventory.read')
     return
   }
 
   if (key === 'DataService.getAccountBalance' || key === 'DataService.getAccountTransactions') {
-    await requireOrg(userId, String(args[1]))
+    await requireDataPermission(userId, String(args[1]), 'financial.read')
     return
   }
 
   if (key === 'DataService.getJournalEntryWithLines') {
     const orgId = await orgFromJournalEntryId(Number(args[0]))
-    await requireOrg(userId, orgId)
+    await requireDataPermission(userId, orgId, 'financial.read')
     return
   }
 
   if (key === 'DataService.createJournalEntry') {
-    await requireOrg(userId, orgFromRecord(args[0]))
+    await requireDataPermission(userId, orgFromRecord(args[0]), 'ledger.write')
     return
   }
 
   if (key === 'DataService.createAccount') {
-    await requireOrg(userId, orgFromRecord(args[0]))
+    await requireDataPermission(userId, orgFromRecord(args[0]), 'chart.write')
     return
   }
 
   if (key === 'DataService.updateAccount' || key === 'DataService.deleteAccount') {
     const orgId = await orgFromAccountId(Number(args[0]))
-    await requireOrg(userId, orgId)
+    await requireDataPermission(userId, orgId, 'chart.write')
     return
   }
 
-  if (
-    key === 'DataService.getInventoryCategory' ||
-    key === 'DataService.updateInventoryCategory' ||
-    key === 'DataService.deleteInventoryCategory'
-  ) {
+  if (key === 'DataService.getInventoryCategory') {
     const orgId = await orgFromInventoryCategoryId(Number(args[0]))
-    await requireOrg(userId, orgId)
+    await requireDataPermission(userId, orgId, 'inventory.read')
+    return
+  }
+  if (key === 'DataService.updateInventoryCategory' || key === 'DataService.deleteInventoryCategory') {
+    const orgId = await orgFromInventoryCategoryId(Number(args[0]))
+    await requireDataPermission(userId, orgId, 'inventory.write')
     return
   }
 
-  if (
-    key === 'DataService.getInventoryItem' ||
-    key === 'DataService.updateInventoryItem' ||
-    key === 'DataService.deleteInventoryItem'
-  ) {
+  if (key === 'DataService.getInventoryItem') {
     const orgId = await orgFromInventoryItemId(Number(args[0]))
-    await requireOrg(userId, orgId)
+    await requireDataPermission(userId, orgId, 'inventory.read')
+    return
+  }
+  if (key === 'DataService.updateInventoryItem' || key === 'DataService.deleteInventoryItem') {
+    const orgId = await orgFromInventoryItemId(Number(args[0]))
+    await requireDataPermission(userId, orgId, 'inventory.write')
     return
   }
 
   if (key === 'DataService.createInventoryCategory' || key === 'DataService.createInventoryItem') {
-    await requireOrg(userId, orgFromRecord(args[0]))
+    await requireDataPermission(userId, orgFromRecord(args[0]), 'inventory.write')
     return
   }
 
   if (key === 'DataService.createInventoryTransaction') {
-    await requireOrg(userId, orgFromRecord(args[0]))
+    await requireDataPermission(userId, orgFromRecord(args[0]), 'inventory.write')
     return
   }
 
-  const acctOrgFirst = new Set([
-    'AccountService.getAccounts',
+  if (key === 'AccountService.exportChartOfAccounts') {
+    await requireDataPermission(userId, String(args[0]), 'data.export')
+    return
+  }
+  if (key === 'AccountService.importChartOfAccounts') {
+    await requireDataPermission(userId, String(args[0]), 'chart.write')
+    return
+  }
+  /* Full books / COA management — members (inventory-only) must not use these. */
+  const acctReadFinancial = new Set([
     'AccountService.getAccountHierarchy',
     'AccountService.getParentAccounts',
     'AccountService.searchAccounts',
@@ -257,64 +306,66 @@ export async function authorizeAppDataCall(
     'AccountService.validateAccountCode',
     'AccountService.getAccountStats',
     'AccountService.getChartOfAccounts',
-    'AccountService.exportChartOfAccounts',
-    'AccountService.importChartOfAccounts',
   ])
-  if (acctOrgFirst.has(key)) {
-    await requireOrg(userId, String(args[0]))
+  if (acctReadFinancial.has(key)) {
+    await requireDataPermission(userId, String(args[0]), 'financial.read')
+    return
+  }
+
+  /* Flat list for account pickers (e.g. inventory GL links, suppliers) — inventory.read OR books. */
+  if (key === 'AccountService.getAccounts') {
+    await requireAnyDataPermission(userId, String(args[0]), ['financial.read', 'inventory.read'])
     return
   }
 
   if (key === 'AccountService.createAccount') {
-    await requireOrg(userId, orgFromRecord(args[0]))
+    await requireDataPermission(userId, orgFromRecord(args[0]), 'chart.write')
     return
   }
 
-  if (key === 'AccountService.getAccount' || key === 'AccountService.updateAccount' || key === 'AccountService.deleteAccount') {
+  if (key === 'AccountService.getAccount' || key === 'AccountService.getChildAccounts' || key === 'AccountService.getAccountBalance') {
     const orgId = await orgFromAccountId(Number(args[0]))
-    await requireOrg(userId, orgId)
+    await requireDataPermission(userId, orgId, 'financial.read')
     return
   }
-
-  if (key === 'AccountService.getChildAccounts') {
+  if (key === 'AccountService.updateAccount' || key === 'AccountService.deleteAccount') {
     const orgId = await orgFromAccountId(Number(args[0]))
-    await requireOrg(userId, orgId)
-    return
-  }
-
-  if (key === 'AccountService.getAccountBalance') {
-    const orgId = await orgFromAccountId(Number(args[0]))
-    await requireOrg(userId, orgId)
+    await requireDataPermission(userId, orgId, 'chart.write')
     return
   }
 
   if (key === 'VoucherService.getVouchers' || key === 'VoucherService.getVoucherStats' || key === 'VoucherService.getExpiredVouchers') {
-    await requireOrg(userId, String(args[0]))
+    await requireDataPermission(userId, String(args[0]), 'inventory.read')
     return
   }
 
   if (key === 'VoucherService.createVoucher') {
-    await requireOrg(userId, String(args[1]))
+    await requireDataPermission(userId, String(args[1]), 'voucher.write')
     return
   }
 
   if (key === 'VoucherService.submitForApproval') {
-    await requireOrg(userId, String(args[1]))
+    await requireDataPermission(userId, String(args[1]), 'voucher.write')
     return
   }
 
   if (key === 'VoucherService.getApprovalStats') {
-    await requireOrg(userId, String(args[0]))
+    await requireDataPermission(userId, String(args[0]), 'financial.read')
     if (String(args[1]) !== userId) throw new Error('Forbidden')
     return
   }
 
   if (key === 'VoucherService.expireOverdueVouchers') {
+    if (!(await isUserProfileSuperAdmin(userId))) throw new Error('Forbidden')
     return
   }
 
-  const voucherById = new Set([
-    'VoucherService.getVoucher',
+  if (key === 'VoucherService.getVoucher') {
+    const orgId = await orgFromVoucherId(Number(args[0]))
+    await requireDataPermission(userId, orgId, 'inventory.read')
+    return
+  }
+  const voucherByIdWrite = new Set([
     'VoucherService.updateVoucher',
     'VoucherService.deleteVoucher',
     'VoucherService.approveVoucher',
@@ -324,9 +375,9 @@ export async function authorizeAppDataCall(
     'VoucherService.postVoucher',
     'VoucherService.completeVoucher',
   ])
-  if (voucherById.has(key)) {
+  if (voucherByIdWrite.has(key)) {
     const orgId = await orgFromVoucherId(Number(args[0]))
-    await requireOrg(userId, orgId)
+    await requireDataPermission(userId, orgId, 'voucher.write')
     return
   }
 
@@ -336,34 +387,39 @@ export async function authorizeAppDataCall(
 
   if (key === 'VoucherService.deleteAttachment') {
     const orgId = await orgFromVoucherAttachmentId(Number(args[0]))
-    await requireOrg(userId, orgId)
+    await requireDataPermission(userId, orgId, 'voucher.write')
     return
   }
 
   if (key === 'SupplierService.getSuppliers' || key === 'SupplierService.getSupplierStats' || key === 'SupplierService.getSuppliersForVoucher') {
-    await requireOrg(userId, String(args[0]))
+    await requireDataPermission(userId, String(args[0]), 'inventory.read')
     return
   }
 
   if (key === 'SupplierService.createSupplier') {
-    await requireOrg(userId, String(args[1]))
+    await requireDataPermission(userId, String(args[1]), 'supplier.write')
     return
   }
 
-  if (key === 'SupplierService.getSupplier' || key === 'SupplierService.updateSupplier' || key === 'SupplierService.deleteSupplier') {
+  if (key === 'SupplierService.getSupplier') {
     const orgId = await orgFromSupplierId(Number(args[0]))
-    await requireOrg(userId, orgId)
+    await requireDataPermission(userId, orgId, 'inventory.read')
+    return
+  }
+  if (key === 'SupplierService.updateSupplier' || key === 'SupplierService.deleteSupplier') {
+    const orgId = await orgFromSupplierId(Number(args[0]))
+    await requireDataPermission(userId, orgId, 'supplier.write')
     return
   }
 
-  if (
-    key === 'SupplierService.getSupplierAccountMappings' ||
-    key === 'SupplierService.updateSupplierAccountMappings' ||
-    key === 'SupplierService.getSupplierContacts' ||
-    key === 'SupplierService.getSupplierForVoucher'
-  ) {
+  if (key === 'SupplierService.getSupplierAccountMappings' || key === 'SupplierService.getSupplierContacts' || key === 'SupplierService.getSupplierForVoucher') {
     const orgId = await orgFromSupplierId(Number(args[0]))
-    await requireOrg(userId, orgId)
+    await requireDataPermission(userId, orgId, 'inventory.read')
+    return
+  }
+  if (key === 'SupplierService.updateSupplierAccountMappings') {
+    const orgId = await orgFromSupplierId(Number(args[0]))
+    await requireDataPermission(userId, orgId, 'supplier.write')
     return
   }
 
@@ -371,13 +427,13 @@ export async function authorizeAppDataCall(
     const sid = (args[0] as { supplier_id?: number })?.supplier_id
     if (typeof sid !== 'number') throw new Error('Forbidden')
     const orgId = await orgFromSupplierId(sid)
-    await requireOrg(userId, orgId)
+    await requireDataPermission(userId, orgId, 'supplier.write')
     return
   }
 
   if (key === 'SupplierService.updateSupplierContact' || key === 'SupplierService.deleteSupplierContact') {
     const orgId = await orgFromSupplierContactId(Number(args[0]))
-    await requireOrg(userId, orgId)
+    await requireDataPermission(userId, orgId, 'supplier.write')
     return
   }
 

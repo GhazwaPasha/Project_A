@@ -5,6 +5,7 @@ import { Win11Sidebar } from './win11-sidebar'
 import { Win11Header } from './win11-header'
 import { cn } from '@/lib/utils'
 import { useBackgroundSync } from '@/hooks/use-background-sync'
+import { OrgPathAccessGuard } from '@/components/access/org-path-access-guard'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -21,7 +22,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   useEffect(() => {
     const updateSidebarWidth = () => {
       if (layoutRef.current) {
-        const sidebar = layoutRef.current.querySelector('.md-layout-sidebar') as HTMLElement
+        const sidebar = layoutRef.current.querySelector('.app-shell-sidebar') as HTMLElement
         if (sidebar) {
           const actualWidth = sidebar.offsetWidth
           layoutRef.current.style.setProperty('--sidebar-width', `${actualWidth}px`)
@@ -44,7 +45,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   useEffect(() => {
     const updateSidebarWidth = () => {
       if (layoutRef.current) {
-        const sidebar = layoutRef.current.querySelector('.md-layout-sidebar') as HTMLElement
+        const sidebar = layoutRef.current.querySelector('.app-shell-sidebar') as HTMLElement
         if (sidebar) {
           const actualWidth = sidebar.offsetWidth
           layoutRef.current.style.setProperty('--sidebar-width', `${actualWidth}px`)
@@ -59,7 +60,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, [sidebarOpen])
 
   return (
-    <div ref={layoutRef} className="md-layout">
+    <div ref={layoutRef} className="app-shell">
       {/* Sidebar - Material Design 3 Navigation Drawer */}
       <Win11Sidebar 
         open={sidebarOpen} 
@@ -67,13 +68,13 @@ export function AppLayout({ children }: AppLayoutProps) {
       />
       
       {/* Main content area - Material Design 3 Main Content */}
-      <div className={cn("md-layout-main", !sidebarOpen && "sidebar-collapsed")}>
+      <div className={cn("app-shell-main", !sidebarOpen && "sidebar-collapsed")}>
         {/* Header - Material Design 3 Top App Bar */}
         <Win11Header />
         
         {/* Page content - Material Design 3 Content Area */}
         <main className="flex-1 overflow-y-auto md-scrollbar relative">
-          {children}
+          <OrgPathAccessGuard>{children}</OrgPathAccessGuard>
         </main>
       </div>
     </div>

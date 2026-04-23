@@ -123,19 +123,19 @@ export function Win11ReportsPage() {
     // Navigate to the dedicated report page
     switch (report.id) {
       case 'balance_sheet':
-        router.push('/dashboard/reports/balance-sheet')
+        router.push('/reports/balance-sheet')
         break
       case 'income_statement':
-        router.push('/dashboard/reports/income-statement')
+        router.push('/reports/income-statement')
         break
       case 'trial_balance':
-        router.push('/dashboard/reports/trial-balance')
+        router.push('/reports/trial-balance')
         break
       case 'aged_receivables':
-        router.push('/dashboard/reports/aged-receivables')
+        router.push('/reports/aged-receivables')
         break
       case 'aged_payables':
-        router.push('/dashboard/reports/aged-payables')
+        router.push('/reports/aged-payables')
         break
       default:
         console.log('Report type not implemented:', report.id)

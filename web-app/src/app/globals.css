@@ -301,6 +301,16 @@
   .md-card-expressive.interactive:active {
     transform: translateY(-2px) scale(1.01);
   }
+
+  /* Auth sign-in / sign-up floating card: typography + text (Plus Jakarta in component). Links use --auth-form-link, not --md-sys-color-primary, so buttons keep theme primary. */
+  .auth-form-card {
+    --md-sys-color-on-surface: #e8e6f0;
+    --md-sys-color-on-surface-variant: #9a95a8;
+    --md-sys-color-outline: #5a6370;
+    --md-sys-color-surface-container-highest: #2c2a32;
+    --auth-form-link: #7eb8ff;
+    color: var(--md-sys-color-on-surface);
+  }
   
   /* Material Design 3 Buttons */
   .md-button {
@@ -648,13 +658,13 @@
   }
   
   /* Collapsed sidebar active state - only color the icon, no background */
-  .md-layout-sidebar.w-16 .md-navigation-item.active {
+  .app-shell-sidebar.w-16 .md-navigation-item.active {
     background-color: transparent;
     color: var(--md-sys-color-on-surface-variant);
   }
   
   /* Material Design 3 Header */
-  .md-header {
+  .app-top-header {
     background-color: var(--md-sys-color-surface);
     color: var(--md-sys-color-on-surface);
     border-bottom: 1px solid var(--md-sys-color-outline-variant);
@@ -977,18 +987,18 @@
   }
   
   /* Material Design 3 Layout */
-  .md-layout {
+  .app-shell {
     display: flex;
     min-height: 100vh;
     background-color: var(--md-sys-color-background);
   }
   
-  .md-layout {
+  .app-shell {
     --sidebar-width: 256px;
     --sidebar-collapsed-width: 64px;
   }
   
-  .md-layout-sidebar {
+  .app-shell-sidebar {
     width: var(--sidebar-width);
     background-color: var(--md-sys-color-surface);
     border-right: 1px solid var(--md-sys-color-outline-variant);
@@ -1005,34 +1015,34 @@
     flex-shrink: 0;
   }
   
-  .md-layout-sidebar::-webkit-scrollbar {
+  .app-shell-sidebar::-webkit-scrollbar {
     display: none; /* Safari and Chrome */
   }
   
   /* Custom scrollbar for sidebar navigation */
-  .md-layout-sidebar nav::-webkit-scrollbar {
+  .app-shell-sidebar nav::-webkit-scrollbar {
     width: 4px;
   }
   
-  .md-layout-sidebar nav::-webkit-scrollbar-track {
+  .app-shell-sidebar nav::-webkit-scrollbar-track {
     background: transparent;
   }
   
-  .md-layout-sidebar nav::-webkit-scrollbar-thumb {
+  .app-shell-sidebar nav::-webkit-scrollbar-thumb {
     background: var(--md-sys-color-outline-variant);
     border-radius: 2px;
   }
   
-  .md-layout-sidebar nav::-webkit-scrollbar-thumb:hover {
+  .app-shell-sidebar nav::-webkit-scrollbar-thumb:hover {
     background: var(--md-sys-color-outline);
   }
   
   /* Collapsed sidebar state */
-  .md-layout-sidebar.w-16 {
+  .app-shell-sidebar.w-16 {
     width: var(--sidebar-collapsed-width);
   }
   
-  .md-layout-main {
+  .app-shell-main {
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -1044,13 +1054,13 @@
   }
   
   /* Collapsed sidebar state */
-  .md-layout-main.sidebar-collapsed {
+  .app-shell-main.sidebar-collapsed {
     margin-left: var(--sidebar-collapsed-width);
     width: calc(100% - var(--sidebar-collapsed-width));
     max-width: calc(100% - var(--sidebar-collapsed-width));
   }
   
-  .md-layout-header {
+  .app-shell-header {
     background-color: var(--md-sys-color-surface);
     border-bottom: 1px solid var(--md-sys-color-outline-variant);
     box-shadow: 
@@ -1058,7 +1068,7 @@
       0 1px 2px rgba(0, 0, 0, 0.24);
   }
   
-  .md-layout-content {
+  .app-shell-content {
     flex: 1;
     padding: 24px;
     background-color: var(--md-sys-color-background);
@@ -1066,19 +1076,19 @@
   
   /* Material Design 3 Responsive Design */
   @media (max-width: 1024px) {
-    .md-layout {
+    .app-shell {
       --sidebar-width: 240px;
       --sidebar-collapsed-width: 64px;
     }
   }
   
   @media (max-width: 768px) {
-    .md-layout {
+    .app-shell {
       --sidebar-width: 280px;
       --sidebar-collapsed-width: 64px;
     }
     
-    .md-layout-sidebar {
+    .app-shell-sidebar {
       position: fixed;
       top: 0;
       left: calc(-1 * var(--sidebar-width));
@@ -1088,17 +1098,17 @@
       width: var(--sidebar-width) !important;
     }
     
-    .md-layout-sidebar.open {
+    .app-shell-sidebar.open {
       left: 0;
     }
     
-    .md-layout-main {
+    .app-shell-main {
       margin-left: 0;
       width: 100%;
       max-width: 100%;
     }
     
-    .md-layout-main.sidebar-collapsed {
+    .app-shell-main.sidebar-collapsed {
       margin-left: 0 !important;
       width: 100%;
       max-width: 100%;
@@ -1106,7 +1116,7 @@
   }
   
   @media (max-width: 480px) {
-    .md-layout {
+    .app-shell {
       --sidebar-width: 100vw;
       --sidebar-collapsed-width: 64px;
     }
@@ -1321,15 +1331,15 @@
   }
   
   /* Specific overrides for sidebar icons */
-  .md-layout-sidebar .text-primary {
+  .app-shell-sidebar .text-primary {
     color: var(--md-sys-color-primary) !important;
   }
   
-  .md-layout-sidebar .text-on-surface-variant {
+  .app-shell-sidebar .text-on-surface-variant {
     color: var(--md-sys-color-on-surface-variant) !important;
   }
   
-  .md-layout-sidebar svg {
+  .app-shell-sidebar svg {
     color: inherit !important;
   }
   
@@ -1342,7 +1352,7 @@
   }
   
   .win11-header {
-    @apply md-header;
+    @apply app-top-header;
   }
   
   /* Material Design 3 Scrollbar */

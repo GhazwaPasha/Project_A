@@ -43,7 +43,7 @@ export function useLoadingState() {
  * Hook for page-level loading states
  * Provides loading states for specific page types
  */
-export function usePageLoadingState(pageType: 'dashboard' | 'reports' | 'inventory' | 'vouchers' | 'suppliers') {
+export function usePageLoadingState(pageType: 'home' | 'reports' | 'inventory' | 'vouchers' | 'suppliers') {
   const currentOrganization = useCurrentOrganization()
   
   const getPageQueries = () => {
@@ -55,7 +55,7 @@ export function usePageLoadingState(pageType: 'dashboard' | 'reports' | 'invento
     ]
 
     switch (pageType) {
-      case 'dashboard':
+      case 'home':
         return [
           ...baseQueries,
           queryKeys.accountBalances(currentOrganization.id),

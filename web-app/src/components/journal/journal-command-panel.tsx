@@ -21,7 +21,7 @@ type ProposalRow = {
   created_at: string
 }
 
-export function JournalCommandPanel() {
+export function JournalCommandPanel({ readOnly = false }: { readOnly?: boolean }) {
   const org = useCurrentOrganization()
   const { toast } = useToast()
   const { data: accounts = [] } = useAccounts()
@@ -54,7 +54,7 @@ export function JournalCommandPanel() {
   }, [load])
 
   const propose = async () => {
-    if (!org?.id) return
+    if (readOnly || !org?.id) return
     const amt = Number(amount)
     const da = Number(debitAccountId)
     const ca = Number(creditAccountId)
@@ -86,7 +86,7 @@ export function JournalCommandPanel() {
   }
 
   const approve = async (id: number) => {
-    if (!org?.id) return
+    if (readOnly || !org?.id) return
     try {
       await commandApiFetch('journal/approve', {
         method: 'POST',
@@ -101,7 +101,7 @@ export function JournalCommandPanel() {
   }
 
   const post = async (id: number) => {
-    if (!org?.id) return
+    if (readOnly || !org?.id) return
     try {
       await commandApiFetch('journal/post', {
         method: 'POST',
@@ -128,27 +128,55 @@ export function JournalCommandPanel() {
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label>Description</Label>
-            <Input value={description} onChange={(e) => setDescription(e.target.value)} />
+            <Input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              readOnly={readOnly}
+              disabled={readOnly}
+            />
           </div>
           <div className="space-y-2">
             <Label>Entry date</Label>
-            <Input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
+            <Input
+              type="date"
+              value={entryDate}
+              onChange={(e) => setEntryDate(e.target.value)}
+              readOnly={readOnly}
+              disabled={readOnly}
+            />
           </div>
           <div className="space-y-2">
             <Label>Debit account id</Label>
-            <Input value={debitAccountId} onChange={(e) => setDebitAccountId(e.target.value)} placeholder="e.g. 6000" />
+            <Input
+              value={debitAccountId}
+              onChange={(e) => setDebitAccountId(e.target.value)}
+              placeholder="e.g. 6000"
+              readOnly={readOnly}
+              disabled={readOnly}
+            />
           </div>
           <div className="space-y-2">
             <Label>Credit account id</Label>
-            <Input value={creditAccountId} onChange={(e) => setCreditAccountId(e.target.value)} placeholder="e.g. 1000" />
+            <Input
+              value={creditAccountId}
+              onChange={(e) => setCreditAccountId(e.target.value)}
+              placeholder="e.g. 1000"
+              readOnly={readOnly}
+              disabled={readOnly}
+            />
           </div>
           <div className="space-y-2">
             <Label>Amount</Label>
-            <Input value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <Input value={amount} onChange={(e) => setAmount(e.target.value)} readOnly={readOnly} disabled={readOnly} />
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" onClick={() => void propose()}>
+          <Button
+            type="button"
+            onClick={() => void propose()}
+            disabled={readOnly}
+            title={readOnly ? 'Your role cannot propose journal entries' : undefined}
+          >
             Propose balanced entry
           </Button>
           <Button type="button" variant="outline" onClick={() => void load()} disabled={loading}>
@@ -177,12 +205,23 @@ export function JournalCommandPanel() {
                 </div>
                 <div className="flex gap-2">
                   {p.status === 'pending' ? (
-                    <Button size="sm" variant="secondary" type="button" onClick={() => void approve(p.id)}>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      type="button"
+                      disabled={readOnly}
+                      onClick={() => void approve(p.id)}
+                    >
                       Approve
                     </Button>
                   ) : null}
                   {p.status === 'approved' ? (
-                    <Button size="sm" type="button" onClick={() => void post(p.id)}>
+                    <Button
+                      size="sm"
+                      type="button"
+                      disabled={readOnly}
+                      onClick={() => void post(p.id)}
+                    >
                       Post
                     </Button>
                   ) : null}

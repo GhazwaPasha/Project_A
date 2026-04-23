@@ -11,7 +11,8 @@ import {
   Calendar,
   FileText,
   Grid3X3,
-  List
+  List,
+  Info,
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { JournalEntryDialog } from './journal-entry-dialog'
@@ -19,8 +20,18 @@ import { BulkEntryDialog } from './bulk-entry-dialog'
 import { JournalCommandPanel } from './journal-command-panel'
 import { JournalEntry, Account, JournalEntryLine } from '@/types'
 import { useJournalEntries, useAccounts } from '@/hooks/use-organization-data'
+import { useOrgDataPermission, useOrgMemberRoleResolved } from '@/hooks/use-org-permissions'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
 export function Win11JournalPage() {
+  const roleResolved = useOrgMemberRoleResolved()
+  const canWriteJournal = useOrgDataPermission('ledger.write')
+  const writeDisabled = !roleResolved || !canWriteJournal
+  const writeBlockTitle = !roleResolved
+    ? 'Checking your access…'
+    : !canWriteJournal
+      ? 'Your role cannot post journal entries'
+      : undefined
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState('cards') // 'cards' or 'table'
   const [showNewEntryDialog, setShowNewEntryDialog] = useState(false)
@@ -85,8 +96,18 @@ export function Win11JournalPage() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--md-sys-color-background)' }}>
-      <div className="px-6 pt-6">
-        <JournalCommandPanel />
+      <div className="px-6 pt-6 space-y-3">
+        {roleResolved && !canWriteJournal ? (
+          <Alert className="border-primary/30 bg-primary-container/30">
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <span className="font-medium text-on-surface">View only in this organization.</span>{' '}
+              Your role can browse the journal; posting and new entries are limited to Owner and
+              Accountant.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        <JournalCommandPanel readOnly={roleResolved && !canWriteJournal} />
       </div>
       {/* Fixed Header */}
       <div className="sticky top-0 z-30 backdrop-blur-sm border-b border-outline-variant" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>
@@ -122,14 +143,18 @@ export function Win11JournalPage() {
               </Button>
               <Button 
                 className="md-button"
-                onClick={() => setShowNewEntryDialog(true)}
+                disabled={writeDisabled}
+                title={writeBlockTitle}
+                onClick={() => roleResolved && canWriteJournal && setShowNewEntryDialog(true)}
               >
                 <Plus className="w-4 h-4 mr-2" />
                 New Entry
               </Button>
               <Button 
                 className="md-button-outlined"
-                onClick={() => setShowBulkEntryDialog(true)}
+                disabled={writeDisabled}
+                title={writeBlockTitle}
+                onClick={() => roleResolved && canWriteJournal && setShowBulkEntryDialog(true)}
               >
                 <FileText className="w-4 h-4 mr-2" />
                 Bulk Entry
@@ -163,14 +188,18 @@ export function Win11JournalPage() {
             <div className="flex items-center gap-3">
               <Button 
                 className="md-button"
-                onClick={() => setShowNewEntryDialog(true)}
+                disabled={writeDisabled}
+                title={writeBlockTitle}
+                onClick={() => roleResolved && canWriteJournal && setShowNewEntryDialog(true)}
               >
                 <Plus className="w-4 h-4 mr-2" />
                 New Entry
               </Button>
               <Button 
                 className="md-button-outlined"
-                onClick={() => setShowBulkEntryDialog(true)}
+                disabled={writeDisabled}
+                title={writeBlockTitle}
+                onClick={() => roleResolved && canWriteJournal && setShowBulkEntryDialog(true)}
               >
                 <FileText className="w-4 h-4 mr-2" />
                 Bulk Entry

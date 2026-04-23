@@ -23,12 +23,14 @@ import {
   X,
   AlertCircle,
   CheckCircle,
-  Info
+  Info,
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { DataService } from '@/lib/data-service'
 import { Account, AccountType } from '@/types'
 import { useOrganization } from '@/hooks/use-organization'
+import { useOrgDataPermission, useOrgMemberRoleResolved } from '@/hooks/use-org-permissions'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
 // Enhanced account interface with hierarchy support
 interface HierarchicalAccount extends Account {
@@ -64,6 +66,21 @@ export function Win11AccountsPage() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [loading, setLoading] = useState(true)
   const { currentOrganization } = useOrganization()
+  const roleResolved = useOrgMemberRoleResolved()
+  const canEditChart = useOrgDataPermission('chart.write')
+  const canExportData = useOrgDataPermission('data.export')
+  const chartEditDisabled = !roleResolved || !canEditChart
+  const exportDisabled = !roleResolved || !canExportData
+  const chartEditTitle = !roleResolved
+    ? 'Checking your access…'
+    : !canEditChart
+      ? 'Your role cannot edit the chart of accounts'
+      : undefined
+  const exportTitle = !roleResolved
+    ? 'Checking your access…'
+    : !canExportData
+      ? 'Your role cannot export'
+      : undefined
   const [formData, setFormData] = useState<AccountFormData>({
     code: '',
     name: '',
@@ -300,6 +317,7 @@ export function Win11AccountsPage() {
 
   const handleDeleteAccount = async (accountId: number) => {
     if (!currentOrganization) return
+    if (!roleResolved || !canEditChart) return
 
     if (confirm('Are you sure you want to delete this account? This action cannot be undone.')) {
       try {
@@ -333,6 +351,7 @@ export function Win11AccountsPage() {
   }
 
   const handleExportAccounts = () => {
+    if (!roleResolved || !canExportData) return
     const exportData = flatAccounts.map(account => ({
       'Account Code': account.code,
       'Account Name': account.name,
@@ -363,6 +382,7 @@ export function Win11AccountsPage() {
   }
 
   const handleImportAccounts = () => {
+    if (!roleResolved || !canEditChart) return
     setShowImportModal(true)
     setImportFile(null)
     setImportPreview([])
@@ -538,11 +558,13 @@ export function Win11AccountsPage() {
   }
 
   const openCreateModal = () => {
+    if (!roleResolved || !canEditChart) return
     resetForm()
     setShowCreateModal(true)
   }
 
   const openEditModal = (account: HierarchicalAccount) => {
+    if (!roleResolved || !canEditChart) return
     setFormData({
       code: account.code,
       name: account.name,
@@ -952,6 +974,23 @@ export function Win11AccountsPage() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--md-sys-color-background)' }}>
+      {roleResolved && (!canEditChart || !canExportData) && (
+        <div className="px-6 pt-4">
+          <Alert className="border-primary/30 bg-primary-container/30">
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <span className="text-on-surface">
+                {!canEditChart
+                  ? 'You can browse the chart. Creating, editing, or deleting accounts is limited to Owner and Accountant. '
+                  : null}
+                {!canExportData
+                  ? 'Export is not available for your current role. '
+                  : null}
+              </span>
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
       {/* Fixed Header */}
       <div className="sticky top-0 z-30 backdrop-blur-sm border-b border-outline-variant" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>
         <div className="px-6 py-4">
@@ -990,9 +1029,11 @@ export function Win11AccountsPage() {
                 >
                   <Search className="w-4 h-4" />
                 </Button>
-                <Button 
+                <Button
                   onClick={openCreateModal}
                   className="md-button"
+                  disabled={chartEditDisabled}
+                  title={chartEditTitle}
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   New Account
@@ -1008,6 +1049,8 @@ export function Win11AccountsPage() {
                   variant="outline" 
                   className="h-10 px-4 rounded-2xl border-outline hover:bg-primary-container hover:text-on-primary-container"
                   onClick={handleImportAccounts}
+                  disabled={chartEditDisabled}
+                  title={!roleResolved ? 'Checking your access…' : !canEditChart ? 'Your role cannot import into the chart' : undefined}
                 >
                   <Upload className="w-4 h-4" />
                 </Button>
@@ -1015,6 +1058,8 @@ export function Win11AccountsPage() {
                   variant="outline" 
                   className="h-10 px-4 rounded-2xl border-outline hover:bg-primary-container hover:text-on-primary-container"
                   onClick={handleExportAccounts}
+                  disabled={exportDisabled}
+                  title={exportTitle}
                 >
                   <Download className="w-4 h-4" />
                 </Button>
@@ -1040,7 +1085,12 @@ export function Win11AccountsPage() {
                 : 'Get started by creating your first account.'
               }
             </p>
-            <Button onClick={openCreateModal} className="md-button">
+            <Button
+              onClick={openCreateModal}
+              className="md-button"
+              disabled={chartEditDisabled}
+              title={chartEditTitle}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Create Account
             </Button>
@@ -1121,6 +1171,8 @@ export function Win11AccountsPage() {
                           <Button 
                             variant="outline" 
                             className="flex-1"
+                            disabled={chartEditDisabled}
+                            title={chartEditTitle}
                             onClick={() => openEditModal(selectedAccount)}
                           >
                             <Edit className="w-4 h-4 mr-2" />
@@ -1129,6 +1181,8 @@ export function Win11AccountsPage() {
                           <Button 
                             variant="outline" 
                             className="flex-1 text-red-600 hover:bg-red-50 hover:border-red-300"
+                            disabled={chartEditDisabled}
+                            title={chartEditTitle}
                             onClick={() => handleDeleteAccount(selectedAccount.id)}
                           >
                             <Trash2 className="w-4 h-4 mr-2" />

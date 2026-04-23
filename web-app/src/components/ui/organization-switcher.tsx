@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Building2, ChevronDown, Check, Plus } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { ChevronDown, Check } from 'lucide-react'
 import { useOrganization } from '@/hooks/use-organization'
 import { Organization } from '@/types'
 import { useQueryClient } from '@tanstack/react-query'
@@ -13,6 +13,7 @@ interface OrganizationSwitcherProps {
 }
 
 export function OrganizationSwitcher({ className = '' }: OrganizationSwitcherProps) {
+  const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
   const [isSwitching, setIsSwitching] = useState(false)
   const queryClient = useQueryClient()
@@ -57,8 +58,8 @@ export function OrganizationSwitcher({ className = '' }: OrganizationSwitcherPro
   }
 
   const handleCreateOrganization = () => {
-    // Navigate to organization creation page
-    window.location.href = '/dashboard/organization'
+    setIsOpen(false)
+    router.push('/organization/new')
   }
 
   if (isLoading || !hasOrganizations) {

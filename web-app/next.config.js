@@ -32,6 +32,12 @@ for (const [key, value] of Object.entries(process.env)) {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   env: nextPublic,
+  async redirects() {
+    return [
+      { source: '/dashboard', destination: '/home', permanent: true },
+      { source: '/dashboard/:path*', destination: '/:path*', permanent: true },
+    ]
+  },
 }
 
 module.exports = nextConfig

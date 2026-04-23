@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
 import { AppLayout } from '@/components/layout/app-layout'
 
-export default async function DashboardLayout({
+export default async function AppShellLayout({
   children,
 }: {
   children: React.ReactNode

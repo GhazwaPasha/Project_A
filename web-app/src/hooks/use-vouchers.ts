@@ -9,6 +9,7 @@ import {
 } from '@/types'
 import { useCurrentOrganization } from '@/contexts/organization-context'
 import { useAuthStore } from '@/stores/auth-store'
+import { hasOrgDataPermission } from '@/lib/organization-permissions'
 import { queryKeys } from '@/lib/query-keys'
 
 // ===============================================
@@ -366,7 +367,12 @@ export function useCanApproveVouchers() {
 
 export function useCanCreateVouchers() {
   const { user } = useAuthStore()
-  
-  // All authenticated users can create vouchers
-  return !!user
+  const role = useAuthStore((s) => s.currentOrgMemberRole)
+  const isSuper = useAuthStore((s) => s.profile?.is_super_admin) === true
+  const resolved = useAuthStore((s) => s.orgMemberRoleResolved)
+  if (!user) return false
+  if (isSuper) return true
+  if (!resolved) return true
+  if (!role) return false
+  return hasOrgDataPermission(role, 'voucher.write', { isPlatformSuperAdmin: false })
 }

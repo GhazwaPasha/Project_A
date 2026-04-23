@@ -1,12 +1,16 @@
 import { create } from 'zustand'
 import { subscribeWithSelector, persist } from 'zustand/middleware'
-import { User, Organization, UserProfile } from '@/types'
+import { User, Organization, UserProfile, UserRole } from '@/types'
 
 interface AuthState {
   user: User | null
   profile: UserProfile | null
   organizations: Organization[]
   currentOrganization: Organization | null
+  /** Set when `currentOrganization` and session are known. Used for per-org RBAC in UI. */
+  currentOrgMemberRole: UserRole | null
+  /** After `loadUserData` / `switchOrganization` has finished loading `currentOrgMemberRole` for the active org. */
+  orgMemberRoleResolved: boolean
   isLoading: boolean
   isAuthenticated: boolean
   lastOrganizationSwitch: number | null
@@ -16,6 +20,7 @@ interface AuthState {
   setProfile: (profile: UserProfile | null) => void
   setOrganizations: (organizations: Organization[]) => void
   setCurrentOrganization: (organization: Organization | null) => void
+  setCurrentOrgMemberRole: (role: UserRole | null) => void
   setLoading: (loading: boolean) => void
   switchOrganization: (organizationId: string) => Promise<boolean>
   loadUserData: () => Promise<void>
@@ -29,6 +34,8 @@ export const useAuthStore = create<AuthState>()(
       profile: null,
       organizations: [],
       currentOrganization: null,
+      currentOrgMemberRole: null,
+      orgMemberRoleResolved: false,
       isLoading: false,
       isAuthenticated: false,
       lastOrganizationSwitch: null,
@@ -37,18 +44,31 @@ export const useAuthStore = create<AuthState>()(
     setProfile: (profile) => set({ profile }),
     setOrganizations: (organizations) => set({ organizations }),
     setCurrentOrganization: (currentOrganization) => set({ currentOrganization }),
+    setCurrentOrgMemberRole: (currentOrgMemberRole) => set({ currentOrgMemberRole }),
     setLoading: (isLoading) => set({ isLoading }),
     
     switchOrganization: async (organizationId: string) => {
-      const { organizations } = get()
+      const { organizations, user: u } = get()
       const organization = organizations.find(org => org.id === organizationId)
       
       if (organization) {
         set({ 
           currentOrganization: organization,
-          lastOrganizationSwitch: Date.now()
+          lastOrganizationSwitch: Date.now(),
+          orgMemberRoleResolved: false,
         })
         localStorage.setItem('selectedOrganizationId', organizationId)
+        if (u) {
+          try {
+            const { DataService } = await import('@/lib/data-service')
+            const role = await DataService.getUserRoleInOrganization(u.id, organizationId)
+            set({ currentOrgMemberRole: role, orgMemberRoleResolved: true })
+          } catch {
+            set({ currentOrgMemberRole: null, orgMemberRoleResolved: true })
+          }
+        } else {
+          set({ orgMemberRoleResolved: true })
+        }
         return true
       }
       return false
@@ -57,6 +77,7 @@ export const useAuthStore = create<AuthState>()(
   loadUserData: async () => {
     const { user, organizations: existingOrgs, currentOrganization: existingOrg } = get()
     if (!user) return
+    set({ orgMemberRoleResolved: false })
     
     // If we already have organizations and current org, don't set loading
     // This prevents the loading state from showing when data is already available
@@ -83,9 +104,19 @@ export const useAuthStore = create<AuthState>()(
       
       if (currentOrg) {
         set({ currentOrganization: currentOrg })
+        try {
+          const { DataService } = await import('@/lib/data-service')
+          const role = await DataService.getUserRoleInOrganization(user.id, currentOrg.id)
+          set({ currentOrgMemberRole: role, orgMemberRoleResolved: true })
+        } catch {
+          set({ currentOrgMemberRole: null, orgMemberRoleResolved: true })
+        }
+      } else {
+        set({ currentOrgMemberRole: null, orgMemberRoleResolved: true })
       }
     } catch (error) {
       console.error('Error loading user data:', error)
+      set({ orgMemberRoleResolved: true })
     } finally {
       set({ isLoading: false })
     }
@@ -97,7 +128,9 @@ export const useAuthStore = create<AuthState>()(
           user: null, 
           profile: null, 
           organizations: [], 
-          currentOrganization: null, 
+          currentOrganization: null,
+          currentOrgMemberRole: null,
+          orgMemberRoleResolved: false,
           isAuthenticated: false,
           lastOrganizationSwitch: null,
           isLoading: false

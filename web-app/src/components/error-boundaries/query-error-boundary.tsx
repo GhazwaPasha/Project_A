@@ -137,7 +137,7 @@ function QueryErrorFallback({
 
   const handleGoHome = () => {
     queryClient.clear()
-    router.push('/dashboard')
+    router.push('/home')
     onGoHome()
   }
 

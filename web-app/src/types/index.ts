@@ -185,7 +185,12 @@ export interface InventoryTransaction {
   item?: InventoryItem
 }
 
-export type UserRole = 'super_admin' | 'organization_owner' | 'accountant' | 'member'
+export type UserRole =
+  | 'super_admin'
+  | 'organization_owner'
+  | 'accountant'
+  | 'member'
+  | 'observer'
 export type AccountType = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense'
 
 /** Dashboard / ledger row from `getFinancialMetrics`. */

@@ -88,6 +88,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('complete-profile error', e)
+    const code =
+      e && typeof e === 'object' && 'code' in e
+        ? String((e as { code: unknown }).code)
+        : ''
+    const isDb =
+      code === 'ETIMEDOUT' ||
+      code === 'CONNECT_TIMEOUT' ||
+      code === 'ECONNREFUSED' ||
+      code === 'ENOTFOUND' ||
+      (e instanceof Error && /connect|timeout|database/i.test(e.message))
+    if (isDb) {
+      return NextResponse.json(
+        {
+          error:
+            'Cannot reach the database. Use Neon Project → Connect → copy the pooled Postgres connection string into DATABASE_URL (not Data API), ensure SSL, then restart the dev server.',
+        },
+        { status: 503 }
+      )
+    }
+    if (e instanceof Error && e.message.startsWith('DATABASE_URL host looks like')) {
+      return NextResponse.json({ error: e.message }, { status: 400 })
+    }
     return NextResponse.json({ error: 'Profile setup failed' }, { status: 500 })
   }
 }

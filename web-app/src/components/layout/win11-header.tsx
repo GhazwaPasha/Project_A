@@ -1,22 +1,38 @@
 'use client'
 
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { 
-  Bell, 
+import { useRouter } from 'next/navigation'
+import {
+  Bell,
   Settings,
   User,
   Building2,
-  MoreVertical
+  MoreVertical,
+  LogOut,
 } from 'lucide-react'
+import { authClient } from '@/lib/auth-client'
 import { AIStatusBar } from '@/components/ai/ai-status-bar'
 import { OrganizationSwitcher } from '@/components/ui/organization-switcher'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 interface Win11HeaderProps {}
 
 export function Win11Header({}: Win11HeaderProps) {
+  const router = useRouter()
+
+  async function handleSignOut() {
+    await authClient.signOut()
+    router.push('/')
+  }
+
   return (
-    <header className="md-header sticky top-0 z-40">
+    <header className="app-top-header sticky top-0 z-40">
       <div className="flex h-16 items-center justify-between px-4 md:px-6">
         {/* Left side - App Branding */}
         <div className="flex items-center space-x-3">
@@ -53,18 +69,31 @@ export function Win11Header({}: Win11HeaderProps) {
           <button 
             className="md-button-text p-2 rounded-full"
             aria-label="Settings"
-            onClick={() => window.location.href = '/dashboard/settings'}
+            onClick={() => window.location.href = '/settings'}
           >
             <Settings className="w-4 h-4" />
           </button>
           
           {/* User Profile */}
-          <button 
-            className="md-button-text p-2 rounded-full"
-            aria-label="User profile"
-          >
-            <User className="w-4 h-4" />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="md-button-text p-2 rounded-full"
+                aria-label="User profile"
+                type="button"
+              >
+                <User className="w-4 h-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuLabel>Account</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => void handleSignOut()}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           
           {/* More options */}
           <button 
