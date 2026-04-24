@@ -25,6 +25,28 @@ export type {
   BalanceSheetReportData,
 } from '@/types'
 
+type DashboardBundleData = {
+  financialMetrics: FinancialMetricsData
+  accountBalances: AccountBalanceRow[]
+}
+
+/** One `/api/app-data` request for both metrics and balances (parallel on server). Prefer on dashboard. */
+export const useDashboardBundle = (dateRange?: { fromDate?: string; toDate?: string }) => {
+  const currentOrganization = useCurrentOrganization()
+  return useQuery<DashboardBundleData>({
+    queryKey: queryKeys.dashboardBundle(currentOrganization?.id || '', dateRange),
+    queryFn: () =>
+      DataService.getDashboardBundle(
+        currentOrganization!.id,
+        dateRange?.fromDate,
+        dateRange?.toDate
+      ),
+    enabled: !!currentOrganization,
+    staleTime: 3 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+  })
+}
+
 // Financial metrics hook
 export const useFinancialMetrics = (dateRange?: { fromDate?: string; toDate?: string }) => {
   const currentOrganization = useCurrentOrganization()
@@ -158,8 +180,10 @@ export const useInvalidateOrganizationData = () => {
 
   const invalidateFinancial = () => {
     if (currentOrganization) {
+      const id = currentOrganization.id
+      queryClient.invalidateQueries({ queryKey: ['dashboard-bundle', id] })
       queryClient.invalidateQueries({
-        queryKey: queryKeys.allFinancialQueries(currentOrganization.id),
+        queryKey: queryKeys.allFinancialQueries(id),
       })
     }
   }

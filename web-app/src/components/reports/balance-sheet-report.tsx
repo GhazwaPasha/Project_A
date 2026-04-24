@@ -456,7 +456,7 @@ export function BalanceSheetReport({ onBack, asOfDate }: BalanceSheetReportProps
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--md-sys-color-background)' }}>
       {/* Fixed Header */}
-      <div className="sticky top-0 z-30 backdrop-blur-sm border-b border-outline-variant" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>
+      <div className="app-page-header sticky top-0 z-30">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">

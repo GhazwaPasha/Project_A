@@ -371,8 +371,8 @@ export function VoucherViewDialog({ voucher, open, onOpenChange }: VoucherViewDi
                 {/* Executed */}
                 {voucher.executed_at && (
                   <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <FileText className="h-3 w-3 text-blue-600" />
+                    <div className="w-6 h-6 rounded-full bg-primary-container/50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <FileText className="h-3 w-3 text-on-primary-container" />
                     </div>
                     <div>
                       <p className="font-medium">Executed</p>

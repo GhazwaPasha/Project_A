@@ -15,7 +15,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 import { formatCurrency, formatPercentage, formatDate } from '@/lib/utils'
-import { useFinancialMetrics, useAccountBalances } from '@/hooks/use-organization-data'
+import { useDashboardBundle } from '@/hooks/use-organization-data'
 import type { AccountBalanceRow, FinancialMetricsData } from '@/types'
 import { DateFilter, DateRange } from '@/components/ui/date-filter'
 import { 
@@ -86,8 +86,6 @@ function calculateFinancialRatios(
   accountBalances: AccountBalanceRow[],
   financialMetrics: FinancialMetricsData
 ): FinancialRatios {
-  console.log('Calculating ratios with account balances:', accountBalances.length, 'accounts')
-  
   // Calculate current assets (accounts with group = 'current_asset')
   const currentAssets = accountBalances
     .filter(acc => acc.group === 'current_asset' && acc.balance > 0)
@@ -105,16 +103,6 @@ function calculateFinancialRatios(
                     acc.name.toLowerCase().includes('merchandise')) && 
                    acc.balance > 0)
     .reduce((sum, acc) => sum + acc.balance, 0)
-  
-  console.log('Ratio calculations:', {
-    currentAssets,
-    currentLiabilities,
-    inventory,
-    totalRevenue: financialMetrics.totalRevenue,
-    totalExpenses: financialMetrics.totalExpenses,
-    netIncome: financialMetrics.netIncome,
-    totalAssets: financialMetrics.totalAssets
-  })
   
   // Calculate liquidity ratios
   const currentRatio = currentLiabilities > 0 ? currentAssets / currentLiabilities : 0
@@ -146,27 +134,16 @@ function calculateFinancialRatios(
 export function Win11DashboardPage() {
   const [dateRange, setDateRange] = useState<DateRange>({ startDate: null, endDate: null })
   
-  // Use optimized hooks instead of manual data loading
-  const { 
-    data: financialMetrics, 
-    isLoading: metricsLoading, 
-    error: metricsError 
-  } = useFinancialMetrics({
+  const {
+    data: bundle,
+    isLoading,
+    error,
+  } = useDashboardBundle({
     fromDate: dateRange.startDate?.toISOString().split('T')[0],
-    toDate: dateRange.endDate?.toISOString().split('T')[0]
+    toDate: dateRange.endDate?.toISOString().split('T')[0],
   })
-  
-  const { 
-    data: accountBalances, 
-    isLoading: balancesLoading, 
-    error: balancesError 
-  } = useAccountBalances({
-    fromDate: dateRange.startDate?.toISOString().split('T')[0],
-    toDate: dateRange.endDate?.toISOString().split('T')[0]
-  })
-  
-  const isLoading = metricsLoading || balancesLoading
-  const error = metricsError || balancesError
+  const financialMetrics = bundle?.financialMetrics
+  const accountBalances = bundle?.accountBalances
   
   // Memoize expensive calculations
   const financialRatios = useMemo(() => {
@@ -356,7 +333,7 @@ export function Win11DashboardPage() {
           <p className="win11-text-secondary">
             Overview of your accounting and financial data.
             {dateRange.startDate && dateRange.endDate && (
-              <span className="ml-2 px-2 py-1 bg-primary-container text-on-primary-container rounded-full text-xs font-medium">
+              <span className="ml-2 inline-flex max-w-full items-center rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary dark:bg-primary/20">
                 Filtered: {dateRange.startDate.toLocaleDateString()} - {dateRange.endDate.toLocaleDateString()}
               </span>
             )}

@@ -26,6 +26,7 @@ import {
   Info,
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { accountTypeBadgeClass } from '@/lib/account-type-badges'
 import { DataService } from '@/lib/data-service'
 import { Account, AccountType } from '@/types'
 import { useOrganization } from '@/hooks/use-organization'
@@ -227,17 +228,6 @@ export function Win11AccountsPage() {
 
   const selectAccount = (account: HierarchicalAccount) => {
     setSelectedAccount(account)
-  }
-
-  const getAccountTypeColor = (type: AccountType) => {
-    switch (type) {
-      case 'asset': return 'text-green-600 bg-green-50'
-      case 'liability': return 'text-red-600 bg-red-50'
-      case 'equity': return 'text-blue-600 bg-blue-50'
-      case 'revenue': return 'text-purple-600 bg-purple-50'
-      case 'expense': return 'text-orange-600 bg-orange-50'
-      default: return 'text-gray-600 bg-gray-50'
-    }
   }
 
   const validateForm = (): boolean => {
@@ -620,16 +610,16 @@ export function Win11AccountsPage() {
                 <span className="md-body-medium text-on-surface truncate">
                   {account.name}
                 </span>
-                <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-medium ${getAccountTypeColor(account.account_type)}`}>
+                <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-medium ${accountTypeBadgeClass(account.account_type)}`}>
                   {account.account_type.charAt(0).toUpperCase() + account.account_type.slice(1)}
                 </span>
                 {account.is_postable && (
-                  <span className="px-2 py-0.5 bg-green-100 text-green-600 text-xs rounded-md">
+                  <span className="px-2 py-0.5 bg-primary-container/30 text-on-primary-container text-xs rounded-md">
                     Postable
                 </span>
                 )}
                 {account.group && (
-                  <span className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-md">
+                  <span className="px-2 py-0.5 bg-surface-container-highest text-on-surface text-xs rounded-md">
                     {account.group.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                   </span>
                 )}
@@ -992,7 +982,7 @@ export function Win11AccountsPage() {
         </div>
       )}
       {/* Fixed Header */}
-      <div className="sticky top-0 z-30 backdrop-blur-sm border-b border-outline-variant" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>
+      <div className="app-page-header sticky top-0 z-30">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -1134,7 +1124,7 @@ export function Win11AccountsPage() {
                       </div>
                       <div>
                         <label className="text-sm font-medium text-on-surface-variant">Account Type</label>
-                        <span className={`inline-block px-2 py-1 rounded-md text-xs font-medium ${getAccountTypeColor(selectedAccount.account_type)}`}>
+                        <span className={`inline-block px-2 py-1 rounded-md text-xs font-medium ${accountTypeBadgeClass(selectedAccount.account_type)}`}>
                           {selectedAccount.account_type.charAt(0).toUpperCase() + selectedAccount.account_type.slice(1)}
                         </span>
                       </div>

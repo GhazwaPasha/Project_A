@@ -62,11 +62,23 @@ export function OrganizationSwitcher({ className = '' }: OrganizationSwitcherPro
     router.push('/organization/new')
   }
 
-  if (isLoading || !hasOrganizations) {
+  if (isLoading) {
     return (
       <div className={`md-chip selected ${className}`}>
         <span className="md-label-medium">Loading...</span>
       </div>
+    )
+  }
+
+  if (!hasOrganizations) {
+    return (
+      <button
+        type="button"
+        onClick={() => router.push('/organization/new')}
+        className={`md-chip selected text-left transition-colors duration-200 cursor-pointer ${className}`}
+      >
+        <span className="md-label-medium">Create organization</span>
+      </button>
     )
   }
 
@@ -82,13 +94,15 @@ export function OrganizationSwitcher({ className = '' }: OrganizationSwitcherPro
     <div className={`relative ${className}`}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="md-chip selected hover:bg-primary-container hover:text-on-primary-container transition-colors duration-200 cursor-pointer"
+        className="md-chip selected transition-colors duration-200 cursor-pointer"
         disabled={isSwitching}
       >
-        <span className="md-label-medium">
+        <span className="md-label-medium text-inherit max-w-[14rem] truncate">
           {currentOrganization?.name || 'Select Organization'}
         </span>
-        <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-inherit transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+        />
       </button>
 
       {isOpen && (

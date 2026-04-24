@@ -263,11 +263,11 @@ export function Win11UserManagementPage() {
                   </span>
                 </div>
                 {user.isOnline && (
-                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
+                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-primary rounded-full border-2 border-background" />
                 )}
                 {user.isLocked && (
-                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white flex items-center justify-center">
-                    <Lock className="w-2 h-2 text-white" />
+                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-error rounded-full border-2 border-background flex items-center justify-center">
+                    <Lock className="w-2 h-2 text-on-error" />
                   </div>
                 )}
               </div>
@@ -374,7 +374,7 @@ export function Win11UserManagementPage() {
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--md-sys-color-background)' }}>
       {/* Fixed Header */}
-      <div className="sticky top-0 z-30 backdrop-blur-sm border-b border-outline-variant" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>
+      <div className="app-page-header sticky top-0 z-30">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between mb-4">
             <div>

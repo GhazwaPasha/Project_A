@@ -252,11 +252,11 @@ export function JournalEntryDialog({
               {aiLoading ? (
                 <div className="relative w-32 h-10 bg-surface-container-highest rounded-lg overflow-hidden border border-outline">
                   <div
-                    className="absolute inset-0 bg-gradient-to-r from-pink-500 to-purple-600 transition-all duration-300 ease-out"
+                    className="absolute inset-0 bg-primary transition-all duration-300 ease-out"
                     style={{ width: `${aiProgress}%` }}
                   />
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-sm font-medium text-white relative z-10">
+                    <span className="text-sm font-medium text-on-primary relative z-10">
                       {aiProgress < 100 ? 'Thinking...' : 'Complete!'}
                     </span>
                   </div>
@@ -266,7 +266,7 @@ export function JournalEntryDialog({
                   type="button"
                   onClick={handleAIParse}
                   disabled={!aiInput.trim()}
-                  className="md-button bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white border-0 px-6 h-10"
+                  className="md-button bg-primary text-on-primary border-0 px-6 h-10 hover:opacity-90"
                 >
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4" />

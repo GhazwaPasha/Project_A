@@ -225,12 +225,14 @@ export function AIStatusBar({ className }: AIStatusBarProps) {
           className={cn(
             "ai-status-bar-container relative h-9",
             "flex items-center px-3 py-1.5",
-            "bg-[#1d1b20]",
-            "border border-gray-600/50 rounded-lg",
-            "hover:bg-[#2a282d]",
-            "hover:border-gray-500/70",
-            "focus-within:bg-[#2a282d]",
-            "focus-within:border-blue-500/70 focus-within:ring-1 focus-within:ring-blue-500/30",
+            "rounded-lg border",
+            "bg-[var(--md-sys-color-surface-container-highest)]",
+            "border-[var(--md-sys-color-outline)]",
+            "hover:bg-[var(--md-sys-color-surface-container-high)]",
+            "hover:border-[var(--md-sys-color-outline)]",
+            "focus-within:bg-[var(--md-sys-color-surface-container-highest)]",
+            "focus-within:border-[var(--md-sys-color-primary)]",
+            "focus-within:ring-1 focus-within:ring-primary/30",
             isProcessing && "cursor-not-allowed opacity-75",
             isExpanded ? "w-96" : "w-80"
           )}
@@ -249,7 +251,7 @@ export function AIStatusBar({ className }: AIStatusBarProps) {
                 onBlur={handleFocusOut}
                 className={cn(
                   "w-full outline-none text-on-surface placeholder:text-on-surface-variant",
-                  "selection:bg-blue-400/30",
+                  "selection:bg-primary/25 dark:selection:bg-primary/35",
                   isProcessing && "cursor-not-allowed",
                   !inputValue && "empty"
                 )}
@@ -279,7 +281,7 @@ export function AIStatusBar({ className }: AIStatusBarProps) {
                   e.stopPropagation()
                   collapseToNormal()
                 }}
-                className="cursor-pointer p-1 transition-colors rounded hover:bg-on-surface/10 flex items-center justify-center"
+                className="flex cursor-pointer items-center justify-center rounded p-1 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
               >
                 <X className="w-3 h-3 text-on-surface-variant" />
               </div>

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { subscribeWithSelector, persist } from 'zustand/middleware'
 import { User, Organization, UserProfile, UserRole } from '@/types'
+import { clearUserAccentLocalStorage, clearUserAccentOnRoot, syncUserAccentLocalStorageFromProfile } from '@/lib/user-accent-early'
 
 interface AuthState {
   user: User | null
@@ -11,6 +12,8 @@ interface AuthState {
   currentOrgMemberRole: UserRole | null
   /** After `loadUserData` / `switchOrganization` has finished loading `currentOrgMemberRole` for the active org. */
   orgMemberRoleResolved: boolean
+  /** True while `loadUserData` is fetching. Used so accent code does not trust a persisted `profile` as final. */
+  profileLoadInProgress: boolean
   isLoading: boolean
   isAuthenticated: boolean
   lastOrganizationSwitch: number | null
@@ -36,12 +39,16 @@ export const useAuthStore = create<AuthState>()(
       currentOrganization: null,
       currentOrgMemberRole: null,
       orgMemberRoleResolved: false,
+      profileLoadInProgress: false,
       isLoading: false,
       isAuthenticated: false,
       lastOrganizationSwitch: null,
     
     setUser: (user) => set({ user, isAuthenticated: !!user }),
-    setProfile: (profile) => set({ profile }),
+    setProfile: (profile) => {
+      set({ profile })
+      if (typeof window !== 'undefined') syncUserAccentLocalStorageFromProfile(profile)
+    },
     setOrganizations: (organizations) => set({ organizations }),
     setCurrentOrganization: (currentOrganization) => set({ currentOrganization }),
     setCurrentOrgMemberRole: (currentOrgMemberRole) => set({ currentOrgMemberRole }),
@@ -77,7 +84,7 @@ export const useAuthStore = create<AuthState>()(
   loadUserData: async () => {
     const { user, organizations: existingOrgs, currentOrganization: existingOrg } = get()
     if (!user) return
-    set({ orgMemberRoleResolved: false })
+    set({ orgMemberRoleResolved: false, profileLoadInProgress: true })
     
     // If we already have organizations and current org, don't set loading
     // This prevents the loading state from showing when data is already available
@@ -95,6 +102,7 @@ export const useAuthStore = create<AuthState>()(
       ])
       
       set({ profile, organizations })
+      if (typeof window !== 'undefined') syncUserAccentLocalStorageFromProfile(profile)
       
       // Set current organization from localStorage or first available
       const savedOrgId = localStorage.getItem('selectedOrganizationId')
@@ -112,18 +120,22 @@ export const useAuthStore = create<AuthState>()(
           set({ currentOrgMemberRole: null, orgMemberRoleResolved: true })
         }
       } else {
-        set({ currentOrgMemberRole: null, orgMemberRoleResolved: true })
+        set({ currentOrganization: null, currentOrgMemberRole: null, orgMemberRoleResolved: true })
       }
     } catch (error) {
       console.error('Error loading user data:', error)
       set({ orgMemberRoleResolved: true })
     } finally {
-      set({ isLoading: false })
+      set({ isLoading: false, profileLoadInProgress: false })
     }
   },
   
       logout: () => {
         localStorage.removeItem('selectedOrganizationId')
+        if (typeof window !== 'undefined') {
+          clearUserAccentLocalStorage()
+          clearUserAccentOnRoot(document.documentElement)
+        }
         set({ 
           user: null, 
           profile: null, 
@@ -133,13 +145,16 @@ export const useAuthStore = create<AuthState>()(
           orgMemberRoleResolved: false,
           isAuthenticated: false,
           lastOrganizationSwitch: null,
-          isLoading: false
+          isLoading: false,
+          profileLoadInProgress: false
         })
       },
     })),
     {
       name: 'auth-storage',
       partialize: (state) => ({
+        /** Rehydrate before `/api/app-data` for accent and settings UX; session still gates real auth. */
+        profile: state.profile,
         organizations: state.organizations,
         currentOrganization: state.currentOrganization,
       }),

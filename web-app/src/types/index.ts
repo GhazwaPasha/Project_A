@@ -7,6 +7,13 @@ export interface User {
   last_sign_in_at?: string
 }
 
+/** Merged in `public.user_profiles.preferences` (JSON). */
+export interface UserPreferences {
+  /** UI accent; `#RRGGBB`. Personal to the signed-in user. */
+  accentColor?: string
+  [key: string]: unknown
+}
+
 export interface UserProfile {
   id: string
   email: string
@@ -14,17 +21,22 @@ export interface UserProfile {
   avatar_url: string | null
   phone: string | null
   is_super_admin: boolean
-  preferences: any
+  preferences: UserPreferences
   created_at: string
   updated_at: string
   last_sign_in_at: string | null
+}
+
+/** Merged in `public.organizations.settings` (JSON). */
+export interface OrganizationSettings {
+  [key: string]: unknown
 }
 
 export interface Organization {
   id: string
   name: string
   description: string | null
-  settings: any
+  settings: OrganizationSettings
   created_at: string
   updated_at: string
   is_active: boolean

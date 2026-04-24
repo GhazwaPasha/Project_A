@@ -6,7 +6,8 @@ import { z } from 'zod'
 
 const bodySchema = z.object({
   fullName: z.string().min(1),
-  organizationName: z.string().min(1),
+  /** If empty or omitted, only the user profile is created; org can be added later (e.g. /organization/new or invite). */
+  organizationName: z.string().optional().default(''),
   organizationType: z.string().optional().default('business'),
 })
 
@@ -25,7 +26,9 @@ export async function POST(req: Request) {
 
     const userId = data.user.id
     const normalizedEmail = data.user.email.trim().toLowerCase()
-    const { fullName, organizationName, organizationType } = parsed.data
+    const { fullName, organizationName: rawOrgName, organizationType } = parsed.data
+    const organizationName = rawOrgName.trim()
+    const createOrg = organizationName.length > 0
 
     const sql = getSql()
     const existingProfile = await sql<{ id: string }[]>`
@@ -60,29 +63,31 @@ export async function POST(req: Request) {
           ${JSON.stringify({})}::jsonb
         )
       `
-      await tx`
-        INSERT INTO public.organizations (
-          id, name, description, settings, is_active
-        ) VALUES (
-          ${orgId},
-          ${organizationName},
-          ${organizationType + ' organization'},
-          ${JSON.stringify({ organization_type: organizationType, created_by: userId })}::jsonb,
-          true
-        )
-      `
-      await tx`
-        INSERT INTO public.organization_members (
-          id, organization_id, user_id, role, is_active, joined_at
-        ) VALUES (
-          ${memberId},
-          ${orgId},
-          ${userId},
-          'organization_owner',
-          true,
-          NOW()
-        )
-      `
+      if (createOrg) {
+        await tx`
+          INSERT INTO public.organizations (
+            id, name, description, settings, is_active
+          ) VALUES (
+            ${orgId},
+            ${organizationName},
+            ${organizationType + ' organization'},
+            ${JSON.stringify({ organization_type: organizationType, created_by: userId })}::jsonb,
+            true
+          )
+        `
+        await tx`
+          INSERT INTO public.organization_members (
+            id, organization_id, user_id, role, is_active, joined_at
+          ) VALUES (
+            ${memberId},
+            ${orgId},
+            ${userId},
+            'organization_owner',
+            true,
+            NOW()
+          )
+        `
+      }
     })
 
     return NextResponse.json({ ok: true })

@@ -220,20 +220,28 @@ export function DateFilter({
         variant="outline"
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "h-10 px-4 rounded-2xl border-outline hover:bg-primary-container hover:text-on-primary-container transition-all duration-200 min-w-[160px] sm:min-w-[200px] justify-between",
-          isOpen && "bg-primary-container text-on-primary-container border-primary"
+          "h-10 min-w-[160px] justify-between rounded-2xl px-4 transition-all duration-200 sm:min-w-[200px]",
+          /* beat outline: bg-background + hover:accent; use M3 surfaces + primary tint on hover in light and dark */
+          "!border !border-[var(--md-sys-color-outline)] !bg-[var(--md-sys-color-surface-container-highest)]",
+          "!text-on-surface",
+          "hover:!border-[var(--md-sys-color-outline)]",
+          "hover:!bg-[color-mix(in_srgb,var(--md-sys-color-primary)_12%,var(--md-sys-color-surface-container-highest))] hover:!text-on-surface",
+          isOpen &&
+            "!border-[var(--md-sys-color-primary)] !bg-primary !text-on-primary"
         )}
       >
-        <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4" />
-          <span className="md-body-medium">
+        <div className="flex min-w-0 items-center gap-2">
+          <Calendar className="h-4 w-4 shrink-0 text-inherit" />
+          <span className="md-body-medium truncate text-inherit">
             {formatDateRange(dateRange)}
           </span>
         </div>
-        <ChevronDown className={cn(
-          "w-4 h-4 transition-transform duration-200",
-          isOpen && "rotate-180"
-        )} />
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 shrink-0 text-inherit transition-transform duration-200",
+            isOpen && "rotate-180"
+          )}
+        />
       </Button>
 
       {/* Date Filter Dropdown */}
@@ -248,7 +256,7 @@ export function DateFilter({
                   variant="ghost"
                   size="icon"
                   onClick={() => setIsOpen(false)}
-                  className="h-8 w-8 rounded-full hover:bg-surface-container"
+                  className="h-8 w-8 rounded-full text-on-surface hover:!bg-[var(--md-sys-color-surface-container)]"
                 >
                   <X className="w-4 h-4" />
                 </Button>
@@ -268,10 +276,10 @@ export function DateFilter({
                     variant={selectedPreset === preset.value ? "default" : "ghost"}
                     onClick={() => handlePresetSelect(preset)}
                     className={cn(
-                      "h-9 px-3 rounded-xl text-sm font-medium transition-all duration-200",
+                      "h-9 rounded-xl px-3 text-sm font-medium text-on-surface transition-all duration-200",
                       selectedPreset === preset.value
                         ? "bg-primary text-on-primary"
-                        : "hover:bg-primary-container hover:text-on-primary-container"
+                        : "hover:!bg-[color-mix(in_srgb,var(--md-sys-color-primary)_10%,var(--md-sys-color-surface-container-highest))] hover:!text-on-surface"
                     )}
                   >
                     {preset.label}
@@ -323,7 +331,7 @@ export function DateFilter({
                   <Button
                     variant="outline"
                     onClick={handleClear}
-                    className="h-9 px-4 rounded-xl border-outline hover:bg-surface-container"
+                    className="h-9 rounded-xl !border !border-[var(--md-sys-color-outline)] px-4 text-on-surface hover:!bg-[var(--md-sys-color-surface-container)]"
                   >
                     Clear
                   </Button>

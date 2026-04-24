@@ -4,9 +4,11 @@
 
 @layer base {
   :root {
+    /* Per-user accent set on `html` (see UserAccentRoot); else defaults below */
+    --org-accent-hex: #4a5568;
     /* Material Design 3 - Light Theme */
     /* Primary Colors */
-    --md-sys-color-primary: #4a5568;
+    --md-sys-color-primary: var(--org-accent-hex, #4a5568);
     --md-sys-color-on-primary: #ffffff;
     --md-sys-color-primary-container: #e2e8f0;
     --md-sys-color-on-primary-container: #1a202c;
@@ -82,7 +84,8 @@
   .dark {
     /* Material Design 3 - Dark Theme */
     /* Primary Colors */
-    --md-sys-color-primary: #718096;
+    --org-accent-hex: #718096;
+    --md-sys-color-primary: var(--org-accent-hex, #718096);
     --md-sys-color-on-primary: #ffffff;
     --md-sys-color-primary-container: #2d3748;
     --md-sys-color-on-primary-container: #e2e8f0;
@@ -107,9 +110,9 @@
     
     /* Surface Colors */
     --md-sys-color-surface: #141218;
-    --md-sys-color-on-surface: #e6e0e9;
+    --md-sys-color-on-surface: #ffffff;
     --md-sys-color-surface-variant: #49454f;
-    --md-sys-color-on-surface-variant: #cac4d0;
+    --md-sys-color-on-surface-variant: #c8c2ce;
     --md-sys-color-surface-container-lowest: #0f0d13;
     --md-sys-color-surface-container-low: #1d1b20;
     --md-sys-color-surface-container: #211f26;
@@ -122,7 +125,7 @@
     
     /* Background Colors */
     --md-sys-color-background: #141218;
-    --md-sys-color-on-background: #e6e0e9;
+    --md-sys-color-on-background: #ffffff;
     
     /* Shadow */
     --md-sys-color-shadow: #000000;
@@ -130,11 +133,11 @@
     
     /* Legacy compatibility */
     --background: 20 18 24;
-    --foreground: 230 224 233;
+    --foreground: 255 255 255;
     --card: 20 18 24;
-    --card-foreground: 230 224 233;
+    --card-foreground: 255 255 255;
     --popover: 20 18 24;
-    --popover-foreground: 230 224 233;
+    --popover-foreground: 255 255 255;
     --primary: 113 128 150;
     --primary-foreground: 255 255 255;
     --secondary: 98 91 113;
@@ -656,54 +659,54 @@
     background-color: var(--md-sys-color-primary);
     color: var(--md-sys-color-on-primary);
   }
-  
-  /* Collapsed sidebar active state - only color the icon, no background */
-  .app-shell-sidebar.w-16 .md-navigation-item.active {
+
+  /* App rail: no filled “button”; selection = primary text/icon only */
+  .app-shell-sidebar {
+    color: var(--md-sys-color-on-surface);
+  }
+
+  .app-shell-sidebar .md-navigation-item {
     background-color: transparent;
-    color: var(--md-sys-color-on-surface-variant);
+    color: var(--md-sys-color-on-surface);
+    border-radius: 0.5rem;
+    margin: 0.125rem 0.375rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .app-shell-sidebar .md-navigation-item:hover {
+    background-color: var(--md-sys-color-surface-container-highest);
+    color: var(--md-sys-color-on-surface);
+  }
+
+  .app-shell-sidebar .md-navigation-item.active {
+    background-color: transparent;
+    color: var(--md-sys-color-primary);
+    font-weight: 600;
+  }
+
+  .app-shell-sidebar .app-shell-nav-label {
+    color: inherit;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: inherit;
   }
   
   /* Material Design 3 Header */
   .app-top-header {
+    box-sizing: border-box;
     background-color: var(--md-sys-color-surface);
     color: var(--md-sys-color-on-surface);
     border-bottom: 1px solid var(--md-sys-color-outline-variant);
-    box-shadow: 
-      0 1px 3px rgba(0, 0, 0, 0.12),
-      0 1px 2px rgba(0, 0, 0, 0.24);
+    box-shadow: none;
   }
 
-  /* Organization Switcher Styles */
-  .md-chip {
-    background-color: var(--md-sys-color-primary);
-    color: var(--md-sys-color-on-primary);
-    border-radius: 16px;
-    padding: 8px 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 500;
-    font-size: 14px;
-    line-height: 20px;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    border: none;
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .md-chip:hover {
-    background-color: var(--md-sys-color-primary-container);
-    color: var(--md-sys-color-on-primary-container);
-  }
-
-  .md-chip.selected {
-    background-color: var(--md-sys-color-primary);
-    color: var(--md-sys-color-on-primary);
-  }
-
-  .md-chip:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
+  /** Page title strip under the app shell: matches top chrome; no shadow or blur. */
+  .app-page-header {
+    box-sizing: border-box;
+    background-color: var(--md-sys-color-surface);
+    color: var(--md-sys-color-on-surface);
+    border-bottom: 1px solid var(--md-sys-color-outline-variant);
+    box-shadow: none;
   }
 
   .md-label-medium {
@@ -875,7 +878,7 @@
     color: var(--md-sys-color-on-surface);
   }
   
-  /* Material Design 3 Chips */
+  /* Material Design 3 Chips (single definition — duplicate block removed) */
   .md-chip {
     background-color: var(--md-sys-color-surface-container-highest);
     color: var(--md-sys-color-on-surface);
@@ -888,17 +891,39 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
-  
-  .md-chip:hover {
+
+  /* Filled (outline / surface) chip — hover uses M3 container */
+  .md-chip:hover:not(:disabled) {
     background-color: var(--md-sys-color-primary-container);
     color: var(--md-sys-color-on-primary-container);
   }
-  
+
   .md-chip.selected {
     background-color: var(--md-sys-color-primary);
     color: var(--md-sys-color-on-primary);
+    border-color: var(--md-sys-color-primary);
+  }
+
+  /* Accent / primary — keep a tint of the user primary in light *and* dark (avoids flat gray) */
+  .md-chip.selected:hover:not(:disabled) {
+    background-color: color-mix(
+      in srgb,
+      var(--md-sys-color-primary) 88%,
+      var(--md-sys-color-on-surface) 12%
+    ) !important;
+    color: var(--md-sys-color-on-primary) !important;
+    border-color: color-mix(
+      in srgb,
+      var(--md-sys-color-primary) 88%,
+      var(--md-sys-color-on-surface) 12%
+    ) !important;
+  }
+
+  .md-chip:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
   
   /* Material Design 3 Dividers */
@@ -991,28 +1016,26 @@
     display: flex;
     min-height: 100vh;
     background-color: var(--md-sys-color-background);
-  }
-  
-  .app-shell {
+    /* Fixed app rail: always open (w-72 / 18rem). Legacy var kept for one-off uses. */
+    --sidebar-rail: 18rem;
     --sidebar-width: 256px;
-    --sidebar-collapsed-width: 64px;
   }
   
   .app-shell-sidebar {
-    width: var(--sidebar-width);
-    background-color: var(--md-sys-color-surface);
-    border-right: 1px solid var(--md-sys-color-outline-variant);
     display: flex;
     flex-direction: column;
+    width: var(--sidebar-rail);
+    min-width: var(--sidebar-rail);
+    max-width: 100%;
+    background-color: var(--md-sys-color-surface);
+    border-right: 1px solid var(--md-sys-color-outline-variant);
     position: fixed;
     top: 0;
     left: 0;
     height: 100vh;
-    z-index: 40;
+    z-index: 50;
     overflow: hidden;
     box-sizing: border-box;
-    transition: width 0.3s ease-in-out;
-    flex-shrink: 0;
   }
   
   .app-shell-sidebar::-webkit-scrollbar {
@@ -1037,35 +1060,20 @@
     background: var(--md-sys-color-outline);
   }
   
-  /* Collapsed sidebar state */
-  .app-shell-sidebar.w-16 {
-    width: var(--sidebar-collapsed-width);
-  }
-  
   .app-shell-main {
     flex: 1;
     display: flex;
     flex-direction: column;
     min-width: 0;
-    margin-left: var(--sidebar-width);
-    transition: margin-left 0.3s ease-in-out;
-    width: calc(100% - var(--sidebar-width));
-    max-width: calc(100% - var(--sidebar-width));
-  }
-  
-  /* Collapsed sidebar state */
-  .app-shell-main.sidebar-collapsed {
-    margin-left: var(--sidebar-collapsed-width);
-    width: calc(100% - var(--sidebar-collapsed-width));
-    max-width: calc(100% - var(--sidebar-collapsed-width));
+    margin-left: var(--sidebar-rail);
+    width: calc(100% - var(--sidebar-rail));
+    max-width: calc(100% - var(--sidebar-rail));
   }
   
   .app-shell-header {
     background-color: var(--md-sys-color-surface);
     border-bottom: 1px solid var(--md-sys-color-outline-variant);
-    box-shadow: 
-      0 1px 3px rgba(0, 0, 0, 0.12),
-      0 1px 2px rgba(0, 0, 0, 0.24);
+    box-shadow: none;
   }
   
   .app-shell-content {
@@ -1074,51 +1082,10 @@
     background-color: var(--md-sys-color-background);
   }
   
-  /* Material Design 3 Responsive Design */
+  /* Slightly narrower rail on small viewports; still always visible */
   @media (max-width: 1024px) {
     .app-shell {
-      --sidebar-width: 240px;
-      --sidebar-collapsed-width: 64px;
-    }
-  }
-  
-  @media (max-width: 768px) {
-    .app-shell {
-      --sidebar-width: 280px;
-      --sidebar-collapsed-width: 64px;
-    }
-    
-    .app-shell-sidebar {
-      position: fixed;
-      top: 0;
-      left: calc(-1 * var(--sidebar-width));
-      height: 100vh;
-      z-index: 1000;
-      transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      width: var(--sidebar-width) !important;
-    }
-    
-    .app-shell-sidebar.open {
-      left: 0;
-    }
-    
-    .app-shell-main {
-      margin-left: 0;
-      width: 100%;
-      max-width: 100%;
-    }
-    
-    .app-shell-main.sidebar-collapsed {
-      margin-left: 0 !important;
-      width: 100%;
-      max-width: 100%;
-    }
-  }
-  
-  @media (max-width: 480px) {
-    .app-shell {
-      --sidebar-width: 100vw;
-      --sidebar-collapsed-width: 64px;
+      --sidebar-rail: 16rem;
     }
   }
   
@@ -1285,13 +1252,33 @@
   .bg-primary {
     background-color: var(--md-sys-color-primary) !important;
   }
+
+  .bg-primary-container {
+    background-color: var(--md-sys-color-primary-container) !important;
+  }
   
   .text-primary {
     color: var(--md-sys-color-primary) !important;
   }
+
+  .text-on-primary-container {
+    color: var(--md-sys-color-on-primary-container) !important;
+  }
   
   .text-on-primary {
     color: var(--md-sys-color-on-primary) !important;
+  }
+
+  .text-on-surface {
+    color: var(--md-sys-color-on-surface) !important;
+  }
+
+  .text-on-background {
+    color: var(--md-sys-color-on-background) !important;
+  }
+
+  .text-on-surface-variant {
+    color: var(--md-sys-color-on-surface-variant) !important;
   }
   
   /* Override warning colors that might be causing yellow */
@@ -1335,6 +1322,10 @@
     color: var(--md-sys-color-primary) !important;
   }
   
+  .app-shell-sidebar .text-on-surface {
+    color: var(--md-sys-color-on-surface) !important;
+  }
+
   .app-shell-sidebar .text-on-surface-variant {
     color: var(--md-sys-color-on-surface-variant) !important;
   }
@@ -1569,17 +1560,6 @@
     background-color: var(--md-sys-color-surface-container) !important;
     border: 1px solid var(--md-sys-color-outline) !important;
     border-radius: 12px !important;
-  }
-  
-  .win11-header button {
-    background-color: var(--md-sys-color-surface-container-highest) !important;
-    border: 1px solid var(--md-sys-color-outline) !important;
-    border-radius: 8px !important;
-  }
-  
-  .win11-header button:hover {
-    background-color: var(--md-sys-color-primary-container) !important;
-    color: var(--md-sys-color-on-primary-container) !important;
   }
   
   /* Material Design 3 Layout Overrides */

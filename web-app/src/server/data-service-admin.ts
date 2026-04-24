@@ -27,6 +27,8 @@ import {
   InventoryItem,
   InventoryTransaction,
 } from '@/types'
+import { isValidHex6 } from '@/lib/org-accent-color'
+import { parseUserPreferences } from '@/lib/user-preferences'
 
 export class DataServiceAdmin {
   // ================================
@@ -43,7 +45,44 @@ export class DataServiceAdmin {
     const rows = await sql<UserProfile[]>`
       SELECT * FROM public.user_profiles WHERE id = ${userId}::uuid LIMIT 1
     `
-    return rows[0] ?? null
+    const row = rows[0] ?? null
+    if (!row) return null
+    return { ...row, preferences: parseUserPreferences(row.preferences) }
+  }
+
+  /**
+   * Merges into `user_profiles.preferences` (e.g. `accentColor`). Call only for the same user.
+   */
+  static async updateUserPreferences(
+    userId: string,
+    patch: { accentColor?: string | null }
+  ): Promise<UserProfile | null> {
+    if (patch.accentColor != null && patch.accentColor !== '' && !isValidHex6(patch.accentColor)) {
+      throw new Error('Invalid accent color (use #RRGGBB)')
+    }
+    const sql = getSql()
+    const prof = await this.getUserProfile(userId)
+    if (!prof) return null
+    const cur = parseUserPreferences(prof.preferences) as Record<string, unknown>
+    const next: Record<string, unknown> = { ...cur }
+    if (patch.accentColor === null || patch.accentColor === '') {
+      // Keep the key with `null` so the client can tell "user chose default" from
+      // a row where the key was never present (use localStorage / avoid theme flash).
+      next.accentColor = null
+    } else if (patch.accentColor !== undefined) {
+      next.accentColor = patch.accentColor
+    }
+    const rows = await sql<UserProfile[]>`
+      UPDATE public.user_profiles
+      SET
+        preferences = ${JSON.stringify(next)}::jsonb,
+        updated_at = now()
+      WHERE id = ${userId}::uuid
+      RETURNING *
+    `
+    const out = rows[0] ?? null
+    if (!out) return null
+    return { ...out, preferences: parseUserPreferences(out.preferences) }
   }
 
   static async createUserProfile(profile: Omit<UserProfile, 'created_at' | 'updated_at'>): Promise<UserProfile | null> {
@@ -65,7 +104,9 @@ export class DataServiceAdmin {
       )
       RETURNING *
     `
-    return rows[0] ?? null
+    const out = rows[0] ?? null
+    if (!out) return null
+    return { ...out, preferences: parseUserPreferences(out.preferences) }
   }
 
   // ================================
@@ -1077,6 +1118,22 @@ export class DataServiceAdmin {
       }
     })
     return accountsWithDetails
+  }
+
+  /** Single round-trip through `/api/app-data`: runs metrics + balances in parallel on the server. */
+  static async getDashboardBundle(
+    organizationId: string,
+    fromDate?: string,
+    toDate?: string
+  ): Promise<{
+    financialMetrics: Awaited<ReturnType<typeof DataServiceAdmin.getFinancialMetrics>>
+    accountBalances: Awaited<ReturnType<typeof DataServiceAdmin.getAccountBalances>>
+  }> {
+    const [financialMetrics, accountBalances] = await Promise.all([
+      this.getFinancialMetrics(organizationId),
+      this.getAccountBalances(organizationId, fromDate, toDate),
+    ])
+    return { financialMetrics, accountBalances }
   }
 
   static async getAccountTransactions(

@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useAuthStore } from '@/stores/auth-store'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -30,6 +31,7 @@ import {
   MapPin,
   Calendar,
   Clock,
+  ChevronLeft,
   ChevronRight,
   CheckCircle,
   AlertTriangle,
@@ -39,7 +41,8 @@ import {
   Upload,
   Download as DownloadIcon
 } from 'lucide-react'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { UserAccentSettingsContent } from '@/components/settings/user-accent-settings'
+import { UserThemeSettingsContent } from '@/components/settings/user-theme-settings-card'
 
 // Mock data for settings
 const mockUserSettings = {
@@ -152,17 +155,56 @@ const mockSettingsCategories = [
   }
 ]
 
+const PERSONALIZATION_CATEGORIES: (typeof mockSettingsCategories)[number][] = [
+  {
+    id: 'accent',
+    name: 'Accent color',
+    description:
+      'Your personal primary color for buttons, focus, and key highlights. Stored in your account.',
+    icon: Palette,
+    color: 'text-fuchsia-600 bg-fuchsia-50',
+    settingsCount: 1,
+  },
+  {
+    id: 'theme',
+    name: 'Theme',
+    description: 'Light, dark, or follow your system appearance.',
+    icon: Monitor,
+    color: 'text-amber-600 bg-amber-50',
+    settingsCount: 1,
+  },
+]
+
+/** For detail header: always include accent + theme so titles resolve. */
+const ALL_SETTINGS_SECTIONS: (typeof mockSettingsCategories)[number][] = [
+  ...PERSONALIZATION_CATEGORIES,
+  ...mockSettingsCategories,
+]
+
+function categoryListForUser(signedIn: boolean) {
+  if (signedIn) return ALL_SETTINGS_SECTIONS
+  return [...PERSONALIZATION_CATEGORIES.filter((c) => c.id !== 'accent'), ...mockSettingsCategories]
+}
+
 export function Win11SettingsPage() {
+  const user = useAuthStore((s) => s.user)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingField, setEditingField] = useState<string | null>(null)
 
-  const filteredCategories = mockSettingsCategories.filter(category => {
-    const matchesSearch = category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         category.description.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesSearch
-  })
+  const q = searchTerm
+  const allCategories = useMemo(() => categoryListForUser(!!user), [user])
+  const filteredCategories = useMemo(
+    () =>
+      allCategories.filter((category) => {
+        const lower = q.toLowerCase()
+        return (
+          category.name.toLowerCase().includes(lower) || category.description.toLowerCase().includes(lower)
+        )
+      }),
+    [allCategories, q]
+  )
 
   const getCategoryIcon = (category: any) => {
     const IconComponent = category.icon
@@ -170,14 +212,10 @@ export function Win11SettingsPage() {
   }
 
   const renderCategoryCard = (category: any) => {
-    const isSelected = selectedCategory === category.id
-    
     return (
-      <Card 
+      <Card
         key={category.id}
-        className={`md-card-expressive group hover:md-elevation-1 transition-all duration-200 cursor-pointer ${
-          isSelected ? 'ring-2 ring-primary' : ''
-        }`}
+        className="md-card-expressive group hover:md-elevation-1 transition-all duration-200 cursor-pointer"
         onClick={() => setSelectedCategory(category.id)}
       >
         <CardContent className="p-6">
@@ -191,9 +229,7 @@ export function Win11SettingsPage() {
                 <p className="md-body-small text-on-surface-variant">{category.settingsCount} settings</p>
               </div>
             </div>
-            <ChevronRight className={`w-5 h-5 text-on-surface-variant transition-transform ${
-              isSelected ? 'rotate-90' : ''
-            }`} />
+            <ChevronRight className="w-5 h-5 text-on-surface-variant transition-transform group-hover:translate-x-0.5" />
           </div>
           
           <p className="md-body-medium text-on-surface-variant mb-4">
@@ -219,45 +255,46 @@ export function Win11SettingsPage() {
   }
 
   const renderSettingsDetails = () => {
-    if (!selectedCategory) {
-      return (
-        <Card className="md-card-expressive">
-          <CardContent className="p-12 text-center">
-            <Settings className="w-16 h-16 text-on-surface-variant mx-auto mb-4" />
-            <h3 className="md-title-large text-on-surface mb-2">Select a Category</h3>
-            <p className="text-on-surface-variant">
-              Choose a settings category from the left to view and configure options.
-            </p>
-          </CardContent>
-        </Card>
-      )
-    }
-
-    const category = mockSettingsCategories.find(c => c.id === selectedCategory)
+    const category = ALL_SETTINGS_SECTIONS.find((c) => c.id === selectedCategory)
     if (!category) return null
 
     return (
       <Card className="md-card-expressive">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${category.color}`}>
+        <CardHeader className="space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-10 w-fit -ml-2 px-3 text-on-surface hover:bg-surface-container-highest rounded-2xl"
+              onClick={() => setSelectedCategory(null)}
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" />
+              All settings
+            </Button>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center space-x-3 min-w-0">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${category.color}`}>
                 {getCategoryIcon(category)}
               </div>
-              <div>
+              <div className="min-w-0">
                 <CardTitle className="md-title-large text-on-surface">{category.name}</CardTitle>
                 <CardDescription className="md-body-medium text-on-surface-variant">
                   {category.description}
                 </CardDescription>
               </div>
             </div>
-            <Button onClick={() => setShowEditModal(true)} className="md-button">
+            <Button onClick={() => setShowEditModal(true)} className="md-button shrink-0">
               <Edit className="w-4 h-4 mr-2" />
               Edit Settings
             </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
+          {selectedCategory === 'accent' && <UserAccentSettingsContent />}
+
+          {selectedCategory === 'theme' && <UserThemeSettingsContent />}
+
           {selectedCategory === 'profile' && (
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -539,7 +576,7 @@ export function Win11SettingsPage() {
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--md-sys-color-background)' }}>
       {/* Fixed Header */}
-      <div className="sticky top-0 z-30 backdrop-blur-sm border-b border-outline-variant" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>
+      <div className="app-page-header sticky top-0 z-30">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -590,20 +627,16 @@ export function Win11SettingsPage() {
 
       {/* Main Content */}
       <div className="px-6 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Settings Categories */}
-          <div className="lg:col-span-1">
-            <h2 className="text-lg font-semibold text-on-surface mb-4">Settings Categories</h2>
-            <div className="space-y-4">
-              {filteredCategories.map(category => renderCategoryCard(category))}
+        {selectedCategory ? (
+          <div className="w-full">{renderSettingsDetails()}</div>
+        ) : (
+          <div>
+            <h2 className="text-lg font-semibold text-on-surface mb-4">Personalization and categories</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+              {filteredCategories.map((category) => renderCategoryCard(category))}
             </div>
           </div>
-
-          {/* Settings Details */}
-          <div className="lg:col-span-2">
-            {renderSettingsDetails()}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   )

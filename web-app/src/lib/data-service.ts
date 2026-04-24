@@ -74,6 +74,13 @@ export class DataService {
     return appDataRequest('DataService', 'getUserRoleInOrganization', [userId, organizationId])
   }
 
+  static async updateUserPreferences(
+    userId: string,
+    patch: { accentColor?: string | null }
+  ): Promise<UserProfile | null> {
+    return appDataRequest('DataService', 'updateUserPreferences', [userId, patch])
+  }
+
   static async getAccounts(organizationId: string, activeOnly: boolean = true): Promise<Account[]> {
     return appDataRequest('DataService', 'getAccounts', [organizationId, activeOnly])
   }
@@ -138,6 +145,15 @@ export class DataService {
 
   static async getFinancialMetrics(organizationId: string): Promise<FinancialMetricsData> {
     return appDataRequest<FinancialMetricsData>('DataService', 'getFinancialMetrics', [organizationId])
+  }
+
+  /** One `/api/app-data` call: financial metrics + account balances (server runs them in parallel). */
+  static async getDashboardBundle(
+    organizationId: string,
+    fromDate?: string,
+    toDate?: string
+  ): Promise<{ financialMetrics: FinancialMetricsData; accountBalances: AccountBalanceRow[] }> {
+    return appDataRequest('DataService', 'getDashboardBundle', [organizationId, fromDate, toDate])
   }
 
   static async getFinancialRatios(

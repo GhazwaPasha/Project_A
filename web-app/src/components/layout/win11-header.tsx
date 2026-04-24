@@ -32,10 +32,9 @@ export function Win11Header({}: Win11HeaderProps) {
   }
 
   return (
-    <header className="app-top-header sticky top-0 z-40">
-      <div className="flex h-16 items-center justify-between px-4 md:px-6">
+    <header className="app-top-header sticky top-0 z-40 flex h-16 min-h-16 w-full shrink-0 items-center justify-between gap-2 px-4 md:px-6">
         {/* Left side - App Branding */}
-        <div className="flex items-center space-x-3">
+        <div className="flex min-w-0 items-center space-x-3">
           {/* App Logo */}
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
             <Building2 className="w-4 h-4 text-on-primary" />
@@ -103,7 +102,6 @@ export function Win11Header({}: Win11HeaderProps) {
             <MoreVertical className="w-4 h-4" />
           </button>
         </div>
-      </div>
     </header>
   )
 }

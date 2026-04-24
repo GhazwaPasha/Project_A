@@ -77,12 +77,12 @@ export function VoucherApprovalDashboard({ vouchers }: VoucherApprovalDashboardP
 
   const getPriorityColor = (priority: string) => {
     const colors: Record<string, string> = {
-      expired: 'text-red-600 bg-red-100',
-      urgent: 'text-red-600 bg-red-100',
-      high: 'text-orange-600 bg-orange-100',
-      normal: 'text-blue-600 bg-blue-100'
+      expired: 'text-on-error-container bg-error-container/50',
+      urgent: 'text-on-error-container bg-error-container/50',
+      high: 'text-on-tertiary-container bg-tertiary-container/50',
+      normal: 'text-on-primary-container bg-primary-container/50'
     }
-    return colors[priority] || 'text-gray-600 bg-gray-100'
+    return colors[priority] || 'text-on-surface-variant bg-surface-container-highest'
   }
 
   const getPriorityIcon = (priority: string) => {

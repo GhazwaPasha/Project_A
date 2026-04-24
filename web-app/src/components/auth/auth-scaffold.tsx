@@ -1,9 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { Outfit } from 'next/font/google'
-
-const outfit = Outfit({ subsets: ['latin'], weight: '800' })
+import { brandTitleFont } from '@/lib/brand-title-font'
 
 const BG_IMAGE = '/closeup-coins-stack-isolated-black-background.jpg'
 
@@ -11,7 +9,7 @@ export function AuthScaffold({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 pt-[min(12rem,28vh)] sm:pt-36 relative overflow-hidden bg-[#0a0a0a]">
       <h1
-        className={`${outfit.className} pointer-events-none absolute left-3 right-3 top-3 z-20 text-left text-white sm:left-5 sm:top-5 sm:right-8 md:left-6 md:top-6 leading-[0.9] tracking-tight`}
+        className={`${brandTitleFont.className} pointer-events-none absolute left-3 right-3 top-3 z-20 text-left text-white sm:left-5 sm:top-5 sm:right-8 md:left-6 md:top-6 leading-[0.9] tracking-tight`}
         style={{
           textShadow: '0 2px 32px rgba(0,0,0,0.5), 0 4px 4px rgba(0,0,0,0.3)',
           fontSize: 'clamp(2.25rem, 11vw, 8.5rem)',

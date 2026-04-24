@@ -17,25 +17,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     setLoading(false)
 
-    if (!data?.user?.id || !data.user.email) {
-      lastLoadedUserId.current = null
-      logout()
+    if (data?.user?.id && data.user.email) {
+      const now = new Date().toISOString()
+      const user: User = {
+        id: data.user.id,
+        email: data.user.email,
+        created_at: now,
+        updated_at: now,
+      }
+      setUser(user)
+
+      if (lastLoadedUserId.current !== data.user.id) {
+        lastLoadedUserId.current = data.user.id
+        void loadUserData()
+      }
       return
     }
 
-    const now = new Date().toISOString()
-    const user: User = {
-      id: data.user.id,
-      email: data.user.email,
-      created_at: now,
-      updated_at: now,
+    // `data === undefined` is common while the session is refetching. Do not logout
+    // (avoids brief default theme + re-applying accent when the session result returns).
+    if (data === undefined) {
+      return
     }
-    setUser(user)
 
-    if (lastLoadedUserId.current !== data.user.id) {
-      lastLoadedUserId.current = data.user.id
-      void loadUserData()
-    }
+    lastLoadedUserId.current = null
+    logout()
   }, [data, isPending, setUser, setLoading, logout, loadUserData])
 
   return <>{children}</>

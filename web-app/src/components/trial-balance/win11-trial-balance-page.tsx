@@ -18,6 +18,7 @@ import {
   DollarSign
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { accountTypeBadgeClass } from '@/lib/account-type-badges'
 import { DataService } from '@/lib/data-service'
 import { AccountType } from '@/types'
 import { useOrganization } from '@/hooks/use-organization'
@@ -206,23 +207,6 @@ export function Win11TrialBalancePage() {
   const totalDebits = accounts.reduce((sum, account) => sum + account.debit_balance, 0)
   const totalCredits = accounts.reduce((sum, account) => sum + account.credit_balance, 0)
   const isBalanced = Math.abs(totalDebits - totalCredits) < 0.01
-
-  const getAccountTypeColor = (type: string) => {
-    switch (type) {
-      case 'Asset': return 'text-green-600 bg-green-50'
-      case 'Liability': return 'text-red-600 bg-red-50'
-      case 'Equity': return 'text-blue-600 bg-blue-50'
-      case 'Income': return 'text-purple-600 bg-purple-50'
-      case 'Expense': return 'text-orange-600 bg-orange-50'
-      default: return 'text-gray-600 bg-gray-50'
-    }
-  }
-
-  const getBalanceDisplay = (debit: number, credit: number) => {
-    if (debit > 0) return { amount: debit, type: 'debit', color: 'text-green-600' }
-    if (credit > 0) return { amount: credit, type: 'credit', color: 'text-red-600' }
-    return { amount: 0, type: 'zero', color: 'text-gray-500' }
-  }
 
   const handleRefresh = () => {
     loadTrialBalanceData()
@@ -453,7 +437,7 @@ export function Win11TrialBalancePage() {
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--md-sys-color-background)' }}>
       {/* Fixed Header */}
-      <div className="sticky top-0 z-30 backdrop-blur-sm border-b border-outline-variant" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>
+      <div className="app-page-header sticky top-0 z-30">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -620,7 +604,6 @@ export function Win11TrialBalancePage() {
                   </thead>
                   <tbody>
                     {filteredAccounts.map((account, index) => {
-                      const balance = getBalanceDisplay(account.debit_balance, account.credit_balance)
                       return (
                         <tr key={account.account_id} className={`border-b border-outline-variant/50 ${index % 2 === 0 ? 'bg-surface-container/30' : ''}`}>
                           <td className="p-4 md-body-medium text-on-surface-variant font-mono">
@@ -632,26 +615,26 @@ export function Win11TrialBalancePage() {
                             </div>
                           </td>
                           <td className="p-4">
-                            <span className={`inline-block px-2 py-1 rounded-md text-xs font-medium ${getAccountTypeColor(account.account_type)}`}>
+                            <span className={`inline-block px-2 py-1 rounded-md text-xs font-medium ${accountTypeBadgeClass(account.account_type)}`}>
                               {account.account_type}
                             </span>
                           </td>
                           <td className="p-4 md-body-medium text-on-surface text-right">
                             {account.debit_balance > 0 ? (
-                              <span className="text-green-600 font-medium">
+                              <span className="text-primary font-medium">
                                 {formatCurrency(account.debit_balance)}
                               </span>
                             ) : (
-                              <span className="text-gray-400">-</span>
+                              <span className="text-on-surface-variant">-</span>
                             )}
                           </td>
                           <td className="p-4 md-body-medium text-on-surface text-right">
                             {account.credit_balance > 0 ? (
-                              <span className="text-red-600 font-medium">
+                              <span className="text-error font-medium">
                                 {formatCurrency(account.credit_balance)}
                               </span>
                             ) : (
-                              <span className="text-gray-400">-</span>
+                              <span className="text-on-surface-variant">-</span>
                             )}
                           </td>
                         </tr>

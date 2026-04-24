@@ -110,7 +110,7 @@ export function VoucherRenewDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <RotateCcw className="h-5 w-5 text-blue-600" />
+            <RotateCcw className="h-5 w-5 text-primary" />
             Renew Expired Voucher
           </DialogTitle>
         </DialogHeader>
@@ -140,7 +140,7 @@ export function VoucherRenewDialog({
                   <Label className="text-sm font-medium text-muted-foreground">Type</Label>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className={
-                      voucher.voucher_type === 'purchase' ? 'text-blue-600' : 'text-green-600'
+                      voucher.voucher_type === 'purchase' ? 'text-primary' : 'text-tertiary'
                     }>
                       {voucher.voucher_type === 'purchase' ? 'Purchase' : 'Issuance'}
                     </Badge>
@@ -235,8 +235,8 @@ export function VoucherRenewDialog({
             <CardContent>
               <div className="space-y-3 text-sm">
                 <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <span className="text-blue-600 font-medium text-xs">1</span>
+                  <div className="w-6 h-6 rounded-full bg-primary-container/50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-on-primary-container font-medium text-xs">1</span>
                   </div>
                   <div>
                     <p className="font-medium">Voucher Reset to Draft</p>
@@ -247,8 +247,8 @@ export function VoucherRenewDialog({
                 </div>
                 
                 <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <span className="text-blue-600 font-medium text-xs">2</span>
+                  <div className="w-6 h-6 rounded-full bg-primary-container/50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-on-primary-container font-medium text-xs">2</span>
                   </div>
                   <div>
                     <p className="font-medium">Inventory Items Restored</p>
@@ -259,8 +259,8 @@ export function VoucherRenewDialog({
                 </div>
                 
                 <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <span className="text-blue-600 font-medium text-xs">3</span>
+                  <div className="w-6 h-6 rounded-full bg-primary-container/50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-on-primary-container font-medium text-xs">3</span>
                   </div>
                   <div>
                     <p className="font-medium">Resubmit for Approval</p>

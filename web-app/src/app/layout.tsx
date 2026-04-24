@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { Providers } from '@/components/providers'
+import { USER_ACCENT_BOOT_INLINE } from '@/lib/user-accent-early'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -26,11 +27,15 @@ export default async function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          id="accui-user-accent-boot"
+          dangerouslySetInnerHTML={{ __html: USER_ACCENT_BOOT_INLINE }}
+        />
+      </head>
       <body className={inter.className}>
-        <Providers>
-          {children}
-        </Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
   )

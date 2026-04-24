@@ -21,7 +21,7 @@ export function SignupPage() {
     confirmPassword: '',
     fullName: '',
     organizationName: '',
-    organizationType: 'business'
+    organizationType: 'business',
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -218,32 +218,35 @@ export function SignupPage() {
               </div>
             </div>
             
+            <div className="space-y-2">
+              <p className="text-sm" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
+                Workspace (optional). Add one now, or after sign-in from the app if you are joining an existing team.
+              </p>
+            </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-end">
               <div className="space-y-3">
-                <label htmlFor="organizationName" className="text-sm font-medium block" style={{ color: 'var(--md-sys-color-on-surface)' }}>Organization Name</label>
+                <label htmlFor="organizationName" className="text-sm font-medium block" style={{ color: 'var(--md-sys-color-on-surface)' }}>Organization name</label>
                 <div className="relative group">
                   <Building2 className="pointer-events-none absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 transition-colors duration-200" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
                   <input
                     id="organizationName"
                     name="organizationName"
                     type="text"
-                    placeholder="Enter organization name"
+                    placeholder="Leave blank to set up later"
                     value={formData.organizationName}
                     onChange={handleInputChange}
                     className="md-input md-input--icon-left w-full pr-4 py-3 group-hover:border-primary transition-all duration-200"
-                    required
                   />
                 </div>
               </div>
               <div className="space-y-3">
-                <label htmlFor="organizationType" className="text-sm font-medium block" style={{ color: 'var(--md-sys-color-on-surface)' }}>Organization Type</label>
+                <label htmlFor="organizationType" className="text-sm font-medium block" style={{ color: 'var(--md-sys-color-on-surface)' }}>Type (if you add a workspace)</label>
                 <select
                   id="organizationType"
                   name="organizationType"
                   value={formData.organizationType}
                   onChange={handleInputChange}
                   className="md-input w-full px-4 py-3 min-h-[48px] group-hover:border-primary transition-all duration-200"
-                  required
                   style={{
                     backgroundColor: 'var(--md-sys-color-surface-container-highest)',
                     color: 'var(--md-sys-color-on-surface)',

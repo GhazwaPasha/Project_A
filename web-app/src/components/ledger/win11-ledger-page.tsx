@@ -19,6 +19,7 @@ import {
   DollarSign
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { accountTypeBadgeClass } from '@/lib/account-type-badges'
 import { DataService } from '@/lib/data-service'
 import type { AccountBalanceRow, AccountTransactionRow, AccountType } from '@/types'
 import { useOrganization } from '@/hooks/use-organization'
@@ -424,27 +425,16 @@ export function Win11LedgerPage() {
     URL.revokeObjectURL(url)
   }
 
-  const getAccountTypeColor = (type: AccountType) => {
-    switch (type) {
-      case 'asset': return 'text-green-600 bg-green-50'
-      case 'liability': return 'text-red-600 bg-red-50'
-      case 'equity': return 'text-blue-600 bg-blue-50'
-      case 'revenue': return 'text-purple-600 bg-purple-50'
-      case 'expense': return 'text-orange-600 bg-orange-50'
-      default: return 'text-gray-600 bg-gray-50'
-    }
-  }
-
   const getChangeIcon = (change: number) => {
-    if (change > 0) return <TrendingUp className="w-4 h-4 text-green-600" />
-    if (change < 0) return <TrendingDown className="w-4 h-4 text-red-600" />
-    return <DollarSign className="w-4 h-4 text-gray-600" />
+    if (change > 0) return <TrendingUp className="w-4 h-4 text-primary" />
+    if (change < 0) return <TrendingDown className="w-4 h-4 text-error" />
+    return <DollarSign className="w-4 h-4 text-on-surface-variant" />
   }
 
   const getChangeColor = (change: number) => {
-    if (change > 0) return 'text-green-600'
-    if (change < 0) return 'text-red-600'
-    return 'text-gray-600'
+    if (change > 0) return 'text-primary'
+    if (change < 0) return 'text-error'
+    return 'text-on-surface-variant'
   }
 
   if (loading) {
@@ -464,7 +454,7 @@ export function Win11LedgerPage() {
     return (
       <div className="min-h-screen" style={{ backgroundColor: 'var(--md-sys-color-background)' }}>
         {/* Fixed Header */}
-        <div className="sticky top-0 z-30 backdrop-blur-sm border-b border-outline-variant" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>
+        <div className="app-page-header sticky top-0 z-30">
           <div className="px-6 py-4">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-4 gap-4">
               <div className="flex items-center space-x-4">
@@ -609,7 +599,7 @@ export function Win11LedgerPage() {
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--md-sys-color-background)' }}>
       {/* Fixed Header */}
-      <div className="sticky top-0 z-30 backdrop-blur-sm border-b border-outline-variant" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>
+      <div className="app-page-header sticky top-0 z-30">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -693,13 +683,13 @@ export function Win11LedgerPage() {
                     
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded">
+                        <span className="px-2 py-1 bg-surface-container-highest text-on-surface text-xs font-semibold rounded">
                           {account.code}
                         </span>
-                        <span className={`px-2 py-1 text-xs font-semibold rounded ${getAccountTypeColor(account.account_type)}`}>
+                        <span className={`px-2 py-1 text-xs font-semibold rounded ${accountTypeBadgeClass(account.account_type as AccountType)}`}>
                           {account.account_type.charAt(0).toUpperCase() + account.account_type.slice(1)}
                         </span>
-                        <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded">
+                        <span className="px-2 py-1 bg-secondary-container/30 text-on-secondary-container text-xs font-semibold rounded">
                           L{account.level}
                         </span>
                       </div>
@@ -714,7 +704,7 @@ export function Win11LedgerPage() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="md-body-medium text-on-surface-variant">Balance</span>
-                      <span className="md-title-large font-medium text-white">
+                      <span className="md-title-large font-medium text-on-surface">
                         {formatCurrency(Math.abs(account.balance))}
                       </span>
                     </div>
