@@ -68,7 +68,7 @@ export function Win11Header({}: Win11HeaderProps) {
           <button 
             className="md-button-text p-2 rounded-full"
             aria-label="Settings"
-            onClick={() => window.location.href = '/settings'}
+            onClick={() => router.push('/settings')}
           >
             <Settings className="w-4 h-4" />
           </button>

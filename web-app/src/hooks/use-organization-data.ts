@@ -181,26 +181,27 @@ export const useInvalidateOrganizationData = () => {
   const invalidateFinancial = () => {
     if (currentOrganization) {
       const id = currentOrganization.id
-      queryClient.invalidateQueries({ queryKey: ['dashboard-bundle', id] })
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.allFinancialQueries(id),
-      })
+      for (const qk of queryKeys.financialQueryPrefixes(id)) {
+        queryClient.invalidateQueries({ queryKey: qk })
+      }
     }
   }
 
   const invalidateReports = () => {
     if (currentOrganization) {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.allReportQueries(currentOrganization.id),
-      })
+      const id = currentOrganization.id
+      for (const qk of queryKeys.reportQueryPrefixes(id)) {
+        queryClient.invalidateQueries({ queryKey: qk })
+      }
     }
   }
 
   const invalidateInventory = () => {
     if (currentOrganization) {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.allInventoryQueries(currentOrganization.id),
-      })
+      const id = currentOrganization.id
+      for (const qk of queryKeys.inventoryQueryPrefixes(id)) {
+        queryClient.invalidateQueries({ queryKey: qk })
+      }
     }
   }
 

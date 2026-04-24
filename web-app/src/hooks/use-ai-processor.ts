@@ -34,7 +34,7 @@ export function useAIProcessor() {
       
       // Execute the response
       if (response.type === 'navigation') {
-        await executeNavigation(response.data)
+        await executeNavigation(response.data, router)
       } else if (response.type === 'reminder_creation') {
         await executeReminderCreation(response.data)
       } else if (response.type === 'report_generation') {
@@ -365,8 +365,8 @@ function extractDateParameters(input: string): Record<string, string> {
 }
 
 // Execution functions
-async function executeNavigation(data: NavigationParams) {
-  const { page, parameters } = data
+async function executeNavigation(data: NavigationParams, router: ReturnType<typeof import('next/navigation').useRouter>) {
+  const { page } = data
   
   // Map page names to routes
   const routeMap: Record<string, string> = {
@@ -383,11 +383,7 @@ async function executeNavigation(data: NavigationParams) {
   }
   
   const route = routeMap[page] || '/home'
-  
-  // Navigate to the page
-  if (typeof window !== 'undefined') {
-    window.location.href = route
-  }
+  router.push(route)
 }
 
 async function executeReminderCreation(data: any) {

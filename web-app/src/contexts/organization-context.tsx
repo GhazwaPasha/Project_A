@@ -44,11 +44,13 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
     () => (typeof window !== 'undefined' ? localStorage.getItem('selectedOrganizationId') : null)
   )
 
+  // Only fetch from network when Zustand has no orgs yet; otherwise the auth-store loadUserData
+  // already fetched and seeded data — running a second request here would be duplicate work.
   const { data: orgsFromQuery, isPending: orgsPending, error: organizationsError, refetch: refetchOrganizations } =
     useQuery<Organization[]>({
       queryKey: queryKeys.userOrganizations(user?.id ?? ''),
       queryFn: () => DataService.getUserOrganizations(user!.id),
-      enabled: !!user && isAuthenticated,
+      enabled: !!user && isAuthenticated && storeOrgs.length === 0,
       staleTime: 10 * 60 * 1000,
       gcTime: 30 * 60 * 1000,
       retry: 3,
@@ -127,35 +129,70 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
         localStorage.setItem('selectedOrganizationId', organizationId)
         setCurrentOrganizationId(organizationId)
 
-        await queryClient.prefetchQuery({
-          queryKey: ['financial-metrics', organizationId],
-          queryFn: () => DataService.getFinancialMetrics(organizationId),
-          staleTime: 5 * 60 * 1000,
-        })
+        /** Bookkeeping prefetches: inventory-only/member roles lack financial.* — must not block switching. */
+        const runOptional = (label: string, fn: () => Promise<unknown>) =>
+          void fn().catch((e) => {
+            if (process.env.NODE_ENV === 'development') {
+              console.debug(`[org switch] ${label} prefetch skipped:`, e)
+            }
+          })
 
-        await queryClient.prefetchQuery({
-          queryKey: ['account-balances', organizationId],
-          queryFn: () => DataService.getAccountBalances(organizationId),
-          staleTime: 3 * 60 * 1000,
-        })
-
-        await queryClient.prefetchQuery({
-          queryKey: queryKeys.dashboardBundle(organizationId, undefined),
-          queryFn: () => DataService.getDashboardBundle(organizationId, undefined, undefined),
-          staleTime: 3 * 60 * 1000,
-        })
-
-        await queryClient.prefetchQuery({
-          queryKey: queryKeys.accounts(organizationId, true),
-          queryFn: () => DataService.getAccounts(organizationId, true),
-          staleTime: 10 * 60 * 1000,
-        })
+        runOptional(
+          'financial-metrics',
+          () =>
+            queryClient.prefetchQuery({
+              queryKey: queryKeys.financialMetrics(organizationId, undefined),
+              queryFn: () => DataService.getFinancialMetrics(organizationId),
+              staleTime: 5 * 60 * 1000,
+            })
+        )
+        runOptional(
+          'account-balances',
+          () =>
+            queryClient.prefetchQuery({
+              queryKey: queryKeys.accountBalances(organizationId, undefined),
+              queryFn: () => DataService.getAccountBalances(organizationId),
+              staleTime: 3 * 60 * 1000,
+            })
+        )
+        runOptional(
+          'dashboard',
+          () =>
+            queryClient.prefetchQuery({
+              queryKey: queryKeys.dashboardBundle(organizationId, undefined),
+              queryFn: () => DataService.getDashboardBundle(organizationId, undefined, undefined),
+              staleTime: 3 * 60 * 1000,
+            })
+        )
+        runOptional(
+          'accounts',
+          () =>
+            queryClient.prefetchQuery({
+              queryKey: queryKeys.accounts(organizationId, true),
+              queryFn: () => DataService.getAccounts(organizationId, true),
+              staleTime: 10 * 60 * 1000,
+            })
+        )
 
         const oldOrgId = currentOrganization?.id
         if (oldOrgId && oldOrgId !== organizationId) {
           queryClient.invalidateQueries({
             predicate: (query) => query.queryKey.includes(oldOrgId),
           })
+        }
+
+        let synced = await useAuthStore.getState().switchOrganization(organizationId)
+        if (!synced) {
+          try {
+            const role = await DataService.getUserRoleInOrganization(user.id, organizationId)
+            useAuthStore.getState().setCurrentOrganization(organization)
+            if (organizations.length) useAuthStore.getState().setOrganizations(organizations)
+            useAuthStore.getState().setCurrentOrgMemberRole(role)
+            useAuthStore.setState({ orgMemberRoleResolved: true })
+            synced = true
+          } catch {
+            console.warn('[org switch] Auth store could not sync role for this org.')
+          }
         }
 
         return true

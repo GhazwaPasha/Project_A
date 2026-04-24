@@ -20,13 +20,13 @@ export const useBackgroundSync = (options?: { enabled?: boolean }) => {
         
         // Only sync if it's been more than 5 minutes since last sync
         if (timeSinceLastSync > 5 * 60 * 1000) {
-          // Invalidate specific query types instead of all queries
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.allFinancialQueries(currentOrganization.id)
-          })
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.allReportQueries(currentOrganization.id)
-          })
+          const id = currentOrganization.id
+          for (const qk of queryKeys.financialQueryPrefixes(id)) {
+            queryClient.invalidateQueries({ queryKey: qk })
+          }
+          for (const qk of queryKeys.reportQueryPrefixes(id)) {
+            queryClient.invalidateQueries({ queryKey: qk })
+          }
           lastSyncTimeRef.current = now
         }
       }
@@ -46,13 +46,13 @@ export const useBackgroundSync = (options?: { enabled?: boolean }) => {
         
         // Only sync if it's been more than 5 minutes since last sync
         if (timeSinceLastSync > 5 * 60 * 1000) {
-          // Invalidate specific query types instead of all queries
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.allFinancialQueries(currentOrganization.id)
-          })
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.allReportQueries(currentOrganization.id)
-          })
+          const id = currentOrganization.id
+          for (const qk of queryKeys.financialQueryPrefixes(id)) {
+            queryClient.invalidateQueries({ queryKey: qk })
+          }
+          for (const qk of queryKeys.reportQueryPrefixes(id)) {
+            queryClient.invalidateQueries({ queryKey: qk })
+          }
           lastSyncTimeRef.current = now
         }
       }

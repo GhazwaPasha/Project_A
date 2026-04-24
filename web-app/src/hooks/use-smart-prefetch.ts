@@ -57,15 +57,15 @@ export const useSmartPrefetch = () => {
   const prefetchCommonData = useCallback(async () => {
     if (!currentOrganization) return
     
-    // Prefetch commonly accessed data
+    // Prefetch commonly accessed data — keys must match what hooks use (3-element with undefined dateRange)
     const commonDataPromises = [
       queryClient.prefetchQuery({
-        queryKey: ['financial-metrics', currentOrganization.id],
+        queryKey: queryKeys.financialMetrics(currentOrganization.id, undefined),
         queryFn: () => DataService.getFinancialMetrics(currentOrganization.id),
         staleTime: 5 * 60 * 1000,
       }),
       queryClient.prefetchQuery({
-        queryKey: ['account-balances', currentOrganization.id],
+        queryKey: queryKeys.accountBalances(currentOrganization.id, undefined),
         queryFn: () => DataService.getAccountBalances(currentOrganization.id),
         staleTime: 3 * 60 * 1000,
       }),
