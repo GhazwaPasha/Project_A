@@ -79,6 +79,7 @@
     --input: 202 196 208;
     --ring: 74 85 104;
     --radius: 0.75rem;
+    --md-control-radius: 8px;
   }
 
   .dark {
@@ -191,26 +192,20 @@
   .md-card {
     background-color: var(--md-sys-color-surface-container-low);
     color: var(--md-sys-color-on-surface);
-    border-radius: 12px;
-    box-shadow: 
-      0 1px 3px rgba(0, 0, 0, 0.12),
-      0 1px 2px rgba(0, 0, 0, 0.24);
+    border-radius: var(--md-control-radius);
+    box-shadow: none;
     border: 1px solid var(--md-sys-color-outline-variant);
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
   
   .md-card:hover {
-    box-shadow: 
-      0 4px 8px rgba(0, 0, 0, 0.12),
-      0 2px 4px rgba(0, 0, 0, 0.24);
+    box-shadow: none;
     transform: translateY(-1px);
   }
   
   .md-card-elevated {
     background-color: var(--md-sys-color-surface-container);
-    box-shadow: 
-      0 2px 6px rgba(0, 0, 0, 0.12),
-      0 1px 3px rgba(0, 0, 0, 0.24);
+    box-shadow: none;
   }
   
   .md-card-filled {
@@ -226,10 +221,8 @@
   .md-card-expressive {
     background-color: var(--md-sys-color-surface-container-low);
     color: var(--md-sys-color-on-surface);
-    border-radius: 16px;
-    box-shadow: 
-      0 1px 3px rgba(0, 0, 0, 0.12),
-      0 1px 2px rgba(0, 0, 0, 0.24);
+    border-radius: var(--md-control-radius);
+    box-shadow: none;
     border: 1px solid var(--md-sys-color-outline-variant);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
@@ -253,9 +246,7 @@
   }
   
   .md-card-expressive:hover {
-    box-shadow: 
-      0 4px 12px rgba(0, 0, 0, 0.15),
-      0 2px 6px rgba(0, 0, 0, 0.12);
+    box-shadow: none;
     transform: translateY(-2px);
     border-color: var(--md-sys-color-primary);
   }
@@ -266,9 +257,7 @@
   
   .md-card-expressive:active {
     transform: translateY(-1px);
-    box-shadow: 
-      0 2px 8px rgba(0, 0, 0, 0.12),
-      0 1px 4px rgba(0, 0, 0, 0.08);
+    box-shadow: none;
   }
   
   .md-card-expressive.group:hover {
@@ -305,14 +294,81 @@
     transform: translateY(-2px) scale(1.01);
   }
 
-  /* Auth sign-in / sign-up floating card: typography + text (Plus Jakarta in component). Links use --auth-form-link, not --md-sys-color-primary, so buttons keep theme primary. */
+  /* Auth sign-in / sign-up floating card: keep text and fields on active theme tokens. */
   .auth-form-card {
-    --md-sys-color-on-surface: #e8e6f0;
-    --md-sys-color-on-surface-variant: #9a95a8;
-    --md-sys-color-outline: #5a6370;
-    --md-sys-color-surface-container-highest: #2c2a32;
-    --auth-form-link: #7eb8ff;
+    --auth-form-link: var(--md-sys-color-primary);
+    background-color: color-mix(
+      in srgb,
+      var(--md-sys-color-surface-container-low) 54%,
+      transparent
+    );
+    border-color: color-mix(
+      in srgb,
+      var(--md-sys-color-outline-variant) 72%,
+      transparent
+    );
+    backdrop-filter: blur(22px) saturate(150%);
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+    box-shadow:
+      0 20px 60px rgba(0, 0, 0, 0.32),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
     color: var(--md-sys-color-on-surface);
+  }
+
+  .auth-form-card.md-card-expressive:hover,
+  .auth-form-card.md-card-expressive.group:hover {
+    background-color: color-mix(
+      in srgb,
+      var(--md-sys-color-surface-container-low) 62%,
+      transparent
+    );
+  }
+
+  .auth-form-card.md-card-expressive.featured {
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--md-sys-color-primary-container) 34%, transparent),
+      color-mix(in srgb, var(--md-sys-color-surface-container-low) 58%, transparent)
+    );
+  }
+
+  .auth-form-card label,
+  .auth-form-card h2,
+  .auth-form-card h3 {
+    color: var(--md-sys-color-on-surface);
+  }
+
+  .auth-form-card p {
+    color: var(--md-sys-color-on-surface-variant);
+  }
+
+  .auth-form-card input,
+  .auth-form-card select {
+    background-color: var(--md-sys-color-surface-container-highest) !important;
+    color: var(--md-sys-color-on-surface) !important;
+    border-color: var(--md-sys-color-outline) !important;
+    caret-color: var(--md-sys-color-primary);
+  }
+
+  .auth-form-card input::placeholder {
+    color: var(--md-sys-color-on-surface-variant) !important;
+    opacity: 1;
+  }
+
+  .auth-form-card input:focus,
+  .auth-form-card select:focus {
+    background-color: var(--md-sys-color-surface-container-highest) !important;
+    border-color: var(--md-sys-color-primary) !important;
+    box-shadow: 0 0 0 1px var(--md-sys-color-primary) !important;
+  }
+
+  .auth-form-card input:-webkit-autofill,
+  .auth-form-card input:-webkit-autofill:hover,
+  .auth-form-card input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--md-sys-color-on-surface);
+    caret-color: var(--md-sys-color-primary);
+    transition: background-color 9999s ease-in-out 0s;
+    box-shadow: 0 0 0 1000px var(--md-sys-color-surface-container-highest) inset !important;
   }
   
   /* Material Design 3 Buttons */
@@ -320,7 +376,7 @@
     background-color: var(--md-sys-color-primary);
     color: var(--md-sys-color-on-primary);
     border: none;
-    border-radius: 20px;
+    border-radius: var(--md-control-radius);
     padding: 10px 24px;
     font-weight: 500;
     font-size: 14px;
@@ -377,7 +433,7 @@
     background-color: var(--md-sys-color-surface-container-highest);
     color: var(--md-sys-color-on-surface);
     border: 1px solid var(--md-sys-color-outline);
-    border-radius: 4px;
+    border-radius: var(--md-control-radius);
     padding: 8px 12px;
     font-size: 16px;
     line-height: 24px;
@@ -400,7 +456,7 @@
     background-color: var(--md-sys-color-surface-container-highest);
     border: none;
     border-bottom: 1px solid var(--md-sys-color-outline);
-    border-radius: 4px 4px 0 0;
+    border-radius: var(--md-control-radius);
     padding: 8px 0;
   }
   
@@ -431,14 +487,14 @@
     background-color: var(--md-sys-color-surface-container-highest);
     color: var(--md-sys-color-on-surface);
     border: 1px solid var(--md-sys-color-outline);
-    border-radius: 4px;
-    padding: 8px 12px;
+    border-radius: var(--md-control-radius);
+    padding: 7px 12px;
     font-size: 16px;
     line-height: 24px;
     font-weight: 400;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     width: 100%;
-    min-height: 40px;
+    height: 40px;
     box-sizing: border-box;
   }
 
@@ -496,14 +552,14 @@
     color: var(--md-sys-color-on-surface);
     border: none;
     border-bottom: 1px solid var(--md-sys-color-outline);
-    border-radius: 4px 4px 0 0;
-    padding: 8px 0;
+    border-radius: var(--md-control-radius);
+    padding: 7px 0;
     font-size: 16px;
     line-height: 24px;
     font-weight: 400;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     width: 100%;
-    min-height: 40px;
+    height: 40px;
     box-sizing: border-box;
   }
 
@@ -543,14 +599,14 @@
     background-color: transparent;
     color: var(--md-sys-color-on-surface);
     border: 1px solid var(--md-sys-color-outline);
-    border-radius: 4px;
-    padding: 8px 12px;
+    border-radius: var(--md-control-radius);
+    padding: 7px 12px;
     font-size: 16px;
     line-height: 24px;
     font-weight: 400;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     width: 100%;
-    min-height: 40px;
+    height: 40px;
     box-sizing: border-box;
   }
 
@@ -612,7 +668,7 @@
     background-color: var(--md-sys-color-surface-container);
     color: var(--md-sys-color-on-surface);
     border: 1px solid var(--md-sys-color-outline);
-    border-radius: 8px;
+    border-radius: var(--md-control-radius);
     padding: 8px 12px;
     font-size: 14px;
     line-height: 20px;
@@ -944,7 +1000,7 @@
     background-color: var(--md-sys-color-primary-container);
     color: var(--md-sys-color-on-primary-container);
     border: none;
-    border-radius: 16px;
+    border-radius: var(--md-control-radius);
     width: 56px;
     height: 56px;
     display: flex;
@@ -1016,8 +1072,8 @@
     display: flex;
     min-height: 100vh;
     background-color: var(--md-sys-color-background);
-    /* Fixed app rail: always open (w-72 / 18rem). Legacy var kept for one-off uses. */
-    --sidebar-rail: 18rem;
+    /* Fixed app rail: always open, sized to leave more room for page content. */
+    --sidebar-rail: 16rem;
     --sidebar-width: 256px;
   }
   
@@ -1085,7 +1141,7 @@
   /* Slightly narrower rail on small viewports; still always visible */
   @media (max-width: 1024px) {
     .app-shell {
-      --sidebar-rail: 16rem;
+      --sidebar-rail: 14rem;
     }
   }
   
@@ -1458,24 +1514,33 @@
     color: var(--md-sys-color-on-primary) !important;
   }
   
-  /* Material Design 3 Form Elements */
-  input[type="text"],
-  input[type="search"],
-  input[type="email"],
-  input[type="password"],
+  /* Material Design 3 Form Elements
+     Do not set horizontal padding on inputs with !important: it beats Tailwind pl-10 / pl-12, so
+     placeholder text sits under leading search icons. Use :where() (zero specificity) for the default. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
   textarea,
   select {
     background-color: var(--md-sys-color-surface-container-highest) !important;
     color: var(--md-sys-color-on-surface) !important;
     border: 1px solid var(--md-sys-color-outline) !important;
-    border-radius: 4px !important;
-    padding: 8px 12px !important;
+    border-radius: var(--md-control-radius) !important;
     font-size: 16px !important;
     line-height: 24px !important;
   }
 
-  /* These must use !important: the rule above sets padding on all input[type=...] with !important, which
-     otherwise overrides .md-text-field-input / .md-input and makes text draw under leading icons. */
+  :where(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    textarea
+  ) {
+    padding: 7px 12px;
+  }
+
+  /* Selects rarely need a leading icon offset; keep a single enforced inset. */
+  select {
+    padding: 7px 12px !important;
+  }
+
+  /* Extra leading inset when not using Tailwind pl-*; login/signup and legacy forms. */
   input.md-text-field-input--icon-left {
     padding-left: 2.5rem !important;
   }
@@ -1484,10 +1549,7 @@
     padding-left: 3rem !important;
   }
   
-  input[type="text"]:focus,
-  input[type="search"]:focus,
-  input[type="email"]:focus,
-  input[type="password"]:focus,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
   textarea:focus,
   select:focus {
     outline: none !important;
@@ -1496,10 +1558,7 @@
     box-shadow: 0 0 0 1px var(--md-sys-color-primary) !important;
   }
   
-  input[type="text"]::placeholder,
-  input[type="search"]::placeholder,
-  input[type="email"]::placeholder,
-  input[type="password"]::placeholder,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
   textarea::placeholder {
     color: var(--md-sys-color-on-surface-variant) !important;
   }
@@ -1559,7 +1618,7 @@
   .win11-header .win11-card {
     background-color: var(--md-sys-color-surface-container) !important;
     border: 1px solid var(--md-sys-color-outline) !important;
-    border-radius: 12px !important;
+    border-radius: var(--md-control-radius) !important;
   }
   
   /* Material Design 3 Layout Overrides */
@@ -1578,10 +1637,8 @@
   [class*="win11-card"] {
     background-color: var(--md-sys-color-surface-container-low) !important;
     border: 1px solid var(--md-sys-color-outline-variant) !important;
-    border-radius: 12px !important;
-    box-shadow: 
-      0 1px 3px rgba(0, 0, 0, 0.12),
-      0 1px 2px rgba(0, 0, 0, 0.24) !important;
+    border-radius: var(--md-control-radius) !important;
+    box-shadow: none !important;
   }
   
   .dark .win11-card,
@@ -1601,7 +1658,7 @@
   .win11-input {
     background-color: var(--md-sys-color-surface-container-highest) !important;
     border: 1px solid var(--md-sys-color-outline) !important;
-    border-radius: 4px !important;
+    border-radius: var(--md-control-radius) !important;
     color: var(--md-sys-color-on-surface) !important;
   }
   
@@ -1636,7 +1693,7 @@
     background-color: var(--md-sys-color-primary) !important;
     color: var(--md-sys-color-on-primary) !important;
     border: none !important;
-    border-radius: 20px !important;
+    border-radius: var(--md-control-radius) !important;
     padding: 10px 24px !important;
     font-weight: 500 !important;
     font-size: 14px !important;
@@ -1683,7 +1740,7 @@
   .bg-gray-100 {
     background-color: var(--md-sys-color-surface-container-low) !important;
     border: 1px solid var(--md-sys-color-outline-variant) !important;
-    border-radius: 12px !important;
+    border-radius: var(--md-control-radius) !important;
   }
   
   .dark .bg-card,
@@ -1709,7 +1766,7 @@
   .rounded-lg,
   .rounded-xl,
   .rounded-2xl {
-    border-radius: 12px !important;
+    border-radius: var(--md-control-radius) !important;
   }
   
   .rounded-md {
@@ -1718,6 +1775,13 @@
   
   .rounded-sm {
     border-radius: 4px !important;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea,
+  select,
+  [role="combobox"] {
+    border-radius: var(--md-control-radius) !important;
   }
 }
 

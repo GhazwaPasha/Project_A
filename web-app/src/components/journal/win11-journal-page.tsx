@@ -17,7 +17,6 @@ import {
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { JournalEntryDialog } from './journal-entry-dialog'
 import { BulkEntryDialog } from './bulk-entry-dialog'
-import { JournalCommandPanel } from './journal-command-panel'
 import { JournalEntry, Account, JournalEntryLine } from '@/types'
 import { useJournalEntries, useAccounts } from '@/hooks/use-organization-data'
 import { useOrgDataPermission, useOrgMemberRoleResolved } from '@/hooks/use-org-permissions'
@@ -107,7 +106,6 @@ export function Win11JournalPage() {
             </AlertDescription>
           </Alert>
         ) : null}
-        <JournalCommandPanel readOnly={roleResolved && !canWriteJournal} />
       </div>
       {/* Fixed Header */}
       <div className="app-page-header sticky top-0 z-30">

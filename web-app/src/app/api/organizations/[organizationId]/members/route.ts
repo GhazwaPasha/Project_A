@@ -10,6 +10,11 @@ const postSchema = z.object({
   role: z.enum(['accountant', 'member', 'observer']),
 })
 
+const patchSchema = z.object({
+  memberId: z.string().uuid(),
+  role: z.enum(['accountant', 'member', 'observer']),
+})
+
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ organizationId: string }> }
@@ -142,5 +147,70 @@ export async function POST(
       )
     }
     return NextResponse.json({ error: 'Failed to add member' }, { status: 500 })
+  }
+}
+
+export async function PATCH(
+  req: Request,
+  ctx: { params: Promise<{ organizationId: string }> }
+) {
+  try {
+    const { data } = await neonAuth.getSession()
+    if (!data?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { organizationId } = await ctx.params
+    const actorId = data.user.id
+    const myRole = await getOrganizationMemberRole(organizationId, actorId)
+    const canManage =
+      myRole === 'organization_owner' || (await isUserProfileSuperAdmin(actorId))
+    if (!canManage) {
+      return NextResponse.json(
+        { error: 'Only an organization owner can change member roles' },
+        { status: 403 }
+      )
+    }
+
+    const json = await req.json()
+    const parsed = patchSchema.safeParse(json)
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
+    }
+
+    const { memberId, role } = parsed.data
+    const sql = getSql()
+    const targetRows = await sql<{ user_id: string; role: string }[]>`
+      SELECT user_id::text, role
+      FROM public.organization_members
+      WHERE id = ${memberId}::uuid
+        AND organization_id = ${organizationId}::uuid
+        AND is_active = true
+      LIMIT 1
+    `
+
+    const target = targetRows[0]
+    if (!target) {
+      return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+    }
+    if (target.user_id === actorId) {
+      return NextResponse.json({ error: 'You cannot change your own role' }, { status: 400 })
+    }
+    if (target.role === 'organization_owner') {
+      return NextResponse.json({ error: 'Owner roles cannot be changed here' }, { status: 400 })
+    }
+
+    await sql`
+      UPDATE public.organization_members
+      SET role = ${role}
+      WHERE id = ${memberId}::uuid
+        AND organization_id = ${organizationId}::uuid
+        AND is_active = true
+    `
+
+    return NextResponse.json({ ok: true, member: { id: memberId, role } })
+  } catch (e) {
+    console.error('org members PATCH', e)
+    return NextResponse.json({ error: 'Failed to change member role' }, { status: 500 })
   }
 }

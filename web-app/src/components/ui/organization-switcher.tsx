@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type KeyboardEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronDown, Check } from 'lucide-react'
 import { useOrganization } from '@/hooks/use-organization'
 import { Organization } from '@/types'
+import { cn } from '@/lib/utils'
 
 interface OrganizationSwitcherProps {
   className?: string
@@ -21,6 +22,27 @@ export function OrganizationSwitcher({ className = '' }: OrganizationSwitcherPro
     isLoading,
     hasOrganizations
   } = useOrganization()
+
+  const switcherSurfaceClass = cn(
+    'ai-status-bar-container relative flex h-9 items-center rounded-lg border',
+    'bg-[var(--md-sys-color-surface-container-highest)]',
+    'border-[var(--md-sys-color-outline)]',
+    'hover:bg-[var(--md-sys-color-surface-container-high)]',
+    'hover:border-[var(--md-sys-color-outline)]',
+    'focus:bg-[var(--md-sys-color-surface-container-highest)]',
+    'focus:border-[var(--md-sys-color-primary)]',
+    'focus:ring-1 focus:ring-primary/30',
+    'transition-colors duration-200'
+  )
+
+  const handleTriggerKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (isSwitching) return
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      setIsOpen((open) => !open)
+    }
+  }
 
   const handleOrganizationSwitch = async (organization: Organization) => {
     if (organization.id === currentOrganization?.id) {
@@ -47,46 +69,65 @@ export function OrganizationSwitcher({ className = '' }: OrganizationSwitcherPro
 
   if (isLoading) {
     return (
-      <div className={`md-chip selected ${className}`}>
-        <span className="md-label-medium">Loading...</span>
+      <div className={cn(switcherSurfaceClass, 'justify-center px-3 py-1.5', className)}>
+        <span className="text-sm font-medium text-on-surface">Loading...</span>
       </div>
     )
   }
 
   if (!hasOrganizations) {
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => router.push('/organization/new')}
-        className={`md-chip selected text-left transition-colors duration-200 cursor-pointer ${className}`}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            router.push('/organization/new')
+          }
+        }}
+        className={cn(switcherSurfaceClass, 'cursor-pointer justify-center px-3 py-1.5', className)}
       >
-        <span className="md-label-medium">Create organization</span>
-      </button>
+        <span className="text-sm font-medium text-on-surface">Create organization</span>
+      </div>
     )
   }
 
   if (!currentOrganization) {
     return (
-      <div className={`md-chip selected ${className}`}>
-        <span className="md-label-medium">No Organization</span>
+      <div className={cn(switcherSurfaceClass, 'justify-center px-3 py-1.5', className)}>
+        <span className="text-sm font-medium text-on-surface">No Organization</span>
       </div>
     )
   }
 
   return (
-    <div className={`relative ${className}`}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="md-chip selected transition-colors duration-200 cursor-pointer"
-        disabled={isSwitching}
+    <div className={cn('relative', className)}>
+      <div
+        role="button"
+        tabIndex={isSwitching ? -1 : 0}
+        onClick={() => {
+          if (!isSwitching) {
+            setIsOpen(!isOpen)
+          }
+        }}
+        onKeyDown={handleTriggerKeyDown}
+        aria-disabled={isSwitching}
+        aria-expanded={isOpen}
+        className={cn(
+          switcherSurfaceClass,
+          'min-w-[150px] max-w-[240px] cursor-pointer justify-center px-8 py-1.5',
+          isSwitching && 'cursor-not-allowed opacity-75'
+        )}
       >
-        <span className="md-label-medium text-inherit max-w-[14rem] truncate">
+        <span className="w-full truncate text-center text-sm font-medium text-on-surface">
           {currentOrganization?.name || 'Select Organization'}
         </span>
         <ChevronDown
-          className={`h-4 w-4 shrink-0 text-inherit transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          className={`absolute right-3 h-4 w-4 shrink-0 text-on-surface-variant transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
         />
-      </button>
+      </div>
 
       {isOpen && (
         <>

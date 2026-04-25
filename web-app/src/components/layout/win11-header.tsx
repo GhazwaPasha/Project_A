@@ -5,8 +5,6 @@ import {
   Bell,
   Settings,
   User,
-  Building2,
-  MoreVertical,
   LogOut,
 } from 'lucide-react'
 import { authClient } from '@/lib/auth-client'
@@ -33,14 +31,8 @@ export function Win11Header({}: Win11HeaderProps) {
 
   return (
     <header className="app-top-header sticky top-0 z-40 flex h-16 min-h-16 w-full shrink-0 items-center justify-between gap-2 px-4 md:px-6">
-        {/* Left side - App Branding */}
-        <div className="flex min-w-0 items-center space-x-3">
-          {/* App Logo */}
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-            <Building2 className="w-4 h-4 text-on-primary" />
-          </div>
-          
-          {/* Organization switcher - Material Design 3 Chip */}
+        {/* Left side - Organization Switcher */}
+        <div className="flex min-w-0 items-center">
           <div className="hidden md:flex">
             <OrganizationSwitcher />
           </div>
@@ -93,14 +85,6 @@ export function Win11Header({}: Win11HeaderProps) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          
-          {/* More options */}
-          <button 
-            className="md-button-text p-2 rounded-full"
-            aria-label="More options"
-          >
-            <MoreVertical className="w-4 h-4" />
-          </button>
         </div>
     </header>
   )

@@ -78,6 +78,8 @@ export function Win11TeamManagementPage() {
   const [inviteRole, setInviteRole] = useState<InvitableOrgRole>('accountant')
   const [inviteError, setInviteError] = useState<string | null>(null)
   const [inviteLoading, setInviteLoading] = useState(false)
+  const [roleUpdateError, setRoleUpdateError] = useState<string | null>(null)
+  const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null)
 
   const loadMembers = useCallback(async () => {
     if (!currentOrganization?.id) {
@@ -186,6 +188,30 @@ export function Win11TeamManagementPage() {
     }
   }
 
+  async function changeMemberRole(memberId: string, role: InvitableOrgRole) {
+    if (!currentOrganization?.id) return
+    setRoleUpdateError(null)
+    setUpdatingMemberId(memberId)
+    try {
+      const res = await fetch(`/api/organizations/${currentOrganization.id}/members`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ memberId, role }),
+      })
+      const data = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) {
+        setRoleUpdateError(typeof data.error === 'string' ? data.error : 'Could not update role')
+        return
+      }
+      setMembers((current) =>
+        current.map((m) => (m.id === memberId ? { ...m, role } : m))
+      )
+    } finally {
+      setUpdatingMemberId(null)
+    }
+  }
+
   if (!currentOrganization) {
     return (
       <div
@@ -276,6 +302,11 @@ export function Win11TeamManagementPage() {
               {loadError}
             </p>
           )}
+          {roleUpdateError && (
+            <p className="md-body-small text-on-error-container bg-error-container/30 p-2 rounded mb-2">
+              {roleUpdateError}
+            </p>
+          )}
 
           <div className="flex flex-col lg:flex-row gap-4">
             <div className="flex-1 relative">
@@ -354,6 +385,8 @@ export function Win11TeamManagementPage() {
                   const display = m.full_name?.trim() || m.email
                   const perm = orgRolePermissionsForDisplay(m.role)
                   const isSelf = user?.id === m.user_id
+                  const canChangeRole =
+                    canInvite && !isSelf && m.role !== 'organization_owner' && m.role !== 'super_admin'
                   return (
                     <Card
                       key={m.id}
@@ -409,6 +442,30 @@ export function Win11TeamManagementPage() {
                                 </span>
                               ))}
                             </div>
+                          </div>
+                        )}
+                        {canChangeRole && (
+                          <div className="mt-4 pt-4 border-t border-outline-variant">
+                            <label className="block text-xs text-on-surface-variant mb-1">
+                              Change role
+                            </label>
+                            <select
+                              className="w-full h-10 rounded-md border border-outline bg-surface-container px-3 text-sm"
+                              value={m.role}
+                              disabled={updatingMemberId === m.id}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => {
+                                e.stopPropagation()
+                                void changeMemberRole(m.id, e.target.value as InvitableOrgRole)
+                              }}
+                              aria-label={`Change role for ${display}`}
+                            >
+                              {INVITABLE_ORG_ROLES.map((o) => (
+                                <option key={o.value} value={o.value}>
+                                  {o.label}
+                                </option>
+                              ))}
+                            </select>
                           </div>
                         )}
                       </CardContent>

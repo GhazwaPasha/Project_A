@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@/auth'
+import { authInApiRoute } from '@/auth'
 import { actingUserStore } from '@/server/request-context'
 import { authorizeAppDataCall } from '@/server/app-data-authorize'
 import { DataServiceAdmin } from '@/server/data-service-admin'
@@ -15,7 +15,7 @@ const services = {
 } as const
 
 export async function POST(req: Request) {
-  const session = await auth()
+  const session = await authInApiRoute()
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

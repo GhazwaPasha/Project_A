@@ -21,6 +21,7 @@ import {
   Bot,
   Package,
   Truck,
+  Crown,
 } from 'lucide-react'
 
 const navigation = [
@@ -35,6 +36,7 @@ const navigation = [
   { name: 'Approvals', href: '/approvals', icon: CheckSquare },
   { name: 'Period Closing', href: '/period-closing', icon: Lock },
   { name: 'AI Demo', href: '/ai-demo', icon: Bot },
+  { name: 'Super Admin', href: '/super-admin', icon: Crown },
   { name: 'Team Management', href: '/team', icon: Users },
   { name: 'Organization Settings', href: '/organization', icon: Building2 },
   { name: 'User Management', href: '/users', icon: Users },
@@ -62,7 +64,7 @@ export function Win11Sidebar() {
         <span
           className={cn(
             brandTitleFont.className,
-            'w-full min-w-0 text-base font-extrabold leading-none tracking-tight sm:text-lg truncate text-on-surface',
+            'w-full min-w-0 truncate text-xl font-extrabold leading-none tracking-tight text-on-surface sm:text-2xl',
           )}
         >
           Accountuitive
