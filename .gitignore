@@ -126,7 +126,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# Only repo-root lib/ (Python packaging); do not use bare `lib/` — it ignores src/lib/ (Next.js).
+/lib/
 lib64/
 parts/
 sdist/
