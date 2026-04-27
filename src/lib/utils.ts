@@ -5,11 +5,37 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatCurrency(amount: number, currency = 'USD'): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-  }).format(amount)
+/**
+ * Format a monetary amount in the given ISO 4217 currency. Falls back to USD if the code is invalid.
+ * `fractionDigits` maps to the organization’s accounting decimal-places when using org settings.
+ */
+export function formatMonetaryAmount(
+  amount: number,
+  currency: string = 'USD',
+  fractionDigits: number = 2
+): string {
+  const code = (currency && currency.trim()) ? currency.trim().toUpperCase() : 'USD'
+  const fd = Math.min(6, Math.max(0, Math.floor(fractionDigits)))
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: code,
+      minimumFractionDigits: fd,
+      maximumFractionDigits: fd,
+    }).format(amount)
+  } catch {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount)
+  }
+}
+
+/** For non–org UIs, pass `currency` explicitly. Org screens should use `useOrganizationFormatters`. */
+export function formatCurrency(amount: number, currency: string = 'USD', fractionDigits: number = 2): string {
+  return formatMonetaryAmount(amount, currency, fractionDigits)
 }
 
 export function formatNumber(value: number): string {

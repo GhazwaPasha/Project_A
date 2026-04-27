@@ -11,7 +11,8 @@ import {
   Search, RefreshCw, Plus, Edit, Trash2, X, Package,
   DollarSign, Boxes, Check, Receipt, ShoppingCart, AlertTriangle, ListChecks, ChevronRight
 } from 'lucide-react'
-import { cn, formatCurrency } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 import { DataService } from '@/lib/data-service'
 import { InventoryCategory, InventoryItem, Account } from '@/types'
 import { useOrganization } from '@/hooks/use-organization'
@@ -46,6 +47,7 @@ interface EditingCategory {
 }
 
 export function Win11InventoryPage() {
+  const { formatCurrency } = useOrganizationFormatters()
   const [searchTerm, setSearchTerm] = useState('')
   const [activeView, setActiveView] = useState<'items' | 'categories' | 'transactions' | 'vouchers' | 'purchase-vouchers' | 'issuance-vouchers'>('items')
   

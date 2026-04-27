@@ -14,20 +14,14 @@ import {
   TrendingUp,
   Timer
 } from 'lucide-react'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 
 interface VoucherStatsCardsProps {
   stats: VoucherStats
 }
 
 export function VoucherStatsCards({ stats }: VoucherStatsCardsProps) {
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount)
-  }
+  const { formatCurrency } = useOrganizationFormatters()
 
   const formatHours = (hours: number) => {
     if (hours < 1) {

@@ -25,7 +25,8 @@ import {
   CheckCircle,
   Info,
 } from 'lucide-react'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 import { accountTypeBadgeClass } from '@/lib/account-type-badges'
 import { DataService } from '@/lib/data-service'
 import { Account, AccountType } from '@/types'
@@ -67,6 +68,7 @@ export function Win11AccountsPage() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [loading, setLoading] = useState(true)
   const { currentOrganization } = useOrganization()
+  const { formatCurrency } = useOrganizationFormatters()
   const roleResolved = useOrgMemberRoleResolved()
   const canEditChart = useOrgDataPermission('chart.write')
   const canExportData = useOrgDataPermission('data.export')

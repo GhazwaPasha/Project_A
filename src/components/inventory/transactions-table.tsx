@@ -1,7 +1,8 @@
 'use client'
 
 import { InventoryTransaction } from '@/types'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 import { ArrowUpCircle, ArrowDownCircle, RefreshCcw } from 'lucide-react'
 
 interface TransactionsTableProps {
@@ -10,6 +11,7 @@ interface TransactionsTableProps {
 }
 
 export function TransactionsTable({ transactions, onRefresh }: TransactionsTableProps) {
+  const { formatCurrency } = useOrganizationFormatters()
   if (transactions.length === 0) {
     return (
       <div className="text-center py-12 md-card rounded-lg">

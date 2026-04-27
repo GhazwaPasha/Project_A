@@ -110,7 +110,8 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
       organizationIds.size > 0 &&
       organizationIds.has(currentOrganizationId),
     placeholderData: (previousData) => previousData ?? (currentOrgPlaceholder ?? undefined),
-    staleTime: 15 * 60 * 1000,
+    // Shorter so reporting currency and other org settings update reasonably soon for all members.
+    staleTime: 60 * 1000,
     gcTime: 30 * 60 * 1000,
     retry: 3,
     refetchOnWindowFocus: true,

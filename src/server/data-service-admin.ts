@@ -28,6 +28,11 @@ import {
   InventoryItem,
   InventoryTransaction,
 } from '@/types'
+import { parseOrganizationSettingsValue } from '@/lib/organization-settings-defaults'
+
+function organizationRowWithParsedSettings<T extends { settings: unknown }>(row: T): T {
+  return { ...row, settings: parseOrganizationSettingsValue(row.settings) as T['settings'] }
+}
 import { isValidHex6 } from '@/lib/org-accent-color'
 import { parseUserPreferences } from '@/lib/user-preferences'
 
@@ -185,7 +190,7 @@ export class DataServiceAdmin {
 
   static async getUserOrganizations(userId: string): Promise<Organization[]> {
     const sql = getSql()
-    return await sql<Organization[]>`
+    const rows = await sql<Organization[]>`
       SELECT
         o.id, o.name, o.description, o.settings, o.created_at, o.updated_at, o.is_active
       FROM public.organization_members m
@@ -194,6 +199,7 @@ export class DataServiceAdmin {
         AND m.is_active = true
       ORDER BY o.name
     `
+    return rows.map((o) => organizationRowWithParsedSettings(o))
   }
 
   static async getOrganization(organizationId: string): Promise<Organization | null> {
@@ -201,7 +207,8 @@ export class DataServiceAdmin {
     const rows = await sql<Organization[]>`
       SELECT * FROM public.organizations WHERE id = ${organizationId}::uuid LIMIT 1
     `
-    return rows[0] ?? null
+    const r = rows[0] ?? null
+    return r ? organizationRowWithParsedSettings(r) : null
   }
 
   static getCurrentOrganizationId(): string | null {

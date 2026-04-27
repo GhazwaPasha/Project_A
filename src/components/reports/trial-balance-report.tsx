@@ -11,7 +11,8 @@ import {
   Calculator,
   Loader2
 } from 'lucide-react'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 import { useTrialBalance } from '@/hooks/use-organization-data'
 import { useCurrentOrganization } from '@/hooks/use-current-organization'
 import { useToast } from '@/hooks/use-toast'
@@ -37,6 +38,7 @@ interface TrialBalanceReportProps {
 
 export function TrialBalanceReport({ onBack, asOfDate }: TrialBalanceReportProps) {
   const currentOrganization = useCurrentOrganization()
+  const { formatCurrency } = useOrganizationFormatters()
   const { toast } = useToast()
 
   // Use optimized hook instead of manual data loading

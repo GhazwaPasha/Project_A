@@ -17,7 +17,8 @@ import {
   TrendingDown,
   DollarSign
 } from 'lucide-react'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 import { accountTypeBadgeClass } from '@/lib/account-type-badges'
 import { DataService } from '@/lib/data-service'
 import { AccountType } from '@/types'
@@ -128,6 +129,7 @@ const mockTrialBalanceAccounts = [
 ]
 
 export function Win11TrialBalancePage() {
+  const { formatCurrency } = useOrganizationFormatters()
   const [searchTerm, setSearchTerm] = useState('')
   const [accounts, setAccounts] = useState<TrialBalanceAccount[]>([])
   const [loading, setLoading] = useState(true)

@@ -24,6 +24,7 @@ import {
   User,
   Calendar
 } from 'lucide-react'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 
 interface VoucherRenewDialogProps {
   voucher: InventoryVoucher
@@ -42,14 +43,7 @@ export function VoucherRenewDialog({
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const renewVoucher = useRenewVoucher()
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2
-    }).format(amount)
-  }
+  const { formatCurrency } = useOrganizationFormatters()
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {

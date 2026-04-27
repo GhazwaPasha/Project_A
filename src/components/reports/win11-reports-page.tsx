@@ -24,7 +24,8 @@ import {
   PiggyBank,
   Loader2
 } from 'lucide-react'
-import { formatCurrency, formatReportLastGeneratedAt } from '@/lib/utils'
+import { formatReportLastGeneratedAt } from '@/lib/utils'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 import { useSmartPrefetch } from '@/hooks/use-smart-prefetch'
 import { useRouter } from 'next/navigation'
 
@@ -73,6 +74,7 @@ const reportTypes = [
 ]
 
 export function Win11ReportsPage() {
+  const { formatCurrency } = useOrganizationFormatters()
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState('all')
   const [showCreateModal, setShowCreateModal] = useState(false)

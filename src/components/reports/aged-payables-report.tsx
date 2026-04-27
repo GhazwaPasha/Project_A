@@ -11,7 +11,8 @@ import {
   BarChart3,
   Loader2
 } from 'lucide-react'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 import { useAgedPayables } from '@/hooks/use-organization-data'
 import { useCurrentOrganization } from '@/hooks/use-current-organization'
 import { useToast } from '@/hooks/use-toast'
@@ -42,6 +43,7 @@ interface AgedPayablesReportProps {
 
 export function AgedPayablesReport({ onBack, asOfDate }: AgedPayablesReportProps) {
   const currentOrganization = useCurrentOrganization()
+  const { formatCurrency } = useOrganizationFormatters()
   const { toast } = useToast()
   
   // Use optimized hook instead of manual data loading

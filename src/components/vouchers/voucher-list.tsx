@@ -46,6 +46,7 @@ import {
 import { VoucherApprovalDialog } from './voucher-approval-dialog'
 import { VoucherRenewDialog } from './voucher-renew-dialog'
 import { VoucherViewDialog } from './voucher-view-dialog'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 
 interface VoucherListProps {
   vouchers: InventoryVoucher[]
@@ -83,15 +84,7 @@ export function VoucherList({
   const renewVoucher = useRenewVoucher()
   const deleteVoucher = useDeleteVoucher()
   const submitForApproval = useSubmitForApproval(organizationId)
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount)
-  }
+  const { formatCurrency } = useOrganizationFormatters()
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {

@@ -27,7 +27,8 @@ import {
   RotateCcw,
   Save
 } from 'lucide-react'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 
 // Mock data for period closing
 const mockClosingSteps = [
@@ -167,6 +168,7 @@ const mockClosingStatus = {
 }
 
 export function Win11PeriodClosingPage() {
+  const { formatCurrency } = useOrganizationFormatters()
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterCategory, setFilterCategory] = useState('all')

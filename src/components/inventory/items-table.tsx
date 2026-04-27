@@ -1,7 +1,7 @@
 'use client'
 
 import { InventoryItem } from '@/types'
-import { formatCurrency } from '@/lib/utils'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 import { Edit, Trash2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DataService } from '@/lib/data-service'
@@ -13,6 +13,7 @@ interface ItemsTableProps {
 }
 
 export function ItemsTable({ items, onEdit, onRefresh }: ItemsTableProps) {
+  const { formatCurrency } = useOrganizationFormatters()
   const handleDelete = async (itemId: number) => {
     if (!confirm('Are you sure you want to delete this item?')) return
     

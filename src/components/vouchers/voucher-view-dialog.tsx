@@ -32,6 +32,7 @@ import {
   ShoppingCart,
   Package
 } from 'lucide-react'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 
 interface VoucherViewDialogProps {
   voucher: InventoryVoucher
@@ -40,16 +41,9 @@ interface VoucherViewDialogProps {
 }
 
 export function VoucherViewDialog({ voucher, open, onOpenChange }: VoucherViewDialogProps) {
+  const { formatCurrency } = useOrganizationFormatters()
   const getStatusColor = useVoucherStatusColor
   const getStatusIcon = useVoucherStatusIcon
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2
-    }).format(amount)
-  }
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {

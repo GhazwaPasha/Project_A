@@ -14,7 +14,8 @@ import {
   ChevronRight,
   ChevronDown
 } from 'lucide-react'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 import { useBalanceSheet } from '@/hooks/use-organization-data'
 import { useCurrentOrganization } from '@/contexts/organization-context'
 import { useComponentLoadingState } from '@/hooks/use-loading-state'
@@ -58,6 +59,7 @@ export function BalanceSheetReport({ onBack, asOfDate }: BalanceSheetReportProps
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
   const [expandedAccounts, setExpandedAccounts] = useState<Set<number>>(new Set())
   const currentOrganization = useCurrentOrganization()
+  const { formatCurrency } = useOrganizationFormatters()
   const { toast } = useToast()
   
   // Use component loading state for better UX

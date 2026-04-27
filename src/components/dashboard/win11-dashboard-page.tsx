@@ -14,7 +14,8 @@ import {
   RefreshCw,
   AlertCircle
 } from 'lucide-react'
-import { formatCurrency, formatPercentage, formatDate } from '@/lib/utils'
+import { formatPercentage, formatDate } from '@/lib/utils'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 import { useDashboardBundle } from '@/hooks/use-organization-data'
 import { useOrganization } from '@/hooks/use-organization'
 import { useCurrentOrganization } from '@/contexts/organization-context'
@@ -138,6 +139,7 @@ export function Win11DashboardPage() {
   const [dateRange, setDateRange] = useState<DateRange>({ startDate: null, endDate: null })
   const { isLoading: orgContextLoading, organizations, hasOrganizations } = useOrganization()
   const currentOrganization = useCurrentOrganization()
+  const { formatCurrency } = useOrganizationFormatters()
 
   const {
     data: bundle,

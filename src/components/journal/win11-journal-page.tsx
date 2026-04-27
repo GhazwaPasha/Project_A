@@ -10,7 +10,8 @@ import {
   FileText,
   Info,
 } from 'lucide-react'
-import { formatCurrency, formatEntryDateTime } from '@/lib/utils'
+import { formatEntryDateTime } from '@/lib/utils'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 import { accountCodeChipClass } from '@/lib/account-type-badges'
 import { JournalEntryDialog } from './journal-entry-dialog'
 import { BulkEntryDialog } from './bulk-entry-dialog'
@@ -21,6 +22,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { JournalListSkeleton } from '@/components/loading/app-page-skeletons'
 
 export function Win11JournalPage() {
+  const { formatCurrency } = useOrganizationFormatters()
   const roleResolved = useOrgMemberRoleResolved()
   const canWriteJournal = useOrgDataPermission('ledger.write')
   const [searchTerm, setSearchTerm] = useState('')

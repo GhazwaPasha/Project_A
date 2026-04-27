@@ -15,23 +15,16 @@ import {
   CheckCircle,
   XCircle
 } from 'lucide-react'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 
 interface VoucherApprovalDashboardProps {
   vouchers: InventoryVoucher[]
 }
 
 export function VoucherApprovalDashboard({ vouchers }: VoucherApprovalDashboardProps) {
+  const { formatCurrency } = useOrganizationFormatters()
   const getStatusColor = useVoucherStatusColor
   const getStatusIcon = useVoucherStatusIcon
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount)
-  }
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {

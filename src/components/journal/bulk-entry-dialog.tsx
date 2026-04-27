@@ -8,7 +8,6 @@ import { Label } from '@/components/ui/label'
 import { AlertCircle, Plus, Trash2, Upload, Download } from 'lucide-react'
 import { DataService } from '@/lib/data-service'
 import { Account, JournalEntry, JournalEntryLine } from '@/types'
-import { formatCurrency } from '@/lib/utils'
 import { handleFileImport, downloadCSVTemplate } from '@/lib/file-import-utils'
 import { useCurrentOrganization } from '@/hooks/use-current-organization'
 import {
@@ -22,6 +21,7 @@ import {
   createInitialJournalLines,
   type DraftLine,
 } from '@/components/journal/journal-lines-editor'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 
 interface BulkEntryDialogProps {
   open: boolean
@@ -60,6 +60,7 @@ export function BulkEntryDialog({
   organizationId: _organizationId,
 }: BulkEntryDialogProps) {
   const currentOrganization = useCurrentOrganization()
+  const { formatCurrency } = useOrganizationFormatters()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

@@ -11,7 +11,8 @@ import {
   PieChart,
   Loader2
 } from 'lucide-react'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 import { useAgedReceivables } from '@/hooks/use-organization-data'
 import { useCurrentOrganization } from '@/hooks/use-current-organization'
 import { useToast } from '@/hooks/use-toast'
@@ -42,6 +43,7 @@ interface AgedReceivablesReportProps {
 
 export function AgedReceivablesReport({ onBack, asOfDate }: AgedReceivablesReportProps) {
   const currentOrganization = useCurrentOrganization()
+  const { formatCurrency } = useOrganizationFormatters()
   const { toast } = useToast()
   
   // Use optimized hook instead of manual data loading

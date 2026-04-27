@@ -28,7 +28,8 @@ import {
   FileText,
   CheckSquare
 } from 'lucide-react'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 import { useOrganization } from '@/hooks/use-organization'
 import { 
   useVouchers, 
@@ -50,6 +51,7 @@ const FILTER_STATUS_VALUES = new Set(['all', 'pending_finance', 'approved', 'rej
 const FILTER_TYPE_VALUES = new Set(['all', 'purchase', 'issuance'])
 
 export function Win11ApprovalsPage() {
+  const { formatCurrency } = useOrganizationFormatters()
   const { currentOrganization } = useOrganization()
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()

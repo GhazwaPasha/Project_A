@@ -20,10 +20,10 @@ import {
 } from 'lucide-react'
 import {
   formatAccountLastActivity,
-  formatCurrency,
   formatDateTime,
   formatEntryDateTime,
 } from '@/lib/utils'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 import { accountTypeBadgeClass, accountLevelBadgeClass, accountCodeChipClass } from '@/lib/account-type-badges'
 import { DataService } from '@/lib/data-service'
 import type { AccountBalanceRow, AccountTransactionRow, AccountType } from '@/types'
@@ -40,6 +40,7 @@ export function Win11LedgerPage() {
   const [transactions, setTransactions] = useState<TransactionData[]>([])
   const [loading, setLoading] = useState(true)
   const { currentOrganization } = useOrganization()
+  const { formatCurrency } = useOrganizationFormatters()
   const [showSearchField, setShowSearchField] = useState(false)
   const [dateRange, setDateRange] = useState<DateRange>({ startDate: null, endDate: null })
   const [accountsLastUpdated, setAccountsLastUpdated] = useState<Date | null>(null)

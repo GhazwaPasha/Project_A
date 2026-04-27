@@ -11,9 +11,10 @@ import {
   TrendingUp,
   Loader2
 } from 'lucide-react'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
 import { useIncomeStatement } from '@/hooks/use-organization-data'
 import { useCurrentOrganization } from '@/hooks/use-current-organization'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 import { useToast } from '@/hooks/use-toast'
 
 interface IncomeStatementData {
@@ -33,6 +34,7 @@ interface IncomeStatementReportProps {
 
 export function IncomeStatementReport({ onBack, fromDate, toDate }: IncomeStatementReportProps) {
   const currentOrganization = useCurrentOrganization()
+  const { formatCurrency } = useOrganizationFormatters()
   const { toast } = useToast()
   
   // Use optimized hook instead of manual data loading

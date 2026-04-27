@@ -32,6 +32,7 @@ import {
   Clock,
   AlertTriangle
 } from 'lucide-react'
+import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 
 interface VoucherApprovalDialogProps {
   voucher: InventoryVoucher
@@ -52,14 +53,7 @@ export function VoucherApprovalDialog({
 
   const approveVoucher = useApproveVoucher()
   const rejectVoucher = useRejectVoucher()
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2
-    }).format(amount)
-  }
+  const { formatCurrency } = useOrganizationFormatters()
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
