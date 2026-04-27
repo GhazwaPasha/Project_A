@@ -20,8 +20,25 @@ function isTransientSessionFetchError(error: { status?: number }): boolean {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { data, isPending, isRefetching, error: sessionError } = authClient.useSession()
   const queryClient = useQueryClient()
-  const { setUser, setLoading, logout, loadUserData, clearForAccountSwitch } = useAuthStore()
+  const { setUser, setLoading, logout, loadUserData, clearForAccountSwitch, reconcilePersistedForSessionUser } =
+    useAuthStore()
   const lastLoadedUserId = useRef<string | null>(null)
+  const sessionUserIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    sessionUserIdRef.current = data?.user?.id ?? null
+  }, [data?.user?.id])
+
+  useEffect(() => {
+    return useAuthStore.persist.onFinishHydration(() => {
+      const id = sessionUserIdRef.current
+      if (id) {
+        const s = useAuthStore.getState()
+        s.reconcilePersistedForSessionUser(id)
+        s.syncOrgQueries(id)
+      }
+    })
+  }, [])
 
   useEffect(() => {
     if (isPending) {
@@ -47,10 +64,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         created_at: now,
         updated_at: now,
       }
+      reconcilePersistedForSessionUser(data.user.id)
       setUser(user)
-
       if (prevSessionUserId !== data.user.id) {
         lastLoadedUserId.current = data.user.id
+        useAuthStore.getState().syncOrgQueries(data.user.id)
         void loadUserData()
       }
       return

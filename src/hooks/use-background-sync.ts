@@ -1,12 +1,18 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useCurrentOrganization } from '@/contexts/organization-context'
+import { useAuthStore } from '@/stores/auth-store'
 import { queryKeys } from '@/lib/query-keys'
 import { useEffect, useRef } from 'react'
+
+/** Throttle: avoid hammering `loadUserData` + `/api/app-data` on rapid tab flips. */
+const USER_DATA_REFETCH_MIN_MS = 2 * 60 * 1000
 
 export const useBackgroundSync = (options?: { enabled?: boolean }) => {
   const queryClient = useQueryClient()
   const currentOrganization = useCurrentOrganization()
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const lastSyncTimeRef = useRef<number>(Date.now())
+  const lastUserDataRefetchAtRef = useRef<number>(0)
   const enabled = options?.enabled !== false
   
   useEffect(() => {
@@ -35,16 +41,21 @@ export const useBackgroundSync = (options?: { enabled?: boolean }) => {
     return () => clearInterval(interval)
   }, [queryClient, currentOrganization, enabled])
   
-  // Sync on window focus - but only if away for more than 5 minutes
+  // On tab focus: throttled `loadUserData` (org membership, profile) + throttled report/financial invalidation
   useEffect(() => {
     if (!enabled) return
-    
+
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && currentOrganization) {
-        const now = Date.now()
+      if (document.visibilityState !== 'visible') return
+      const now = Date.now()
+
+      if (isAuthenticated && now - lastUserDataRefetchAtRef.current >= USER_DATA_REFETCH_MIN_MS) {
+        lastUserDataRefetchAtRef.current = now
+        void useAuthStore.getState().loadUserData()
+      }
+
+      if (currentOrganization) {
         const timeSinceLastSync = now - lastSyncTimeRef.current
-        
-        // Only sync if it's been more than 5 minutes since last sync
         if (timeSinceLastSync > 5 * 60 * 1000) {
           const id = currentOrganization.id
           for (const qk of queryKeys.financialQueryPrefixes(id)) {
@@ -57,10 +68,10 @@ export const useBackgroundSync = (options?: { enabled?: boolean }) => {
         }
       }
     }
-    
+
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [queryClient, currentOrganization, enabled])
+  }, [queryClient, currentOrganization, enabled, isAuthenticated])
   
   // Sync on network reconnection
   useEffect(() => {

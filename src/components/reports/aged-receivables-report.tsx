@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useAgedReceivables } from '@/hooks/use-organization-data'
-import { useCurrentOrganization } from '@/stores/auth-store'
+import { useCurrentOrganization } from '@/hooks/use-current-organization'
 import { useToast } from '@/hooks/use-toast'
 
 interface AgedReceivablesData {

@@ -31,7 +31,7 @@ import {
 import { formatDate } from '@/lib/utils'
 import { useUser } from '@/stores/auth-store'
 import { useAuthStore } from '@/stores/auth-store'
-import { useCurrentOrganization } from '@/stores/auth-store'
+import { useCurrentOrganization } from '@/hooks/use-current-organization'
 import {
   ORGANIZATION_ROLE_CATALOG,
   INVITABLE_ORG_ROLES,

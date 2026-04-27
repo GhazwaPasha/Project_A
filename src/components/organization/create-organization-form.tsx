@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Building2, Loader2 } from 'lucide-react'
 import { authFormFont } from '@/lib/auth-form-font'
 import type { Organization } from '@/types'
+import { useAuthStore } from '@/stores/auth-store'
 
 export function CreateOrganizationForm() {
   const router = useRouter()
@@ -40,6 +41,7 @@ export function CreateOrganizationForm() {
         router.refresh()
         const { data: session } = await authClient.getSession()
         if (session?.user?.id) {
+          void useAuthStore.getState().loadUserData()
           void queryClient.invalidateQueries({ queryKey: ['user-organizations', session.user.id] })
         }
         void queryClient.invalidateQueries({ queryKey: ['current-organization', data.organization.id] })

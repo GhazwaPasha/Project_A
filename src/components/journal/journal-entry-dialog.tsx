@@ -10,7 +10,7 @@ import { AlertCircle, Sparkles } from 'lucide-react'
 import { DataService } from '@/lib/data-service'
 import { Account, JournalEntry, JournalEntryLine } from '@/types'
 import { parseTransaction } from '@/lib/ai-transaction-parser'
-import { useCurrentOrganization } from '@/stores/auth-store'
+import { useCurrentOrganization } from '@/hooks/use-current-organization'
 import { parseMoneyInput, validateJournalLinesForSave, roundMoney } from '@/lib/journal-validation'
 import {
   JournalLinesEditor,

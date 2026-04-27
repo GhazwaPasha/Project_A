@@ -69,6 +69,8 @@ const supplierSchema = z.object({
   tax_id: z.string().optional(),
   registration_number: z.string().optional(),
   currency: z.string().min(3, 'Currency is required'),
+  payment_terms: z.enum(['net_15', 'net_30', 'net_45', 'net_60', 'due_on_receipt', 'cash_on_delivery', 'prepaid']),
+  credit_limit: z.coerce.number().min(0),
   
   // Status and metadata
   status: z.enum(['active', 'inactive', 'suspended']),
@@ -136,6 +138,8 @@ export function CreateSupplierDialog({
       tax_id: '',
       registration_number: '',
       currency: 'USD',
+      payment_terms: 'net_30',
+      credit_limit: 0,
       status: 'active',
       is_preferred: false,
       notes: '',
@@ -289,6 +293,56 @@ export function CreateSupplierDialog({
                               <SelectItem value="AUD">AUD</SelectItem>
                             </SelectContent>
                           </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="payment_terms"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Payment terms *</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select terms" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="net_15">Net 15</SelectItem>
+                              <SelectItem value="net_30">Net 30</SelectItem>
+                              <SelectItem value="net_45">Net 45</SelectItem>
+                              <SelectItem value="net_60">Net 60</SelectItem>
+                              <SelectItem value="due_on_receipt">Due on receipt</SelectItem>
+                              <SelectItem value="cash_on_delivery">Cash on delivery</SelectItem>
+                              <SelectItem value="prepaid">Prepaid</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="credit_limit"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Credit limit</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              name={field.name}
+                              onBlur={field.onBlur}
+                              ref={field.ref}
+                              value={field.value === undefined || field.value === null ? '' : String(field.value)}
+                              onChange={(e) => field.onChange(e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                            />
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}

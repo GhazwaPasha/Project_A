@@ -32,8 +32,14 @@ interface OrganizationProviderProps {
 }
 
 export function OrganizationProvider({ children }: OrganizationProviderProps) {
-  const { user, isAuthenticated, isLoading: authLoading, organizations: storeOrgs, currentOrganization: storeCurrent } =
-    useAuthStore()
+  const {
+    user,
+    isAuthenticated,
+    isLoading: authStoreLoading,
+    profileLoadInProgress,
+    organizations: storeOrgs,
+    currentOrganization: storeCurrent,
+  } = useAuthStore()
   const queryClient = useQueryClient()
 
   const [isSwitching, setIsSwitching] = useState(false)
@@ -44,23 +50,8 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
     () => (typeof window !== 'undefined' ? localStorage.getItem('selectedOrganizationId') : null)
   )
 
-  // Only fetch from network when Zustand has no orgs yet; otherwise the auth-store loadUserData
-  // already fetched and seeded data — running a second request here would be duplicate work.
-  const { data: orgsFromQuery, isPending: orgsPending, error: organizationsError, refetch: refetchOrganizations } =
-    useQuery<Organization[]>({
-      queryKey: queryKeys.userOrganizations(user?.id ?? ''),
-      queryFn: () => DataService.getUserOrganizations(user!.id),
-      enabled: !!user && isAuthenticated && storeOrgs.length === 0,
-      staleTime: 10 * 60 * 1000,
-      gcTime: 30 * 60 * 1000,
-      retry: 3,
-    })
-
-  /** RQ is source of truth when it has run; before that, rehydrate from auth store (avoids "empty" UI). */
-  const organizations = useMemo<Organization[]>(
-    () => orgsFromQuery ?? (storeOrgs.length > 0 ? storeOrgs : []),
-    [orgsFromQuery, storeOrgs]
-  )
+  // Org list lives in the auth store (rehydrated + `loadUserData`); that path also seeds React Query.
+  const organizations = useMemo<Organization[]>(() => storeOrgs, [storeOrgs])
 
   const currentOrgPlaceholder = useMemo<Organization | null>(() => {
     if (!currentOrganizationId) return null
@@ -73,10 +64,10 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
   /** Stale `selectedOrganizationId` (e.g. after account switch) must not drive UI or requests. */
   useEffect(() => {
     if (!user?.id) return
-    if (authLoading && storeOrgs.length === 0 && orgsFromQuery === undefined) return
+    if ((authStoreLoading || profileLoadInProgress) && storeOrgs.length === 0) return
 
     if (organizationIds.size === 0) {
-      if (authLoading || orgsPending) return
+      if (authStoreLoading || profileLoadInProgress) return
       if (currentOrganizationId) {
         localStorage.removeItem('selectedOrganizationId')
         setCurrentOrganizationId(null)
@@ -99,10 +90,9 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
     }
   }, [
     user?.id,
-    authLoading,
-    orgsPending,
+    authStoreLoading,
+    profileLoadInProgress,
     storeOrgs.length,
-    orgsFromQuery,
     organizations,
     organizationIds,
     currentOrganizationId,
@@ -119,10 +109,11 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
       !!user &&
       organizationIds.size > 0 &&
       organizationIds.has(currentOrganizationId),
-    placeholderData: currentOrgPlaceholder ?? undefined,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 15 * 60 * 1000,
+    placeholderData: (previousData) => previousData ?? (currentOrgPlaceholder ?? undefined),
+    staleTime: 15 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     retry: 3,
+    refetchOnWindowFocus: true,
   })
 
   const currentOrganization = useMemo<Organization | null>(() => {
@@ -257,12 +248,12 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
   const refreshOrganizations = useCallback(async () => {
     try {
       setError(null)
-      await refetchOrganizations()
+      await useAuthStore.getState().loadUserData()
     } catch (err) {
       console.error('Error refreshing organizations:', err)
       setError(err as Error)
     }
-  }, [refetchOrganizations])
+  }, [])
 
   const clearError = useCallback(() => {
     setError(null)
@@ -283,20 +274,10 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
     if (organizations.length > 0 && currentOrganization) return false
     if (organizations.length > 0 && !currentOrganizationId) return isSwitching
     if (organizations.length === 0) {
-      return (
-        (orgsPending && storeOrgs.length === 0) ||
-        (authLoading && !storeOrgs.length) ||
-        (orgsFromQuery === undefined &&
-          storeOrgs.length === 0 &&
-          user &&
-          isAuthenticated &&
-          !organizationsError)
-      )
+      return authStoreLoading || profileLoadInProgress
     }
     if (currentOrganizationId && (currentOrgPlaceholder || currentFromQuery)) return false
-    return Boolean(
-      (orgsPending && storeOrgs.length === 0) || (currentOrgPending && !currentOrgPlaceholder)
-    )
+    return Boolean(currentOrgPending && !currentOrgPlaceholder)
   }, [
     user,
     isAuthenticated,
@@ -304,17 +285,14 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
     currentOrganization,
     currentOrganizationId,
     isSwitching,
-    orgsPending,
-    orgsFromQuery,
-    organizationsError,
-    storeOrgs.length,
-    authLoading,
+    authStoreLoading,
+    profileLoadInProgress,
     currentOrgPlaceholder,
     currentFromQuery,
     currentOrgPending,
   ])
 
-  const contextError = error || organizationsError || currentOrgError
+  const contextError = error || currentOrgError
 
   const value: OrganizationContextType = {
     currentOrganization,

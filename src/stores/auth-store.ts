@@ -1,13 +1,18 @@
 import { create } from 'zustand'
 import { subscribeWithSelector, persist } from 'zustand/middleware'
 import { User, Organization, UserProfile, UserRole } from '@/types'
+import type { AppShellServerBootstrap } from '@/types/app-shell'
 import { clearUserAccentLocalStorage, clearUserAccentOnRoot, syncUserAccentLocalStorageFromProfile } from '@/lib/user-accent-early'
+import { queryClient } from '@/lib/query-client'
+import { queryKeys } from '@/lib/query-keys'
 
 interface AuthState {
   user: User | null
   profile: UserProfile | null
   organizations: Organization[]
   currentOrganization: Organization | null
+  /** `user.id` the persisted `organizations` + `currentOrganization` belong to; cleared on mismatch. */
+  orgCacheUserId: string | null
   /** Set when `currentOrganization` and session are known. Used for per-org RBAC in UI. */
   currentOrgMemberRole: UserRole | null
   /** After `loadUserData` / `switchOrganization` has finished loading `currentOrgMemberRole` for the active org. */
@@ -30,6 +35,12 @@ interface AuthState {
   logout: () => void
   /** Clears org selection and cached org list (call when the signed-in user account changes). */
   clearForAccountSwitch: () => void
+  /** Wipe org snapshot + profile if the signed-in user does not own persisted cache (shared browser / account switch). */
+  reconcilePersistedForSessionUser: (userId: string) => void
+  /** Pushes list + current org into React Query so the rest of the app shares one warm cache. */
+  syncOrgQueries: (userId: string) => void
+  /** Fills the store from RSC when the client has no org list yet (e.g. before persist rehydration). */
+  applyAppShellServerSnapshot: (bootstrap: AppShellServerBootstrap) => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -39,6 +50,7 @@ export const useAuthStore = create<AuthState>()(
       profile: null,
       organizations: [],
       currentOrganization: null,
+      orgCacheUserId: null,
       currentOrgMemberRole: null,
       orgMemberRoleResolved: false,
       profileLoadInProgress: false,
@@ -60,7 +72,7 @@ export const useAuthStore = create<AuthState>()(
       const { organizations, user: u } = get()
       const organization = organizations.find(org => org.id === organizationId)
       
-      if (organization) {
+        if (organization) {
         set({ 
           currentOrganization: organization,
           lastOrganizationSwitch: Date.now(),
@@ -78,6 +90,7 @@ export const useAuthStore = create<AuthState>()(
         } else {
           set({ orgMemberRoleResolved: true })
         }
+        if (u) get().syncOrgQueries(u.id)
         return true
       }
       return false
@@ -138,7 +151,7 @@ export const useAuthStore = create<AuthState>()(
         }
       }
 
-      set({ profile, organizations })
+      set({ profile, organizations, orgCacheUserId: user.id })
       if (typeof window !== 'undefined') syncUserAccentLocalStorageFromProfile(profile)
       
       // Set current organization from localStorage or first available
@@ -159,11 +172,13 @@ export const useAuthStore = create<AuthState>()(
         } catch {
           set({ currentOrgMemberRole: null, orgMemberRoleResolved: true })
         }
+        get().syncOrgQueries(user.id)
       } else {
         set({ currentOrganization: null, currentOrgMemberRole: null, orgMemberRoleResolved: true })
         if (typeof window !== 'undefined') {
           localStorage.removeItem('selectedOrganizationId')
         }
+        get().syncOrgQueries(user.id)
       }
     } catch (error) {
       console.error('Error loading user data:', error)
@@ -184,6 +199,7 @@ export const useAuthStore = create<AuthState>()(
           profile: null, 
           organizations: [], 
           currentOrganization: null,
+          orgCacheUserId: null,
           currentOrgMemberRole: null,
           orgMemberRoleResolved: false,
           isAuthenticated: false,
@@ -198,29 +214,110 @@ export const useAuthStore = create<AuthState>()(
           localStorage.removeItem('selectedOrganizationId')
         }
         set({
+          profile: null,
           organizations: [],
           currentOrganization: null,
+          orgCacheUserId: null,
           currentOrgMemberRole: null,
           orgMemberRoleResolved: false,
           lastOrganizationSwitch: null,
         })
       },
+
+      reconcilePersistedForSessionUser: (userId) => {
+        set((s) => {
+          if (s.orgCacheUserId === userId) {
+            return {}
+          }
+          if (s.orgCacheUserId && s.orgCacheUserId !== userId) {
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('selectedOrganizationId')
+            }
+            return {
+              profile: null,
+              organizations: [],
+              currentOrganization: null,
+              orgCacheUserId: null,
+              currentOrgMemberRole: null,
+              orgMemberRoleResolved: false,
+            }
+          }
+          return {}
+        })
+      },
+
+      syncOrgQueries: (userId) => {
+        const s = get()
+        queryClient.setQueryData(queryKeys.userOrganizations(userId), s.organizations)
+        const c = s.currentOrganization
+        if (c) {
+          queryClient.setQueryData(queryKeys.currentOrganization(c.id), c)
+        }
+      },
+
+      applyAppShellServerSnapshot: async (bootstrap) => {
+        const { user, organizations: existing } = get()
+        if (!user || user.id !== bootstrap.userId) return
+        if (existing.length > 0) return
+
+        set({ profile: bootstrap.profile, organizations: bootstrap.organizations, orgCacheUserId: bootstrap.userId })
+        if (typeof window !== 'undefined') syncUserAccentLocalStorageFromProfile(bootstrap.profile)
+
+        const savedOrgId = typeof window !== 'undefined' ? localStorage.getItem('selectedOrganizationId') : null
+        const orgs = bootstrap.organizations
+        const currentOrg = savedOrgId
+          ? orgs.find((o) => o.id === savedOrgId) || orgs[0]
+          : orgs[0]
+
+        if (currentOrg) {
+          set({ currentOrganization: currentOrg, orgMemberRoleResolved: false })
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('selectedOrganizationId', currentOrg.id)
+          }
+          try {
+            const { DataService } = await import('@/lib/data-service')
+            const role = await DataService.getUserRoleInOrganization(bootstrap.userId, currentOrg.id)
+            set({ currentOrgMemberRole: role, orgMemberRoleResolved: true })
+          } catch {
+            set({ currentOrgMemberRole: null, orgMemberRoleResolved: true })
+          }
+        } else {
+          set({ currentOrganization: null, currentOrgMemberRole: null, orgMemberRoleResolved: true })
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('selectedOrganizationId')
+          }
+        }
+        get().syncOrgQueries(bootstrap.userId)
+      },
     })),
     {
       name: 'auth-storage',
+      version: 2,
+      migrate: (persisted) => {
+        if (!persisted || typeof persisted !== 'object') return persisted
+        const p = persisted as { state: Record<string, unknown> }
+        return {
+          ...p,
+          state: {
+            ...p.state,
+            orgCacheUserId: (p.state.orgCacheUserId as string | null | undefined) ?? null,
+            organizations: (p.state.organizations as Organization[] | undefined) ?? [],
+            currentOrganization: (p.state.currentOrganization as Organization | null | undefined) ?? null,
+          },
+        }
+      },
       partialize: (state) => ({
-        /** Rehydrate before `/api/app-data` for accent and settings UX; session still gates real auth. */
+        /** Rehydrate for accent, settings, and org list so cold loads don’t flash “no organization”. */
         profile: state.profile,
-        /** Do not persist organizations — they belong to whoever was last signed in on this browser. */
+        organizations: state.organizations,
+        currentOrganization: state.currentOrganization,
+        orgCacheUserId: state.orgCacheUserId,
       }),
     }
   )
 )
 
 // Optimized selectors
-export const useCurrentOrganization = () => 
-  useAuthStore(state => state.currentOrganization)
-
 export const useIsLoading = () => 
   useAuthStore(state => state.isLoading)
 

@@ -226,9 +226,9 @@ export class SupplierServiceAdmin {
         ${supplierData.tax_id ?? null},
         ${supplierData.registration_number ?? null},
         ${supplierData.currency}::text,
-        ${supplierData.payment_terms}::text,
-        ${supplierData.credit_limit},
-        ${supplierData.status}::text,
+        ${(supplierData.payment_terms ?? 'net_30') as string}::text,
+        ${supplierData.credit_limit ?? 0},
+        ${(supplierData.status ?? 'active') as string}::text,
         ${supplierData.is_preferred},
         ${supplierData.notes ?? null},
         ${acting}::uuid

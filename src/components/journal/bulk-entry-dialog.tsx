@@ -10,7 +10,7 @@ import { DataService } from '@/lib/data-service'
 import { Account, JournalEntry, JournalEntryLine } from '@/types'
 import { formatCurrency } from '@/lib/utils'
 import { handleFileImport, downloadCSVTemplate } from '@/lib/file-import-utils'
-import { useCurrentOrganization } from '@/stores/auth-store'
+import { useCurrentOrganization } from '@/hooks/use-current-organization'
 import {
   parseMoneyInput,
   validateJournalLinesForSave,

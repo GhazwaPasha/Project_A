@@ -21,7 +21,7 @@ import {
   UserCheck,
 } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
-import { useCurrentOrganization } from '@/stores/auth-store'
+import { useCurrentOrganization } from '@/hooks/use-current-organization'
 import { orgRoleLabel, orgRolePermissionsForDisplay } from '@/lib/organization-role-definitions'
 
 type ApiMember = {
