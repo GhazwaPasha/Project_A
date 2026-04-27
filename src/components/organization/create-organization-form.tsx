@@ -36,13 +36,13 @@ export function CreateOrganizationForm() {
       }
       if (data.organization?.id) {
         localStorage.setItem('selectedOrganizationId', data.organization.id)
-        const { data: session } = await authClient.getSession()
-        if (session?.user?.id) {
-          await queryClient.invalidateQueries({ queryKey: ['user-organizations', session.user.id] })
-        }
-        await queryClient.invalidateQueries({ queryKey: ['current-organization', data.organization.id] })
         router.push('/organization')
         router.refresh()
+        const { data: session } = await authClient.getSession()
+        if (session?.user?.id) {
+          void queryClient.invalidateQueries({ queryKey: ['user-organizations', session.user.id] })
+        }
+        void queryClient.invalidateQueries({ queryKey: ['current-organization', data.organization.id] })
       }
     } catch {
       setError('An unexpected error occurred')
