@@ -28,6 +28,8 @@ interface AuthState {
   switchOrganization: (organizationId: string) => Promise<boolean>
   loadUserData: () => Promise<void>
   logout: () => void
+  /** Clears org selection and cached org list (call when the signed-in user account changes). */
+  clearForAccountSwitch: () => void
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -112,6 +114,9 @@ export const useAuthStore = create<AuthState>()(
       
       if (currentOrg) {
         set({ currentOrganization: currentOrg })
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('selectedOrganizationId', currentOrg.id)
+        }
         try {
           const { DataService } = await import('@/lib/data-service')
           const role = await DataService.getUserRoleInOrganization(user.id, currentOrg.id)
@@ -121,6 +126,9 @@ export const useAuthStore = create<AuthState>()(
         }
       } else {
         set({ currentOrganization: null, currentOrgMemberRole: null, orgMemberRoleResolved: true })
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('selectedOrganizationId')
+        }
       }
     } catch (error) {
       console.error('Error loading user data:', error)
@@ -149,14 +157,26 @@ export const useAuthStore = create<AuthState>()(
           profileLoadInProgress: false
         })
       },
+
+      clearForAccountSwitch: () => {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('selectedOrganizationId')
+        }
+        set({
+          organizations: [],
+          currentOrganization: null,
+          currentOrgMemberRole: null,
+          orgMemberRoleResolved: false,
+          lastOrganizationSwitch: null,
+        })
+      },
     })),
     {
       name: 'auth-storage',
       partialize: (state) => ({
         /** Rehydrate before `/api/app-data` for accent and settings UX; session still gates real auth. */
         profile: state.profile,
-        organizations: state.organizations,
-        currentOrganization: state.currentOrganization,
+        /** Do not persist organizations — they belong to whoever was last signed in on this browser. */
       }),
     }
   )

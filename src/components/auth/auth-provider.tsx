@@ -1,13 +1,15 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { authClient } from '@/lib/auth-client'
 import { useAuthStore } from '@/stores/auth-store'
 import { User } from '@/types'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { data, isPending } = authClient.useSession()
-  const { setUser, setLoading, logout, loadUserData } = useAuthStore()
+  const queryClient = useQueryClient()
+  const { setUser, setLoading, logout, loadUserData, clearForAccountSwitch } = useAuthStore()
   const lastLoadedUserId = useRef<string | null>(null)
 
   useEffect(() => {
@@ -18,6 +20,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false)
 
     if (data?.user?.id && data.user.email) {
+      const prevSessionUserId = lastLoadedUserId.current
+      const switchingAccount =
+        prevSessionUserId !== null && prevSessionUserId !== data.user.id
+
+      if (switchingAccount) {
+        clearForAccountSwitch()
+        queryClient.clear()
+      }
+
       const now = new Date().toISOString()
       const user: User = {
         id: data.user.id,
@@ -27,7 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setUser(user)
 
-      if (lastLoadedUserId.current !== data.user.id) {
+      if (prevSessionUserId !== data.user.id) {
         lastLoadedUserId.current = data.user.id
         void loadUserData()
       }
@@ -42,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     lastLoadedUserId.current = null
     logout()
-  }, [data, isPending, setUser, setLoading, logout, loadUserData])
+  }, [data, isPending, setUser, setLoading, logout, loadUserData, clearForAccountSwitch, queryClient])
 
   return <>{children}</>
 }

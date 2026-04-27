@@ -68,22 +68,69 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
     return storeOrgs.find((o) => o.id === currentOrganizationId) ?? null
   }, [currentOrganizationId, storeCurrent, storeOrgs])
 
+  const organizationIds = useMemo(() => new Set(organizations.map((o) => o.id)), [organizations])
+
+  /** Stale `selectedOrganizationId` (e.g. after account switch) must not drive UI or requests. */
+  useEffect(() => {
+    if (!user?.id) return
+    if (authLoading && storeOrgs.length === 0 && orgsFromQuery === undefined) return
+
+    if (organizationIds.size === 0) {
+      if (authLoading || orgsPending) return
+      if (currentOrganizationId) {
+        localStorage.removeItem('selectedOrganizationId')
+        setCurrentOrganizationId(null)
+      }
+      return
+    }
+
+    if (currentOrganizationId && !organizationIds.has(currentOrganizationId)) {
+      const fallback =
+        (storeCurrent?.id && organizationIds.has(storeCurrent.id) ? storeCurrent.id : null) ??
+        organizations[0]?.id ??
+        null
+      if (fallback) {
+        localStorage.setItem('selectedOrganizationId', fallback)
+        setCurrentOrganizationId(fallback)
+      } else {
+        localStorage.removeItem('selectedOrganizationId')
+        setCurrentOrganizationId(null)
+      }
+    }
+  }, [
+    user?.id,
+    authLoading,
+    orgsPending,
+    storeOrgs.length,
+    orgsFromQuery,
+    organizations,
+    organizationIds,
+    currentOrganizationId,
+    storeCurrent?.id,
+  ])
+
   const { data: currentFromQuery, isPending: currentOrgPending, error: currentOrgError } = useQuery<Organization | null>({
     queryKey: currentOrganizationId
       ? queryKeys.currentOrganization(currentOrganizationId)
       : ['current-organization', 'none'],
     queryFn: () => DataService.getOrganization(currentOrganizationId!),
-    enabled: !!currentOrganizationId && !!user,
+    enabled:
+      !!currentOrganizationId &&
+      !!user &&
+      organizationIds.size > 0 &&
+      organizationIds.has(currentOrganizationId),
     placeholderData: currentOrgPlaceholder ?? undefined,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     retry: 3,
   })
 
-  const currentOrganization = useMemo<Organization | null>(
-    () => (currentFromQuery as Organization | null) ?? currentOrgPlaceholder,
-    [currentFromQuery, currentOrgPlaceholder]
-  )
+  const currentOrganization = useMemo<Organization | null>(() => {
+    const fromQuery = currentFromQuery as Organization | null
+    if (fromQuery) return fromQuery
+    if (!currentOrganizationId || !organizationIds.has(currentOrganizationId)) return null
+    return currentOrgPlaceholder
+  }, [currentFromQuery, currentOrganizationId, currentOrgPlaceholder, organizationIds])
 
   // Keep RQ in sync with auth store so other hooks see warm cache; reduces duplicate "loading" on route changes.
   useEffect(() => {
