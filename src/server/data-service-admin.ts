@@ -52,14 +52,17 @@ export class DataServiceAdmin {
   }
 
   /**
-   * Merges into `user_profiles.preferences` (e.g. `accentColor`). Call only for the same user.
+   * Merges into `user_profiles.preferences` (e.g. `accentColor`, `theme`). Call only for the same user.
    */
   static async updateUserPreferences(
     userId: string,
-    patch: { accentColor?: string | null }
+    patch: { accentColor?: string | null; theme?: 'light' | 'dark' | 'system' | null }
   ): Promise<UserProfile | null> {
     if (patch.accentColor != null && patch.accentColor !== '' && !isValidHex6(patch.accentColor)) {
       throw new Error('Invalid accent color (use #RRGGBB)')
+    }
+    if (patch.theme != null && patch.theme !== 'light' && patch.theme !== 'dark' && patch.theme !== 'system') {
+      throw new Error('Invalid theme')
     }
     const sql = getSql()
     const prof = await this.getUserProfile(userId)
@@ -73,10 +76,76 @@ export class DataServiceAdmin {
     } else if (patch.accentColor !== undefined) {
       next.accentColor = patch.accentColor
     }
+    if (patch.theme === null) {
+      delete next.theme
+    } else if (patch.theme !== undefined) {
+      next.theme = patch.theme
+    }
     const rows = await sql<UserProfile[]>`
       UPDATE public.user_profiles
       SET
         preferences = ${JSON.stringify(next)}::jsonb,
+        updated_at = now()
+      WHERE id = ${userId}::uuid
+      RETURNING *
+    `
+    const out = rows[0] ?? null
+    if (!out) return null
+    return { ...out, preferences: parseUserPreferences(out.preferences) }
+  }
+
+  static async updateUserProfile(
+    userId: string,
+    patch: { full_name?: string | null; phone?: string | null; avatar_url?: string | null }
+  ): Promise<UserProfile | null> {
+    const sql = getSql()
+    const prof = await this.getUserProfile(userId)
+    if (!prof) return null
+
+    const trimOrNull = (v: string | null | undefined): string | null => {
+      if (v == null) return null
+      const t = v.trim()
+      return t.length === 0 ? null : t
+    }
+
+    let full_name = prof.full_name
+    if (patch.full_name !== undefined) {
+      const t = trimOrNull(patch.full_name)
+      if (t != null && t.length > 200) throw new Error('Full name is too long (max 200 characters)')
+      full_name = t
+    }
+
+    let phone = prof.phone
+    if (patch.phone !== undefined) {
+      const t = trimOrNull(patch.phone)
+      if (t != null && t.length > 50) throw new Error('Phone is too long (max 50 characters)')
+      phone = t
+    }
+
+    let avatar_url = prof.avatar_url
+    if (patch.avatar_url !== undefined) {
+      const t = trimOrNull(patch.avatar_url)
+      if (t != null) {
+        try {
+          const u = new URL(t)
+          if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+            throw new Error('Avatar URL must start with http:// or https://')
+          }
+        } catch (e) {
+          if (e instanceof TypeError) throw new Error('Invalid avatar URL')
+          throw e
+        }
+        if (t.length > 2000) throw new Error('Avatar URL is too long')
+      }
+      avatar_url = t
+    }
+
+    const rows = await sql<UserProfile[]>`
+      UPDATE public.user_profiles
+      SET
+        full_name = ${full_name},
+        phone = ${phone},
+        avatar_url = ${avatar_url},
         updated_at = now()
       WHERE id = ${userId}::uuid
       RETURNING *

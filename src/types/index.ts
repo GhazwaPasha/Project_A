@@ -11,6 +11,8 @@ export interface User {
 export interface UserPreferences {
   /** UI accent; `#RRGGBB`. Personal to the signed-in user. */
   accentColor?: string
+  /** Persisted next-themes value for cross-device sync. */
+  theme?: 'light' | 'dark' | 'system'
   [key: string]: unknown
 }
 

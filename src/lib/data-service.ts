@@ -76,9 +76,16 @@ export class DataService {
 
   static async updateUserPreferences(
     userId: string,
-    patch: { accentColor?: string | null }
+    patch: { accentColor?: string | null; theme?: 'light' | 'dark' | 'system' | null }
   ): Promise<UserProfile | null> {
     return appDataRequest('DataService', 'updateUserPreferences', [userId, patch])
+  }
+
+  static async updateUserProfile(
+    userId: string,
+    patch: { full_name?: string | null; phone?: string | null; avatar_url?: string | null }
+  ): Promise<UserProfile | null> {
+    return appDataRequest('DataService', 'updateUserProfile', [userId, patch])
   }
 
   static async getAccounts(organizationId: string, activeOnly: boolean = true): Promise<Account[]> {

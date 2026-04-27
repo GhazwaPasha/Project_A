@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { neonAuth } from '@/auth'
 import { getSql } from '@/server/pg'
+import { relinkUserProfileToAuthIdInTx } from '@/server/relink-user-profile-to-auth-id'
 import { z } from 'zod'
 
 const bodySchema = z.object({
@@ -42,10 +43,48 @@ export async function POST(req: Request) {
       SELECT id FROM public.user_profiles WHERE lower(email) = ${normalizedEmail} LIMIT 1
     `
     if (emailRow.length > 0) {
-      return NextResponse.json(
-        { error: 'This email is already linked to another account in the app database' },
-        { status: 409 }
-      )
+      const legacyId = emailRow[0]!.id
+      if (legacyId === userId) {
+        return NextResponse.json({ ok: true, alreadyComplete: true })
+      }
+
+      // Same email, new Neon Auth user id: move app profile + FKs to the current session id.
+      const orgId = randomUUID()
+      const memberId = randomUUID()
+      await sql.begin(async (tx) => {
+        await relinkUserProfileToAuthIdInTx(tx, {
+          legacyUserId: legacyId,
+          newUserId: userId,
+          normalizedEmail,
+          fullName,
+        })
+        if (createOrg) {
+          await tx`
+            INSERT INTO public.organizations (
+              id, name, description, settings, is_active
+            ) VALUES (
+              ${orgId},
+              ${organizationName},
+              ${organizationType + ' organization'},
+              ${JSON.stringify({ organization_type: organizationType, created_by: userId })}::jsonb,
+              true
+            )
+          `
+          await tx`
+            INSERT INTO public.organization_members (
+              id, organization_id, user_id, role, is_active, joined_at
+            ) VALUES (
+              ${memberId},
+              ${orgId},
+              ${userId},
+              'organization_owner',
+              true,
+              NOW()
+            )
+          `
+        }
+      })
+      return NextResponse.json({ ok: true, relinked: true })
     }
 
     const orgId = randomUUID()

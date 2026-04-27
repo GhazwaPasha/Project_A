@@ -203,6 +203,11 @@ export async function authorizeAppDataCall(
     return
   }
 
+  if (key === 'DataService.updateUserProfile') {
+    if (String(args[0] ?? '') !== userId) throw new Error('Forbidden')
+    return
+  }
+
   if (key === 'DataService.getAccounts') {
     await requireAnyDataPermission(userId, String(args[0]), ['financial.read', 'inventory.read'])
     return

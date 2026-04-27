@@ -20,6 +20,19 @@ export function parseUserPreferences(raw: unknown): UserPreferences {
   return {}
 }
 
+const THEME_VALUES = new Set(['light', 'dark', 'system'])
+
+export function getThemePreferenceFromProfile(
+  profile: UserProfile | null | undefined
+): 'light' | 'dark' | 'system' | undefined {
+  if (!profile) return undefined
+  const t = parseUserPreferences(profile.preferences).theme
+  if (typeof t !== 'string') return undefined
+  const v = t.trim().toLowerCase()
+  if (THEME_VALUES.has(v)) return v as 'light' | 'dark' | 'system'
+  return undefined
+}
+
 export function getAccentColorFromProfile(profile: UserProfile | null | undefined): string | null {
   if (!profile) return null
   const prefs = parseUserPreferences(profile.preferences)
