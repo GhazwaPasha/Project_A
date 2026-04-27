@@ -24,7 +24,7 @@ import {
   PiggyBank,
   Loader2
 } from 'lucide-react'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatReportLastGeneratedAt } from '@/lib/utils'
 import { useSmartPrefetch } from '@/hooks/use-smart-prefetch'
 import { useRouter } from 'next/navigation'
 
@@ -99,7 +99,7 @@ export function Win11ReportsPage() {
       const reportsData = reportTypes.map(reportType => ({
         ...reportType,
         lastGenerated: null,
-        status: 'ready',
+        status: 'Ready',
         size: '0 KB'
       }))
       
@@ -144,7 +144,9 @@ export function Win11ReportsPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Ready': return 'text-green-600 bg-green-50'
+      case 'Ready':
+      case 'ready':
+        return 'text-green-600 bg-green-50'
       case 'Generating': return 'text-blue-600 bg-blue-50'
       case 'Error': return 'text-red-600 bg-red-50'
       default: return 'text-gray-600 bg-gray-50'
@@ -191,7 +193,7 @@ export function Win11ReportsPage() {
               {report.status}
             </span>
             <span className="text-xs text-on-surface-variant">
-              Last generated: {formatDate(report.lastGenerated)}
+              Last generated: {formatReportLastGeneratedAt(report.lastGenerated)}
             </span>
           </div>
           

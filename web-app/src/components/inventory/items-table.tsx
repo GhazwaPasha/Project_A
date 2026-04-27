@@ -32,17 +32,17 @@ export function ItemsTable({ items, onEdit, onRefresh }: ItemsTableProps) {
     <div className="md-card rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full">
-          <thead className="bg-surface-container">
+          <thead className="bg-[var(--md-sys-color-surface-container-highest)] border-b border-[var(--md-sys-color-outline-variant)]">
             <tr>
-              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface-variant">SKU</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface-variant">Name</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface-variant">Category</th>
-              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface-variant">In</th>
-              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface-variant">Out</th>
-              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface-variant">Available</th>
-              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface-variant">Unit Cost</th>
-              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface-variant">Total Value</th>
-              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface-variant">Actions</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface">SKU</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface">Name</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface">Category</th>
+              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface">In</th>
+              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface">Out</th>
+              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface">Available</th>
+              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface">Unit Cost</th>
+              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface">Total Value</th>
+              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-outline-variant">

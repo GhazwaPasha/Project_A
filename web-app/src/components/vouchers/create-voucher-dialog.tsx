@@ -72,11 +72,6 @@ export function CreateVoucherDialog({
   const createVoucher = useCreateVoucher(currentOrganization?.id || '')
   const { data: accounts = [] } = useAccounts()
 
-  // Debug: Log items to see if they're being passed correctly
-  useEffect(() => {
-    console.log('CreateVoucherDialog - Items received:', items)
-  }, [items])
-
   // Generate purchase order number
   const generatePONumber = () => {
     const now = new Date()

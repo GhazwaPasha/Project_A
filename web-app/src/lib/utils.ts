@@ -32,6 +32,14 @@ export function formatDate(date: string | Date): string {
   }).format(new Date(date))
 }
 
+/** Avoids 1970 epoch and invalid dates from null/undefined. */
+export function formatReportLastGeneratedAt(date: string | Date | null | undefined): string {
+  if (date == null) return 'Never'
+  const t = new Date(date).getTime()
+  if (!Number.isFinite(t) || t <= 0) return 'Never'
+  return formatDate(date)
+}
+
 export function formatDateTime(date: string | Date): string {
   return new Intl.DateTimeFormat('en-US', {
     year: 'numeric',

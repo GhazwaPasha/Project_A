@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { VoucherService } from '@/lib/voucher-service'
 import { 
   InventoryVoucher, 
@@ -11,6 +11,14 @@ import { useCurrentOrganization } from '@/contexts/organization-context'
 import { useAuthStore } from '@/stores/auth-store'
 import { hasOrgDataPermission } from '@/lib/organization-permissions'
 import { queryKeys } from '@/lib/query-keys'
+
+/** Keeps inventory voucher lists, stats, and Approvals (pending / expired) in sync. */
+export function invalidateVoucherRelatedQueries(queryClient: QueryClient, orgId: string | undefined) {
+  if (!orgId) return
+  for (const prefix of queryKeys.voucherQueryPrefixes(orgId)) {
+    void queryClient.invalidateQueries({ queryKey: [...prefix] })
+  }
+}
 
 // ===============================================
 // VOUCHER QUERIES
@@ -98,15 +106,14 @@ export function useCreateVoucher(organizationId: string) {
   return useMutation({
     mutationFn: (voucherData: VoucherFormData) => VoucherService.createVoucher(voucherData, organizationId),
     onSuccess: () => {
-      // Invalidate and refetch voucher queries
-      queryClient.invalidateQueries({ queryKey: ['vouchers'] })
-      queryClient.invalidateQueries({ queryKey: ['voucher-stats'] })
+      invalidateVoucherRelatedQueries(queryClient, organizationId)
     },
   })
 }
 
 export function useUpdateVoucher() {
   const queryClient = useQueryClient()
+  const orgId = useCurrentOrganization()?.id
 
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<VoucherFormData> }) => 
@@ -114,24 +121,21 @@ export function useUpdateVoucher() {
     onSuccess: (updatedVoucher) => {
       // Update the specific voucher in cache
       queryClient.setQueryData(['voucher', updatedVoucher.id], updatedVoucher)
-      // Invalidate list queries
-      queryClient.invalidateQueries({ queryKey: ['vouchers'] })
-      queryClient.invalidateQueries({ queryKey: ['voucher-stats'] })
+      invalidateVoucherRelatedQueries(queryClient, updatedVoucher.organization_id || orgId)
     },
   })
 }
 
 export function useDeleteVoucher() {
   const queryClient = useQueryClient()
+  const orgId = useCurrentOrganization()?.id
 
   return useMutation({
     mutationFn: (id: number) => VoucherService.deleteVoucher(id),
     onSuccess: (_, deletedId) => {
       // Remove from cache
       queryClient.removeQueries({ queryKey: ['voucher', deletedId] })
-      // Invalidate list queries
-      queryClient.invalidateQueries({ queryKey: ['vouchers'] })
-      queryClient.invalidateQueries({ queryKey: ['voucher-stats'] })
+      invalidateVoucherRelatedQueries(queryClient, orgId)
     },
   })
 }
@@ -148,10 +152,10 @@ export function useSubmitForApproval(organizationId: string) {
     onSuccess: (updatedVoucher) => {
       // Update the specific voucher in cache
       queryClient.setQueryData(['voucher', updatedVoucher.id], updatedVoucher)
-      // Invalidate list queries
-      queryClient.invalidateQueries({ queryKey: ['vouchers'] })
-      queryClient.invalidateQueries({ queryKey: ['pending-approvals'] })
-      queryClient.invalidateQueries({ queryKey: ['voucher-stats'] })
+      invalidateVoucherRelatedQueries(
+        queryClient,
+        updatedVoucher.organization_id || organizationId
+      )
     },
   })
 }
@@ -165,11 +169,7 @@ export function useApproveVoucher() {
     onSuccess: (updatedVoucher) => {
       // Update the specific voucher in cache
       queryClient.setQueryData(['voucher', updatedVoucher.id], updatedVoucher)
-      // Invalidate list queries
-      queryClient.invalidateQueries({ queryKey: ['vouchers'] })
-      queryClient.invalidateQueries({ queryKey: ['pending-approvals'] })
-      queryClient.invalidateQueries({ queryKey: ['voucher-stats'] })
-      queryClient.invalidateQueries({ queryKey: ['approval-stats'] })
+      invalidateVoucherRelatedQueries(queryClient, updatedVoucher.organization_id)
     },
   })
 }
@@ -183,11 +183,7 @@ export function useRejectVoucher() {
     onSuccess: (updatedVoucher) => {
       // Update the specific voucher in cache
       queryClient.setQueryData(['voucher', updatedVoucher.id], updatedVoucher)
-      // Invalidate list queries
-      queryClient.invalidateQueries({ queryKey: ['vouchers'] })
-      queryClient.invalidateQueries({ queryKey: ['pending-approvals'] })
-      queryClient.invalidateQueries({ queryKey: ['voucher-stats'] })
-      queryClient.invalidateQueries({ queryKey: ['approval-stats'] })
+      invalidateVoucherRelatedQueries(queryClient, updatedVoucher.organization_id)
     },
   })
 }
@@ -201,10 +197,7 @@ export function useRenewVoucher() {
     onSuccess: (updatedVoucher) => {
       // Update the specific voucher in cache
       queryClient.setQueryData(['voucher', updatedVoucher.id], updatedVoucher)
-      // Invalidate list queries
-      queryClient.invalidateQueries({ queryKey: ['vouchers'] })
-      queryClient.invalidateQueries({ queryKey: ['expired-vouchers'] })
-      queryClient.invalidateQueries({ queryKey: ['voucher-stats'] })
+      invalidateVoucherRelatedQueries(queryClient, updatedVoucher.organization_id)
     },
   })
 }
@@ -222,9 +215,7 @@ export function useExecuteVoucher() {
     onSuccess: (updatedVoucher) => {
       // Update the specific voucher in cache
       queryClient.setQueryData(['voucher', updatedVoucher.id], updatedVoucher)
-      // Invalidate list queries
-      queryClient.invalidateQueries({ queryKey: ['vouchers'] })
-      queryClient.invalidateQueries({ queryKey: ['voucher-stats'] })
+      invalidateVoucherRelatedQueries(queryClient, updatedVoucher.organization_id)
     },
   })
 }
@@ -237,9 +228,7 @@ export function usePostVoucher() {
     onSuccess: (updatedVoucher) => {
       // Update the specific voucher in cache
       queryClient.setQueryData(['voucher', updatedVoucher.id], updatedVoucher)
-      // Invalidate list queries
-      queryClient.invalidateQueries({ queryKey: ['vouchers'] })
-      queryClient.invalidateQueries({ queryKey: ['voucher-stats'] })
+      invalidateVoucherRelatedQueries(queryClient, updatedVoucher.organization_id)
     },
   })
 }
@@ -252,9 +241,7 @@ export function useCompleteVoucher() {
     onSuccess: (updatedVoucher) => {
       // Update the specific voucher in cache
       queryClient.setQueryData(['voucher', updatedVoucher.id], updatedVoucher)
-      // Invalidate list queries
-      queryClient.invalidateQueries({ queryKey: ['vouchers'] })
-      queryClient.invalidateQueries({ queryKey: ['voucher-stats'] })
+      invalidateVoucherRelatedQueries(queryClient, updatedVoucher.organization_id)
     },
   })
 }
@@ -265,16 +252,19 @@ export function useCompleteVoucher() {
 
 export function useExpireOverdueVouchers() {
   const queryClient = useQueryClient()
+  const orgId = useCurrentOrganization()?.id
 
   return useMutation({
     mutationFn: () => VoucherService.expireOverdueVouchers(),
     onSuccess: (expiredCount) => {
       if (expiredCount > 0) {
-        // Invalidate all voucher queries to refresh data
-        queryClient.invalidateQueries({ queryKey: ['vouchers'] })
-        queryClient.invalidateQueries({ queryKey: ['pending-approvals'] })
-        queryClient.invalidateQueries({ queryKey: ['expired-vouchers'] })
-        queryClient.invalidateQueries({ queryKey: ['voucher-stats'] })
+        if (orgId) {
+          invalidateVoucherRelatedQueries(queryClient, orgId)
+        } else {
+          void queryClient.invalidateQueries({ queryKey: ['vouchers'] })
+          void queryClient.invalidateQueries({ queryKey: ['pending-approvals'] })
+          void queryClient.invalidateQueries({ queryKey: ['expired-vouchers'] })
+        }
       }
       return expiredCount
     },

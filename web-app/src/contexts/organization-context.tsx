@@ -236,7 +236,15 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
     if (organizations.length > 0 && currentOrganization) return false
     if (organizations.length > 0 && !currentOrganizationId) return isSwitching
     if (organizations.length === 0) {
-      return (orgsPending && storeOrgs.length === 0) || (authLoading && !storeOrgs.length)
+      return (
+        (orgsPending && storeOrgs.length === 0) ||
+        (authLoading && !storeOrgs.length) ||
+        (orgsFromQuery === undefined &&
+          storeOrgs.length === 0 &&
+          user &&
+          isAuthenticated &&
+          !organizationsError)
+      )
     }
     if (currentOrganizationId && (currentOrgPlaceholder || currentFromQuery)) return false
     return Boolean(
@@ -250,6 +258,8 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
     currentOrganizationId,
     isSwitching,
     orgsPending,
+    orgsFromQuery,
+    organizationsError,
     storeOrgs.length,
     authLoading,
     currentOrgPlaceholder,

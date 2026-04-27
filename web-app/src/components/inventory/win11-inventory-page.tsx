@@ -1,19 +1,21 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import Link from 'next/link'
+import { useQueryClient } from '@tanstack/react-query'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { 
-  Search, RefreshCw, Plus, Edit, Trash2, Save, X, Package,
-  DollarSign, Boxes, Check, Receipt, ShoppingCart, AlertTriangle
+  Search, RefreshCw, Plus, Edit, Trash2, X, Package,
+  DollarSign, Boxes, Check, Receipt, ShoppingCart, AlertTriangle, ListChecks, ChevronRight
 } from 'lucide-react'
-import { formatCurrency } from '@/lib/utils'
+import { cn, formatCurrency } from '@/lib/utils'
 import { DataService } from '@/lib/data-service'
-import { InventoryCategory, InventoryItem, InventoryTransaction, Account } from '@/types'
+import { InventoryCategory, InventoryItem, Account } from '@/types'
 import { useOrganization } from '@/hooks/use-organization'
-import { useInventoryCategories, useInventoryItems } from '@/hooks/use-inventory'
+import { useInventoryCategories, useInventoryItems, useInventoryTransactions } from '@/hooks/use-inventory'
 import { useAccounts } from '@/hooks/use-accounts'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AccountSelect } from '@/components/ui/account-select'
@@ -21,7 +23,7 @@ import { VoucherList } from '@/components/vouchers/voucher-list'
 import { VoucherStatsCards } from '@/components/vouchers/voucher-stats-cards'
 import { VoucherFilters } from '@/components/vouchers/voucher-filters'
 import { CreateVoucherDialog } from '@/components/vouchers/create-voucher-dialog'
-import { useVouchers, useVoucherStats } from '@/hooks/use-vouchers'
+import { useVouchers, useVoucherStats, usePendingApprovals, invalidateVoucherRelatedQueries } from '@/hooks/use-vouchers'
 import { useOrgDataPermission } from '@/hooks/use-org-permissions'
 import { VoucherFilters as VoucherFiltersType } from '@/types'
 
@@ -49,7 +51,6 @@ export function Win11InventoryPage() {
   
   const [categories, setCategories] = useState<InventoryCategory[]>([])
   const [items, setItems] = useState<InventoryItem[]>([])
-  const [transactions, setTransactions] = useState<InventoryTransaction[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [editingItem, setEditingItem] = useState<EditingItem | null>(null)
   const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null)
@@ -71,7 +72,8 @@ export function Win11InventoryPage() {
   const [createVoucherType, setCreateVoucherType] = useState<'purchase' | 'issuance'>('purchase')
   
   const { currentOrganization } = useOrganization()
-  
+  const queryClient = useQueryClient()
+
   const canWriteInventory = useOrgDataPermission('inventory.write')
   const canWriteVoucher = useOrgDataPermission('voucher.write')
 
@@ -79,12 +81,17 @@ export function Win11InventoryPage() {
   const { data: vouchers, isLoading: vouchersLoading, refetch: refetchVouchers } = useVouchers(voucherFilters)
   const voucherRows = vouchers ?? []
   const { data: voucherStats, isLoading: voucherStatsLoading } = useVoucherStats()
+  const { data: pendingApprovalVouchers = [] } = usePendingApprovals()
+  const pendingApprovalCount = pendingApprovalVouchers.length
 
 
   // Use React Query hooks instead of manual data loading
   const { data: categoriesData, isLoading: categoriesLoading, refetch: refetchCategories } = useInventoryCategories()
   const { data: itemsData, isLoading: itemsLoading, refetch: refetchItems } = useInventoryItems()
   const { data: accountsData, isLoading: accountsLoading, refetch: refetchAccounts } = useAccounts()
+  const { data: transactionsData, isLoading: transactionsLoading, refetch: refetchTransactions } =
+    useInventoryTransactions(200)
+  const transactions = transactionsData ?? []
 
   // Update local state when data changes
   useEffect(() => {
@@ -99,25 +106,17 @@ export function Win11InventoryPage() {
     if (accountsData) setAccounts(accountsData)
   }, [accountsData])
 
-  const reloadTransactions = useCallback(async () => {
-    if (!currentOrganization) return
-    try {
-      const txs = await DataService.getInventoryTransactions(currentOrganization.id, undefined, 100)
-      setTransactions(txs)
-    } catch (e) {
-      console.error(e)
-    }
-  }, [currentOrganization])
-
-  useEffect(() => {
-    void reloadTransactions()
-  }, [reloadTransactions])
-
   const refreshInventoryData = useCallback(async () => {
-    await Promise.all([refetchCategories(), refetchItems(), refetchAccounts(), reloadTransactions()])
-  }, [refetchCategories, refetchItems, refetchAccounts, reloadTransactions])
+    await Promise.all([refetchCategories(), refetchItems(), refetchAccounts(), refetchTransactions()])
+  }, [refetchCategories, refetchItems, refetchAccounts, refetchTransactions])
 
-  const loading = categoriesLoading || itemsLoading || accountsLoading || vouchersLoading
+  const isVoucherTab =
+    activeView === 'vouchers' ||
+    activeView === 'purchase-vouchers' ||
+    activeView === 'issuance-vouchers'
+
+  const loading = categoriesLoading || itemsLoading || accountsLoading || (activeView === 'transactions' && transactionsLoading)
+  const voucherListLoading = isVoucherTab && vouchersLoading
 
   const totalValue = items.reduce((sum, item) => sum + item.total_value, 0)
   const totalItems = items.length
@@ -134,6 +133,17 @@ export function Win11InventoryPage() {
     transaction.item?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     transaction.reference?.toLowerCase().includes(searchTerm.toLowerCase())
   )
+
+  const categoryStats = useMemo(() => {
+    const m = new Map<number, { count: number; value: number }>()
+    for (const it of items) {
+      const cur = m.get(it.category_id) ?? { count: 0, value: 0 }
+      cur.count += 1
+      cur.value += it.total_value
+      m.set(it.category_id, cur)
+    }
+    return m
+  }, [items])
 
   const startCreatingItem = () => {
     if (!canWriteInventory) return
@@ -241,14 +251,19 @@ export function Win11InventoryPage() {
     if (!canWriteInventory || !currentOrganization || !transactionForm.item_id || !transactionForm.quantity) return
     const quantity = parseFloat(transactionForm.quantity)
     const unitCost = parseFloat(transactionForm.unit_cost) || 0
-    const finalQuantity = transactionForm.transaction_type === 'out' ? -Math.abs(quantity) : Math.abs(quantity)
+    const finalQuantity =
+    transactionForm.transaction_type === 'out'
+      ? -Math.abs(quantity)
+      : transactionForm.transaction_type === 'adjustment'
+        ? quantity
+        : Math.abs(quantity)
     const transactionData = {
       organization_id: currentOrganization.id, 
       item_id: parseInt(transactionForm.item_id),
       transaction_type: transactionForm.transaction_type, 
       quantity: finalQuantity,
       unit_cost: unitCost > 0 ? unitCost : null, 
-      total_cost: unitCost > 0 ? Math.abs(quantity) * unitCost : null,
+      total_cost: unitCost > 0 ? Math.abs(finalQuantity) * unitCost : null,
       description: transactionForm.description || null, 
       reference: transactionForm.reference || null,
       transaction_date: transactionForm.transaction_date, 
@@ -264,6 +279,8 @@ export function Win11InventoryPage() {
       await refreshInventoryData()
     } catch (error) {
       console.error('Error creating transaction:', error)
+      const msg = error instanceof Error ? error.message : 'Could not record this transaction'
+      if (typeof window !== 'undefined') window.alert(msg)
     }
   }
 
@@ -280,7 +297,11 @@ export function Win11InventoryPage() {
 
   const handleVoucherSuccess = () => {
     setShowCreateVoucherDialog(false)
-    refetchVouchers()
+    if (currentOrganization?.id) {
+      invalidateVoucherRelatedQueries(queryClient, currentOrganization.id)
+    }
+    void refetchVouchers()
+    void refreshInventoryData()
   }
 
   // Filter vouchers by tab
@@ -326,7 +347,7 @@ export function Win11InventoryPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-on-surface-variant">Total Value</p>
-                <p className="text-2xl font-bold">{formatCurrency(totalValue)}</p>
+                <p className="text-2xl font-bold text-on-surface">{formatCurrency(totalValue)}</p>
               </div>
               <DollarSign className="h-8 w-8 text-primary" />
             </div>
@@ -337,9 +358,9 @@ export function Win11InventoryPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-on-surface-variant">Total Items</p>
-                <p className="text-2xl font-bold">{totalItems}</p>
+                <p className="text-2xl font-bold text-on-surface">{totalItems}</p>
               </div>
-              <Package className="h-8 w-8 text-secondary" />
+              <Package className="h-8 w-8 text-primary" />
             </div>
           </CardContent>
         </Card>
@@ -348,9 +369,9 @@ export function Win11InventoryPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-on-surface-variant">Total Quantity</p>
-                <p className="text-2xl font-bold">{totalQuantity.toFixed(2)}</p>
+                <p className="text-2xl font-bold text-on-surface">{totalQuantity.toFixed(2)}</p>
               </div>
-              <Boxes className="h-8 w-8 text-tertiary" />
+              <Boxes className="h-8 w-8 md-warning" />
             </div>
           </CardContent>
         </Card>
@@ -369,54 +390,66 @@ export function Win11InventoryPage() {
 
       <div className="flex gap-2 flex-wrap">
         <button
-          className={`px-4 py-2 font-medium transition-colors ${
-            activeView === 'items' ? 'border-b-2 border-primary text-primary' : 'text-on-surface-variant hover:text-on-surface'
-          }`}
+          type="button"
+          className={cn(
+            'px-4 py-2 font-medium transition-colors rounded-lg',
+            activeView === 'items' ? 'inventory-subtab--active' : 'inventory-subtab--inactive'
+          )}
           onClick={() => setActiveView('items')}
         >
           <Package className="h-4 w-4 mr-1 inline" />
           Items
         </button>
         <button
-          className={`px-4 py-2 font-medium transition-colors ${
-            activeView === 'categories' ? 'border-b-2 border-primary text-primary' : 'text-on-surface-variant hover:text-on-surface'
-          }`}
+          type="button"
+          className={cn(
+            'px-4 py-2 font-medium transition-colors rounded-lg',
+            activeView === 'categories' ? 'inventory-subtab--active' : 'inventory-subtab--inactive'
+          )}
           onClick={() => setActiveView('categories')}
         >
           <Boxes className="h-4 w-4 mr-1 inline" />
           Categories
         </button>
         <button
-          className={`px-4 py-2 font-medium transition-colors ${
-            activeView === 'transactions' ? 'border-b-2 border-primary text-primary' : 'text-on-surface-variant hover:text-on-surface'
-          }`}
+          type="button"
+          className={cn(
+            'px-4 py-2 font-medium transition-colors rounded-lg',
+            activeView === 'transactions' ? 'inventory-subtab--active' : 'inventory-subtab--inactive'
+          )}
           onClick={() => setActiveView('transactions')}
         >
           <Check className="h-4 w-4 mr-1 inline" />
           Transactions
         </button>
         <button
-          className={`px-4 py-2 font-medium transition-colors ${
-            activeView === 'vouchers' ? 'border-b-2 border-primary text-primary' : 'text-on-surface-variant hover:text-on-surface'
-          }`}
+          type="button"
+          className={cn(
+            'px-4 py-2 font-medium transition-colors rounded-lg',
+            activeView === 'vouchers' ? 'inventory-subtab--active' : 'inventory-subtab--inactive'
+          )}
           onClick={() => setActiveView('vouchers')}
         >
           <Receipt className="h-4 w-4 mr-1 inline" />
           Vouchers
         </button>
         <button
-          className={`px-4 py-2 font-medium transition-colors ${
-            activeView === 'purchase-vouchers' ? 'border-b-2 border-primary text-primary' : 'text-on-surface-variant hover:text-on-surface'
-          }`}
+          type="button"
+          className={cn(
+            'px-4 py-2 font-medium transition-colors rounded-lg',
+            activeView === 'purchase-vouchers' ? 'inventory-subtab--active' : 'inventory-subtab--inactive'
+          )}
           onClick={() => setActiveView('purchase-vouchers')}
         >
           <ShoppingCart className="h-4 w-4 mr-1 inline" />
           Purchase
         </button>
         <button
-          className={`px-4 py-2 font-medium transition-colors ${
-            activeView === 'issuance-vouchers' ? 'border-b-2 border-primary text-primary' : 'text-on-surface-variant hover:text-on-surface'
-          }`}
+          type="button"
+          className={cn(
+            'px-4 py-2 font-medium transition-colors rounded-lg',
+            activeView === 'issuance-vouchers' ? 'inventory-subtab--active' : 'inventory-subtab--inactive'
+          )}
           onClick={() => setActiveView('issuance-vouchers')}
         >
           <Package className="h-4 w-4 mr-1 inline" />
@@ -424,10 +457,35 @@ export function Win11InventoryPage() {
         </button>
       </div>
 
+      {isVoucherTab && currentOrganization && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline bg-[var(--md-sys-color-surface-container)] px-4 py-3 text-sm text-on-surface">
+          <div className="flex min-w-0 items-start gap-2">
+            <ListChecks className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <span>
+              Inventory vouchers use the same approval queue as{' '}
+              <span className="font-medium">Approvals</span>.{' '}
+              {pendingApprovalCount > 0 ? (
+                <span className="font-medium text-orange-700">
+                  {pendingApprovalCount} pending finance {pendingApprovalCount === 1 ? 'approval' : 'approvals'}
+                </span>
+              ) : (
+                <span className="text-on-surface-variant">No pending finance approvals</span>
+              )}
+            </span>
+          </div>
+          <Button asChild variant="outline" size="sm" className="shrink-0">
+            <Link href="/approvals?status=pending_finance">
+              Open Approvals
+              <ChevronRight className="ml-1 h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+      )}
+
       {activeView === 'items' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Inventory Items</h2>
+            <h2 className="text-xl font-semibold text-on-surface">Inventory Items</h2>
             <div className="flex gap-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-on-surface-variant" />
@@ -441,26 +499,26 @@ export function Win11InventoryPage() {
             </div>
           </div>
           
-          <div className="border border-outline rounded-lg overflow-hidden bg-surface">
+          <div className="border border-outline rounded-lg overflow-hidden bg-[var(--md-sys-color-surface)]">
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
-                <thead className="bg-surface-container-highest border-b border-outline">
+                <thead className="bg-[var(--md-sys-color-surface-container-highest)] border-b border-outline">
                   <tr>
-                    <th className="border-r border-outline px-3 py-2 text-left text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-24">SKU</th>
-                    <th className="border-r border-outline px-3 py-2 text-left text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-48">Name</th>
-                    <th className="border-r border-outline px-3 py-2 text-left text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-32">Category</th>
-                    <th className="border-r border-outline px-3 py-2 text-center text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-16">Unit</th>
-                    <th className="border-r border-outline px-3 py-2 text-right text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-20">In</th>
-                    <th className="border-r border-outline px-3 py-2 text-right text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-20">Out</th>
-                    <th className="border-r border-outline px-3 py-2 text-right text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-24">Available</th>
-                    <th className="border-r border-outline px-3 py-2 text-right text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-24">Cost</th>
-                    <th className="border-r border-outline px-3 py-2 text-right text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-24">Value</th>
+                    <th className="border-r border-outline px-3 py-2 text-left text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-24">SKU</th>
+                    <th className="border-r border-outline px-3 py-2 text-left text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-48">Name</th>
+                    <th className="border-r border-outline px-3 py-2 text-left text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-32">Category</th>
+                    <th className="border-r border-outline px-3 py-2 text-center text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-16">Unit</th>
+                    <th className="border-r border-outline px-3 py-2 text-right text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-20">In</th>
+                    <th className="border-r border-outline px-3 py-2 text-right text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-20">Out</th>
+                    <th className="border-r border-outline px-3 py-2 text-right text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-24">Available</th>
+                    <th className="border-r border-outline px-3 py-2 text-right text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-24">Cost</th>
+                    <th className="border-r border-outline px-3 py-2 text-right text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-24">Value</th>
                     {canWriteInventory && (
-                      <th className="px-3 py-2 text-center text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-20">Actions</th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-20">Actions</th>
                     )}
                   </tr>
                 </thead>
-                <tbody className="bg-surface">
+                <tbody className="bg-[var(--md-sys-color-surface)]">
                   {canWriteInventory && isCreatingItem && editingItem && (
                     <tr className="bg-primary-container/5 border-b border-outline">
                       <td className="border-r border-outline px-3 py-2">
@@ -547,8 +605,12 @@ export function Win11InventoryPage() {
                               </SelectContent>
                             </Select>
                           </td>
-                          <td className="border-r border-outline px-3 py-2 text-right text-xs text-green-600">{item.quantity_in.toFixed(2)}</td>
-                          <td className="border-r border-outline px-3 py-2 text-right text-xs text-red-600">{item.quantity_out.toFixed(2)}</td>
+                          <td className="border-r border-outline px-3 py-2 text-right text-xs text-[var(--md-sys-color-tertiary)]">
+                            {item.quantity_in.toFixed(2)}
+                          </td>
+                          <td className="border-r border-outline px-3 py-2 text-right text-xs text-error">
+                            {item.quantity_out.toFixed(2)}
+                          </td>
                           <td className="border-r border-outline px-3 py-2 text-right text-xs font-medium">{item.quantity_available.toFixed(2)}</td>
                           <td className="border-r border-outline px-3 py-2">
                             <Input type="number" step="0.01" value={editingItem.average_unit_cost}
@@ -582,8 +644,12 @@ export function Win11InventoryPage() {
                         </td>
                         <td className="border-r border-outline px-3 py-2 text-xs text-on-surface-variant">{item.category?.name || '-'}</td>
                         <td className="border-r border-outline px-3 py-2 text-xs text-center text-on-surface-variant">{item.unit_of_measure}</td>
-                        <td className="border-r border-outline px-3 py-2 text-xs text-right text-green-600 font-mono">{item.quantity_in.toFixed(2)}</td>
-                        <td className="border-r border-outline px-3 py-2 text-xs text-right text-red-600 font-mono">{item.quantity_out.toFixed(2)}</td>
+                        <td className="border-r border-outline px-3 py-2 text-xs text-right font-mono text-[var(--md-sys-color-tertiary)]">
+                          {item.quantity_in.toFixed(2)}
+                        </td>
+                        <td className="border-r border-outline px-3 py-2 text-xs text-right font-mono text-error">
+                          {item.quantity_out.toFixed(2)}
+                        </td>
                         <td className="border-r border-outline px-3 py-2 text-xs text-right font-medium font-mono">
                           <span className={isLowStock ? 'text-error' : 'text-on-surface'}>{item.quantity_available.toFixed(2)}</span>
                         </td>
@@ -614,7 +680,7 @@ export function Win11InventoryPage() {
       {activeView === 'categories' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Inventory Categories</h2>
+            <h2 className="text-xl font-semibold text-on-surface">Inventory Categories</h2>
             {canWriteInventory && (
               <Button onClick={startCreatingCategory} size="sm">
                 <Plus className="mr-2 h-4 w-4" />Add Category
@@ -622,22 +688,22 @@ export function Win11InventoryPage() {
             )}
           </div>
           
-          <div className="border border-outline rounded-lg overflow-hidden bg-surface">
+          <div className="border border-outline rounded-lg overflow-hidden bg-[var(--md-sys-color-surface)]">
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
-                <thead className="bg-surface-container-highest border-b border-outline">
+                <thead className="bg-[var(--md-sys-color-surface-container-highest)] border-b border-outline">
                   <tr>
-                    <th className="border-r border-outline px-3 py-2 text-left text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-56">Name</th>
-                    <th className="border-r border-outline px-3 py-2 text-left text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-64">Inventory Account</th>
-                    <th className="border-r border-outline px-3 py-2 text-left text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-64">Expense Account</th>
-                    <th className="border-r border-outline px-3 py-2 text-center text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-24">Items</th>
-                    <th className="border-r border-outline px-3 py-2 text-right text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-32">Value</th>
+                    <th className="border-r border-outline px-3 py-2 text-left text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-56">Name</th>
+                    <th className="border-r border-outline px-3 py-2 text-left text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-64">Inventory Account</th>
+                    <th className="border-r border-outline px-3 py-2 text-left text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-64">Expense Account</th>
+                    <th className="border-r border-outline px-3 py-2 text-center text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-24">Items</th>
+                    <th className="border-r border-outline px-3 py-2 text-right text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-32">Value</th>
                     {canWriteInventory && (
-                      <th className="px-3 py-2 text-center text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-24">Actions</th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-24">Actions</th>
                     )}
                   </tr>
                 </thead>
-                <tbody className="bg-surface">
+                <tbody className="bg-[var(--md-sys-color-surface)]">
                   {canWriteInventory && isCreatingCategory && editingCategory && (
                     <tr className="bg-primary-container/5 border-b border-outline">
                       <td className="border-r border-outline px-3 py-2">
@@ -689,8 +755,12 @@ export function Win11InventoryPage() {
                               onChange={(v) => setEditingCategory({ ...editingCategory, expense_account_id: v })} 
                               placeholder="Select" className="h-7 text-xs border-0 bg-transparent focus:bg-surface-container" />
                           </td>
-                          <td className="border-r border-outline px-3 py-2 text-center text-xs text-on-surface-variant">0</td>
-                          <td className="border-r border-outline px-3 py-2 text-right text-xs font-medium">$0.00</td>
+                          <td className="border-r border-outline px-3 py-2 text-center text-xs text-on-surface-variant">
+                            {categoryStats.get(category.id)?.count ?? 0}
+                          </td>
+                          <td className="border-r border-outline px-3 py-2 text-right text-xs font-medium text-on-surface">
+                            {formatCurrency(categoryStats.get(category.id)?.value ?? 0)}
+                          </td>
                           {canWriteInventory && (
                             <td className="px-3 py-2 text-center">
                               <div className="flex gap-1 justify-center">
@@ -715,8 +785,12 @@ export function Win11InventoryPage() {
                         <td className="border-r border-outline px-3 py-2 text-xs text-on-surface-variant font-mono">
                           {category.expense_account ? `${category.expense_account.code} - ${category.expense_account.name}` : '-'}
                         </td>
-                        <td className="border-r border-outline px-3 py-2 text-center text-xs text-on-surface-variant">0</td>
-                        <td className="border-r border-outline px-3 py-2 text-right text-xs font-medium font-mono">$0.00</td>
+                        <td className="border-r border-outline px-3 py-2 text-center text-xs text-on-surface">
+                          {categoryStats.get(category.id)?.count ?? 0}
+                        </td>
+                        <td className="border-r border-outline px-3 py-2 text-right text-xs font-medium font-mono text-on-surface">
+                          {formatCurrency(categoryStats.get(category.id)?.value ?? 0)}
+                        </td>
                         {canWriteInventory && (
                           <td className="px-3 py-2 text-center">
                             <div className="flex gap-1 justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -743,7 +817,7 @@ export function Win11InventoryPage() {
         <div className="space-y-4">
           {canWriteInventory && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold">Record Transaction</h2>
+              <h2 className="text-xl font-semibold text-on-surface">Record transaction</h2>
               <div className="border border-outline rounded-lg p-4 bg-surface-container/30">
                 <div className="grid grid-cols-7 gap-3">
                   <div>
@@ -800,45 +874,52 @@ export function Win11InventoryPage() {
 
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Transaction History</h2>
+              <h2 className="text-xl font-semibold text-on-surface">Transaction history</h2>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-on-surface-variant" />
                 <Input placeholder="Search transactions..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 w-64" />
               </div>
             </div>
             
-            <div className="border border-outline rounded-lg overflow-hidden bg-surface">
+            <div className="border border-outline rounded-lg overflow-hidden bg-[var(--md-sys-color-surface)]">
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
-                  <thead className="bg-surface-container-highest border-b border-outline">
+                  <thead className="bg-[var(--md-sys-color-surface-container-highest)] border-b border-outline">
                     <tr>
-                      <th className="border-r border-outline px-3 py-2 text-left text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-24">Date</th>
-                      <th className="border-r border-outline px-3 py-2 text-center text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-20">Type</th>
-                      <th className="border-r border-outline px-3 py-2 text-left text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-48">Item</th>
-                      <th className="border-r border-outline px-3 py-2 text-right text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-20">Qty</th>
-                      <th className="border-r border-outline px-3 py-2 text-right text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-24">Cost</th>
-                      <th className="border-r border-outline px-3 py-2 text-right text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-24">Total</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-on-surface-variant bg-surface-container-highest w-32">Ref</th>
+                      <th className="border-r border-outline px-3 py-2 text-left text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-24">Date</th>
+                      <th className="border-r border-outline px-3 py-2 text-center text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-20">Type</th>
+                      <th className="border-r border-outline px-3 py-2 text-left text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-48">Item</th>
+                      <th className="border-r border-outline px-3 py-2 text-right text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-20">Qty</th>
+                      <th className="border-r border-outline px-3 py-2 text-right text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-24">Cost</th>
+                      <th className="border-r border-outline px-3 py-2 text-right text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-24">Total</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-on-surface bg-[var(--md-sys-color-surface-container-highest)] w-32">Ref</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-surface">
+                  <tbody className="bg-[var(--md-sys-color-surface)]">
                     {filteredTransactions.map(txn => (
                       <tr key={txn.id} className="border-b border-outline hover:bg-surface-container/30 group">
                         <td className="border-r border-outline px-3 py-2 text-xs text-on-surface-variant font-mono">
                           {new Date(txn.transaction_date).toLocaleDateString()}
                         </td>
                         <td className="border-r border-outline px-3 py-2 text-center">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            txn.transaction_type === 'in' ? 'bg-green-100 text-green-700' : 
-                            txn.transaction_type === 'out' ? 'bg-red-100 text-red-700' : 
-                            'bg-yellow-100 text-yellow-700'
-                          }`}>{txn.transaction_type.toUpperCase()}</span>
+                          <span
+                            className={cn(
+                              'inline-flex rounded-md border px-2 py-0.5 text-xs font-medium',
+                              txn.transaction_type === 'in' && 'inv-txn-pill inv-txn-pill--in',
+                              txn.transaction_type === 'out' && 'inv-txn-pill inv-txn-pill--out',
+                              txn.transaction_type === 'adjustment' && 'inv-txn-pill inv-txn-pill--adj'
+                            )}
+                          >
+                            {txn.transaction_type.toUpperCase()}
+                          </span>
                         </td>
                         <td className="border-r border-outline px-3 py-2 text-xs font-medium text-on-surface group-hover:bg-surface-container/20">
                           {txn.item?.name}
                         </td>
                         <td className="border-r border-outline px-3 py-2 text-xs text-right font-mono">
-                          <span className={txn.quantity >= 0 ? 'text-green-600' : 'text-red-600'}>
+                          <span
+                            className={txn.quantity >= 0 ? 'text-[var(--md-sys-color-tertiary)]' : 'text-error'}
+                          >
                             {txn.quantity >= 0 ? '+' : ''}{txn.quantity.toFixed(2)}
                           </span>
                         </td>
@@ -869,12 +950,9 @@ export function Win11InventoryPage() {
             <VoucherStatsCards stats={voucherStats} />
           )}
 
-          {/* Approval Dashboard for approvers */}
-
-
           {/* Create Voucher Buttons */}
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">All Vouchers</h2>
+            <h2 className="text-xl font-semibold text-on-surface">All vouchers</h2>
             {canWriteVoucher && (
               <div className="flex gap-2">
                 <Button onClick={() => handleCreateVoucher('purchase')} className="bg-blue-600 hover:bg-blue-700">
@@ -898,7 +976,7 @@ export function Win11InventoryPage() {
           {/* Voucher List */}
           <VoucherList 
             vouchers={filteredVouchers} 
-            isLoading={vouchersLoading}
+            isLoading={!!voucherListLoading}
             showActions={canWriteVoucher}
             showViewActions={!canWriteVoucher}
             organizationId={currentOrganization?.id || ''}
@@ -910,7 +988,7 @@ export function Win11InventoryPage() {
       {activeView === 'purchase-vouchers' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Purchase Vouchers</h2>
+            <h2 className="text-xl font-semibold text-on-surface">Purchase vouchers</h2>
             {canWriteVoucher && (
               <Button onClick={() => handleCreateVoucher('purchase')} className="bg-blue-600 hover:bg-blue-700">
                 <ShoppingCart className="h-4 w-4 mr-2" />
@@ -920,7 +998,7 @@ export function Win11InventoryPage() {
           </div>
           <VoucherList 
             vouchers={filteredVouchers} 
-            isLoading={vouchersLoading}
+            isLoading={!!voucherListLoading}
             showActions={canWriteVoucher}
             showViewActions={!canWriteVoucher}
             organizationId={currentOrganization?.id || ''}
@@ -932,7 +1010,7 @@ export function Win11InventoryPage() {
       {activeView === 'issuance-vouchers' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Issuance Vouchers</h2>
+            <h2 className="text-xl font-semibold text-on-surface">Issuance vouchers</h2>
             {canWriteVoucher && (
               <Button onClick={() => handleCreateVoucher('issuance')} className="bg-green-600 hover:bg-green-700">
                 <Package className="h-4 w-4 mr-2" />
@@ -942,7 +1020,7 @@ export function Win11InventoryPage() {
           </div>
           <VoucherList 
             vouchers={filteredVouchers} 
-            isLoading={vouchersLoading}
+            isLoading={!!voucherListLoading}
             showActions={canWriteVoucher}
             showViewActions={!canWriteVoucher}
             organizationId={currentOrganization?.id || ''}

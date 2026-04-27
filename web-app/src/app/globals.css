@@ -1336,6 +1336,62 @@
   .text-on-surface-variant {
     color: var(--md-sys-color-on-surface-variant) !important;
   }
+
+  /* M3 chips: ledger + account type badges (see @/lib/account-type-badges) */
+  .m3-chip {
+    display: inline-block;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 500;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+  }
+  .m3-chip--account-asset {
+    background: color-mix(in srgb, var(--md-sys-color-primary-container) 40%, transparent);
+    color: var(--md-sys-color-on-primary-container);
+  }
+  .m3-chip--account-liability {
+    background: color-mix(in srgb, var(--md-sys-color-error-container) 40%, transparent);
+    color: var(--md-sys-color-on-error-container);
+  }
+  .m3-chip--account-equity {
+    background: color-mix(in srgb, var(--md-sys-color-tertiary-container) 40%, transparent);
+    color: var(--md-sys-color-on-tertiary-container);
+  }
+  .m3-chip--account-revenue {
+    background: color-mix(in srgb, var(--md-sys-color-secondary-container) 40%, transparent);
+    color: var(--md-sys-color-on-secondary-container);
+  }
+  .m3-chip--account-expense {
+    background: var(--md-sys-color-surface-container-high);
+    color: var(--md-sys-color-on-surface);
+  }
+  .m3-chip--account-default {
+    background: var(--md-sys-color-surface-container-highest);
+    color: var(--md-sys-color-on-surface-variant);
+  }
+  .m3-chip--code {
+    background: var(--md-sys-color-surface-container-highest);
+    color: var(--md-sys-color-on-surface);
+  }
+  /* Ledger L1/L2/…: dedicated names + !important so Card `text-card-foreground` (!important) cannot
+     win over chip text color. */
+  .m3-ledger-lvl-1 {
+    background: color-mix(in srgb, var(--md-sys-color-primary-container) 45%, transparent) !important;
+    color: var(--md-sys-color-on-primary-container) !important;
+  }
+  .m3-ledger-lvl-2 {
+    background: color-mix(in srgb, var(--md-sys-color-secondary-container) 45%, transparent) !important;
+    color: var(--md-sys-color-on-secondary-container) !important;
+  }
+  .m3-ledger-lvl-3 {
+    background: color-mix(in srgb, var(--md-sys-color-tertiary-container) 45%, transparent) !important;
+    color: var(--md-sys-color-on-tertiary-container) !important;
+  }
+  .m3-ledger-lvl-4 {
+    background: color-mix(in srgb, var(--md-sys-color-error-container) 45%, transparent) !important;
+    color: var(--md-sys-color-on-error-container) !important;
+  }
   
   /* Override warning colors that might be causing yellow */
   .text-warning {
@@ -1731,6 +1787,45 @@
   .dark .win11-button:hover {
     background-color: var(--md-sys-color-primary) !important;
     color: var(--md-sys-color-on-primary) !important;
+  }
+
+  /* Inventory / view tabs: utilities like `text-on-surface-variant` can override the global
+     `button` fill and force illegible text on the primary background. Inactive uses surface. */
+  button.inventory-subtab--inactive {
+    background-color: var(--md-sys-color-surface-container) !important;
+    color: var(--md-sys-color-on-surface) !important;
+    box-shadow: none !important;
+  }
+  button.inventory-subtab--inactive:hover {
+    background-color: var(--md-sys-color-surface-container-high) !important;
+    color: var(--md-sys-color-on-surface) !important;
+  }
+  button.inventory-subtab--active,
+  button.inventory-subtab--active:hover {
+    background-color: var(--md-sys-color-primary) !important;
+    color: var(--md-sys-color-on-primary) !important;
+  }
+  button.inventory-subtab--inactive svg {
+    color: var(--md-sys-color-on-surface) !important;
+  }
+  button.inventory-subtab--active svg,
+  button.inventory-subtab--active:hover svg {
+    color: var(--md-sys-color-on-primary) !important;
+  }
+  .inv-txn-pill--in {
+    color: var(--md-sys-color-on-tertiary-container) !important;
+    background-color: var(--md-sys-color-tertiary-container) !important;
+    border-color: color-mix(in srgb, var(--md-sys-color-tertiary) 32%, var(--md-sys-color-outline) 0%) !important;
+  }
+  .inv-txn-pill--out {
+    color: var(--md-sys-color-on-error-container) !important;
+    background-color: var(--md-sys-color-error-container) !important;
+    border-color: color-mix(in srgb, var(--md-sys-color-error) 32%, var(--md-sys-color-outline) 0%) !important;
+  }
+  .inv-txn-pill--adj {
+    color: var(--md-sys-color-on-secondary-container) !important;
+    background-color: var(--md-sys-color-secondary-container) !important;
+    border-color: color-mix(in srgb, var(--md-sys-color-secondary) 32%, var(--md-sys-color-outline) 0%) !important;
   }
   
   /* Material Design 3 UI Element Overrides */

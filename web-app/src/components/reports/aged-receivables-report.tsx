@@ -14,6 +14,7 @@ import {
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useAgedReceivables } from '@/hooks/use-organization-data'
 import { useCurrentOrganization } from '@/stores/auth-store'
+import { useToast } from '@/hooks/use-toast'
 
 interface AgedReceivablesData {
   receivables: Array<{
@@ -41,6 +42,7 @@ interface AgedReceivablesReportProps {
 
 export function AgedReceivablesReport({ onBack, asOfDate }: AgedReceivablesReportProps) {
   const currentOrganization = useCurrentOrganization()
+  const { toast } = useToast()
   
   // Use optimized hook instead of manual data loading
   const { 
@@ -55,8 +57,10 @@ export function AgedReceivablesReport({ onBack, asOfDate }: AgedReceivablesRepor
   }
 
   const handleExport = () => {
-    // TODO: Implement PDF export
-    console.log('Export functionality to be implemented')
+    toast({
+      title: 'PDF export',
+      description: 'Not available yet. Use Print and choose “Save as PDF” in the print dialog.',
+    })
   }
 
   if (loading) {

@@ -16,6 +16,8 @@ import {
 } from 'lucide-react'
 import { formatCurrency, formatPercentage, formatDate } from '@/lib/utils'
 import { useDashboardBundle } from '@/hooks/use-organization-data'
+import { useOrganization } from '@/hooks/use-organization'
+import { useCurrentOrganization } from '@/contexts/organization-context'
 import type { AccountBalanceRow, FinancialMetricsData } from '@/types'
 import { DateFilter, DateRange } from '@/components/ui/date-filter'
 import { 
@@ -133,7 +135,9 @@ function calculateFinancialRatios(
 
 export function Win11DashboardPage() {
   const [dateRange, setDateRange] = useState<DateRange>({ startDate: null, endDate: null })
-  
+  const { isLoading: orgContextLoading, organizations, hasOrganizations } = useOrganization()
+  const currentOrganization = useCurrentOrganization()
+
   const {
     data: bundle,
     isLoading,
@@ -249,6 +253,47 @@ export function Win11DashboardPage() {
     return ((current - previous) / previous) * 100
   }
 
+  if (orgContextLoading || (hasOrganizations && !currentOrganization)) {
+    return (
+      <div className="space-y-6 p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="flex items-center space-x-2">
+            <RefreshCw className="h-6 w-6 animate-spin" />
+            <span className="text-lg">Loading organization…</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!currentOrganization) {
+    if (organizations.length === 0) {
+      return (
+        <div className="space-y-6 p-6">
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center max-w-md">
+              <h3 className="text-lg font-semibold mb-2">No organization</h3>
+              <p className="text-gray-600">
+                You are not a member of any team yet. Create an organization or accept an invite from
+                the header, then return here.
+              </p>
+            </div>
+          </div>
+        </div>
+      )
+    }
+    return (
+      <div className="space-y-6 p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="flex items-center space-x-2">
+            <RefreshCw className="h-6 w-6 animate-spin" />
+            <span className="text-lg">Loading organization…</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (isLoading) {
     return (
       <div className="space-y-6 p-6">
@@ -284,9 +329,16 @@ export function Win11DashboardPage() {
     return (
       <div className="space-y-6 p-6">
         <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <h3 className="text-lg font-semibold mb-2">No Data Available</h3>
-            <p className="text-gray-600">Start by creating some journal entries to see your financial data.</p>
+          <div className="text-center max-w-md">
+            <h3 className="text-lg font-semibold mb-2">Dashboard data unavailable</h3>
+            <p className="text-gray-600 mb-4">
+              We could not load account balances and metrics for this organization. Try again, or add
+              journal activity if the ledger is empty.
+            </p>
+            <Button onClick={handleRefresh} className="win11-button-primary">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Retry
+            </Button>
           </div>
         </div>
       </div>

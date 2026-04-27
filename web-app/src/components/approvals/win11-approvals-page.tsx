@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,15 +37,21 @@ import {
   useExpiredVouchers,
   useApproveVoucher,
   useRejectVoucher,
-  useRenewVoucher
+  useRenewVoucher,
+  invalidateVoucherRelatedQueries,
 } from '@/hooks/use-vouchers'
 import { VoucherApprovalDialog } from '@/components/vouchers/voucher-approval-dialog'
 import { VoucherRenewDialog } from '@/components/vouchers/voucher-renew-dialog'
 import { VoucherViewDialog } from '@/components/vouchers/voucher-view-dialog'
 import { InventoryVoucher } from '@/types'
 
+const FILTER_STATUS_VALUES = new Set(['all', 'pending_finance', 'approved', 'rejected', 'expired'])
+const FILTER_TYPE_VALUES = new Set(['all', 'purchase', 'issuance'])
+
 export function Win11ApprovalsPage() {
   const { currentOrganization } = useOrganization()
+  const queryClient = useQueryClient()
+  const searchParams = useSearchParams()
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterType, setFilterType] = useState('all')
@@ -52,21 +60,34 @@ export function Win11ApprovalsPage() {
   const [showRenewDialog, setShowRenewDialog] = useState(false)
   const [showViewDialog, setShowViewDialog] = useState(false)
 
+  // Deep link from Inventory (e.g. /approvals?status=pending_finance)
+  useEffect(() => {
+    const status = searchParams.get('status') ?? searchParams.get('filter')
+    if (status && FILTER_STATUS_VALUES.has(status)) {
+      setFilterStatus(status)
+    }
+    const type = searchParams.get('type')
+    if (type && FILTER_TYPE_VALUES.has(type)) {
+      setFilterType(type)
+    }
+  }, [searchParams])
+
   // Fetch data
   const { data: vouchers = [], isLoading: vouchersLoading } = useVouchers()
   const { data: stats } = useVoucherStats()
   const { data: pendingApprovals = [] } = usePendingApprovals()
   const { data: expiredVouchers = [] } = useExpiredVouchers()
 
-  // Debug logging
-  useEffect(() => {
-    console.log('Approvals Page - Debug Info:')
-    console.log('Current Organization:', currentOrganization?.id)
-    console.log('Vouchers:', vouchers)
-    console.log('Vouchers Loading:', vouchersLoading)
-    console.log('Pending Approvals:', pendingApprovals)
-    console.log('Expired Vouchers:', expiredVouchers)
-  }, [currentOrganization, vouchers, vouchersLoading, pendingApprovals, expiredVouchers])
+  const refreshVoucherData = useCallback(() => {
+    const orgId = currentOrganization?.id
+    if (orgId) {
+      invalidateVoucherRelatedQueries(queryClient, orgId)
+    } else {
+      void queryClient.invalidateQueries({ queryKey: ['vouchers'] })
+      void queryClient.invalidateQueries({ queryKey: ['pending-approvals'] })
+      void queryClient.invalidateQueries({ queryKey: ['expired-vouchers'] })
+    }
+  }, [queryClient, currentOrganization?.id])
 
   // Mutations
   const approveVoucher = useApproveVoucher()
@@ -74,21 +95,14 @@ export function Win11ApprovalsPage() {
   const renewVoucher = useRenewVoucher()
 
   const filteredVouchers = vouchers.filter(voucher => {
-    const matchesSearch = voucher.voucher_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const num = String(voucher.voucher_number ?? '').toLowerCase()
+    const matchesSearch = num.includes(searchTerm.toLowerCase()) ||
                          voucher.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         voucher.vendor_name?.toLowerCase().includes(searchTerm.toLowerCase())
+                         (voucher.vendor_name?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)
     const matchesStatus = filterStatus === 'all' || voucher.status === filterStatus
     const matchesType = filterType === 'all' || voucher.voucher_type === filterType
     return matchesSearch && matchesStatus && matchesType
   })
-
-  // Debug filtered results
-  useEffect(() => {
-    console.log('Filtered Vouchers:', filteredVouchers)
-    console.log('Filter Status:', filterStatus)
-    console.log('Filter Type:', filterType)
-    console.log('Search Term:', searchTerm)
-  }, [filteredVouchers, filterStatus, filterType, searchTerm])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -309,7 +323,7 @@ export function Win11ApprovalsPage() {
             </div>
             <div className="flex items-center space-x-3">
               <Button 
-                onClick={() => window.location.reload()}
+                onClick={refreshVoucherData}
                 variant="outline"
                 className="h-10 px-4 rounded-2xl border-outline hover:bg-primary-container hover:text-on-primary-container"
               >

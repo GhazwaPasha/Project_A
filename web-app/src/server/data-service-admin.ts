@@ -1481,26 +1481,108 @@ export class DataServiceAdmin {
   ): Promise<InventoryTransaction | null> {
     const sql = getSql()
     const t = transaction
-    const ins = (await sql<InventoryTransaction[]>`
-      INSERT INTO public.inventory_transactions (
-        organization_id, item_id, transaction_type, quantity, unit_cost, total_cost, journal_entry_id, reference, description, transaction_date, created_by
-      ) VALUES (
-        ${t.organization_id}::uuid,
-        ${t.item_id},
-        ${t.transaction_type},
-        ${t.quantity},
-        ${t.unit_cost},
-        ${t.total_cost},
-        ${t.journal_entry_id},
-        ${t.reference},
-        ${t.description},
-        ${t.transaction_date}::date,
-        ${t.created_by}::uuid
-      )
-      RETURNING *
-    `) as InventoryTransaction[]
-    if (!ins[0]) return null
-    const [enriched] = await attachTransactionItem(sql, [ins[0]])
+    const row = await sql.begin(async (tx) => {
+      const ins = (await tx<InventoryTransaction[]>`
+        INSERT INTO public.inventory_transactions (
+          organization_id, item_id, transaction_type, quantity, unit_cost, total_cost, journal_entry_id, reference, description, transaction_date, created_by
+        ) VALUES (
+          ${t.organization_id}::uuid,
+          ${t.item_id},
+          ${t.transaction_type},
+          ${t.quantity},
+          ${t.unit_cost},
+          ${t.total_cost},
+          ${t.journal_entry_id},
+          ${t.reference},
+          ${t.description},
+          ${t.transaction_date}::date,
+          ${t.created_by}::uuid
+        )
+        RETURNING *
+      `) as InventoryTransaction[]
+      const tr = ins[0]
+      if (!tr) return null
+
+      const locked = (await tx<InventoryItem[]>`
+        SELECT * FROM public.inventory_items
+        WHERE id = ${t.item_id} AND organization_id = ${t.organization_id}::uuid
+        FOR UPDATE
+      `) as InventoryItem[]
+      const item = locked[0]
+      if (!item) {
+        throw new Error('Inventory item not found for this organization')
+      }
+
+      const qty = Number(tr.quantity)
+      const qIn = Math.abs(qty)
+      let quantityIn = Number(item.quantity_in)
+      let quantityOut = Number(item.quantity_out)
+      const avail = Number(item.quantity_available)
+      const avg = Number(item.average_unit_cost)
+      let val = Number(item.total_value)
+      const kind = t.transaction_type
+
+      if (kind === 'in') {
+        const addQty = qIn
+        quantityIn += addQty
+        let addValue = 0
+        if (t.total_cost != null && Number(t.total_cost) > 0) {
+          addValue = Number(t.total_cost)
+        } else if (t.unit_cost != null && Number(t.unit_cost) > 0) {
+          addValue = addQty * Number(t.unit_cost)
+        } else {
+          addValue = addQty * avg
+        }
+        const newAvail = avail + addQty
+        const newTotal = val + addValue
+        const newAvg = newAvail > 0 ? newTotal / newAvail : 0
+        await tx`
+          UPDATE public.inventory_items
+          SET
+            quantity_in = ${quantityIn},
+            quantity_available = ${newAvail},
+            total_value = ${newTotal},
+            average_unit_cost = ${newAvg}
+          WHERE id = ${item.id} AND organization_id = ${t.organization_id}::uuid
+        `
+      } else if (kind === 'out') {
+        const outQty = qIn
+        if (avail + 1e-9 < outQty) {
+          throw new Error('Insufficient quantity on hand for this issue')
+        }
+        quantityOut += outQty
+        const newAvail = avail - outQty
+        const cogs = outQty * avg
+        const newTotal = Math.max(0, val - cogs)
+        await tx`
+          UPDATE public.inventory_items
+          SET
+            quantity_out = ${quantityOut},
+            quantity_available = ${newAvail},
+            total_value = ${newTotal}
+          WHERE id = ${item.id} AND organization_id = ${t.organization_id}::uuid
+        `
+      } else {
+        // adjustment: signed delta on available; value at current average
+        const newAvail = avail + qty
+        if (newAvail < -1e-9) {
+          throw new Error('Adjustment would make quantity negative')
+        }
+        const newTotal = newAvail * avg
+        await tx`
+          UPDATE public.inventory_items
+          SET
+            quantity_available = ${newAvail},
+            total_value = ${newTotal < 0 ? 0 : newTotal}
+          WHERE id = ${item.id} AND organization_id = ${t.organization_id}::uuid
+        `
+      }
+
+      return tr
+    })
+
+    if (!row) return null
+    const [enriched] = await attachTransactionItem(sql, [row])
     return enriched ?? null
   }
 

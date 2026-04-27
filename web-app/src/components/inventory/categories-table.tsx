@@ -31,13 +31,13 @@ export function CategoriesTable({ categories, onEdit, onRefresh }: CategoriesTab
     <div className="md-card rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full">
-          <thead className="bg-surface-container">
+          <thead className="bg-[var(--md-sys-color-surface-container-highest)] border-b border-[var(--md-sys-color-outline-variant)]">
             <tr>
-              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface-variant">Category Name</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface-variant">Description</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface-variant">Inventory Account (IN)</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface-variant">Expense Account (OUT)</th>
-              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface-variant">Actions</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface">Category Name</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface">Description</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface">Inventory Account (IN)</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface">Expense Account (OUT)</th>
+              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-outline-variant">

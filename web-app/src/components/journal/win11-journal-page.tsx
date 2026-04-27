@@ -25,12 +25,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 export function Win11JournalPage() {
   const roleResolved = useOrgMemberRoleResolved()
   const canWriteJournal = useOrgDataPermission('ledger.write')
-  const writeDisabled = !roleResolved || !canWriteJournal
-  const writeBlockTitle = !roleResolved
-    ? 'Checking your access…'
-    : !canWriteJournal
-      ? 'Your role cannot post journal entries'
-      : undefined
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState('cards') // 'cards' or 'table'
   const [showNewEntryDialog, setShowNewEntryDialog] = useState(false)
@@ -53,6 +47,16 @@ export function Win11JournalPage() {
   
   const loading = entriesLoading || accountsLoading
   const error = entriesError || accountsError
+
+  const accessGateLoading = !roleResolved && (entriesLoading || accountsLoading)
+  const writeDisabled = !roleResolved || !canWriteJournal
+  const writeBlockTitle = accessGateLoading
+    ? 'Loading your access…'
+    : !roleResolved
+      ? 'Checking your access…'
+      : !canWriteJournal
+        ? 'Your role cannot post journal entries'
+        : undefined
 
   const handleNewEntryCreated = (newEntry: JournalEntry) => {
     // React Query will automatically refetch the data

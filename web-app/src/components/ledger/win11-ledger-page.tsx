@@ -19,7 +19,7 @@ import {
   DollarSign
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { accountTypeBadgeClass } from '@/lib/account-type-badges'
+import { accountTypeBadgeClass, accountLevelBadgeClass, accountCodeChipClass } from '@/lib/account-type-badges'
 import { DataService } from '@/lib/data-service'
 import type { AccountBalanceRow, AccountTransactionRow, AccountType } from '@/types'
 import { useOrganization } from '@/hooks/use-organization'
@@ -683,13 +683,13 @@ export function Win11LedgerPage() {
                     
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="px-2 py-1 bg-surface-container-highest text-on-surface text-xs font-semibold rounded">
+                        <span className={accountCodeChipClass()}>
                           {account.code}
                         </span>
-                        <span className={`px-2 py-1 text-xs font-semibold rounded ${accountTypeBadgeClass(account.account_type as AccountType)}`}>
+                        <span className={accountTypeBadgeClass(account.account_type as AccountType)}>
                           {account.account_type.charAt(0).toUpperCase() + account.account_type.slice(1)}
                         </span>
-                        <span className="px-2 py-1 bg-secondary-container/30 text-on-secondary-container text-xs font-semibold rounded">
+                        <span className={accountLevelBadgeClass(account.level)}>
                           L{account.level}
                         </span>
                       </div>

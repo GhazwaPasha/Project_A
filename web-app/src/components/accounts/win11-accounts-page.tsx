@@ -610,7 +610,7 @@ export function Win11AccountsPage() {
                 <span className="md-body-medium text-on-surface truncate">
                   {account.name}
                 </span>
-                <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-medium ${accountTypeBadgeClass(account.account_type)}`}>
+                <span className={accountTypeBadgeClass(account.account_type)}>
                   {account.account_type.charAt(0).toUpperCase() + account.account_type.slice(1)}
                 </span>
                 {account.is_postable && (
@@ -1124,7 +1124,7 @@ export function Win11AccountsPage() {
                       </div>
                       <div>
                         <label className="text-sm font-medium text-on-surface-variant">Account Type</label>
-                        <span className={`inline-block px-2 py-1 rounded-md text-xs font-medium ${accountTypeBadgeClass(selectedAccount.account_type)}`}>
+                        <span className={accountTypeBadgeClass(selectedAccount.account_type)}>
                           {selectedAccount.account_type.charAt(0).toUpperCase() + selectedAccount.account_type.slice(1)}
                         </span>
                       </div>

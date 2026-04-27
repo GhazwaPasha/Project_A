@@ -53,7 +53,23 @@ export async function POST(req: Request) {
     return NextResponse.json(result)
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Error'
-    const status = msg === 'Forbidden' ? 403 : 500
-    return NextResponse.json({ error: msg }, { status })
+    if (msg === 'Forbidden') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    const isMissingDbObject =
+      msg.includes('does not exist') ||
+      (e as { code?: string })?.code === '42P01' ||
+      (e as { code?: string })?.code === '42704'
+    if (isMissingDbObject) {
+      return NextResponse.json(
+        {
+          error: msg,
+          code: 'SCHEMA_NOT_READY' as const,
+          hint: 'Run the database migrations for inventory, suppliers, or vouchers, then try again.',
+        },
+        { status: 503 }
+      )
+    }
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

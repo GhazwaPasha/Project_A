@@ -38,9 +38,19 @@ interface SupplierListProps {
   organizationId: string
 }
 
+function isSchemaNotReadyError(error: unknown): boolean {
+  const c = (error as { code?: string; status?: number; body?: { code?: string } })?.code
+  const bc = (error as { body?: { code?: string } })?.body?.code
+  if (c === 'SCHEMA_NOT_READY' || bc === 'SCHEMA_NOT_READY') return true
+  const m = (error as Error)?.message ?? ''
+  return m.includes('does not exist') || m.includes('SCHEMA_NOT_READY')
+}
+
 export function SupplierList({ organizationId }: SupplierListProps) {
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [schemaNotReady, setSchemaNotReady] = useState(false)
   const [filters, setFilters] = useState<SupplierFilters>({})
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
@@ -51,15 +61,25 @@ export function SupplierList({ organizationId }: SupplierListProps) {
   const loadSuppliers = async () => {
     try {
       setLoading(true)
+      setLoadError(null)
+      setSchemaNotReady(false)
       const data = await SupplierService.getSuppliers(organizationId, filters)
       setSuppliers(data)
     } catch (error) {
       console.error('Error loading suppliers:', error)
-      toast({
-        title: 'Error',
-        description: 'Failed to load suppliers',
-        variant: 'destructive',
-      })
+      const snr = isSchemaNotReadyError(error)
+      setSchemaNotReady(snr)
+      if (snr) {
+        setLoadError('Suppliers require database setup (migrations) on this environment.')
+        setSuppliers([])
+      } else {
+        setLoadError('Failed to load suppliers.')
+        toast({
+          title: 'Error',
+          description: 'Failed to load suppliers',
+          variant: 'destructive',
+        })
+      }
     } finally {
       setLoading(false)
     }
@@ -138,6 +158,15 @@ export function SupplierList({ organizationId }: SupplierListProps) {
 
   return (
     <div className="space-y-6">
+      {loadError && (
+        <p
+          className="rounded-md border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-100"
+          role="status"
+        >
+          {loadError}
+        </p>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -146,7 +175,7 @@ export function SupplierList({ organizationId }: SupplierListProps) {
             Manage your suppliers and their account mappings
           </p>
         </div>
-        <Button onClick={() => setShowCreateDialog(true)}>
+        <Button onClick={() => setShowCreateDialog(true)} disabled={schemaNotReady}>
           <Plus className="h-4 w-4 mr-2" />
           Add Supplier
         </Button>
@@ -160,10 +189,14 @@ export function SupplierList({ organizationId }: SupplierListProps) {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Search</label>
+              <label className="text-sm font-medium" htmlFor="supplier-filter-search">
+                Search
+              </label>
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
+                  id="supplier-filter-search"
+                  name="supplierFilterSearch"
                   placeholder="Search suppliers..."
                   value={filters.search || ''}
                   onChange={(e) => setFilters({ ...filters, search: e.target.value })}
@@ -173,7 +206,9 @@ export function SupplierList({ organizationId }: SupplierListProps) {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Status</label>
+              <label className="text-sm font-medium" id="supplier-filter-status-label">
+                Status
+              </label>
               <Select
                 value={filters.status?.[0] || 'all'}
                 onValueChange={(value) =>
@@ -183,7 +218,7 @@ export function SupplierList({ organizationId }: SupplierListProps) {
                   })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger aria-labelledby="supplier-filter-status-label">
                   <SelectValue placeholder="All statuses" />
                 </SelectTrigger>
                 <SelectContent>
@@ -196,7 +231,9 @@ export function SupplierList({ organizationId }: SupplierListProps) {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Payment Terms</label>
+              <label className="text-sm font-medium" id="supplier-filter-terms-label">
+                Payment Terms
+              </label>
               <Select
                 value={filters.payment_terms?.[0] || 'all'}
                 onValueChange={(value) =>
@@ -206,7 +243,7 @@ export function SupplierList({ organizationId }: SupplierListProps) {
                   })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger aria-labelledby="supplier-filter-terms-label">
                   <SelectValue placeholder="All terms" />
                 </SelectTrigger>
                 <SelectContent>
@@ -223,7 +260,9 @@ export function SupplierList({ organizationId }: SupplierListProps) {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Preferred</label>
+              <label className="text-sm font-medium" id="supplier-filter-preferred-label">
+                Preferred
+              </label>
               <Select
                 value={filters.is_preferred?.toString() || 'all'}
                 onValueChange={(value) =>
@@ -233,7 +272,7 @@ export function SupplierList({ organizationId }: SupplierListProps) {
                   })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger aria-labelledby="supplier-filter-preferred-label">
                   <SelectValue placeholder="All suppliers" />
                 </SelectTrigger>
                 <SelectContent>

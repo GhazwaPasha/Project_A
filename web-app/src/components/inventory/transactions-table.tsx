@@ -61,16 +61,16 @@ export function TransactionsTable({ transactions, onRefresh }: TransactionsTable
     <div className="md-card rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full">
-          <thead className="bg-surface-container">
+          <thead className="bg-[var(--md-sys-color-surface-container-highest)] border-b border-[var(--md-sys-color-outline-variant)]">
             <tr>
-              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface-variant">Date</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface-variant">Type</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface-variant">Item</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface-variant">Category</th>
-              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface-variant">Quantity</th>
-              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface-variant">Unit Cost</th>
-              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface-variant">Total Cost</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface-variant">Reference</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface">Date</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface">Type</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface">Item</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface">Category</th>
+              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface">Quantity</th>
+              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface">Unit Cost</th>
+              <th className="px-4 py-3 text-right text-sm font-medium text-on-surface">Total Cost</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-on-surface">Reference</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-outline-variant">

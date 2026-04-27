@@ -615,7 +615,7 @@ export function Win11TrialBalancePage() {
                             </div>
                           </td>
                           <td className="p-4">
-                            <span className={`inline-block px-2 py-1 rounded-md text-xs font-medium ${accountTypeBadgeClass(account.account_type)}`}>
+                            <span className={accountTypeBadgeClass(account.account_type)}>
                               {account.account_type}
                             </span>
                           </td>

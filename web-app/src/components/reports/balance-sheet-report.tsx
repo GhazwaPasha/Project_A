@@ -18,6 +18,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { useBalanceSheet } from '@/hooks/use-organization-data'
 import { useCurrentOrganization } from '@/contexts/organization-context'
 import { useComponentLoadingState } from '@/hooks/use-loading-state'
+import { useToast } from '@/hooks/use-toast'
 
 interface Account {
   id: number
@@ -57,6 +58,7 @@ export function BalanceSheetReport({ onBack, asOfDate }: BalanceSheetReportProps
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
   const [expandedAccounts, setExpandedAccounts] = useState<Set<number>>(new Set())
   const currentOrganization = useCurrentOrganization()
+  const { toast } = useToast()
   
   // Use component loading state for better UX
   const { isLoading: componentLoading } = useComponentLoadingState('balance-sheet', ['organization', 'accounts'])
@@ -232,8 +234,10 @@ export function BalanceSheetReport({ onBack, asOfDate }: BalanceSheetReportProps
   }
 
   const handleExport = () => {
-    // TODO: Implement PDF export
-    console.log('Export functionality to be implemented')
+    toast({
+      title: 'PDF export',
+      description: 'Not available yet. Use Print and choose “Save as PDF” in the print dialog.',
+    })
   }
 
   const toggleSection = (sectionName: string) => {

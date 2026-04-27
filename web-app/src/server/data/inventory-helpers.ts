@@ -3,6 +3,34 @@ import type { Account, InventoryCategory, InventoryItem, InventoryTransaction } 
 
 type Pg = ReturnType<typeof getSql>
 
+/** Neon/postgres.js often returns numeric columns as strings; normalize for the client. */
+export function parseInventoryItemRow(i: InventoryItem): InventoryItem {
+  return {
+    ...i,
+    id: Number(i.id),
+    category_id: Number(i.category_id),
+    quantity_in: Number(i.quantity_in) || 0,
+    quantity_out: Number(i.quantity_out) || 0,
+    quantity_available: Number(i.quantity_available) || 0,
+    average_unit_cost: Number(i.average_unit_cost) || 0,
+    total_value: Number(i.total_value) || 0,
+    reorder_point: Number(i.reorder_point) || 0,
+    reorder_quantity: Number(i.reorder_quantity) || 0,
+  }
+}
+
+export function parseInventoryTransactionRow(t: InventoryTransaction): InventoryTransaction {
+  return {
+    ...t,
+    id: Number(t.id),
+    item_id: Number(t.item_id),
+    quantity: Number(t.quantity) || 0,
+    unit_cost: t.unit_cost != null ? Number(t.unit_cost) : null,
+    total_cost: t.total_cost != null ? Number(t.total_cost) : null,
+    journal_entry_id: t.journal_entry_id != null ? Number(t.journal_entry_id) : null,
+  }
+}
+
 export async function attachCategoryAccounts(
   sql: Pg,
   rows: InventoryCategory[]
@@ -38,10 +66,11 @@ export async function attachItemCategory(
   `
   const c0 = (cats[0] as InventoryCategory) ?? null
   if (!c0) {
-    return { ...item, category: undefined }
+    return { ...parseInventoryItemRow(item), category: undefined }
   }
   const [enriched] = await attachCategoryAccounts(sql, [c0])
-  return { ...item, category: enriched }
+  const parsed = parseInventoryItemRow(item)
+  return { ...parsed, category: enriched }
 }
 
 export async function attachItemsCategories(
@@ -55,8 +84,11 @@ export async function attachItemsCategories(
     WHERE id = ANY(${catIds}::bigint[])
   `) as InventoryCategory[]
   const cats = await attachCategoryAccounts(sql, rawCats)
-  const m = new Map(cats.map((c) => [c.id, c]))
-  return items.map((i) => ({ ...i, category: m.get(i.category_id) }))
+  const m = new Map(cats.map((c) => [Number(c.id), c]))
+  return items.map((i) => {
+    const parsed = parseInventoryItemRow(i)
+    return { ...parsed, category: m.get(parsed.category_id) }
+  })
 }
 
 export async function attachTransactionItem(
@@ -71,5 +103,8 @@ export async function attachTransactionItem(
   `) as InventoryItem[]
   const withCat = await attachItemsCategories(sql, items)
   const byItem = new Map(withCat.map((i) => [i.id, i]))
-  return rows.map((r) => ({ ...r, item: byItem.get(r.item_id) }))
+  return rows.map((r) => {
+    const parsed = parseInventoryTransactionRow(r)
+    return { ...parsed, item: byItem.get(parsed.item_id) }
+  })
 }
