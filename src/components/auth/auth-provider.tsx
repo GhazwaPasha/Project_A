@@ -88,6 +88,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
+    // Dropping a real session: clear RQ so the next sign-in (same or different user) is not
+    // blended with the previous user/org-scoped cache. (The `switchingAccount` path above only
+    // runs when lastLoadedUserId is non-null *before* the new id—after sign-out that ref is null,
+    // so post-logout sign-in never hit queryClient.clear() before.)
+    if (lastLoadedUserId.current) {
+      queryClient.clear()
+    }
     lastLoadedUserId.current = null
     logout()
   }, [data, isPending, isRefetching, sessionError, setUser, setLoading, logout, loadUserData, clearForAccountSwitch, queryClient])
