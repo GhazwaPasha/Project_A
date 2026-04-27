@@ -441,20 +441,20 @@ export function Win11TrialBalancePage() {
                 />
               </div>
               <Button 
-                className="md-button-outlined"
+                className="md-button"
                 onClick={() => setShowSearchField(!showSearchField)}
               >
                 <Search className="w-4 h-4" />
               </Button>
               <Button 
                 onClick={handleRefresh}
-                className="md-button-outlined"
+                className="md-button"
                 disabled={loading}
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               </Button>
               <Button 
-                className="md-button-outlined"
+                className="md-button"
                 onClick={handleExport}
               >
                 <Download className="w-4 h-4" />

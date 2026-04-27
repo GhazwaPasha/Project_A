@@ -447,7 +447,7 @@ export function BalanceSheetReport({ onBack, asOfDate }: BalanceSheetReportProps
               Try Again
             </Button>
             <Button 
-              className="md-button-outlined"
+              className="md-button"
               onClick={onBack}
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
@@ -523,14 +523,14 @@ export function BalanceSheetReport({ onBack, asOfDate }: BalanceSheetReportProps
                 <ChevronRight className="w-4 h-4" />
               </div>
               <Button 
-                className="md-button-outlined"
+                className="md-button"
                 onClick={() => refetch()}
                 title="Refresh"
               >
                 <RefreshCw className="w-4 h-4" />
               </Button>
               <Button 
-                className="md-button-outlined"
+                className="md-button"
                 onClick={handlePrint}
                 title="Print"
               >

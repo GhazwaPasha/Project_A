@@ -318,7 +318,7 @@ export function JournalEntryDialog({
         </div>
 
         <DialogFooter className="flex-shrink-0 pt-4 border-t border-outline-variant">
-          <Button className="md-button-outlined" onClick={handleCancel} disabled={loading}>
+          <Button className="md-button" onClick={handleCancel} disabled={loading}>
             Cancel
           </Button>
           <Button className="md-button" onClick={handleSubmit} disabled={loading}>

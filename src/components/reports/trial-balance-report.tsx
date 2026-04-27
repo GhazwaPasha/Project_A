@@ -119,14 +119,14 @@ export function TrialBalanceReport({ onBack, asOfDate }: TrialBalanceReportProps
             </div>
             <div className="flex items-center gap-2">
               <Button 
-                className="md-button-outlined"
+                className="md-button"
                 onClick={() => refetch()}
                 title="Refresh"
               >
                 <RefreshCw className="w-4 h-4" />
               </Button>
               <Button 
-                className="md-button-outlined"
+                className="md-button"
                 onClick={handlePrint}
                 title="Print"
               >

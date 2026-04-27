@@ -494,14 +494,14 @@ export function Win11LedgerPage() {
                 />
                 <div className="flex items-center gap-2">
                   <Button 
-                    className="md-button-outlined"
+                    className="md-button"
                     onClick={handlePrint}
                     title="Print"
                   >
                     <Printer className="w-4 h-4" />
                   </Button>
                   <Button 
-                    className="md-button-outlined"
+                    className="md-button"
                     onClick={handleExport}
                     title="Export"
                   >
@@ -649,7 +649,7 @@ export function Win11LedgerPage() {
                   />
                 </div>
                 <Button 
-                  className="md-button-outlined"
+                  className="md-button"
                   onClick={() => setShowSearchField(!showSearchField)}
                 >
                   <Search className="w-4 h-4" />

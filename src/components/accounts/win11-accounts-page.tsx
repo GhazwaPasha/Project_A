@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { 
@@ -24,8 +24,10 @@ import {
   AlertCircle,
   CheckCircle,
   Info,
+  LayoutList,
+  Share2,
 } from 'lucide-react'
-import { formatDate } from '@/lib/utils'
+import { cn, formatDate } from '@/lib/utils'
 import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 import { accountTypeBadgeClass } from '@/lib/account-type-badges'
 import { DataService } from '@/lib/data-service'
@@ -33,6 +35,7 @@ import { Account, AccountType } from '@/types'
 import { useOrganization } from '@/hooks/use-organization'
 import { useOrgDataPermission, useOrgMemberRoleResolved } from '@/hooks/use-org-permissions'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AccountsGraphView } from '@/components/accounts/accounts-graph-view'
 
 // Enhanced account interface with hierarchy support
 interface HierarchicalAccount extends Account {
@@ -58,6 +61,10 @@ interface AccountFormData {
   group: string
   is_postable: boolean
 }
+
+/** Postable / Group pills — outline only */
+const accountMetaBadgeClass =
+  'inline-flex items-center rounded-md border border-outline-variant px-2 py-0.5 text-xs font-medium text-on-surface bg-transparent'
 
 export function Win11AccountsPage() {
   const [searchTerm, setSearchTerm] = useState('')
@@ -100,6 +107,7 @@ export function Win11AccountsPage() {
   const [importErrors, setImportErrors] = useState<string[]>([])
   const [isImporting, setIsImporting] = useState(false)
   const [showSearchField, setShowSearchField] = useState(false)
+  const [viewMode, setViewMode] = useState<'list' | 'graph'>('list')
 
   // Load data on component mount and when organization changes
   useEffect(() => {
@@ -616,12 +624,10 @@ export function Win11AccountsPage() {
                   {account.account_type.charAt(0).toUpperCase() + account.account_type.slice(1)}
                 </span>
                 {account.is_postable && (
-                  <span className="px-2 py-0.5 bg-primary-container/30 text-on-primary-container text-xs rounded-md">
-                    Postable
-                </span>
+                  <span className={accountMetaBadgeClass}>Postable</span>
                 )}
                 {account.group && (
-                  <span className="px-2 py-0.5 bg-surface-container-highest text-on-surface text-xs rounded-md">
+                  <span className={accountMetaBadgeClass}>
                     {account.group.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                   </span>
                 )}
@@ -647,61 +653,68 @@ export function Win11AccountsPage() {
     const handleSubmit = isEdit ? handleUpdateAccount : handleCreateAccount
 
      return (
-       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-         <div className="bg-surface rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl border border-outline-variant">
-          <div className="flex items-center justify-between mb-6">
+       <div className="fixed inset-0 z-50 flex items-center justify-center bg-[color-mix(in_srgb,var(--md-sys-color-scrim)_42%,transparent)] backdrop-blur-[1px]">
+         <div className="m3-accounts-dialog w-full max-w-md rounded-2xl p-6 mx-4">
+          <div className="flex items-center justify-between mb-6 gap-3">
             <h2 className="md-headline-small text-on-surface">{modalTitle}</h2>
             <button
+              type="button"
               onClick={() => {
                 setShowCreateModal(false)
                 setShowEditModal(false)
                 resetForm()
               }}
-              className="p-2 hover:bg-surface-container-highest rounded-full"
+              className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-[color-mix(in_srgb,var(--md-sys-color-on-surface)_8%,transparent)] hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--md-sys-color-primary)_45%,transparent)]"
+              aria-label="Close"
             >
-              <X className="w-5 h-5" />
+              <X className="h-5 w-5" aria-hidden />
             </button>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-on-surface-variant mb-2">
+              <label htmlFor="account-form-code" className="md-text-field-label block">
                 Account Code *
               </label>
               <Input
+                id="account-form-code"
                 value={formData.code}
                 onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                 placeholder="e.g., 1000"
-                className={formErrors.code ? 'border-red-500' : ''}
+                autoComplete="off"
+                className={cn('md-text-field-input', formErrors.code && 'error')}
               />
               {formErrors.code && (
-                <p className="text-red-500 text-sm mt-1">{formErrors.code}</p>
+                <p className="md-text-field-helper error mt-1">{formErrors.code}</p>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-on-surface-variant mb-2">
+              <label htmlFor="account-form-name" className="md-text-field-label block">
                 Account Name *
               </label>
               <Input
+                id="account-form-name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="e.g., Cash"
-                className={formErrors.name ? 'border-red-500' : ''}
+                autoComplete="off"
+                className={cn('md-text-field-input', formErrors.name && 'error')}
               />
               {formErrors.name && (
-                <p className="text-red-500 text-sm mt-1">{formErrors.name}</p>
+                <p className="md-text-field-helper error mt-1">{formErrors.name}</p>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-on-surface-variant mb-2">
+              <label htmlFor="account-form-type" className="md-text-field-label block">
                 Account Type *
               </label>
               <select
+                id="account-form-type"
                 value={formData.account_type}
                 onChange={(e) => setFormData({ ...formData, account_type: e.target.value as AccountType })}
-                className="w-full h-10 px-3 bg-surface-container border border-outline rounded-lg text-sm text-on-surface focus:border-primary focus:ring-2 focus:ring-primary/20"
+                className="m3-native-select"
               >
                 <option value="asset">Asset</option>
                 <option value="liability">Liability</option>
@@ -710,18 +723,19 @@ export function Win11AccountsPage() {
                 <option value="expense">Expense</option>
               </select>
               {formErrors.account_type && (
-                <p className="text-red-500 text-sm mt-1">{formErrors.account_type}</p>
+                <p className="md-text-field-helper error mt-1">{formErrors.account_type}</p>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-on-surface-variant mb-2">
+              <label htmlFor="account-form-parent" className="md-text-field-label block">
                 Parent Account
               </label>
               <select
+                id="account-form-parent"
                 value={formData.parent_id || ''}
                 onChange={(e) => setFormData({ ...formData, parent_id: e.target.value ? parseInt(e.target.value) : null })}
-                className="w-full h-10 px-3 bg-surface-container border border-outline rounded-lg text-sm text-on-surface focus:border-primary focus:ring-2 focus:ring-primary/20"
+                className="m3-native-select"
               >
                 <option value="">No Parent (Top Level)</option>
                 {flatAccounts
@@ -735,13 +749,14 @@ export function Win11AccountsPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-on-surface-variant mb-2">
+              <label htmlFor="account-form-group" className="md-text-field-label block">
                 Group
               </label>
               <select
+                id="account-form-group"
                 value={formData.group}
                 onChange={(e) => setFormData({ ...formData, group: e.target.value })}
-                className="w-full h-10 px-3 bg-surface-container border border-outline rounded-lg text-sm text-on-surface focus:border-primary focus:ring-2 focus:ring-primary/20"
+                className="m3-native-select"
               >
                 <option value="">No Group</option>
                 <optgroup label="Assets">
@@ -777,23 +792,24 @@ export function Win11AccountsPage() {
               </select>
              </div>
  
-             <div className="flex items-center space-x-2">
+             <div className="flex items-center gap-2 pt-1">
               <input
                 type="checkbox"
                 id="is_postable"
                 checked={formData.is_postable}
                 onChange={(e) => setFormData({ ...formData, is_postable: e.target.checked })}
-                className="w-4 h-4 text-primary bg-surface-container border-outline rounded focus:ring-primary"
+                className="h-4 w-4 shrink-0 rounded border-[var(--md-sys-color-outline)] bg-[var(--md-sys-color-surface-container-highest)] text-[var(--md-sys-color-primary)] accent-[var(--md-sys-color-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--md-sys-color-primary)_45%,transparent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--md-sys-color-surface)]"
               />
-              <label htmlFor="is_postable" className="text-sm text-on-surface">
+              <label htmlFor="is_postable" className="md-body-medium text-on-surface cursor-pointer select-none">
                 Postable
               </label>
             </div>
           </div>
 
-          <div className="flex justify-end space-x-3 mt-6">
+          <div className="flex justify-end gap-3 mt-6">
             <Button
-              variant="outline"
+              type="button"
+              className="md-button"
               onClick={() => {
                 setShowCreateModal(false)
                 setShowEditModal(false)
@@ -802,8 +818,8 @@ export function Win11AccountsPage() {
             >
               Cancel
             </Button>
-            <Button onClick={handleSubmit}>
-              <Save className="w-4 h-4 mr-2" />
+            <Button type="button" className="md-button" onClick={handleSubmit}>
+              <Save className="w-4 h-4 mr-2" aria-hidden />
               {isEdit ? 'Update' : 'Create'}
             </Button>
           </div>
@@ -1015,11 +1031,13 @@ export function Win11AccountsPage() {
                     autoFocus={showSearchField}
                   />
                 </div>
-                <Button 
-                  className="md-button-outlined"
+                <Button
+                  type="button"
+                  className="md-button md-button-icon"
                   onClick={() => setShowSearchField(!showSearchField)}
+                  title="Search"
                 >
-                  <Search className="w-4 h-4" />
+                  <Search className="w-4 h-4" aria-hidden />
                 </Button>
                 <Button
                   onClick={openCreateModal}
@@ -1030,30 +1048,31 @@ export function Win11AccountsPage() {
                   <Plus className="w-4 h-4 mr-2" />
                   New Account
                 </Button>
-                <Button 
+                <Button
+                  type="button"
                   onClick={loadData}
-                  variant="outline"
-                  className="h-10 px-4 rounded-2xl border-outline hover:bg-primary-container hover:text-on-primary-container"
+                  className="md-button md-button-icon"
+                  title="Refresh"
                 >
-                  <RefreshCw className="w-4 h-4" />
+                  <RefreshCw className="w-4 h-4" aria-hidden />
                 </Button>
-                <Button 
-                  variant="outline" 
-                  className="h-10 px-4 rounded-2xl border-outline hover:bg-primary-container hover:text-on-primary-container"
+                <Button
+                  type="button"
+                  className="md-button md-button-icon"
                   onClick={handleImportAccounts}
                   disabled={chartEditDisabled}
                   title={!roleResolved ? 'Checking your access…' : !canEditChart ? 'Your role cannot import into the chart' : undefined}
                 >
-                  <Upload className="w-4 h-4" />
+                  <Upload className="w-4 h-4" aria-hidden />
                 </Button>
-                <Button 
-                  variant="outline" 
-                  className="h-10 px-4 rounded-2xl border-outline hover:bg-primary-container hover:text-on-primary-container"
+                <Button
+                  type="button"
+                  className="md-button md-button-icon"
                   onClick={handleExportAccounts}
                   disabled={exportDisabled}
                   title={exportTitle}
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="w-4 h-4" aria-hidden />
                 </Button>
               </div>
             </div>
@@ -1093,16 +1112,62 @@ export function Win11AccountsPage() {
             {/* Accounts Tree */}
             <div className="lg:col-span-2">
               <Card className="md-card-expressive">
-                <CardHeader>
-                  <CardTitle className="md-title-large text-on-surface">Account Hierarchy</CardTitle>
-                  <CardDescription className="md-body-medium text-on-surface-variant">
-                    Click to expand/collapse account groups. Click on an account to view details.
-                  </CardDescription>
+                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
+                  <div className="min-w-0">
+                    <CardTitle className="md-title-large text-on-surface">
+                      {viewMode === 'list' ? 'Account Hierarchy' : 'Account graph'}
+                    </CardTitle>
+                  </div>
+                  <div
+                    className="flex shrink-0 items-center gap-1"
+                    role="group"
+                    aria-label="Chart view"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('list')}
+                      title="List and tree"
+                      aria-pressed={viewMode === 'list'}
+                      className="accounts-chart-view-toggle transition-colors"
+                    >
+                      <span className="sr-only">List view</span>
+                      <LayoutList
+                        className="h-5 w-5"
+                        strokeWidth={viewMode === 'list' ? 2.25 : 1.75}
+                        aria-hidden
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('graph')}
+                      title="Graph view"
+                      aria-pressed={viewMode === 'graph'}
+                      className="accounts-chart-view-toggle transition-colors"
+                    >
+                      <span className="sr-only">Graph view</span>
+                      <Share2
+                        className="h-5 w-5"
+                        strokeWidth={viewMode === 'graph' ? 2.25 : 1.75}
+                        aria-hidden
+                      />
+                    </button>
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <div className="h-[calc(100vh-16rem)] overflow-y-auto">
-                    {filteredAccounts.map(account => renderAccountItem(account))}
-                  </div>
+                  {viewMode === 'list' ? (
+                    <div className="h-[calc(100vh-16rem)] overflow-y-auto">
+                      {filteredAccounts.map((account) => renderAccountItem(account))}
+                    </div>
+                  ) : (
+                    <div className="p-0 px-0 pb-1">
+                      <AccountsGraphView
+                        flatAccounts={flatAccounts}
+                        searchTerm={searchTerm}
+                        selectedId={selectedAccount?.id ?? null}
+                        onSelect={(a) => selectAccount(a as HierarchicalAccount)}
+                      />
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -1136,15 +1201,15 @@ export function Win11AccountsPage() {
                       </div>
                       <div>
                         <label className="text-sm font-medium text-on-surface-variant">Postable</label>
-                        <p className="text-sm text-on-surface">
+                        <p className="mt-1 text-sm text-on-surface">
                           {selectedAccount.is_postable ? (
-                            <span className="text-green-600 flex items-center">
-                              <CheckCircle className="w-4 h-4 mr-1" />
+                            <span className={cn(accountMetaBadgeClass, 'gap-1')}>
+                              <CheckCircle className="w-3.5 h-3.5 shrink-0 text-on-surface-variant" aria-hidden />
                               Yes
                             </span>
                           ) : (
-                            <span className="text-red-600 flex items-center">
-                              <AlertCircle className="w-4 h-4 mr-1" />
+                            <span className={cn(accountMetaBadgeClass, 'gap-1')}>
+                              <AlertCircle className="w-3.5 h-3.5 shrink-0 text-on-surface-variant" aria-hidden />
                               No
                             </span>
                           )}
@@ -1153,8 +1218,10 @@ export function Win11AccountsPage() {
                       {selectedAccount.group && (
                         <div>
                           <label className="text-sm font-medium text-on-surface-variant">Group</label>
-                          <p className="text-sm text-on-surface">
-                            {selectedAccount.group.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          <p className="mt-1 text-sm text-on-surface">
+                            <span className={accountMetaBadgeClass}>
+                              {selectedAccount.group.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                            </span>
                           </p>
                       </div>
                        )}

@@ -137,7 +137,7 @@ export function Win11JournalPage() {
                 />
               </div>
               <Button 
-                className="md-button-outlined"
+                className="md-button"
                 onClick={() => setShowSearchField(!showSearchField)}
               >
                 <Search className="w-4 h-4" />
@@ -152,7 +152,7 @@ export function Win11JournalPage() {
                 New Entry
               </Button>
               <Button 
-                className="md-button-outlined"
+                className="md-button"
                 disabled={writeDisabled}
                 title={writeBlockTitle}
                 onClick={() => roleResolved && canWriteJournal && setShowBulkEntryDialog(true)}
@@ -194,7 +194,7 @@ export function Win11JournalPage() {
                 New Entry
               </Button>
               <Button 
-                className="md-button-outlined"
+                className="md-button"
                 disabled={writeDisabled}
                 title={writeBlockTitle}
                 onClick={() => roleResolved && canWriteJournal && setShowBulkEntryDialog(true)}

@@ -322,7 +322,7 @@ export function BulkEntryDialog({
               <Button
                 type="button"
                 onClick={addNewCard}
-                className="md-button-outlined"
+                className="md-button"
                 size="sm"
               >
                 <Plus className="w-4 h-4 mr-1" />
@@ -331,7 +331,7 @@ export function BulkEntryDialog({
               <Button
                 type="button"
                 onClick={handleDownloadTemplate}
-                className="md-button-outlined"
+                className="md-button"
                 size="sm"
               >
                 <Download className="w-4 h-4 mr-1" />
@@ -347,7 +347,7 @@ export function BulkEntryDialog({
                 />
                 <Button
                   type="button"
-                  className="md-button-outlined"
+                  className="md-button"
                   size="sm"
                   disabled={importing}
                 >
@@ -358,7 +358,7 @@ export function BulkEntryDialog({
               <Button
                 type="button"
                 onClick={clearAllCards}
-                className="md-button-outlined"
+                className="md-button"
                 size="sm"
                 variant="destructive"
               >
@@ -388,7 +388,7 @@ export function BulkEntryDialog({
                   <Button
                     type="button"
                     onClick={() => removeCard(card.id)}
-                    className="md-button-outlined"
+                    className="md-button"
                     size="sm"
                     variant="destructive"
                   >
@@ -442,7 +442,7 @@ export function BulkEntryDialog({
 
         <DialogFooter className="flex-shrink-0 pt-4 border-t border-outline-variant">
           <Button
-            className="md-button-outlined"
+            className="md-button"
             onClick={() => onOpenChange(false)}
             disabled={loading}
           >

@@ -82,6 +82,30 @@
     --ring: 74 85 104;
     --radius: 0.75rem;
     --md-control-radius: 8px;
+
+    /* Ledger / COA badges (see @/lib/account-type-badges) */
+    --m3-badge-asset-bg: color-mix(in srgb, #2563eb 13%, var(--md-sys-color-surface-container-high));
+    --m3-badge-asset-fg: #1d4ed8;
+    --m3-badge-liability-bg: color-mix(in srgb, #dc2626 13%, var(--md-sys-color-surface-container-high));
+    --m3-badge-liability-fg: #b91c1c;
+    --m3-badge-equity-bg: color-mix(in srgb, #7c3aed 12%, var(--md-sys-color-surface-container-high));
+    --m3-badge-equity-fg: #6d28d9;
+    --m3-badge-revenue-bg: color-mix(in srgb, #059669 13%, var(--md-sys-color-surface-container-high));
+    --m3-badge-revenue-fg: #047857;
+    --m3-badge-expense-bg: color-mix(in srgb, #ea580c 13%, var(--md-sys-color-surface-container-high));
+    --m3-badge-expense-fg: #c2410c;
+    --m3-badge-default-bg: var(--md-sys-color-surface-container-highest);
+    --m3-badge-default-fg: var(--md-sys-color-on-surface-variant);
+    --m3-badge-code-bg: color-mix(in srgb, #0d9488 13%, var(--md-sys-color-surface-container-high));
+    --m3-badge-code-fg: #0f766e;
+    --m3-badge-lvl-1-bg: color-mix(in srgb, #2563eb 14%, var(--md-sys-color-surface-container-high));
+    --m3-badge-lvl-1-fg: #1d4ed8;
+    --m3-badge-lvl-2-bg: color-mix(in srgb, #7c3aed 13%, var(--md-sys-color-surface-container-high));
+    --m3-badge-lvl-2-fg: #6d28d9;
+    --m3-badge-lvl-3-bg: color-mix(in srgb, #0d9488 14%, var(--md-sys-color-surface-container-high));
+    --m3-badge-lvl-3-fg: #0f766e;
+    --m3-badge-lvl-4-bg: color-mix(in srgb, #d97706 14%, var(--md-sys-color-surface-container-high));
+    --m3-badge-lvl-4-fg: #b45309;
   }
 
   .dark {
@@ -160,6 +184,29 @@
     --border: 73 69 79;
     --input: 73 69 79;
     --ring: 113 128 150;
+
+    --m3-badge-asset-bg: color-mix(in srgb, #3b82f6 22%, var(--md-sys-color-surface-container-high));
+    --m3-badge-asset-fg: #93c5fd;
+    --m3-badge-liability-bg: color-mix(in srgb, #f87171 22%, var(--md-sys-color-surface-container-high));
+    --m3-badge-liability-fg: #fecaca;
+    --m3-badge-equity-bg: color-mix(in srgb, #a78bfa 18%, var(--md-sys-color-surface-container-high));
+    --m3-badge-equity-fg: #ddd6fe;
+    --m3-badge-revenue-bg: color-mix(in srgb, #34d399 18%, var(--md-sys-color-surface-container-high));
+    --m3-badge-revenue-fg: #a7f3d0;
+    --m3-badge-expense-bg: color-mix(in srgb, #fb923c 20%, var(--md-sys-color-surface-container-high));
+    --m3-badge-expense-fg: #fed7aa;
+    --m3-badge-default-bg: var(--md-sys-color-surface-container-highest);
+    --m3-badge-default-fg: var(--md-sys-color-on-surface-variant);
+    --m3-badge-code-bg: color-mix(in srgb, #14b8a6 20%, var(--md-sys-color-surface-container-high));
+    --m3-badge-code-fg: #5eead4;
+    --m3-badge-lvl-1-bg: color-mix(in srgb, #3b82f6 22%, var(--md-sys-color-surface-container-high));
+    --m3-badge-lvl-1-fg: #93c5fd;
+    --m3-badge-lvl-2-bg: color-mix(in srgb, #a78bfa 20%, var(--md-sys-color-surface-container-high));
+    --m3-badge-lvl-2-fg: #ddd6fe;
+    --m3-badge-lvl-3-bg: color-mix(in srgb, #14b8a6 22%, var(--md-sys-color-surface-container-high));
+    --m3-badge-lvl-3-fg: #5eead4;
+    --m3-badge-lvl-4-bg: color-mix(in srgb, #f59e0b 22%, var(--md-sys-color-surface-container-high));
+    --m3-badge-lvl-4-fg: #fde68a;
   }
 }
 
@@ -412,12 +459,6 @@
       0 1px 2px rgba(0, 0, 0, 0.24);
   }
   
-  .md-button-outlined {
-    background-color: transparent;
-    color: var(--md-sys-color-primary);
-    border: 1px solid var(--md-sys-color-outline);
-  }
-  
   .md-button-text {
     background-color: transparent;
     color: var(--md-sys-color-primary);
@@ -529,6 +570,60 @@
   .md-text-field-input.error:focus {
     border-color: var(--md-sys-color-error);
     box-shadow: 0 0 0 1px var(--md-sys-color-error);
+  }
+
+  /* Stronger than global `input[type=text]` !important so validation state wins */
+  input.md-text-field-input.error,
+  .dark input.md-text-field-input.error {
+    border-color: var(--md-sys-color-error) !important;
+    border-width: 2px !important;
+  }
+
+  input.md-text-field-input.error:focus,
+  .dark input.md-text-field-input.error:focus {
+    border-color: var(--md-sys-color-error) !important;
+    box-shadow: 0 0 0 1px var(--md-sys-color-error) !important;
+  }
+
+  /* Chart of accounts modals — native selects aligned with md-text-field tokens */
+  .m3-native-select {
+    width: 100%;
+    height: 2.5rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    border-radius: var(--md-control-radius);
+    border: 1px solid var(--md-sys-color-outline);
+    background-color: var(--md-sys-color-surface-container-highest);
+    color: var(--md-sys-color-on-surface);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    transition:
+      border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+  }
+
+  .m3-native-select:focus {
+    outline: none;
+    border-color: var(--md-sys-color-primary);
+    border-width: 2px;
+    box-shadow: 0 0 0 1px var(--md-sys-color-primary);
+  }
+
+  .m3-native-select option,
+  .m3-native-select optgroup {
+    background-color: var(--md-sys-color-surface-container-highest);
+    color: var(--md-sys-color-on-surface);
+  }
+
+  /* Dialog panels — use MD surface (Tailwind `bg-surface` is not theme-aware here) */
+  .m3-accounts-dialog {
+    background-color: var(--md-sys-color-surface);
+    color: var(--md-sys-color-on-surface);
+    border: 1px solid var(--md-sys-color-outline-variant);
+    box-shadow:
+      0 12px 40px color-mix(in srgb, var(--md-sys-color-shadow) 28%, transparent),
+      0 4px 12px color-mix(in srgb, var(--md-sys-color-shadow) 18%, transparent);
   }
 
   .md-text-field-helper {
@@ -1351,50 +1446,50 @@
     border-radius: 0.25rem;
   }
   .m3-chip--account-asset {
-    background: color-mix(in srgb, var(--md-sys-color-primary-container) 40%, transparent);
-    color: var(--md-sys-color-on-primary-container);
+    background: var(--m3-badge-asset-bg);
+    color: var(--m3-badge-asset-fg);
   }
   .m3-chip--account-liability {
-    background: color-mix(in srgb, var(--md-sys-color-error-container) 40%, transparent);
-    color: var(--md-sys-color-on-error-container);
+    background: var(--m3-badge-liability-bg);
+    color: var(--m3-badge-liability-fg);
   }
   .m3-chip--account-equity {
-    background: color-mix(in srgb, var(--md-sys-color-tertiary-container) 40%, transparent);
-    color: var(--md-sys-color-on-tertiary-container);
+    background: var(--m3-badge-equity-bg);
+    color: var(--m3-badge-equity-fg);
   }
   .m3-chip--account-revenue {
-    background: color-mix(in srgb, var(--md-sys-color-secondary-container) 40%, transparent);
-    color: var(--md-sys-color-on-secondary-container);
+    background: var(--m3-badge-revenue-bg);
+    color: var(--m3-badge-revenue-fg);
   }
   .m3-chip--account-expense {
-    background: var(--md-sys-color-surface-container-high);
-    color: var(--md-sys-color-on-surface);
+    background: var(--m3-badge-expense-bg);
+    color: var(--m3-badge-expense-fg);
   }
   .m3-chip--account-default {
-    background: var(--md-sys-color-surface-container-highest);
-    color: var(--md-sys-color-on-surface-variant);
+    background: var(--m3-badge-default-bg);
+    color: var(--m3-badge-default-fg);
   }
   .m3-chip--code {
-    background: var(--md-sys-color-surface-container-highest);
-    color: var(--md-sys-color-on-surface);
+    background: var(--m3-badge-code-bg);
+    color: var(--m3-badge-code-fg);
   }
   /* Ledger L1/L2/…: dedicated names + !important so Card `text-card-foreground` (!important) cannot
      win over chip text color. */
   .m3-ledger-lvl-1 {
-    background: color-mix(in srgb, var(--md-sys-color-primary-container) 45%, transparent) !important;
-    color: var(--md-sys-color-on-primary-container) !important;
+    background: var(--m3-badge-lvl-1-bg) !important;
+    color: var(--m3-badge-lvl-1-fg) !important;
   }
   .m3-ledger-lvl-2 {
-    background: color-mix(in srgb, var(--md-sys-color-secondary-container) 45%, transparent) !important;
-    color: var(--md-sys-color-on-secondary-container) !important;
+    background: var(--m3-badge-lvl-2-bg) !important;
+    color: var(--m3-badge-lvl-2-fg) !important;
   }
   .m3-ledger-lvl-3 {
-    background: color-mix(in srgb, var(--md-sys-color-tertiary-container) 45%, transparent) !important;
-    color: var(--md-sys-color-on-tertiary-container) !important;
+    background: var(--m3-badge-lvl-3-bg) !important;
+    color: var(--m3-badge-lvl-3-fg) !important;
   }
   .m3-ledger-lvl-4 {
-    background: color-mix(in srgb, var(--md-sys-color-error-container) 45%, transparent) !important;
-    color: var(--md-sys-color-on-error-container) !important;
+    background: var(--m3-badge-lvl-4-bg) !important;
+    color: var(--m3-badge-lvl-4-fg) !important;
   }
   
   /* Override warning colors that might be causing yellow */
@@ -1791,6 +1886,60 @@
   .dark .win11-button:hover {
     background-color: var(--md-sys-color-primary) !important;
     color: var(--md-sys-color-on-primary) !important;
+  }
+
+  /* Filled primary icon buttons — overrides global `button` padding for compact squares */
+  button.md-button.md-button-icon,
+  .dark button.md-button.md-button-icon {
+    padding: 8px !important;
+    min-width: 2.5rem !important;
+    min-height: 2.5rem !important;
+    border-radius: var(--md-control-radius) !important;
+  }
+
+  button.md-button.md-button-icon svg,
+  .dark button.md-button.md-button-icon svg {
+    color: var(--md-sys-color-on-primary) !important;
+  }
+
+  /* Chart of accounts: list/graph — icons only (no md-button; escapes global filled `button`) */
+  button.accounts-chart-view-toggle,
+  .dark button.accounts-chart-view-toggle {
+    background-color: transparent !important;
+    color: var(--md-sys-color-on-surface-variant) !important;
+    border: none !important;
+    box-shadow: none !important;
+    transform: none !important;
+    padding: 0.375rem !important;
+    min-height: 0 !important;
+    min-width: 0 !important;
+    width: auto !important;
+    height: auto !important;
+    border-radius: 0.375rem !important;
+    cursor: pointer !important;
+  }
+
+  button.accounts-chart-view-toggle[aria-pressed='true'],
+  .dark button.accounts-chart-view-toggle[aria-pressed='true'] {
+    color: var(--md-sys-color-primary) !important;
+  }
+
+  button.accounts-chart-view-toggle:hover,
+  .dark button.accounts-chart-view-toggle:hover {
+    background-color: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent) !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+
+  button.accounts-chart-view-toggle svg,
+  .dark button.accounts-chart-view-toggle svg {
+    color: currentColor !important;
+  }
+
+  button.accounts-chart-view-toggle:focus-visible,
+  .dark button.accounts-chart-view-toggle:focus-visible {
+    outline: none !important;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--md-sys-color-primary) 40%, transparent) !important;
   }
 
   /* Nav / ghost row on cards (e.g. “All settings”): global `button` + `.dark button` use on-primary

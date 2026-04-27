@@ -183,7 +183,7 @@ function QueryErrorFallback({
           
           <Button 
             onClick={handleGoHome}
-            className="md-button-outlined"
+            className="md-button"
           >
             <Home className="w-4 h-4 mr-2" />
             Go to Dashboard
