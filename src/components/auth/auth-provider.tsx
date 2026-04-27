@@ -6,8 +6,19 @@ import { authClient } from '@/lib/auth-client'
 import { useAuthStore } from '@/stores/auth-store'
 import { User } from '@/types'
 
+/** If session GET errored, keep the local app session for network / server hiccups (not 401/403). */
+function isTransientSessionFetchError(error: { status?: number }): boolean {
+  const s = error.status
+  if (s === 401 || s === 403) return false
+  if (s == null) return true
+  if (s === 0 || s === 429 || s === 408) return true
+  if (s >= 500) return true
+  if (s >= 400) return true
+  return false
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { data, isPending } = authClient.useSession()
+  const { data, isPending, isRefetching, error: sessionError } = authClient.useSession()
   const queryClient = useQueryClient()
   const { setUser, setLoading, logout, loadUserData, clearForAccountSwitch } = useAuthStore()
   const lastLoadedUserId = useRef<string | null>(null)
@@ -45,15 +56,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
+    if (isRefetching) {
+      return
+    }
+
     // `data === undefined` is common while the session is refetching. Do not logout
     // (avoids brief default theme + re-applying accent when the session result returns).
     if (data === undefined) {
       return
     }
 
+    if (lastLoadedUserId.current && sessionError && isTransientSessionFetchError(sessionError)) {
+      return
+    }
+
     lastLoadedUserId.current = null
     logout()
-  }, [data, isPending, setUser, setLoading, logout, loadUserData, clearForAccountSwitch, queryClient])
+  }, [data, isPending, isRefetching, sessionError, setUser, setLoading, logout, loadUserData, clearForAccountSwitch, queryClient])
 
   return <>{children}</>
 }
