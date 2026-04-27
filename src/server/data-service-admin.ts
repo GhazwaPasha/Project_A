@@ -19,7 +19,8 @@ import {
   UserProfile, 
   Organization, 
   OrganizationMember, 
-  Account, 
+  Account,
+  AccountCreatePayload, 
   JournalEntry, 
   JournalEntryLine,
   UserRole,
@@ -37,6 +38,8 @@ import {
   resolveBalanceSheetSubsectionKey,
   resolveExpenseBucket,
 } from '@/lib/account-report-category'
+import { allocateStructuredAccountCode } from '@/server/account-code'
+import { isUndefinedColumnError } from '@/server/pg-undefined-column'
 
 function organizationRowWithParsedSettings<T extends { settings: unknown }>(row: T): T {
   return { ...row, settings: parseOrganizationSettingsValue(row.settings) as T['settings'] }
@@ -262,7 +265,7 @@ export class DataServiceAdmin {
     `) as Account[]
   }
 
-  static async createAccount(account: Omit<Account, 'id' | 'created_at' | 'updated_at'>): Promise<Account | null> {
+  static async createAccount(account: AccountCreatePayload): Promise<Account | null> {
     assertReportCategoryCompatible(account.account_type, account.report_category ?? null)
     const sql = getSql()
     if (account.parent_id != null) {
@@ -278,26 +281,83 @@ export class DataServiceAdmin {
         throw new Error('Child account must have the same account type as its parent.')
       }
     }
-    const rows = await sql<Account[]>`
-      INSERT INTO public.accounts (
-        organization_id, code, name, account_type, parent_id, description, is_active,
-        "group", report_category, is_postable, created_by
-      ) VALUES (
-        ${account.organization_id}::uuid,
-        ${account.code},
-        ${account.name},
-        ${account.account_type}::public.account_type,
-        ${account.parent_id},
-        ${account.description},
-        ${account.is_active},
-        ${account.group},
-        ${account.report_category ?? null}::public.account_report_category,
-        ${account.is_postable ?? true},
-        ${account.created_by}::uuid
-      )
-      RETURNING *
-    `
-    return (rows[0] as Account) ?? null
+
+    let generatedCode = await allocateStructuredAccountCode(
+      sql,
+      account.organization_id,
+      account.account_type,
+      account.parent_id ?? null
+    )
+    const insertRow = async (includeReportCategory: boolean): Promise<Account | null> => {
+      if (includeReportCategory) {
+        const rows = await sql<Account[]>`
+          INSERT INTO public.accounts (
+            organization_id, code, name, account_type, parent_id, description, is_active,
+            "group", report_category, is_postable, created_by
+          ) VALUES (
+            ${account.organization_id}::uuid,
+            ${generatedCode},
+            ${account.name},
+            ${account.account_type}::public.account_type,
+            ${account.parent_id},
+            ${account.description},
+            ${account.is_active},
+            ${account.group},
+            ${account.report_category ?? null}::public.account_report_category,
+            ${account.is_postable ?? true},
+            ${account.created_by}::uuid
+          )
+          RETURNING *
+        `
+        return (rows[0] as Account) ?? null
+      }
+      const rows = await sql<Account[]>`
+        INSERT INTO public.accounts (
+          organization_id, code, name, account_type, parent_id, description, is_active,
+          "group", is_postable, created_by
+        ) VALUES (
+          ${account.organization_id}::uuid,
+          ${generatedCode},
+          ${account.name},
+          ${account.account_type}::public.account_type,
+          ${account.parent_id},
+          ${account.description},
+          ${account.is_active},
+          ${account.group},
+          ${account.is_postable ?? true},
+          ${account.created_by}::uuid
+        )
+        RETURNING *
+      `
+      return (rows[0] as Account) ?? null
+    }
+
+    for (let attempt = 0; attempt < 8; attempt++) {
+      try {
+        try {
+          return await insertRow(true)
+        } catch (e) {
+          if (isUndefinedColumnError(e, 'report_category')) {
+            return await insertRow(false)
+          }
+          throw e
+        }
+      } catch (e) {
+        const code =
+          e && typeof e === 'object' && 'code' in e ? String((e as { code: unknown }).code) : ''
+        if (code === '23505' && attempt < 7) {
+          generatedCode = await allocateStructuredAccountCode(
+            sql,
+            account.organization_id,
+            account.account_type,
+            account.parent_id ?? null
+          )
+          continue
+        }
+        throw e
+      }
+    }
+    return null
   }
 
   static async updateAccount(id: number, updates: Partial<Account>): Promise<Account | null> {
@@ -331,22 +391,40 @@ export class DataServiceAdmin {
     }
 
     const u = { ...updates }
-    const rows = await sql<Account[]>`
-      UPDATE public.accounts
-      SET
-        code = COALESCE(${u.code ?? null}, code),
-        name = COALESCE(${u.name ?? null}, name),
-        account_type = COALESCE(${u.account_type ?? null}::public.account_type, account_type),
-        parent_id = ${mergedParent},
-        description = ${u.description === undefined ? null : u.description},
-        is_active = COALESCE(${u.is_active ?? null}, is_active),
-        "group" = COALESCE(${u.group ?? null}, "group"),
-        report_category = ${mergedReport}::public.account_report_category,
-        is_postable = COALESCE(${u.is_postable ?? null}, is_postable)
-      WHERE id = ${id}
-      RETURNING *
-    `
-    return (rows[0] as Account) ?? null
+    delete (u as { code?: unknown }).code
+    try {
+      const rows = await sql<Account[]>`
+        UPDATE public.accounts
+        SET
+          name = COALESCE(${u.name ?? null}, name),
+          account_type = COALESCE(${u.account_type ?? null}::public.account_type, account_type),
+          parent_id = ${mergedParent},
+          description = ${u.description === undefined ? null : u.description},
+          is_active = COALESCE(${u.is_active ?? null}, is_active),
+          "group" = COALESCE(${u.group ?? null}, "group"),
+          report_category = ${mergedReport}::public.account_report_category,
+          is_postable = COALESCE(${u.is_postable ?? null}, is_postable)
+        WHERE id = ${id}
+        RETURNING *
+      `
+      return (rows[0] as Account) ?? null
+    } catch (e) {
+      if (!isUndefinedColumnError(e, 'report_category')) throw e
+      const rows = await sql<Account[]>`
+        UPDATE public.accounts
+        SET
+          name = COALESCE(${u.name ?? null}, name),
+          account_type = COALESCE(${u.account_type ?? null}::public.account_type, account_type),
+          parent_id = ${mergedParent},
+          description = ${u.description === undefined ? null : u.description},
+          is_active = COALESCE(${u.is_active ?? null}, is_active),
+          "group" = COALESCE(${u.group ?? null}, "group"),
+          is_postable = COALESCE(${u.is_postable ?? null}, is_postable)
+        WHERE id = ${id}
+        RETURNING *
+      `
+      return (rows[0] as Account) ?? null
+    }
   }
 
   static async deleteAccount(id: number): Promise<boolean> {

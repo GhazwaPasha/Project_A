@@ -91,6 +91,9 @@ export interface Account {
   created_by: string | null
 }
 
+/** Create chart rows — `code` is always assigned server-side (structured by type + parent). */
+export type AccountCreatePayload = Omit<Account, 'id' | 'created_at' | 'updated_at' | 'code'>
+
 export interface JournalEntry {
   id: number
   organization_id: string

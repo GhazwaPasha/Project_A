@@ -26,6 +26,7 @@ import {
   Info,
   LayoutList,
   Share2,
+  Sparkles,
 } from 'lucide-react'
 import { cn, formatDate } from '@/lib/utils'
 import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
@@ -35,6 +36,10 @@ import {
   allowedReportCategoriesForAccountType,
   formatReportCategoryLabel,
 } from '@/lib/account-report-category'
+import {
+  parseAccountFromNaturalLanguage,
+  type AccountChartContextRow,
+} from '@/lib/ai-account-parser'
 import { Account, AccountReportCategory, AccountType } from '@/types'
 import { useOrganization } from '@/hooks/use-organization'
 import { useOrgDataPermission, useOrgMemberRoleResolved } from '@/hooks/use-org-permissions'
@@ -58,7 +63,6 @@ interface HierarchicalAccount extends Account {
 }
 
 interface AccountFormData {
-  code: string
   name: string
   account_type: AccountType
   parent_id: number | null
@@ -97,7 +101,6 @@ export function Win11AccountsPage() {
       ? 'Your role cannot export'
       : undefined
   const [formData, setFormData] = useState<AccountFormData>({
-    code: '',
     name: '',
     account_type: 'asset',
     parent_id: null,
@@ -113,6 +116,9 @@ export function Win11AccountsPage() {
   const [isImporting, setIsImporting] = useState(false)
   const [showSearchField, setShowSearchField] = useState(false)
   const [viewMode, setViewMode] = useState<'list' | 'graph'>('list')
+  const [coaAiInput, setCoaAiInput] = useState('')
+  const [coaAiLoading, setCoaAiLoading] = useState(false)
+  const [coaAiProgress, setCoaAiProgress] = useState(0)
 
   // Load data on component mount and when organization changes
   useEffect(() => {
@@ -248,14 +254,6 @@ export function Win11AccountsPage() {
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {}
 
-    if (!formData.code.trim()) {
-      errors.code = 'Account code is required'
-    } else if (!/^[0-9]+$/.test(formData.code)) {
-      errors.code = 'Account code must contain only numbers'
-    } else if (flatAccounts.some(acc => acc.code === formData.code && acc.id !== selectedAccount?.id)) {
-      errors.code = 'Account code already exists'
-    }
-
     if (!formData.name.trim()) {
       errors.name = 'Account name is required'
     }
@@ -274,7 +272,6 @@ export function Win11AccountsPage() {
     try {
       const newAccount = await DataService.createAccount({
         organization_id: currentOrganization.id,
-        code: formData.code,
         name: formData.name,
         account_type: formData.account_type,
         parent_id: formData.parent_id,
@@ -301,7 +298,6 @@ export function Win11AccountsPage() {
 
     try {
       const updatedAccount = await DataService.updateAccount(selectedAccount.id, {
-        code: formData.code,
         name: formData.name,
         account_type: formData.account_type,
         parent_id: formData.parent_id,
@@ -419,7 +415,7 @@ export function Win11AccountsPage() {
         }
 
         const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
-        const requiredColumns = ['Name', 'Type', 'Code']
+        const requiredColumns = ['Name', 'Type']
         const missingColumns = requiredColumns.filter(col => !headers.includes(col))
         
         if (missingColumns.length > 0) {
@@ -454,92 +450,136 @@ export function Win11AccountsPage() {
     let skippedCount = 0
 
     try {
-      // Get existing account names and codes to avoid duplicates
-      const existingAccounts = await DataService.getAccounts(currentOrganization.id, false)
-      const existingNames = new Set(existingAccounts.map(acc => acc.name.toLowerCase()))
-      const existingCodes = new Set(existingAccounts.map(acc => acc.code))
+      let mergedAccounts = await DataService.getAccounts(currentOrganization.id, false)
+      const existingNames = new Set(mergedAccounts.map((acc) => acc.name.toLowerCase()))
+      const codeToAccount = new Map(mergedAccounts.map((a) => [a.code, a]))
+      const nameToAccount = new Map(mergedAccounts.map((a) => [a.name.toLowerCase(), a]))
 
-      for (const row of importPreview) {
-        try {
-          const name = row.Name?.trim()
-          const accountType = row.Type?.trim().toLowerCase()
-          const code = row.Code?.trim()
-          const parentCode = row['Parent Code']?.trim()
-          const rawReportCat = row['Report category']?.trim() || row['Report Category']?.trim()
-          const isPostable = row['Is Postable']?.toLowerCase() === 'yes' || row['Is Postable']?.toLowerCase() === 'true' || row['Is Postable'] === '1'
+      type ImportRow = (typeof importPreview)[number]
+      let pending: ImportRow[] = [...importPreview]
+      const validTypes = ['asset', 'liability', 'equity', 'revenue', 'expense']
+      const maxIter = importPreview.length + 15
+      let iter = 0
 
-          if (!name || !accountType || !code) {
-            errors.push(`Row ${row._rowIndex}: Missing required fields (Name, Type, Code)`)
-            continue
-          }
+      while (pending.length > 0 && iter < maxIter) {
+        iter++
+        const nextRound: ImportRow[] = []
+        let progressed = false
 
-          // Validate account type
-          const validTypes = ['asset', 'liability', 'equity', 'revenue', 'expense']
-          if (!validTypes.includes(accountType)) {
-            errors.push(`Row ${row._rowIndex}: Invalid account type '${accountType}'. Must be one of: ${validTypes.join(', ')}`)
-            continue
-          }
+        for (const row of pending) {
+          try {
+            const name = row.Name?.trim()
+            const accountType = row.Type?.trim().toLowerCase()
 
-          // Check for duplicates
-          if (existingNames.has(name.toLowerCase())) {
-            skippedCount++
-            continue
-          }
+            if (!name || !accountType) {
+              errors.push(`Row ${row._rowIndex}: Missing required fields (Name, Type)`)
+              continue
+            }
 
-          if (existingCodes.has(code)) {
-            errors.push(`Row ${row._rowIndex}: Account code '${code}' already exists`)
-            continue
-          }
-
-          let reportCategory: AccountReportCategory | null = null
-          if (rawReportCat) {
-            const allowed = allowedReportCategoriesForAccountType(accountType as AccountType)
-            if (!allowed.includes(rawReportCat as AccountReportCategory)) {
+            if (!validTypes.includes(accountType)) {
               errors.push(
-                `Row ${row._rowIndex}: Invalid Report category "${rawReportCat}" for type ${accountType}. Use one of: ${allowed.join(', ')}`
+                `Row ${row._rowIndex}: Invalid account type '${accountType}'. Must be one of: ${validTypes.join(', ')}`
               )
               continue
             }
-            reportCategory = rawReportCat as AccountReportCategory
-          }
 
-          // Find parent account if parent code is provided
-          let parentId = null
-          if (parentCode) {
-            const parentAccount = existingAccounts.find(acc => acc.code === parentCode)
-            if (parentAccount) {
-              parentId = parentAccount.id
-            } else {
-              errors.push(`Row ${row._rowIndex}: Parent account with code '${parentCode}' not found`)
+            if (existingNames.has(name.toLowerCase())) {
+              skippedCount++
+              progressed = true
               continue
             }
-          }
 
-          // Create account
-          const accountData = {
-            organization_id: currentOrganization.id,
-            code,
-            name,
-            account_type: accountType as AccountType,
-            parent_id: parentId,
-            description: row.Description?.trim() || null,
-            group: null,
-            report_category: reportCategory,
-            is_postable: isPostable,
-            is_active: true,
-            created_by: (await DataService.getCurrentUser())?.id || null
-          }
+            const parentCode = row['Parent Code']?.trim()
+            const parentName = row['Parent Name']?.trim()
 
-          const newAccount = await DataService.createAccount(accountData)
-          if (newAccount) {
-            successCount++
-            existingNames.add(name.toLowerCase())
-            existingCodes.add(code)
-          } else {
-            errors.push(`Row ${row._rowIndex}: Failed to create account '${name}'`)
+            let parentId: number | null = null
+            if (parentCode) {
+              const p = codeToAccount.get(parentCode)
+              if (!p) {
+                nextRound.push(row)
+                continue
+              }
+              parentId = p.id
+            } else if (parentName) {
+              const p = nameToAccount.get(parentName.toLowerCase())
+              if (!p) {
+                nextRound.push(row)
+                continue
+              }
+              parentId = p.id
+            }
+
+            if (parentId != null) {
+              const pAcc = mergedAccounts.find((a) => a.id === parentId)
+              if (pAcc && pAcc.account_type !== accountType) {
+                errors.push(
+                  `Row ${row._rowIndex}: Parent account type (${pAcc.account_type}) must match row type (${accountType}).`
+                )
+                continue
+              }
+            }
+
+            const rawReportCat = row['Report category']?.trim() || row['Report Category']?.trim()
+            const isPostable =
+              row['Is Postable']?.toLowerCase() === 'yes' ||
+              row['Is Postable']?.toLowerCase() === 'true' ||
+              row['Is Postable'] === '1'
+
+            let reportCategory: AccountReportCategory | null = null
+            if (rawReportCat) {
+              const allowed = allowedReportCategoriesForAccountType(accountType as AccountType)
+              if (!allowed.includes(rawReportCat as AccountReportCategory)) {
+                errors.push(
+                  `Row ${row._rowIndex}: Invalid Report category "${rawReportCat}" for type ${accountType}. Use one of: ${allowed.join(', ')}`
+                )
+                continue
+              }
+              reportCategory = rawReportCat as AccountReportCategory
+            }
+
+            const newAccount = await DataService.createAccount({
+              organization_id: currentOrganization.id,
+              name,
+              account_type: accountType as AccountType,
+              parent_id: parentId,
+              description: row.Description?.trim() || null,
+              group: null,
+              report_category: reportCategory,
+              is_postable: isPostable,
+              is_active: true,
+              created_by: (await DataService.getCurrentUser())?.id || null,
+            })
+
+            if (newAccount) {
+              successCount++
+              existingNames.add(name.toLowerCase())
+              mergedAccounts = [...mergedAccounts, newAccount]
+              codeToAccount.set(newAccount.code, newAccount)
+              nameToAccount.set(newAccount.name.toLowerCase(), newAccount)
+              progressed = true
+            } else {
+              errors.push(`Row ${row._rowIndex}: Failed to create account '${name}'`)
+            }
+          } catch (error) {
+            errors.push(`Row ${row._rowIndex}: ${error}`)
           }
-        } catch (error) {
-          errors.push(`Row ${row._rowIndex}: ${error}`)
+        }
+
+        if (!progressed && nextRound.length === pending.length && nextRound.length > 0) {
+          for (const row of nextRound) {
+            errors.push(
+              `Row ${row._rowIndex}: Could not resolve parent — use Parent Code from your chart or Parent Name matching an existing account or a row imported earlier in this file.`
+            )
+          }
+          break
+        }
+
+        pending = nextRound
+      }
+
+      if (pending.length > 0 && iter >= maxIter) {
+        for (const row of pending) {
+          errors.push(`Row ${row._rowIndex}: Import stopped — check parent references for cycles or typos.`)
         }
       }
 
@@ -570,7 +610,6 @@ export function Win11AccountsPage() {
 
   const resetForm = () => {
     setFormData({
-      code: '',
       name: '',
       account_type: 'asset',
       parent_id: null,
@@ -578,7 +617,19 @@ export function Win11AccountsPage() {
       is_postable: true
     })
     setFormErrors({})
+    setCoaAiInput('')
+    setCoaAiProgress(0)
   }
+
+  const chartContextRowsForAI = (): AccountChartContextRow[] =>
+    flatAccounts.map((a) => ({
+      id: a.id,
+      code: a.code,
+      name: a.name,
+      account_type: a.account_type,
+      is_postable: a.is_postable,
+      parent_id: a.parent_id ?? null,
+    }))
 
   const openCreateModal = () => {
     if (!roleResolved || !canEditChart) return
@@ -589,7 +640,6 @@ export function Win11AccountsPage() {
   const openEditModal = (account: HierarchicalAccount) => {
     if (!roleResolved || !canEditChart) return
     setFormData({
-      code: account.code,
       name: account.name,
       account_type: account.account_type,
       parent_id: account.parent_id,
@@ -597,7 +647,63 @@ export function Win11AccountsPage() {
       is_postable: account.is_postable
     })
     setFormErrors({})
+    setCoaAiInput('')
+    setCoaAiProgress(0)
     setShowEditModal(true)
+  }
+
+  const handleCoaAiFill = async (isEdit: boolean) => {
+    if (!coaAiInput.trim()) return
+    try {
+      setCoaAiLoading(true)
+      setCoaAiProgress(0)
+      setFormErrors((prev) => {
+        const next = { ...prev }
+        delete next.coa_ai
+        return next
+      })
+      const progressInterval = setInterval(() => {
+        setCoaAiProgress((prev) => (prev >= 90 ? prev : prev + Math.random() * 15))
+      }, 200)
+
+      const editingSummary =
+        isEdit && selectedAccount
+          ? `${selectedAccount.code} — ${selectedAccount.name} (type: ${selectedAccount.account_type})`
+          : null
+
+      const parsed = await parseAccountFromNaturalLanguage(coaAiInput, chartContextRowsForAI(), {
+        excludeAccountId: isEdit && selectedAccount ? selectedAccount.id : undefined,
+        editingAccountSummary: editingSummary,
+      })
+      clearInterval(progressInterval)
+      setCoaAiProgress(100)
+
+      let parent_id: number | null = null
+      if (parsed.parent_account_code) {
+        const p = flatAccounts.find(
+          (a) => a.code === parsed.parent_account_code && a.account_type === parsed.account_type
+        )
+        parent_id = p ? p.id : null
+      }
+
+      setFormData({
+        name: parsed.name,
+        account_type: parsed.account_type,
+        parent_id,
+        report_category: (parsed.report_category ?? '') as '' | AccountReportCategory,
+        is_postable: parsed.is_postable,
+      })
+      setCoaAiInput('')
+    } catch (e) {
+      console.error(e)
+      setFormErrors((prev) => ({
+        ...prev,
+        coa_ai: e instanceof Error ? e.message : 'AI parse failed',
+      }))
+    } finally {
+      setCoaAiLoading(false)
+      setCoaAiProgress(0)
+    }
   }
 
   const renderAccountItem = (account: HierarchicalAccount, level: number = 0) => {
@@ -698,19 +804,66 @@ export function Win11AccountsPage() {
 
           <div className="space-y-4">
             <div>
-              <label htmlFor="account-form-code" className="md-text-field-label block">
-                Account Code *
+              <label htmlFor="account-ai-input" className="md-text-field-label block">
+                AI assistant
               </label>
-              <Input
-                id="account-form-code"
-                value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                placeholder="e.g., 1000"
-                autoComplete="off"
-                className={cn('md-text-field-input', formErrors.code && 'error')}
-              />
-              {formErrors.code && (
-                <p className="md-text-field-helper error mt-1">{formErrors.code}</p>
+              <p className="md-body-small text-on-surface-variant mb-2">
+                Describe the account (type, parent, postable vs header, report section). AI fills the fields below; the account code is assigned automatically when you save.
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  id="account-ai-input"
+                  placeholder='e.g. "6100 office rent expense, operating expense, postable"'
+                  value={coaAiInput}
+                  onChange={(e) => setCoaAiInput(e.target.value)}
+                  className="flex-1"
+                  disabled={coaAiLoading}
+                  autoComplete="off"
+                />
+                {coaAiLoading ? (
+                  <div className="relative h-10 w-32 overflow-hidden rounded-lg border border-outline bg-surface-container-highest">
+                    <div
+                      className="absolute inset-0 bg-primary transition-all duration-300 ease-out"
+                      style={{ width: `${coaAiProgress}%` }}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="relative z-10 text-sm font-medium text-on-primary">
+                        {coaAiProgress < 100 ? 'Thinking…' : 'Done'}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    className="md-button h-10 shrink-0 border-0 bg-primary px-4 text-on-primary hover:opacity-90"
+                    onClick={() => handleCoaAiFill(isEdit)}
+                    disabled={!coaAiInput.trim()}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4" aria-hidden />
+                      AI fill
+                    </span>
+                  </Button>
+                )}
+              </div>
+              {formErrors.coa_ai && (
+                <p className="md-text-field-helper error mt-1">{formErrors.coa_ai}</p>
+              )}
+            </div>
+
+            <div>
+              <span className="md-text-field-label block">Account code</span>
+              {isEdit && selectedAccount ? (
+                <p
+                  className="mt-1 rounded-lg border border-outline-variant bg-surface-container-high px-3 py-2 font-mono text-sm text-on-surface"
+                  aria-live="polite"
+                >
+                  {selectedAccount.code}
+                </p>
+              ) : (
+                <p className="md-body-small text-on-surface-variant mt-1">
+                  Assigned automatically from account type and parent (e.g. assets use 1000–1999).
+                </p>
               )}
             </div>
 
@@ -882,7 +1035,7 @@ export function Win11AccountsPage() {
                     {importFile ? importFile.name : 'Click to select CSV file'}
                   </span>
                   <span className="text-xs text-on-surface-variant">
-                    Supported format: CSV with columns Name, Type, Code (required)
+                    Supported format: CSV with columns Name, Type (required); codes are assigned on import
                   </span>
                 </label>
               </div>
@@ -892,8 +1045,11 @@ export function Win11AccountsPage() {
             <div className="bg-surface-container p-4 rounded-lg">
               <h3 className="text-sm font-medium text-on-surface mb-2">Required CSV Format</h3>
               <div className="text-xs text-on-surface-variant space-y-1">
-                <p><strong>Required columns:</strong> Name, Type, Code</p>
-                <p><strong>Optional columns:</strong> Parent Code, Description, Group, Is Postable</p>
+                <p><strong>Required columns:</strong> Name, Type</p>
+                <p>
+                  <strong>Optional columns:</strong> Parent Code (existing chart), Parent Name (exact match to
+                  another row or existing account), Report category, Description, Is Postable — Code column is ignored
+                </p>
                 <p><strong>Account Types:</strong> asset, liability, equity, revenue, expense</p>
                 <p><strong>Is Postable:</strong> yes/no, true/false, or 1/0</p>
               </div>
@@ -924,8 +1080,8 @@ export function Win11AccountsPage() {
                         <tr>
                           <th className="text-left p-2 font-medium">Name</th>
                           <th className="text-left p-2 font-medium">Type</th>
-                          <th className="text-left p-2 font-medium">Code</th>
                           <th className="text-left p-2 font-medium">Parent Code</th>
+                          <th className="text-left p-2 font-medium">Parent Name</th>
                           <th className="text-left p-2 font-medium">Group</th>
                           <th className="text-left p-2 font-medium">Postable</th>
                         </tr>
@@ -935,8 +1091,8 @@ export function Win11AccountsPage() {
                           <tr key={index} className="border-t border-outline-variant">
                             <td className="p-2">{row.Name}</td>
                             <td className="p-2">{row.Type}</td>
-                            <td className="p-2">{row.Code}</td>
                             <td className="p-2">{row['Parent Code'] || '-'}</td>
+                            <td className="p-2">{row['Parent Name'] || '-'}</td>
                             <td className="p-2">{row.Group || '-'}</td>
                             <td className="p-2">{row['Is Postable'] || 'Yes'}</td>
                           </tr>

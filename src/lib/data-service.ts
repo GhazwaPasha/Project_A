@@ -6,6 +6,7 @@ import type {
   UserRole,
   AccountType,
   Account,
+  AccountCreatePayload,
   AccountBalanceRow,
   AccountTransactionRow,
   AgedPayablesReportData,
@@ -92,9 +93,7 @@ export class DataService {
     return appDataRequest('DataService', 'getAccounts', [organizationId, activeOnly])
   }
 
-  static async createAccount(
-    account: Omit<Account, 'id' | 'created_at' | 'updated_at'>
-  ): Promise<Account | null> {
+  static async createAccount(account: AccountCreatePayload): Promise<Account | null> {
     return appDataRequest('DataService', 'createAccount', [account])
   }
 
