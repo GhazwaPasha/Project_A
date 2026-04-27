@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Loader2, Mail, Lock } from 'lucide-react'
 import { AuthScaffold } from '@/components/auth/auth-scaffold'
 import { authFormFont } from '@/lib/auth-form-font'
+import { getNeonAuthErrorMessage } from '@/lib/auth-error'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -23,19 +24,23 @@ export function LoginPage() {
     setError('')
 
     try {
+      const callbackURL =
+        typeof window === 'undefined' ? '/home' : new URL('/home', window.location.origin).toString()
+
       const res = await authClient.signIn.email({
         email,
         password,
-        callbackURL: '/home',
+        callbackURL,
       })
       if (res.error) {
-        setError(res.error.message || 'Invalid email or password')
+        setError(getNeonAuthErrorMessage(res.error, 'Invalid email or password'))
         return
       }
       router.push('/home')
       router.refresh()
-    } catch {
-      setError('An unexpected error occurred')
+    } catch (err) {
+      setError(getNeonAuthErrorMessage(err, 'An unexpected error occurred'))
+      console.error('Login error:', err)
     } finally {
       setIsLoading(false)
     }

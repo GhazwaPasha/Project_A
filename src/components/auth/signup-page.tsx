@@ -55,11 +55,14 @@ export function SignupPage() {
     }
 
     try {
+      const callbackURL =
+        typeof window === 'undefined' ? '/home' : new URL('/home', window.location.origin).toString()
+
       const signUpRes = await authClient.signUp.email({
         email: formData.email,
         password: formData.password,
         name: formData.fullName,
-        callbackURL: '/home',
+        callbackURL,
       })
       if (signUpRes.error) {
         setError(getNeonAuthErrorMessage(signUpRes.error, 'Registration failed'))
