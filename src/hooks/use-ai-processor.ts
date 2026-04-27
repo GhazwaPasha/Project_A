@@ -135,7 +135,7 @@ function parseReminderCommand(input: string): AIResponse {
   return {
     type: 'reminder_creation',
     data: reminderData,
-    message: `✅ Recurring reminder created: ${title} - ${recurring} starting ${dueDateTime}`
+    message: `Recurring reminder created: ${title} — ${recurring} starting ${dueDateTime}`
   }
 }
 
@@ -149,7 +149,7 @@ function parseNavigationCommand(input: string): AIResponse {
       page: targetPage,
       parameters
     },
-    message: `📍 Navigating to ${targetPage.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}...`
+    message: `Navigating to ${targetPage.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}…`
   }
 }
 
@@ -163,7 +163,7 @@ function parseReportCommand(input: string): AIResponse {
       reportType,
       parameters
     },
-    message: `📊 Generating ${reportType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}...`
+    message: `Generating ${reportType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}…`
   }
 }
 

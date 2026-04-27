@@ -7,7 +7,7 @@ import { USER_ACCENT_BOOT_INLINE } from '@/lib/user-accent-early'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Accountuitive - Multi-Tenant SaaS Platform',
+  title: 'Accountuitive',
   description: 'Modern accounting software with multi-tenant support, AI integration, and comprehensive financial reporting.',
   keywords: ['accounting', 'SaaS', 'multi-tenant', 'financial reports', 'bookkeeping'],
   authors: [{ name: 'Accountuitive Team' }],

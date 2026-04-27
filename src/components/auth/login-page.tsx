@@ -23,6 +23,9 @@ export function LoginPage() {
     setIsLoading(true)
     setError('')
 
+    /** When true, keep the button spinner until this route unmounts after client navigation. */
+    let holdLoadingUntilNavigate = false
+
     try {
       const res = await authClient.signIn.email({
         email,
@@ -32,13 +35,16 @@ export function LoginPage() {
         setError(getNeonAuthErrorMessage(res.error, 'Invalid email or password'))
         return
       }
+      holdLoadingUntilNavigate = true
       router.push('/home')
       router.refresh()
     } catch (err) {
       setError(getNeonAuthErrorMessage(err, 'An unexpected error occurred'))
       console.error('Login error:', err)
     } finally {
-      setIsLoading(false)
+      if (!holdLoadingUntilNavigate) {
+        setIsLoading(false)
+      }
     }
   }
 

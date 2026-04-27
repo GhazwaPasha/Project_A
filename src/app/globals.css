@@ -75,6 +75,8 @@
     --success-foreground: 255 255 255;
     --warning: 245 158 11;
     --warning-foreground: 28 27 31;
+    --outline: 121 116 126;
+    --outline-variant: 202 196 208;
     --border: 202 196 208;
     --input: 202 196 208;
     --ring: 74 85 104;
@@ -153,6 +155,8 @@
     --success-foreground: 255 255 255;
     --warning: 245 158 11;
     --warning-foreground: 20 18 24;
+    --outline: 147 143 153;
+    --outline-variant: 73 69 79;
     --border: 73 69 79;
     --input: 73 69 79;
     --ring: 113 128 150;

@@ -62,14 +62,12 @@ export function SignupPage() {
       })
       if (signUpRes.error) {
         setError(getNeonAuthErrorMessage(signUpRes.error, 'Registration failed'))
-        setIsLoading(false)
         return
       }
       if (!signUpRes.data?.user) {
         setError(
           'Sign-up did not return a session. If email verification is required, check your inbox or Neon Auth settings.'
         )
-        setIsLoading(false)
         return
       }
 
@@ -87,15 +85,13 @@ export function SignupPage() {
 
       if (!profileRes.ok) {
         setError(typeof profileData.error === 'string' ? profileData.error : 'Could not finish setup')
-        setIsLoading(false)
         return
       }
 
       setSuccess(true)
-      setTimeout(() => {
-        router.push('/home')
-        router.refresh()
-      }, 1200)
+      await new Promise<void>((resolve) => setTimeout(resolve, 1200))
+      router.push('/home')
+      router.refresh()
     } catch (err) {
       setError(getNeonAuthErrorMessage(err, 'An unexpected error occurred'))
       console.error('Signup error:', err)

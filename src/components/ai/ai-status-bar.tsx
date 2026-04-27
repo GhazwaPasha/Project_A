@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Bot, Loader2, CheckCircle, AlertCircle, X } from 'lucide-react'
+import { Bot, Loader2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAIProcessor } from '@/hooks/use-ai-processor'
 import { useAIStatusBar } from '@/contexts/ai-context'
@@ -35,13 +35,17 @@ export function AIStatusBar({ className }: AIStatusBarProps) {
   useEffect(() => {
     if (aiProcessing) {
       setIsProcessing(true)
-      setStatusMessage('🤖 AI is thinking...')
+      setStatusMessage('AI is thinking…')
     }
   }, [aiProcessing])
 
   // Auto-collapse after 5 seconds when showing response
   useEffect(() => {
-    if (statusMessage.includes('✅') || statusMessage.includes('📍') || statusMessage.includes('📊')) {
+    if (
+      statusMessage.includes('Navigating to') ||
+      statusMessage.includes('Generating') ||
+      statusMessage.includes('reminder created')
+    ) {
       statusTimeoutRef.current = setTimeout(() => {
         if (!isExpanded && !isProcessing) {
           setStatusMessage('Your AI Sidekick - Ready')
@@ -57,28 +61,37 @@ export function AIStatusBar({ className }: AIStatusBarProps) {
   }, [statusMessage, isExpanded, isProcessing])
 
   // Handle input submission
+  const clearInputEditor = useCallback(() => {
+    if (inputRef.current) {
+      inputRef.current.textContent = ''
+    }
+  }, [])
+
+  // Handle input submission
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     
-    const command = inputValue.trim()
+    const command = (inputRef.current?.textContent || inputValue).trim()
     if (!command) {
       collapseToNormal()
       return
     }
 
     setIsProcessing(true)
-    setStatusMessage('🤖 Processing...')
+    setStatusMessage('Processing…')
     
     try {
       const response = await processCommand(command)
       setStatusMessage(response.message || 'Command processed successfully')
       setInputValue('')
+      clearInputEditor()
+      setIsExpanded(false)
     } catch (error) {
-      setStatusMessage(`❌ ${error instanceof Error ? error.message : 'Processing error'}`)
+      setStatusMessage(error instanceof Error ? error.message : 'Processing error')
     } finally {
       setIsProcessing(false)
     }
-  }, [inputValue, processCommand])
+  }, [inputValue, processCommand, clearInputEditor])
 
   // Handle input change
   const handleInputChange = (e: React.ChangeEvent<HTMLDivElement>) => {
@@ -100,6 +113,7 @@ export function AIStatusBar({ className }: AIStatusBarProps) {
     if (!isExpanded && !isProcessing) {
       setIsExpanded(true)
       setInputValue('')
+      clearInputEditor()
       setTimeout(() => {
         inputRef.current?.focus()
       }, 100)
@@ -117,6 +131,7 @@ export function AIStatusBar({ className }: AIStatusBarProps) {
   const collapseToNormal = () => {
     setIsExpanded(false)
     setInputValue('')
+    clearInputEditor()
     setIsProcessing(false)
     if (!isShowingNotification) {
       updateStatus()
@@ -130,15 +145,7 @@ export function AIStatusBar({ className }: AIStatusBarProps) {
       const message = process.message || 'Background process running'
       const progress = process.progress || ''
       
-      if (message.toLowerCase().includes('sync')) {
-        setStatusMessage(`🔄 ${message} ${progress}`)
-      } else if (message.toLowerCase().includes('backup')) {
-        setStatusMessage(`💾 ${message} ${progress}`)
-      } else if (message.toLowerCase().includes('report')) {
-        setStatusMessage(`📊 ${message} ${progress}`)
-      } else {
-        setStatusMessage(`⚙️ ${message} ${progress}`)
-      }
+      setStatusMessage(`${message} ${progress}`.trim())
     } else if (unreadNotifications > 0) {
       if (unreadNotifications === 1) {
         setStatusMessage('🔔 1 unread notification')
@@ -152,22 +159,21 @@ export function AIStatusBar({ className }: AIStatusBarProps) {
 
   // Handle focus out
   const handleFocusOut = () => {
-    if (isExpanded && !inputValue.trim()) {
+    if (!isProcessing && isExpanded && !inputValue.trim()) {
       collapseToNormal()
     }
   }
 
   // Show notification
   const showNotification = (title: string, message?: string, type: 'success' | 'warning' | 'error' | 'info' = 'info') => {
-    const icons = {
-      success: '✅',
-      warning: '⚠️',
-      error: '❌',
-      info: '📢'
+    const prefixes: Record<typeof type, string> = {
+      success: '',
+      warning: 'Warning: ',
+      error: 'Error: ',
+      info: '',
     }
-    
-    const icon = icons[type]
-    let displayMessage = `${icon} ${title}`
+
+    let displayMessage = `${prefixes[type]}${title}`
     
     if (message && message.length > 50) {
       displayMessage += `: ${message.substring(0, 47)}...`
