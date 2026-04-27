@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { Plus, Search, Filter, MoreHorizontal, Edit, Trash2, Eye, ArrowLeft } from 'lucide-react'
+import { Plus, Search, Filter, MoreHorizontal, Edit, Trash2, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -48,7 +47,6 @@ function isSchemaNotReadyError(error: unknown): boolean {
 }
 
 export function SupplierList({ organizationId }: SupplierListProps) {
-  const router = useRouter()
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -136,14 +134,6 @@ export function SupplierList({ organizationId }: SupplierListProps) {
     }
   }
 
-  const goBack = () => {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
-      router.back()
-    } else {
-      router.push('/home')
-    }
-  }
-
   const getPaymentTermsLabel = (terms: PaymentTerms | undefined) => {
     if (!terms) return '—'
     switch (terms) {
@@ -179,24 +169,9 @@ export function SupplierList({ organizationId }: SupplierListProps) {
 
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="shrink-0"
-            onClick={goBack}
-            aria-label="Back"
-            title="Back to previous page or home"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="min-w-0">
-            <h1 className="text-3xl font-bold">Suppliers</h1>
-            <p className="text-muted-foreground">
-              Manage your suppliers and their account mappings
-            </p>
-          </div>
+        <div className="min-w-0">
+          <h1 className="text-3xl font-bold">Suppliers</h1>
+          <p className="text-muted-foreground">Manage your suppliers and their account mappings</p>
         </div>
         <Button onClick={() => setShowCreateDialog(true)} disabled={schemaNotReady} className="shrink-0">
           <Plus className="h-4 w-4 mr-2" />
