@@ -265,7 +265,7 @@ export function Win11SettingsPage() {
             <Button
               type="button"
               variant="ghost"
-              className="h-10 w-fit -ml-2 px-3 text-on-surface hover:bg-surface-container-highest rounded-2xl"
+              className="md-surface-nav-button h-10 w-fit -ml-2 px-3 text-on-surface hover:bg-surface-container-highest rounded-2xl"
               onClick={() => setSelectedCategory(null)}
             >
               <ChevronLeft className="w-4 h-4 mr-1" />

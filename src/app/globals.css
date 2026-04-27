@@ -1793,6 +1793,33 @@
     color: var(--md-sys-color-on-primary) !important;
   }
 
+  /* Nav / ghost row on cards (e.g. “All settings”): global `button` + `.dark button` use on-primary
+     and win over `.text-on-surface` — force surface text and transparent fill. */
+  button.md-surface-nav-button,
+  .dark button.md-surface-nav-button {
+    background-color: transparent !important;
+    color: var(--md-sys-color-on-surface) !important;
+    box-shadow: none !important;
+    transform: none !important;
+    border: none !important;
+    padding: 0 12px !important;
+    min-height: 2.5rem !important;
+  }
+
+  button.md-surface-nav-button:hover,
+  .dark button.md-surface-nav-button:hover {
+    background-color: var(--md-sys-color-surface-container-highest) !important;
+    color: var(--md-sys-color-on-surface) !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+
+  button.md-surface-nav-button:focus-visible,
+  .dark button.md-surface-nav-button:focus-visible {
+    outline: none !important;
+    box-shadow: inset 0 0 0 2px var(--md-sys-color-outline-variant) !important;
+  }
+
   /* App top header: icon-only (global `button` rule above forces primary — must override) */
   button.app-header-icon-btn,
   .dark button.app-header-icon-btn {
