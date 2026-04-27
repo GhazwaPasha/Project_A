@@ -5,8 +5,29 @@ import { jwtVerify } from 'jose'
 /**
  * @see @neondatabase/auth Next server adapter (session cache + session token)
  */
-const NEON_AUTH_SESSION_DATA_COOKIE = '__Secure-neon-auth.local.session_data'
-const NEON_AUTH_SESSION_TOKEN_COOKIE = '__Secure-neon-auth.session_token'
+const NEON_AUTH_SESSION_DATA_COOKIES = [
+  '__Secure-neon-auth.session_data',
+  '__Secure-neon-auth.local.session_data',
+  'neon-auth.session_data',
+  'neon-auth.local.session_data',
+]
+const NEON_AUTH_SESSION_TOKEN_COOKIES = [
+  '__Secure-neon-auth.session_token',
+  '__Secure-neon-auth.local.session_token',
+  'neon-auth.session_token',
+  'neon-auth.local.session_token',
+]
+
+function getFirstCookieValue(
+  store: Awaited<ReturnType<typeof cookies>>,
+  names: readonly string[]
+): string | null {
+  for (const name of names) {
+    const value = store.get(name)?.value
+    if (value) return value
+  }
+  return null
+}
 
 function neonAuthConfig() {
   const baseUrl = process.env.NEON_AUTH_BASE_URL?.trim()
@@ -53,8 +74,8 @@ export async function auth(): Promise<AppSession | null> {
   if (!secret) return null
 
   const store = await cookies()
-  if (!store.get(NEON_AUTH_SESSION_TOKEN_COOKIE)?.value) return null
-  const sessionDataValue = store.get(NEON_AUTH_SESSION_DATA_COOKIE)?.value
+  if (!getFirstCookieValue(store, NEON_AUTH_SESSION_TOKEN_COOKIES)) return null
+  const sessionDataValue = getFirstCookieValue(store, NEON_AUTH_SESSION_DATA_COOKIES)
   if (!sessionDataValue) return null
 
   try {
