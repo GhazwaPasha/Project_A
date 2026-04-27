@@ -24,13 +24,9 @@ export function LoginPage() {
     setError('')
 
     try {
-      const callbackURL =
-        typeof window === 'undefined' ? '/home' : new URL('/home', window.location.origin).toString()
-
       const res = await authClient.signIn.email({
         email,
         password,
-        callbackURL,
       })
       if (res.error) {
         setError(getNeonAuthErrorMessage(res.error, 'Invalid email or password'))
