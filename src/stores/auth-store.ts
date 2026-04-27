@@ -98,11 +98,46 @@ export const useAuthStore = create<AuthState>()(
       }
       
       // Load user profile and organizations
-      const [profile, organizations] = await Promise.all([
-        import('@/lib/data-service').then(module => module.DataService.getUserProfile(user.id)),
-        import('@/lib/data-service').then(module => module.DataService.getUserOrganizations(user.id))
+      let [profile, organizations] = await Promise.all([
+        import('@/lib/data-service').then((m) => m.DataService.getUserProfile(user.id)),
+        import('@/lib/data-service').then((m) => m.DataService.getUserOrganizations(user.id)),
       ])
-      
+
+      // Sign-up should create `user_profiles` via /api/auth/complete-profile; if that request
+      // failed silently or cookies were not ready yet, the user can still be signed in but
+      // have no app row — org creation and preferences then fail. Heal on load.
+      if (!profile) {
+        const { authClient } = await import('@/lib/auth-client')
+        const { data: sessionData } = await authClient.getSession()
+        if (sessionData?.user?.id === user.id) {
+          const rawName = sessionData.user.name?.trim()
+          const email = sessionData.user.email?.trim()
+          const fullName =
+            rawName && rawName.length > 0
+              ? rawName
+              : email && email.includes('@')
+                ? email.split('@')[0]!
+                : 'User'
+          const res = await fetch('/api/auth/complete-profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              fullName: fullName.slice(0, 500),
+              organizationName: '',
+              organizationType: 'business',
+            }),
+          })
+          if (res.ok) {
+            const { DataService } = await import('@/lib/data-service')
+            ;[profile, organizations] = await Promise.all([
+              DataService.getUserProfile(user.id),
+              DataService.getUserOrganizations(user.id),
+            ])
+          }
+        }
+      }
+
       set({ profile, organizations })
       if (typeof window !== 'undefined') syncUserAccentLocalStorageFromProfile(profile)
       

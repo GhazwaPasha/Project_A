@@ -71,6 +71,10 @@ export function SignupPage() {
         return
       }
 
+      // Ensure session cookies are visible to the next same-origin request (avoids 401 on
+      // complete-profile in some browsers / hosting right after sign-up).
+      await authClient.getSession()
+
       const profileRes = await fetch('/api/auth/complete-profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
