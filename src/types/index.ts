@@ -226,6 +226,8 @@ export type AccountBalanceRow = {
   credit_balance: number
   transaction_count: number
   last_transaction_date: string | null
+  /** Latest journal entry `created_at` for this account (ISO string); use with `last_transaction_date` for display. */
+  last_transaction_at: string | null
   level: number
   is_postable: boolean
   parent_id: number | null
@@ -239,6 +241,8 @@ export type AccountTransactionRow = {
   entry_id: number
   entry_number: string
   entry_date: string
+  /** When the journal entry row was stored (for time of day; `entry_date` is date-only). */
+  created_at: string
   description: string
   reference: string | null
   debit_amount: number

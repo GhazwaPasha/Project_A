@@ -1,6 +1,6 @@
 # 🚀 React Web Migration Report: Accountuitive Multi-Tenant SaaS Platform
 
-**Status (2026):** The PyQt6 desktop application has been retired from this repository. The web application in `web-app/` is the supported client. Historical sections below that refer to “parallel desktop” or “keep desktop running” are superseded.
+**Status (2026):** The PyQt6 desktop application has been retired from this repository. The web application at the repository root (Next.js) is the supported client. Historical sections below that refer to “parallel desktop” or “keep desktop running” are superseded.
 
 ## 📊 Executive Summary
 

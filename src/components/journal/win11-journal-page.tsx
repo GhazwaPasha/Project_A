@@ -1,32 +1,29 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { 
   Plus, 
   Search, 
-  Trash2,
   Calendar,
   FileText,
-  Grid3X3,
-  List,
   Info,
 } from 'lucide-react'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatEntryDateTime } from '@/lib/utils'
+import { accountCodeChipClass } from '@/lib/account-type-badges'
 import { JournalEntryDialog } from './journal-entry-dialog'
 import { BulkEntryDialog } from './bulk-entry-dialog'
 import { JournalEntry, Account, JournalEntryLine } from '@/types'
 import { useJournalEntries, useAccounts } from '@/hooks/use-organization-data'
 import { useOrgDataPermission, useOrgMemberRoleResolved } from '@/hooks/use-org-permissions'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { JournalListSkeleton } from '@/components/loading/app-page-skeletons'
 
 export function Win11JournalPage() {
   const roleResolved = useOrgMemberRoleResolved()
   const canWriteJournal = useOrgDataPermission('ledger.write')
   const [searchTerm, setSearchTerm] = useState('')
-  const [viewMode, setViewMode] = useState('cards') // 'cards' or 'table'
   const [showNewEntryDialog, setShowNewEntryDialog] = useState(false)
   const [showBulkEntryDialog, setShowBulkEntryDialog] = useState(false)
   const [showSearchField, setShowSearchField] = useState(false)
@@ -170,10 +167,7 @@ export function Win11JournalPage() {
       {/* Main Content */}
       <div className="px-6 py-6">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20">
-            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p className="text-on-surface-variant">Loading journal entries...</p>
-          </div>
+          <JournalListSkeleton />
         ) : filteredTransactions.length === 0 ? (
           /* Empty State */
           <div className="flex flex-col items-center justify-center py-20">
@@ -209,65 +203,71 @@ export function Win11JournalPage() {
             </div>
           </div>
         ) : (
-           /* Transaction List - Compact Two-Line Cards */
-           <div className="space-y-2">
-             {filteredTransactions.map((entry) => {
-               const { debit, credit, detail } = getDebitAndCreditSummary(entry)
-               return (
-                 <Card key={entry.id} className="md-card-expressive group hover:md-elevation-1 transition-all duration-200">
-                   <CardContent className="p-4">
-                     {/* First Line - Transaction Info */}
-                     <div className="flex items-center justify-between mb-2">
-                       <div className="flex items-center space-x-3 flex-1 min-w-0">
-                         <h3 className="md-title-medium text-on-surface truncate">{entry.description}</h3>
-                       </div>
-                       {/* Debit and Credit Accounts - Moved to top right */}
-                         <div className="flex flex-col items-end gap-1 text-sm min-w-0 max-w-md">
-                         <div className="flex items-center space-x-4 flex-wrap justify-end">
-                         <div className="flex items-center space-x-2 min-w-0">
-                           <span className="px-2 py-1 rounded-md text-xs font-medium bg-primary text-on-primary">Debit</span>
-                           <span className="text-on-surface font-medium truncate max-w-40">{debit}</span>
-                         </div>
-                         <div className="flex items-center space-x-2 min-w-0">
-                           <span className="px-2 py-1 rounded-md text-xs font-medium bg-primary text-on-primary">Credit</span>
-                           <span className="text-on-surface font-medium truncate max-w-40">{credit}</span>
-                         </div>
-                         </div>
-                         {detail ? (
-                           <span className="text-xs text-on-surface-variant text-right w-full">{detail}</span>
-                         ) : null}
-                       </div>
-                     </div>
+          <div
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"
+            role="list"
+            aria-label="Journal entries"
+          >
+            {filteredTransactions.map((entry) => {
+              const { debit, credit, detail } = getDebitAndCreditSummary(entry)
+              return (
+                <Card
+                  key={entry.id}
+                  role="listitem"
+                  className="md-card-expressive group relative overflow-hidden border border-outline-variant/30 hover:border-primary/25 hover:md-elevation-1 transition-all duration-200 h-full flex flex-col"
+                >
+                  <div
+                    className="absolute left-0 top-0 bottom-0 w-1 bg-primary/35 group-hover:bg-primary/55 transition-colors"
+                    aria-hidden
+                  />
+                  <CardContent className="p-0 flex flex-col flex-1 min-h-0 pl-1">
+                    <div className="px-4 pt-4 pb-3 space-y-3 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <span className={accountCodeChipClass()}>{entry.entry_number}</span>
+                        <span className="md-title-large text-on-surface tabular-nums text-right leading-none shrink-0">
+                          {formatCurrency(entry.total_amount)}
+                        </span>
+                      </div>
 
-                     {/* Third Line - Date, Reference, and Total Amount */}
-                     <div className="flex items-center justify-between">
-                       <div className="flex items-center space-x-4 text-sm text-on-surface-variant">
-                         <span className="flex items-center space-x-1">
-                           <Calendar className="w-3 h-3" />
-                           <span>{formatDate(entry.entry_date)}</span>
-                         </span>
-                         {entry.reference && (
-                           <span className="flex items-center space-x-1">
-                             <span className="w-1 h-1 bg-outline rounded-full"></span>
-                             <span>{entry.reference}</span>
-                           </span>
-                         )}
-                         <span className="flex items-center space-x-1">
-                           <span className="w-1 h-1 bg-outline rounded-full"></span>
-                           <span>{entry.entry_number}</span>
-                         </span>
-                       </div>
-                       <div className="flex items-center space-x-6">
-                         <span className="md-title-large text-on-surface font-medium">
-                           {formatCurrency(entry.total_amount)}
-                         </span>
-                       </div>
-                     </div>
-                   </CardContent>
-                 </Card>
-               )
-             })}
-           </div>
+                      <p className="md-title-small text-on-surface line-clamp-3 leading-snug">{entry.description}</p>
+
+                      <dl className="grid grid-cols-[2.25rem_1fr] gap-x-2 gap-y-1.5 text-sm">
+                        <dt className="text-on-surface-variant/80 font-medium tabular-nums">Dr</dt>
+                        <dd className="text-on-surface min-w-0 line-clamp-2 leading-tight">{debit}</dd>
+                        <dt className="text-on-surface-variant/80 font-medium tabular-nums">Cr</dt>
+                        <dd className="text-on-surface min-w-0 line-clamp-2 leading-tight">{credit}</dd>
+                      </dl>
+
+                      {detail ? (
+                        <p className="text-xs text-on-surface-variant/90 leading-relaxed line-clamp-2 border-l-2 border-outline-variant/60 pl-2">
+                          {detail}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div className="px-4 py-2.5 bg-surface-container/50 border-t border-outline-variant/40 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-on-surface-variant">
+                      <span className="inline-flex items-center gap-1 min-w-0">
+                        <Calendar className="w-3.5 h-3.5 shrink-0 text-on-surface-variant/70" aria-hidden />
+                        <span className="min-w-0 break-words">
+                          {formatEntryDateTime(entry.entry_date, entry.created_at)}
+                        </span>
+                      </span>
+                      {entry.reference ? (
+                        <>
+                          <span className="text-on-surface-variant/40" aria-hidden>
+                            |
+                          </span>
+                          <span className="min-w-0 truncate max-w-full" title={entry.reference}>
+                            {entry.reference}
+                          </span>
+                        </>
+                      ) : null}
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
         )}
       </div>
 

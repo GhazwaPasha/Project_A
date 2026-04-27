@@ -86,9 +86,8 @@ out
 .nuxt
 dist
 
-# Gatsby files
+# Gatsby / legacy (do not ignore Next.js `public/` at repo root)
 .cache/
-public
 
 # Vuepress build output
 .vuepress/dist
@@ -347,3 +346,7 @@ user_data/
 # Local configuration files
 config.local.js
 config.local.json
+
+# Local-only test account notes (see TEST_CREDENTIALS.md)
+TEST_CREDENTIALS.md
+.gitnexus

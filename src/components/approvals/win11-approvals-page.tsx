@@ -44,6 +44,7 @@ import { VoucherApprovalDialog } from '@/components/vouchers/voucher-approval-di
 import { VoucherRenewDialog } from '@/components/vouchers/voucher-renew-dialog'
 import { VoucherViewDialog } from '@/components/vouchers/voucher-view-dialog'
 import { InventoryVoucher } from '@/types'
+import { ApprovalsVoucherGridSkeleton } from '@/components/loading/app-page-skeletons'
 
 const FILTER_STATUS_VALUES = new Set(['all', 'pending_finance', 'approved', 'rejected', 'expired'])
 const FILTER_TYPE_VALUES = new Set(['all', 'purchase', 'issuance'])
@@ -452,9 +453,7 @@ export function Win11ApprovalsPage() {
         </div>
 
         {vouchersLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          </div>
+          <ApprovalsVoucherGridSkeleton />
         ) : filteredVouchers.length === 0 ? (
           /* Empty State */
           <div className="flex flex-col items-center justify-center py-20">

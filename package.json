@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "db:apply-inventory": "node scripts/apply-sql-file.mjs"
+    "db:apply-inventory": "node scripts/js/apply-sql-file.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.2",

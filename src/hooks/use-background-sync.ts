@@ -67,12 +67,17 @@ export const useBackgroundSync = (options?: { enabled?: boolean }) => {
     if (!enabled) return
     
     const handleOnline = () => {
-      if (currentOrganization) {
-        queryClient.invalidateQueries({
-          predicate: (query) => query.queryKey.includes(currentOrganization.id)
-        })
-        lastSyncTimeRef.current = Date.now()
+      if (!currentOrganization) return
+      const id = currentOrganization.id
+      // Match interval/visibility: only financial + report prefixes — avoids
+      // refetching inventory, vouchers, journal, etc. in one burst on reconnect.
+      for (const qk of queryKeys.financialQueryPrefixes(id)) {
+        queryClient.invalidateQueries({ queryKey: qk })
       }
+      for (const qk of queryKeys.reportQueryPrefixes(id)) {
+        queryClient.invalidateQueries({ queryKey: qk })
+      }
+      lastSyncTimeRef.current = Date.now()
     }
     
     window.addEventListener('online', handleOnline)

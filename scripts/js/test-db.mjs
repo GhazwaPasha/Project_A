@@ -4,8 +4,9 @@ import { fileURLToPath } from 'url'
 import postgres from 'postgres'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-config({ path: path.join(__dirname, '..', '..', '.env') })
-config({ path: path.join(__dirname, '..', '.env') })
+const repoRoot = path.join(__dirname, '..', '..')
+config({ path: path.join(repoRoot, '.env') })
+config({ path: path.join(repoRoot, '.env.local') })
 
 const u = process.env.DATABASE_URL
 if (!u) {

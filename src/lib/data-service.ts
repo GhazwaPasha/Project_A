@@ -143,8 +143,16 @@ export class DataService {
     return appDataRequest('DataService', 'getTrialBalance', [organizationId, asOfDate])
   }
 
-  static async getFinancialMetrics(organizationId: string): Promise<FinancialMetricsData> {
-    return appDataRequest<FinancialMetricsData>('DataService', 'getFinancialMetrics', [organizationId])
+  static async getFinancialMetrics(
+    organizationId: string,
+    fromDate?: string,
+    toDate?: string
+  ): Promise<FinancialMetricsData> {
+    return appDataRequest<FinancialMetricsData>('DataService', 'getFinancialMetrics', [
+      organizationId,
+      fromDate,
+      toDate,
+    ])
   }
 
   /** One `/api/app-data` call: financial metrics + account balances (server runs them in parallel). */

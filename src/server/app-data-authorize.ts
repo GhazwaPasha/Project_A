@@ -1,5 +1,5 @@
 import { getSql } from '@/server/pg'
-import { getOrganizationMemberRole, isUserProfileSuperAdmin } from '@/server/organization-access'
+import { getOrgPermissionSnapshot, isUserProfileSuperAdmin } from '@/server/organization-access'
 import { hasOrgDataPermission, type OrgDataPermission } from '@/lib/organization-permissions'
 
 const UUID_RE =
@@ -14,8 +14,10 @@ async function requireDataPermission(
   if (!organizationId || !UUID_RE.test(organizationId)) {
     throw new Error('Forbidden')
   }
-  if (await isUserProfileSuperAdmin(userId)) return
-  const role = await getOrganizationMemberRole(organizationId, userId)
+  const snap = await getOrgPermissionSnapshot(userId, organizationId)
+  if (!snap) throw new Error('Forbidden')
+  if (snap.isSuperAdmin) return
+  const role = snap.memberRole
   if (!role) throw new Error('Forbidden')
   if (!hasOrgDataPermission(role, perm)) throw new Error('Forbidden')
 }
@@ -29,8 +31,10 @@ async function requireAnyDataPermission(
   if (!organizationId || !UUID_RE.test(organizationId)) {
     throw new Error('Forbidden')
   }
-  if (await isUserProfileSuperAdmin(userId)) return
-  const role = await getOrganizationMemberRole(organizationId, userId)
+  const snap = await getOrgPermissionSnapshot(userId, organizationId)
+  if (!snap) throw new Error('Forbidden')
+  if (snap.isSuperAdmin) return
+  const role = snap.memberRole
   if (!role) throw new Error('Forbidden')
   for (const p of perms) {
     if (hasOrgDataPermission(role, p)) return

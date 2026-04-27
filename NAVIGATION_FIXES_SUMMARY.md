@@ -14,7 +14,7 @@ Pages were getting stuck in loading states during navigation, but would load imm
 ## Solutions Implemented
 
 ### 1. Fixed React Query Configuration
-- **File**: `web-app/src/lib/query-client.ts`
+- **File**: `src/src/lib/query-client.ts`
 - **Changes**:
   - Enabled `refetchOnMount: true` and `refetchOnWindowFocus: true`
   - Implemented exponential backoff retry logic
@@ -22,7 +22,7 @@ Pages were getting stuck in loading states during navigation, but would load imm
   - Added proper error handling and timeouts
 
 ### 2. Created Error Boundaries
-- **File**: `web-app/src/components/error-boundaries/query-error-boundary.tsx`
+- **File**: `src/src/components/error-boundaries/query-error-boundary.tsx`
 - **Features**:
   - Catches and handles stuck queries
   - Auto-retry for network errors
@@ -30,7 +30,7 @@ Pages were getting stuck in loading states during navigation, but would load imm
   - Fallback UI with retry options
 
 ### 3. Unified Organization Context
-- **File**: `web-app/src/contexts/organization-context.tsx`
+- **File**: `src/src/contexts/organization-context.tsx`
 - **Features**:
   - Single source of truth for organization state
   - Centralized loading state management
@@ -38,7 +38,7 @@ Pages were getting stuck in loading states during navigation, but would load imm
   - Optimized data preloading
 
 ### 4. Standardized Query Keys
-- **File**: `web-app/src/lib/query-keys.ts`
+- **File**: `src/src/lib/query-keys.ts`
 - **Features**:
   - Centralized query key factory
   - Consistent patterns across all hooks
@@ -47,11 +47,11 @@ Pages were getting stuck in loading states during navigation, but would load imm
 
 ### 5. Updated All Hooks
 - **Files**: 
-  - `web-app/src/hooks/use-organization-data.ts`
-  - `web-app/src/hooks/use-inventory.ts`
-  - `web-app/src/hooks/use-vouchers.ts`
-  - `web-app/src/hooks/use-background-sync.ts`
-  - `web-app/src/hooks/use-smart-prefetch.ts`
+  - `src/src/hooks/use-organization-data.ts`
+  - `src/src/hooks/use-inventory.ts`
+  - `src/src/hooks/use-vouchers.ts`
+  - `src/src/hooks/use-background-sync.ts`
+  - `src/src/hooks/use-smart-prefetch.ts`
 - **Changes**:
   - Updated to use new organization context
   - Standardized query keys
@@ -59,7 +59,7 @@ Pages were getting stuck in loading states during navigation, but would load imm
   - Better loading state management
 
 ### 6. Created Loading State Manager
-- **File**: `web-app/src/hooks/use-loading-state.ts`
+- **File**: `src/src/hooks/use-loading-state.ts`
 - **Features**:
   - Centralized loading state management
   - Page-level loading states
@@ -68,9 +68,9 @@ Pages were getting stuck in loading states during navigation, but would load imm
 
 ### 7. Updated Components
 - **Files**:
-  - `web-app/src/components/providers.tsx`
-  - `web-app/src/components/reports/balance-sheet-report.tsx`
-  - `web-app/src/components/inventory/win11-inventory-page.tsx`
+  - `src/src/components/providers.tsx`
+  - `src/src/components/reports/balance-sheet-report.tsx`
+  - `src/src/components/inventory/win11-inventory-page.tsx`
 - **Changes**:
   - Integrated error boundaries
   - Updated to use new loading states
@@ -119,27 +119,27 @@ Pages were getting stuck in loading states during navigation, but would load imm
 ## Files Modified
 
 ### Core Infrastructure
-- `web-app/src/lib/query-client.ts` - React Query configuration
-- `web-app/src/lib/query-keys.ts` - Standardized query keys
-- `web-app/src/lib/organization-cache.ts` - Updated cache management
+- `src/src/lib/query-client.ts` - React Query configuration
+- `src/src/lib/query-keys.ts` - Standardized query keys
+- `src/src/lib/organization-cache.ts` - Updated cache management
 
 ### Contexts and Providers
-- `web-app/src/contexts/organization-context.tsx` - New organization context
-- `web-app/src/components/providers.tsx` - Updated provider structure
+- `src/src/contexts/organization-context.tsx` - New organization context
+- `src/src/components/providers.tsx` - Updated provider structure
 
 ### Hooks
-- `web-app/src/hooks/use-organization.ts` - Updated organization hook
-- `web-app/src/hooks/use-organization-data.ts` - Updated data hooks
-- `web-app/src/hooks/use-inventory.ts` - Updated inventory hooks
-- `web-app/src/hooks/use-vouchers.ts` - Updated voucher hooks
-- `web-app/src/hooks/use-background-sync.ts` - Updated background sync
-- `web-app/src/hooks/use-smart-prefetch.ts` - Updated prefetch logic
-- `web-app/src/hooks/use-loading-state.ts` - New loading state manager
+- `src/src/hooks/use-organization.ts` - Updated organization hook
+- `src/src/hooks/use-organization-data.ts` - Updated data hooks
+- `src/src/hooks/use-inventory.ts` - Updated inventory hooks
+- `src/src/hooks/use-vouchers.ts` - Updated voucher hooks
+- `src/src/hooks/use-background-sync.ts` - Updated background sync
+- `src/src/hooks/use-smart-prefetch.ts` - Updated prefetch logic
+- `src/src/hooks/use-loading-state.ts` - New loading state manager
 
 ### Components
-- `web-app/src/components/error-boundaries/query-error-boundary.tsx` - New error boundary
-- `web-app/src/components/reports/balance-sheet-report.tsx` - Updated report component
-- `web-app/src/components/inventory/win11-inventory-page.tsx` - Updated inventory page
+- `src/src/components/error-boundaries/query-error-boundary.tsx` - New error boundary
+- `src/src/components/reports/balance-sheet-report.tsx` - Updated report component
+- `src/src/components/inventory/win11-inventory-page.tsx` - Updated inventory page
 
 ## Expected Results
 

@@ -10,44 +10,60 @@ type TrialRow = {
   cr: string | null
 }
 
+/** Second argument to `fetchTrialBalanceSums`: legacy string = as-of date, or structured range. */
+export type LedgerLineDateFilter =
+  | string
+  | {
+      asOfDate?: string
+      fromDate?: string
+      toDate?: string
+    }
+
+function parseLedgerLineDateFilter(filter?: LedgerLineDateFilter | null): {
+  asOf: string | null
+  from: string | null
+  to: string | null
+} {
+  if (filter == null || filter === '') {
+    return { asOf: null, from: null, to: null }
+  }
+  if (typeof filter === 'string') {
+    const t = filter.trim()
+    return t ? { asOf: t, from: null, to: null } : { asOf: null, from: null, to: null }
+  }
+  const asOf = filter.asOfDate?.trim() || null
+  if (asOf) return { asOf, from: null, to: null }
+  return {
+    asOf: null,
+    from: filter.fromDate?.trim() || null,
+    to: filter.toDate?.trim() || null,
+  }
+}
+
+function journalLineDateFragment(
+  sql: ReturnType<typeof getSql>,
+  parts: ReturnType<typeof parseLedgerLineDateFilter>
+) {
+  const { asOf, from, to } = parts
+  if (asOf) return sql`AND je.entry_date <= ${asOf}::date`
+  if (from && to) return sql`AND je.entry_date >= ${from}::date AND je.entry_date <= ${to}::date`
+  if (from) return sql`AND je.entry_date >= ${from}::date`
+  if (to) return sql`AND je.entry_date <= ${to}::date`
+  return sql``
+}
+
 /**
- * One-query trial balance: debit/credit totals per account, optional as-of date on journal entry_date.
+ * Trial balance: debit/credit totals per account in one query.
+ * - Pass a string for legacy as-of (`entry_date <= date`).
+ * - Pass `{ fromDate, toDate }` for dashboard date range (same rules as `getAccountBalances`).
  */
 export async function fetchTrialBalanceSums(
   organizationId: string,
-  asOfDate?: string
+  dateFilter?: LedgerLineDateFilter | null
 ): Promise<TrialRow[]> {
   const sql = getSql()
-  const asOf = asOfDate && asOfDate.trim() !== '' ? asOfDate : null
-
-  if (asOf) {
-    return (await sql<TrialRow[]>`
-      WITH sums AS (
-        SELECT
-          jel.account_id,
-          COALESCE(SUM(jel.debit_amount), 0)::numeric AS dr,
-          COALESCE(SUM(jel.credit_amount), 0)::numeric AS cr
-        FROM public.journal_entry_lines jel
-        INNER JOIN public.journal_entries je ON je.id = jel.journal_entry_id
-        WHERE je.organization_id = ${organizationId}::uuid
-          AND je.entry_date <= ${asOf}::date
-        GROUP BY jel.account_id
-      )
-      SELECT
-        a.id,
-        a.code,
-        a.name,
-        a.account_type,
-        s.dr::text AS dr,
-        s.cr::text AS cr
-      FROM public.accounts a
-      LEFT JOIN sums s ON s.account_id = a.id
-      WHERE a.organization_id = ${organizationId}::uuid
-        AND a.is_active = true
-      ORDER BY a.code
-    `) as TrialRow[]
-  }
-
+  const parts = parseLedgerLineDateFilter(dateFilter ?? undefined)
+  const d = journalLineDateFragment(sql, parts)
   return (await sql<TrialRow[]>`
     WITH sums AS (
       SELECT
@@ -57,6 +73,7 @@ export async function fetchTrialBalanceSums(
       FROM public.journal_entry_lines jel
       INNER JOIN public.journal_entries je ON je.id = jel.journal_entry_id
       WHERE je.organization_id = ${organizationId}::uuid
+      ${d}
       GROUP BY jel.account_id
     )
     SELECT
@@ -72,6 +89,41 @@ export async function fetchTrialBalanceSums(
       AND a.is_active = true
     ORDER BY a.code
   `) as TrialRow[]
+}
+
+/** Per-account aggregates for balances UI — all work in Postgres (no row-by-row line fetch). */
+export type JournalLineAggRow = {
+  account_id: number
+  dr: string
+  cr: string
+  txn_count: string
+  last_entry: string | null
+  /** Latest `journal_entries.created_at` for lines in scope (wall-clock last activity). */
+  last_activity_at: string | null
+}
+
+export async function fetchJournalLineAggregatesByOrg(
+  organizationId: string,
+  fromDate?: string,
+  toDate?: string
+): Promise<JournalLineAggRow[]> {
+  const sql = getSql()
+  const parts = parseLedgerLineDateFilter({ fromDate, toDate })
+  const d = journalLineDateFragment(sql, parts)
+  return (await sql<JournalLineAggRow[]>`
+    SELECT
+      jel.account_id,
+      COALESCE(SUM(jel.debit_amount), 0)::numeric::text AS dr,
+      COALESCE(SUM(jel.credit_amount), 0)::numeric::text AS cr,
+      COUNT(*)::text AS txn_count,
+      MAX(je.entry_date)::text AS last_entry,
+      MAX(je.created_at)::text AS last_activity_at
+    FROM public.journal_entry_lines jel
+    INNER JOIN public.journal_entries je ON je.id = jel.journal_entry_id
+    WHERE je.organization_id = ${organizationId}::uuid
+    ${d}
+    GROUP BY jel.account_id
+  `) as JournalLineAggRow[]
 }
 
 export function trialRowToDebitsCredits(row: TrialRow): {

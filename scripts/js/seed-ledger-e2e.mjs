@@ -1,10 +1,10 @@
 /**
  * Seeds two postable accounts and one balanced journal entry for E2E / local verification.
- * Usage (from web-app, with root .env loaded):
- *   node scripts/seed-ledger-e2e.mjs <organization_uuid> <user_uuid>
+ * Usage (from repo root, with .env loaded):
+ *   node scripts/js/seed-ledger-e2e.mjs <organization_uuid> <user_uuid>
  *
  * Example (PowerShell):
- *   node scripts/seed-ledger-e2e.mjs "0946405f-3b8a-4fe5-8c29-125b39d9ca8e" "e1b68757-3e5c-4ca1-951c-f28c26893b96"
+ *   node scripts/js/seed-ledger-e2e.mjs "0946405f-3b8a-4fe5-8c29-125b39d9ca8e" "e1b68757-3e5c-4ca1-951c-f28c26893b96"
  */
 import { config } from 'dotenv'
 import path from 'path'
@@ -12,8 +12,9 @@ import { fileURLToPath } from 'url'
 import postgres from 'postgres'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-config({ path: path.join(__dirname, '..', '..', '.env') })
-config({ path: path.join(__dirname, '..', '.env') })
+const repoRoot = path.join(__dirname, '..', '..')
+config({ path: path.join(repoRoot, '.env') })
+config({ path: path.join(repoRoot, '.env.local') })
 
 const orgId = process.argv[2]
 const userId = process.argv[3]

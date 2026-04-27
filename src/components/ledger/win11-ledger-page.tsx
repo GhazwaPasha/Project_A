@@ -18,7 +18,12 @@ import {
   TrendingDown,
   DollarSign
 } from 'lucide-react'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import {
+  formatAccountLastActivity,
+  formatCurrency,
+  formatDateTime,
+  formatEntryDateTime,
+} from '@/lib/utils'
 import { accountTypeBadgeClass, accountLevelBadgeClass, accountCodeChipClass } from '@/lib/account-type-badges'
 import { DataService } from '@/lib/data-service'
 import type { AccountBalanceRow, AccountTransactionRow, AccountType } from '@/types'
@@ -37,6 +42,7 @@ export function Win11LedgerPage() {
   const { currentOrganization } = useOrganization()
   const [showSearchField, setShowSearchField] = useState(false)
   const [dateRange, setDateRange] = useState<DateRange>({ startDate: null, endDate: null })
+  const [accountsLastUpdated, setAccountsLastUpdated] = useState<Date | null>(null)
 
   // Load data on component mount and when organization changes
   useEffect(() => {
@@ -58,6 +64,7 @@ export function Win11LedgerPage() {
       // Load account balances with date filtering for current organization
       const accountBalances = await DataService.getAccountBalances(currentOrganization.id, fromDate, toDate)
       setAccounts(accountBalances)
+      setAccountsLastUpdated(new Date())
     } catch (error) {
       console.error('Error loading data:', error)
     } finally {
@@ -168,14 +175,14 @@ export function Win11LedgerPage() {
             <p><strong>Account Type:</strong> ${account.account_type.charAt(0).toUpperCase() + account.account_type.slice(1)}</p>
             <p><strong>Current Balance:</strong> ${formatCurrency(account.balance)}</p>
             <p><strong>Total Transactions:</strong> ${transactions.length}</p>
-            ${account.last_transaction_date ? `<p><strong>Last Transaction:</strong> ${formatDate(account.last_transaction_date)}</p>` : ''}
+            ${formatAccountLastActivity(account.last_transaction_date, account.last_transaction_at) ? `<p><strong>Last activity:</strong> ${formatAccountLastActivity(account.last_transaction_date, account.last_transaction_at)}</p>` : ''}
           </div>
 
           <h3>Transaction History</h3>
           <table>
             <thead>
               <tr>
-                <th>Date</th>
+                <th>Date & time</th>
                 <th>Description</th>
                 <th>Reference</th>
                 <th class="text-right">Debit</th>
@@ -186,7 +193,7 @@ export function Win11LedgerPage() {
             <tbody>
               ${transactions.map(transaction => `
                 <tr>
-                  <td>${formatDate(transaction.entry_date)}</td>
+                  <td>${formatEntryDateTime(transaction.entry_date, transaction.created_at)}</td>
                   <td>${transaction.description}</td>
                   <td>${transaction.reference || transaction.entry_number}</td>
                   <td class="text-right">${transaction.debit_amount > 0 ? formatCurrency(transaction.debit_amount) : '-'}</td>
@@ -278,9 +285,10 @@ export function Win11LedgerPage() {
   }
 
   const generateCSVContent = () => {
-    const csvHeader = 'Date,Description,Reference,Debit,Credit,Balance\n'
-    const csvRows = transactions.map(transaction => 
-      `${formatDate(transaction.entry_date)},"${transaction.description}","${transaction.reference || transaction.entry_number}",${transaction.debit_amount > 0 ? transaction.debit_amount : ''},${transaction.credit_amount > 0 ? transaction.credit_amount : ''},${transaction.balance}`
+    const csvHeader = 'Date and time,Description,Reference,Debit,Credit,Balance\n'
+    const esc = (s: string) => `"${s.replace(/"/g, '""')}"`
+    const csvRows = transactions.map((transaction) =>
+      `${esc(formatEntryDateTime(transaction.entry_date, transaction.created_at))},${esc(transaction.description)},${esc(transaction.reference || transaction.entry_number)},${transaction.debit_amount > 0 ? transaction.debit_amount : ''},${transaction.credit_amount > 0 ? transaction.credit_amount : ''},${transaction.balance}`
     ).join('\n')
     return csvHeader + csvRows
   }
@@ -313,14 +321,14 @@ export function Win11LedgerPage() {
             <tr><td><strong>Account Type:</strong></td><td>${account.account_type.charAt(0).toUpperCase() + account.account_type.slice(1)}</td></tr>
             <tr><td><strong>Current Balance:</strong></td><td>${formatCurrency(account.balance)}</td></tr>
             <tr><td><strong>Total Transactions:</strong></td><td>${transactions.length}</td></tr>
-            ${account.last_transaction_date ? `<tr><td><strong>Last Transaction:</strong></td><td>${formatDate(account.last_transaction_date)}</td></tr>` : ''}
+            ${formatAccountLastActivity(account.last_transaction_date, account.last_transaction_at) ? `<tr><td><strong>Last activity:</strong></td><td>${formatAccountLastActivity(account.last_transaction_date, account.last_transaction_at)}</td></tr>` : ''}
           </table>
 
           <h3>Transaction History</h3>
           <table>
             <thead>
               <tr>
-                <th>Date</th>
+                <th>Date & time</th>
                 <th>Description</th>
                 <th>Reference</th>
                 <th class="text-right">Debit</th>
@@ -331,7 +339,7 @@ export function Win11LedgerPage() {
             <tbody>
               ${transactions.map(transaction => `
                 <tr>
-                  <td>${formatDate(transaction.entry_date)}</td>
+                  <td>${formatEntryDateTime(transaction.entry_date, transaction.created_at)}</td>
                   <td>${transaction.description}</td>
                   <td>${transaction.reference || transaction.entry_number}</td>
                   <td class="text-right">${transaction.debit_amount > 0 ? formatCurrency(transaction.debit_amount) : '-'}</td>
@@ -378,14 +386,14 @@ export function Win11LedgerPage() {
             <p><strong>Account Type:</strong> ${account.account_type.charAt(0).toUpperCase() + account.account_type.slice(1)}</p>
             <p><strong>Current Balance:</strong> ${formatCurrency(account.balance)}</p>
             <p><strong>Total Transactions:</strong> ${transactions.length}</p>
-            ${account.last_transaction_date ? `<p><strong>Last Transaction:</strong> ${formatDate(account.last_transaction_date)}</p>` : ''}
+            ${formatAccountLastActivity(account.last_transaction_date, account.last_transaction_at) ? `<p><strong>Last activity:</strong> ${formatAccountLastActivity(account.last_transaction_date, account.last_transaction_at)}</p>` : ''}
           </div>
 
           <h3>Transaction History</h3>
           <table>
             <thead>
               <tr>
-                <th>Date</th>
+                <th>Date & time</th>
                 <th>Description</th>
                 <th>Reference</th>
                 <th class="text-right">Debit</th>
@@ -396,7 +404,7 @@ export function Win11LedgerPage() {
             <tbody>
               ${transactions.map(transaction => `
                 <tr>
-                  <td>${formatDate(transaction.entry_date)}</td>
+                  <td>${formatEntryDateTime(transaction.entry_date, transaction.created_at)}</td>
                   <td>${transaction.description}</td>
                   <td>${transaction.reference || transaction.entry_number}</td>
                   <td class="text-right">${transaction.debit_amount > 0 ? formatCurrency(transaction.debit_amount) : '-'}</td>
@@ -450,7 +458,10 @@ export function Win11LedgerPage() {
 
   if (selectedAccount) {
     const account = accounts.find(acc => acc.id.toString() === selectedAccount)
-    
+    const accountLastActivity = account
+      ? formatAccountLastActivity(account.last_transaction_date, account.last_transaction_at)
+      : null
+
     return (
       <div className="min-h-screen" style={{ backgroundColor: 'var(--md-sys-color-background)' }}>
         {/* Fixed Header */}
@@ -520,11 +531,11 @@ export function Win11LedgerPage() {
                   <div className="text-sm text-on-surface-variant">
                     {account?.transaction_count || 0} transactions
                   </div>
-                  {account?.last_transaction_date && (
+                  {accountLastActivity ? (
                     <div className="text-sm text-on-surface-variant">
-                      Last: {formatDate(account.last_transaction_date)}
+                      Last activity: {accountLastActivity}
                     </div>
-                  )}
+                  ) : null}
                 </div>
               </div>
             </CardContent>
@@ -554,7 +565,7 @@ export function Win11LedgerPage() {
                   <table className="w-full">
                     <thead className="border-b border-outline-variant">
                       <tr>
-                        <th className="text-left p-4 md-body-large text-on-surface font-medium">Date</th>
+                        <th className="text-left p-4 md-body-large text-on-surface font-medium">Date & time</th>
                         <th className="text-left p-4 md-body-large text-on-surface font-medium">Description</th>
                         <th className="text-left p-4 md-body-large text-on-surface font-medium">Reference</th>
                         <th className="text-right p-4 md-body-large text-on-surface font-medium">Debit</th>
@@ -566,7 +577,7 @@ export function Win11LedgerPage() {
                       {transactions.map((transaction, index) => (
                         <tr key={transaction.id} className={`border-b border-outline-variant/50 ${index % 2 === 0 ? 'bg-surface-container/30' : ''}`}>
                           <td className="p-4 md-body-medium text-on-surface-variant">
-                            {formatDate(transaction.entry_date)}
+                            {formatEntryDateTime(transaction.entry_date, transaction.created_at)}
                           </td>
                           <td className="p-4 md-body-medium text-on-surface">
                             {transaction.description}
@@ -605,7 +616,13 @@ export function Win11LedgerPage() {
             <div>
               <h1 className="md-headline-small text-on-background">General Ledger</h1>
               <p className="md-body-medium text-on-surface-variant mt-1">
-                Account balances and transaction details
+                {accounts.length} {accounts.length === 1 ? 'account' : 'accounts'}
+                {accountsLastUpdated ? (
+                  <>
+                    {' '}
+                    · Last updated {formatDateTime(accountsLastUpdated)}
+                  </>
+                ) : null}
               </p>
             </div>
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-2">
@@ -668,7 +685,12 @@ export function Win11LedgerPage() {
         ) : (
           /* Account Cards Grid */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredAccounts.map((account) => (
+            {filteredAccounts.map((account) => {
+              const lastActivity = formatAccountLastActivity(
+                account.last_transaction_date,
+                account.last_transaction_at
+              )
+              return (
               <Card 
                 key={account.id} 
                 className="md-card-expressive group hover:md-elevation-1 transition-all duration-200 cursor-pointer"
@@ -714,18 +736,19 @@ export function Win11LedgerPage() {
                       <span className="md-body-small text-on-surface">{account.transaction_count}</span>
                     </div>
                     
-                    {account.last_transaction_date && (
-                      <div className="flex items-center justify-between">
-                        <span className="md-body-small text-on-surface-variant">Last Activity</span>
-                        <span className="md-body-small text-on-surface-variant">
-                          {formatDate(account.last_transaction_date)}
+                    {lastActivity ? (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="md-body-small text-on-surface-variant shrink-0">Last activity</span>
+                        <span className="md-body-small text-on-surface-variant text-right tabular-nums">
+                          {lastActivity}
                         </span>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

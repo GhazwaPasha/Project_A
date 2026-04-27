@@ -9,6 +9,7 @@ import {
 import { validateJournalLinesForSave } from '@/lib/journal-validation'
 import {
   fetchAccountNetBalance,
+  fetchJournalLineAggregatesByOrg,
   fetchTrialBalanceSums,
   netAmountForAccountType,
   trialRowToDebitsCredits,
@@ -350,7 +351,7 @@ export class DataServiceAdmin {
     debit_balance: number
     credit_balance: number
   }>> {
-    const rows = await fetchTrialBalanceSums(organizationId, asOfDate)
+    const rows = await fetchTrialBalanceSums(organizationId, asOfDate ?? null)
     return rows
       .map((row) => {
         const { debit_balance, credit_balance } = trialRowToDebitsCredits(row)
@@ -368,7 +369,11 @@ export class DataServiceAdmin {
       )
   }
 
-  static async getFinancialMetrics(organizationId: string): Promise<{
+  static async getFinancialMetrics(
+    organizationId: string,
+    fromDate?: string | null,
+    toDate?: string | null
+  ): Promise<{
     totalRevenue: number
     totalExpenses: number
     netIncome: number
@@ -376,7 +381,9 @@ export class DataServiceAdmin {
     totalLiabilities: number
     totalEquity: number
   }> {
-    const rows = await fetchTrialBalanceSums(organizationId)
+    const fd = typeof fromDate === 'string' && fromDate.trim() !== '' ? fromDate : undefined
+    const td = typeof toDate === 'string' && toDate.trim() !== '' ? toDate : undefined
+    const rows = await fetchTrialBalanceSums(organizationId, { fromDate: fd, toDate: td })
     let totalRevenue = 0
     let totalExpenses = 0
     let totalAssets = 0
@@ -419,7 +426,7 @@ export class DataServiceAdmin {
       roa: number
     }
   }> {
-    const m = await this.getFinancialMetrics(organizationId)
+    const m = await this.getFinancialMetrics(organizationId, _fromDate, _toDate)
     const working_capital = m.totalAssets - m.totalLiabilities
     const roa = m.totalAssets > 0 ? m.netIncome / m.totalAssets : 0
     return {
@@ -865,7 +872,7 @@ export class DataServiceAdmin {
     isBalanced: boolean
     generatedAt: string
   }> {
-    const rows = await fetchTrialBalanceSums(organizationId, asOfDate)
+    const rows = await fetchTrialBalanceSums(organizationId, asOfDate ?? null)
     const accounts = rows.map((r) => {
       const { debit_balance, credit_balance } = trialRowToDebitsCredits(r)
       return {
@@ -955,6 +962,7 @@ export class DataServiceAdmin {
     credit_balance: number
     transaction_count: number
     last_transaction_date: string | null
+    last_transaction_at: string | null
     level: number
     is_postable: boolean
     parent_id: number | null
@@ -962,12 +970,15 @@ export class DataServiceAdmin {
     group: string
   }>> {
     const sql = getSql()
-    const accounts = (await sql<Account[]>`
-      SELECT * FROM public.accounts
-      WHERE organization_id = ${organizationId}::uuid
-        AND is_active = true
-      ORDER BY code
-    `) as Account[]
+    const [accounts, aggRows] = await Promise.all([
+      sql<Account[]>`
+        SELECT * FROM public.accounts
+        WHERE organization_id = ${organizationId}::uuid
+          AND is_active = true
+        ORDER BY code
+      `,
+      fetchJournalLineAggregatesByOrg(organizationId, fromDate, toDate),
+    ])
 
     if (!accounts || accounts.length === 0) {
       return []
@@ -995,63 +1006,6 @@ export class DataServiceAdmin {
       return !allAccounts.some((acc) => acc.parent_id === accId)
     }
 
-    type JLine = {
-      account_id: number
-      debit_amount: string
-      credit_amount: string
-      entry_date: string
-    }
-    let allJournalLines: JLine[] = []
-    if (fromDate && toDate) {
-      allJournalLines = (await sql<JLine[]>`
-        SELECT
-          jel.account_id,
-          jel.debit_amount::text,
-          jel.credit_amount::text,
-          je.entry_date::text AS entry_date
-        FROM public.journal_entry_lines jel
-        INNER JOIN public.journal_entries je ON je.id = jel.journal_entry_id
-        WHERE je.organization_id = ${organizationId}::uuid
-          AND je.entry_date >= ${fromDate}::date
-          AND je.entry_date <= ${toDate}::date
-      `) as JLine[]
-    } else if (fromDate) {
-      allJournalLines = (await sql<JLine[]>`
-        SELECT
-          jel.account_id,
-          jel.debit_amount::text,
-          jel.credit_amount::text,
-          je.entry_date::text AS entry_date
-        FROM public.journal_entry_lines jel
-        INNER JOIN public.journal_entries je ON je.id = jel.journal_entry_id
-        WHERE je.organization_id = ${organizationId}::uuid
-          AND je.entry_date >= ${fromDate}::date
-      `) as JLine[]
-    } else if (toDate) {
-      allJournalLines = (await sql<JLine[]>`
-        SELECT
-          jel.account_id,
-          jel.debit_amount::text,
-          jel.credit_amount::text,
-          je.entry_date::text AS entry_date
-        FROM public.journal_entry_lines jel
-        INNER JOIN public.journal_entries je ON je.id = jel.journal_entry_id
-        WHERE je.organization_id = ${organizationId}::uuid
-          AND je.entry_date <= ${toDate}::date
-      `) as JLine[]
-    } else {
-      allJournalLines = (await sql<JLine[]>`
-        SELECT
-          jel.account_id,
-          jel.debit_amount::text,
-          jel.credit_amount::text,
-          je.entry_date::text AS entry_date
-        FROM public.journal_entry_lines jel
-        INNER JOIN public.journal_entries je ON je.id = jel.journal_entry_id
-        WHERE je.organization_id = ${organizationId}::uuid
-      `) as JLine[]
-    }
-
     const accountBalances = new Map<
       number,
       {
@@ -1059,37 +1013,26 @@ export class DataServiceAdmin {
         creditTotal: number
         transactionCount: number
         lastTransactionDate: string | null
+        lastTransactionAt: string | null
       }
     >()
-
-    for (const line of allJournalLines) {
-      const aid = line.account_id
-      const debitAmount = parseFloat(line.debit_amount) || 0
-      const creditAmount = parseFloat(line.credit_amount) || 0
-      const entryDate = line.entry_date
-      if (!accountBalances.has(aid)) {
-        accountBalances.set(aid, {
-          debitTotal: 0,
-          creditTotal: 0,
-          transactionCount: 0,
-          lastTransactionDate: null,
-        })
-      }
-      const b = accountBalances.get(aid)!
-      b.debitTotal += debitAmount
-      b.creditTotal += creditAmount
-      b.transactionCount++
-      if (entryDate && (!b.lastTransactionDate || entryDate > b.lastTransactionDate)) {
-        b.lastTransactionDate = entryDate
-      }
+    for (const row of aggRows) {
+      accountBalances.set(row.account_id, {
+        debitTotal: parseFloat(row.dr) || 0,
+        creditTotal: parseFloat(row.cr) || 0,
+        transactionCount: Number(row.txn_count) || 0,
+        lastTransactionDate: row.last_entry,
+        lastTransactionAt: row.last_activity_at,
+      })
     }
 
-    const accountsWithDetails = accounts.map((account) => {
+    return accounts.map((account) => {
       const balance = accountBalances.get(account.id) || {
         debitTotal: 0,
         creditTotal: 0,
         transactionCount: 0,
         lastTransactionDate: null,
+        lastTransactionAt: null,
       }
 
       const accountType = String(account.account_type).toLowerCase()
@@ -1110,6 +1053,7 @@ export class DataServiceAdmin {
         credit_balance: balance.creditTotal,
         transaction_count: balance.transactionCount,
         last_transaction_date: balance.lastTransactionDate,
+        last_transaction_at: balance.lastTransactionAt,
         level: calculateLevel(account, accounts),
         is_postable: (account as Account).is_postable ?? calculateIsPostable(account, accounts),
         parent_id: account.parent_id || null,
@@ -1117,7 +1061,6 @@ export class DataServiceAdmin {
         group: account.group || '',
       }
     })
-    return accountsWithDetails
   }
 
   /** Single round-trip through `/api/app-data`: runs metrics + balances in parallel on the server. */
@@ -1130,7 +1073,7 @@ export class DataServiceAdmin {
     accountBalances: Awaited<ReturnType<typeof DataServiceAdmin.getAccountBalances>>
   }> {
     const [financialMetrics, accountBalances] = await Promise.all([
-      this.getFinancialMetrics(organizationId),
+      this.getFinancialMetrics(organizationId, fromDate, toDate),
       this.getAccountBalances(organizationId, fromDate, toDate),
     ])
     return { financialMetrics, accountBalances }
@@ -1147,6 +1090,7 @@ export class DataServiceAdmin {
       entry_id: number
       entry_number: string
       entry_date: string
+      created_at: string
       description: string
       reference: string | null
       debit_amount: number
@@ -1162,6 +1106,7 @@ export class DataServiceAdmin {
       entry_id: number
       entry_number: string
       entry_date: string
+      created_at: string
       description: string
       reference: string | null
     }
@@ -1175,6 +1120,7 @@ export class DataServiceAdmin {
           je.id AS entry_id,
           je.entry_number,
           je.entry_date::text AS entry_date,
+          je.created_at::text AS created_at,
           je.description,
           je.reference
         FROM public.journal_entry_lines jel
@@ -1183,7 +1129,7 @@ export class DataServiceAdmin {
           AND je.organization_id = ${organizationId}::uuid
           AND je.entry_date >= ${fromDate}::date
           AND je.entry_date <= ${toDate}::date
-        ORDER BY je.entry_date ASC, jel.id ASC
+        ORDER BY je.entry_date ASC, je.created_at ASC, jel.id ASC
       `) as R[]
     } else if (fromDate) {
       rows = (await sql<R[]>`
@@ -1194,6 +1140,7 @@ export class DataServiceAdmin {
           je.id AS entry_id,
           je.entry_number,
           je.entry_date::text AS entry_date,
+          je.created_at::text AS created_at,
           je.description,
           je.reference
         FROM public.journal_entry_lines jel
@@ -1201,7 +1148,7 @@ export class DataServiceAdmin {
         WHERE jel.account_id = ${accountId}
           AND je.organization_id = ${organizationId}::uuid
           AND je.entry_date >= ${fromDate}::date
-        ORDER BY je.entry_date ASC, jel.id ASC
+        ORDER BY je.entry_date ASC, je.created_at ASC, jel.id ASC
       `) as R[]
     } else if (toDate) {
       rows = (await sql<R[]>`
@@ -1212,6 +1159,7 @@ export class DataServiceAdmin {
           je.id AS entry_id,
           je.entry_number,
           je.entry_date::text AS entry_date,
+          je.created_at::text AS created_at,
           je.description,
           je.reference
         FROM public.journal_entry_lines jel
@@ -1219,7 +1167,7 @@ export class DataServiceAdmin {
         WHERE jel.account_id = ${accountId}
           AND je.organization_id = ${organizationId}::uuid
           AND je.entry_date <= ${toDate}::date
-        ORDER BY je.entry_date ASC, jel.id ASC
+        ORDER BY je.entry_date ASC, je.created_at ASC, jel.id ASC
       `) as R[]
     } else {
       rows = (await sql<R[]>`
@@ -1230,13 +1178,14 @@ export class DataServiceAdmin {
           je.id AS entry_id,
           je.entry_number,
           je.entry_date::text AS entry_date,
+          je.created_at::text AS created_at,
           je.description,
           je.reference
         FROM public.journal_entry_lines jel
         INNER JOIN public.journal_entries je ON je.id = jel.journal_entry_id
         WHERE jel.account_id = ${accountId}
           AND je.organization_id = ${organizationId}::uuid
-        ORDER BY je.entry_date ASC, jel.id ASC
+        ORDER BY je.entry_date ASC, je.created_at ASC, jel.id ASC
       `) as R[]
     }
 
@@ -1250,6 +1199,7 @@ export class DataServiceAdmin {
         entry_id: line.entry_id,
         entry_number: line.entry_number,
         entry_date: line.entry_date,
+        created_at: line.created_at,
         description: line.description,
         reference: line.reference,
         debit_amount: dr,

@@ -50,6 +50,33 @@ export function formatDateTime(date: string | Date): string {
   }).format(new Date(date))
 }
 
+/** Journal line: accounting date (`entry_date`) plus wall-clock time when the entry was recorded (`created_at`). */
+export function formatEntryDateTime(
+  entryDate: string,
+  createdAt: string | null | undefined
+): string {
+  if (!createdAt) return formatDate(entryDate)
+  const datePart = formatDate(entryDate)
+  const timePart = new Intl.DateTimeFormat('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(createdAt))
+  return `${datePart}, ${timePart}`
+}
+
+/** General Ledger account row: prefer wall-clock `last_transaction_at`, else accounting date only. */
+export function formatAccountLastActivity(
+  lastTransactionDate: string | null | undefined,
+  lastTransactionAt: string | null | undefined
+): string | null {
+  if (lastTransactionAt) {
+    const t = new Date(lastTransactionAt).getTime()
+    if (Number.isFinite(t)) return formatDateTime(lastTransactionAt)
+  }
+  if (lastTransactionDate) return formatDate(lastTransactionDate)
+  return null
+}
+
 export function getInitials(name: string): string {
   return name
     .split(' ')

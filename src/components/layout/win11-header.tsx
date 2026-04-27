@@ -18,6 +18,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { cn } from '@/lib/utils'
+
+/**
+ * Base styles for header icon buttons live in `globals.css` (`.app-header-icon-btn`):
+ * the global `button` rule uses `!important` primary fill, so utilities alone cannot win.
+ */
+const headerIconClassName = cn(
+  'app-header-icon-btn',
+  'inline-flex shrink-0 items-center justify-center',
+  'transition-[color,background-color] duration-200'
+)
 
 interface Win11HeaderProps {}
 
@@ -46,34 +57,36 @@ export function Win11Header({}: Win11HeaderProps) {
         {/* Right side - Action Buttons */}
         <div className="flex items-center space-x-1">
           {/* Notifications */}
-          <button 
-            className="md-button-text p-2 rounded-full relative"
+          <button
+            type="button"
+            className={cn(headerIconClassName, 'relative')}
             aria-label="Notifications"
           >
-            <Bell className="w-4 h-4" />
+            <Bell className="w-[18px] h-[18px] shrink-0" />
             <span className="absolute -top-1 -right-1 w-3 h-3 bg-error rounded-full flex items-center justify-center">
               <span className="w-1.5 h-1.5 bg-on-error rounded-full"></span>
             </span>
           </button>
           
           {/* Settings */}
-          <button 
-            className="md-button-text p-2 rounded-full"
+          <button
+            type="button"
+            className={headerIconClassName}
             aria-label="Settings"
             onClick={() => router.push('/settings')}
           >
-            <Settings className="w-4 h-4" />
+            <Settings className="w-[18px] h-[18px] shrink-0" />
           </button>
           
           {/* User Profile */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                className="md-button-text p-2 rounded-full"
+                className={headerIconClassName}
                 aria-label="User profile"
                 type="button"
               >
-                <User className="w-4 h-4" />
+                <User className="w-[18px] h-[18px] shrink-0" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">

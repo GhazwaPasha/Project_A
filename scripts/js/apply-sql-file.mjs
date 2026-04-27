@@ -1,10 +1,10 @@
 /**
  * Apply a .sql file to Neon using DATABASE_URL (same as Next.js server).
- * Usage (from web-app): npm run db:apply-inventory
- * Or: node scripts/apply-sql-file.mjs path/to/file.sql
+ * Usage (from repo root): npm run db:apply-inventory
+ * Or: node scripts/js/apply-sql-file.mjs path/to/file.sql
  *
  * Loads DATABASE_URL from the environment, or parses a simple KEY=value line
- * from `.env.local` in the web-app directory when DATABASE_URL is unset.
+ * from `.env` / `.env.local` at the repository root when DATABASE_URL is unset.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 import postgres from 'postgres'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const webAppRoot = path.join(__dirname, '..')
+const repoRoot = path.join(__dirname, '..', '..')
 
 function loadDatabaseUrlFromFile(filePath) {
   if (!fs.existsSync(filePath)) return false
@@ -33,22 +33,20 @@ function loadDatabaseUrlFromFile(filePath) {
 }
 
 if (!process.env.DATABASE_URL) {
-  loadDatabaseUrlFromFile(path.join(webAppRoot, '.env.local')) ||
-    loadDatabaseUrlFromFile(path.join(webAppRoot, '.env')) ||
-    loadDatabaseUrlFromFile(path.join(webAppRoot, '..', '.env.local')) ||
-    loadDatabaseUrlFromFile(path.join(webAppRoot, '..', '.env'))
+  loadDatabaseUrlFromFile(path.join(repoRoot, '.env.local')) ||
+    loadDatabaseUrlFromFile(path.join(repoRoot, '.env'))
 }
 
 const url = process.env.DATABASE_URL
 if (!url) {
-  console.error('DATABASE_URL is not set. Export it or add DATABASE_URL to web-app/.env.local')
+  console.error('DATABASE_URL is not set. Export it or add DATABASE_URL to .env / .env.local at the repo root.')
   process.exit(1)
 }
 
 const rel =
   process.argv[2] ||
-  path.join(webAppRoot, '..', 'database', 'migrations_v2', '005_inventory_vouchers.sql')
-const sqlFile = path.isAbsolute(rel) ? rel : path.resolve(webAppRoot, rel)
+  path.join('database', 'migrations_v2', '005_inventory_vouchers.sql')
+const sqlFile = path.isAbsolute(rel) ? rel : path.resolve(repoRoot, rel)
 
 if (!fs.existsSync(sqlFile)) {
   console.error('SQL file not found:', sqlFile)

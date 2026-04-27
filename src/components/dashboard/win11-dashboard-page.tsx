@@ -20,6 +20,7 @@ import { useOrganization } from '@/hooks/use-organization'
 import { useCurrentOrganization } from '@/contexts/organization-context'
 import type { AccountBalanceRow, FinancialMetricsData } from '@/types'
 import { DateFilter, DateRange } from '@/components/ui/date-filter'
+import { DashboardPageSkeleton } from '@/components/loading/app-page-skeletons'
 import { 
   LineChart, 
   Line, 
@@ -254,16 +255,7 @@ export function Win11DashboardPage() {
   }
 
   if (orgContextLoading || (hasOrganizations && !currentOrganization)) {
-    return (
-      <div className="space-y-6 p-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="flex items-center space-x-2">
-            <RefreshCw className="h-6 w-6 animate-spin" />
-            <span className="text-lg">Loading organization…</span>
-          </div>
-        </div>
-      </div>
-    )
+    return <DashboardPageSkeleton />
   }
 
   if (!currentOrganization) {
@@ -282,29 +274,11 @@ export function Win11DashboardPage() {
         </div>
       )
     }
-    return (
-      <div className="space-y-6 p-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="flex items-center space-x-2">
-            <RefreshCw className="h-6 w-6 animate-spin" />
-            <span className="text-lg">Loading organization…</span>
-          </div>
-        </div>
-      </div>
-    )
+    return <DashboardPageSkeleton />
   }
 
   if (isLoading) {
-    return (
-      <div className="space-y-6 p-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="flex items-center space-x-2">
-            <RefreshCw className="h-6 w-6 animate-spin" />
-            <span className="text-lg">Loading dashboard...</span>
-          </div>
-        </div>
-      </div>
-    )
+    return <DashboardPageSkeleton />
   }
 
   if (error) {

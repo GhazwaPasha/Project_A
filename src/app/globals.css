@@ -1789,6 +1789,36 @@
     color: var(--md-sys-color-on-primary) !important;
   }
 
+  /* App top header: icon-only (global `button` rule above forces primary — must override) */
+  button.app-header-icon-btn,
+  .dark button.app-header-icon-btn {
+    background-color: transparent !important;
+    color: var(--md-sys-color-on-surface-variant) !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    width: 2.25rem !important;
+    min-width: 2.25rem !important;
+    height: 2.25rem !important;
+    min-height: 2.25rem !important;
+    border-radius: 9999px !important;
+    transition: color 0.2s ease !important;
+  }
+
+  /* Hover: no background; icons take theme accent (primary) */
+  button.app-header-icon-btn:hover,
+  .dark button.app-header-icon-btn:hover {
+    background-color: transparent !important;
+    color: var(--md-sys-color-primary) !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+
+  button.app-header-icon-btn:focus-visible,
+  .dark button.app-header-icon-btn:focus-visible {
+    outline: none !important;
+    box-shadow: inset 0 0 0 2px var(--md-sys-color-outline-variant) !important;
+  }
+
   /* Inventory / view tabs: utilities like `text-on-surface-variant` can override the global
      `button` fill and force illegible text on the primary background. Inactive uses surface. */
   button.inventory-subtab--inactive {

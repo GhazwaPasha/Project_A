@@ -1,14 +1,15 @@
 # Accountuitive
 
-Web-first accounting and financial management: multi-tenant organizations, role-based access, reporting, inventory, vouchers, and suppliers. The product UI is the **Next.js** app in `web-app/`.
+Web-first accounting and financial management: multi-tenant organizations, role-based access, reporting, inventory, vouchers, and suppliers. The product UI is the **Next.js** app at the **repository root** (`src/app`, `package.json`, etc.).
 
 ## Repository layout
 
 ```
 Project_A/
-├── web-app/       # Next.js application (primary product)
+├── src/           # Next.js application source (App Router)
+├── public/        # Static assets for Next.js
 ├── database/      # SQL schema, migrations, and report function definitions
-├── scripts/       # Python setup and maintenance utilities
+├── scripts/       # Node SQL helpers (scripts/js/*.mjs)
 ├── services/      # Placeholder for future APIs (see services/README.md)
 ├── shared/        # Shared assets and documentation
 └── tools/         # Optional development tools
@@ -23,33 +24,19 @@ Project_A/
 
 ## Configuration
 
-1. Copy [.env.example](.env.example) to `.env` at the **repository root** (and configure `web-app` env files as documented in the web app, if applicable).  
+1. Copy [.env.example](.env.example) to `.env` at the **repository root**. Optional overrides: `.env.local`, `.env.development.local`, etc.  
 2. Never commit real secrets. If keys were ever committed in history, rotate them in the Supabase (and other) dashboards.
 
 ## Quick start (web)
 
 ```bash
-cd web-app
 npm install
 npm run dev
 ```
 
 ## Database and scripts
 
-SQL artifacts live in [database/](database/). Python utilities (Supabase setup, migrations helpers, etc.) live in [scripts/](scripts/). Install Python dependencies from the repo root:
-
-```bash
-pip install -r requirements.txt
-```
-
-Examples (run from repository root so paths resolve correctly):
-
-```bash
-python scripts/setup_multitenant.py
-python scripts/manage_super_admin.py
-```
-
-Use `POSTGRES_*` or `DB_*` variables from `.env.example` depending on the script.
+SQL artifacts live in [database/](database/). Node helpers that share `DATABASE_URL` with the app live in [scripts/js/](scripts/js/) (for example `npm run db:apply-inventory`).
 
 ## Development
 

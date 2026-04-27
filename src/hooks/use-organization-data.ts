@@ -53,7 +53,12 @@ export const useFinancialMetrics = (dateRange?: { fromDate?: string; toDate?: st
 
   return useQuery<FinancialMetricsData>({
     queryKey: queryKeys.financialMetrics(currentOrganization?.id || '', dateRange),
-    queryFn: () => DataService.getFinancialMetrics(currentOrganization!.id),
+    queryFn: () =>
+      DataService.getFinancialMetrics(
+        currentOrganization!.id,
+        dateRange?.fromDate,
+        dateRange?.toDate
+      ),
     enabled: !!currentOrganization,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
