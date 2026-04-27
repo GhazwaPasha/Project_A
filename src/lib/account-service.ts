@@ -1,5 +1,5 @@
 import { appDataRequest } from '@/lib/app-data-request'
-import type { Account, AccountType } from '@/types'
+import type { Account, AccountReportCategory, AccountType } from '@/types'
 
 /** Browser client: calls `/api/app-data` (server uses service role + membership checks). */
 export class AccountService {
@@ -22,7 +22,8 @@ export class AccountService {
     account_type: AccountType
     parent_id?: number
     description?: string
-    group?: string
+    group?: string | null
+    report_category?: AccountReportCategory | null
     is_postable?: boolean
   }): Promise<Account> {
     return appDataRequest('AccountService', 'createAccount', [accountData])

@@ -31,7 +31,11 @@ import { cn, formatDate } from '@/lib/utils'
 import { useOrganizationFormatters } from '@/hooks/use-organization-formatters'
 import { accountTypeBadgeClass } from '@/lib/account-type-badges'
 import { DataService } from '@/lib/data-service'
-import { Account, AccountType } from '@/types'
+import {
+  allowedReportCategoriesForAccountType,
+  formatReportCategoryLabel,
+} from '@/lib/account-report-category'
+import { Account, AccountReportCategory, AccountType } from '@/types'
 import { useOrganization } from '@/hooks/use-organization'
 import { useOrgDataPermission, useOrgMemberRoleResolved } from '@/hooks/use-org-permissions'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -58,7 +62,8 @@ interface AccountFormData {
   name: string
   account_type: AccountType
   parent_id: number | null
-  group: string
+  /** Empty string = unspecified (NULL in DB). */
+  report_category: '' | AccountReportCategory
   is_postable: boolean
 }
 
@@ -96,7 +101,7 @@ export function Win11AccountsPage() {
     name: '',
     account_type: 'asset',
     parent_id: null,
-    group: '',
+    report_category: '',
     is_postable: true
   })
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
@@ -274,7 +279,8 @@ export function Win11AccountsPage() {
         account_type: formData.account_type,
         parent_id: formData.parent_id,
         description: null,
-        group: formData.group || null,
+        group: null,
+        report_category: formData.report_category ? formData.report_category : null,
         is_active: true,
         is_postable: formData.is_postable,
         created_by: (await DataService.getCurrentUser())?.id || null
@@ -300,7 +306,7 @@ export function Win11AccountsPage() {
         account_type: formData.account_type,
         parent_id: formData.parent_id,
         description: null,
-        group: formData.group || null,
+        report_category: formData.report_category ? formData.report_category : null,
         is_postable: formData.is_postable
       })
 
@@ -359,7 +365,11 @@ export function Win11AccountsPage() {
       'Parent Code': account.parent_code || '',
       'Level': account.level,
       'Postable': account.is_postable ? 'Yes' : 'No',
-      'Group': account.group ? account.group.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : '',
+      'Report category': account.report_category
+        ? formatReportCategoryLabel(account.report_category)
+        : account.group
+          ? account.group.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())
+          : '',
       'Transaction Count': account.transaction_count || 0,
       'Last Transaction': account.last_transaction_date ? formatDate(account.last_transaction_date) : ''
     }))
@@ -455,7 +465,7 @@ export function Win11AccountsPage() {
           const accountType = row.Type?.trim().toLowerCase()
           const code = row.Code?.trim()
           const parentCode = row['Parent Code']?.trim()
-          const group = row.Group?.trim()
+          const rawReportCat = row['Report category']?.trim() || row['Report Category']?.trim()
           const isPostable = row['Is Postable']?.toLowerCase() === 'yes' || row['Is Postable']?.toLowerCase() === 'true' || row['Is Postable'] === '1'
 
           if (!name || !accountType || !code) {
@@ -481,6 +491,18 @@ export function Win11AccountsPage() {
             continue
           }
 
+          let reportCategory: AccountReportCategory | null = null
+          if (rawReportCat) {
+            const allowed = allowedReportCategoriesForAccountType(accountType as AccountType)
+            if (!allowed.includes(rawReportCat as AccountReportCategory)) {
+              errors.push(
+                `Row ${row._rowIndex}: Invalid Report category "${rawReportCat}" for type ${accountType}. Use one of: ${allowed.join(', ')}`
+              )
+              continue
+            }
+            reportCategory = rawReportCat as AccountReportCategory
+          }
+
           // Find parent account if parent code is provided
           let parentId = null
           if (parentCode) {
@@ -501,7 +523,8 @@ export function Win11AccountsPage() {
             account_type: accountType as AccountType,
             parent_id: parentId,
             description: row.Description?.trim() || null,
-            group: group || null,
+            group: null,
+            report_category: reportCategory,
             is_postable: isPostable,
             is_active: true,
             created_by: (await DataService.getCurrentUser())?.id || null
@@ -551,7 +574,7 @@ export function Win11AccountsPage() {
       name: '',
       account_type: 'asset',
       parent_id: null,
-      group: '',
+      report_category: '',
       is_postable: true
     })
     setFormErrors({})
@@ -570,7 +593,7 @@ export function Win11AccountsPage() {
       name: account.name,
       account_type: account.account_type,
       parent_id: account.parent_id,
-      group: account.group || '',
+      report_category: (account.report_category || '') as '' | AccountReportCategory,
       is_postable: account.is_postable
     })
     setFormErrors({})
@@ -626,9 +649,11 @@ export function Win11AccountsPage() {
                 {account.is_postable && (
                   <span className={accountMetaBadgeClass}>Postable</span>
                 )}
-                {account.group && (
+                {(account.report_category || account.group) && (
                   <span className={accountMetaBadgeClass}>
-                    {account.group.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    {account.report_category
+                      ? formatReportCategoryLabel(account.report_category)
+                      : account.group!.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
                   </span>
                 )}
               </div>
@@ -713,7 +738,13 @@ export function Win11AccountsPage() {
               <select
                 id="account-form-type"
                 value={formData.account_type}
-                onChange={(e) => setFormData({ ...formData, account_type: e.target.value as AccountType })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    account_type: e.target.value as AccountType,
+                    report_category: '',
+                  })
+                }
                 className="m3-native-select"
               >
                 <option value="asset">Asset</option>
@@ -739,7 +770,10 @@ export function Win11AccountsPage() {
               >
                 <option value="">No Parent (Top Level)</option>
                 {flatAccounts
-                  .filter(acc => acc.id !== selectedAccount?.id) // Don't allow self as parent
+                  .filter(
+                    (acc) =>
+                      acc.account_type === formData.account_type && acc.id !== selectedAccount?.id
+                  )
                   .map(acc => (
                     <option key={acc.id} value={acc.id}>
                       {'  '.repeat(acc.level - 1)}{acc.code} - {acc.name}
@@ -749,47 +783,30 @@ export function Win11AccountsPage() {
             </div>
 
             <div>
-              <label htmlFor="account-form-group" className="md-text-field-label block">
-                Group
+              <label htmlFor="account-form-report-category" className="md-text-field-label block">
+                Report category
               </label>
               <select
-                id="account-form-group"
-                value={formData.group}
-                onChange={(e) => setFormData({ ...formData, group: e.target.value })}
+                id="account-form-report-category"
+                value={formData.report_category}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    report_category: e.target.value as '' | AccountReportCategory,
+                  })
+                }
                 className="m3-native-select"
               >
-                <option value="">No Group</option>
-                <optgroup label="Assets">
-                  <option value="current_asset">Current Asset</option>
-                  <option value="fixed_asset">Fixed Asset</option>
-                  <option value="other_asset">Other Asset</option>
-                  <option value="prepaid_expense">Prepaid Expense</option>
-                </optgroup>
-                <optgroup label="Liabilities">
-                  <option value="current_liability">Current Liability</option>
-                  <option value="long_term_liability">Long Term Liability</option>
-                  <option value="other_liability">Other Liability</option>
-                </optgroup>
-                <optgroup label="Equity">
-                  <option value="owners_equity">Owner's Equity</option>
-                  <option value="retained_earnings">Retained Earnings</option>
-                  <option value="other_equity">Other Equity</option>
-                </optgroup>
-                <optgroup label="Revenue">
-                  <option value="sales_revenue">Sales Revenue</option>
-                  <option value="service_revenue">Service Revenue</option>
-                  <option value="other_revenue">Other Revenue</option>
-                  <option value="interest_income">Interest Income</option>
-                </optgroup>
-                <optgroup label="Expenses">
-                  <option value="cogs">Cost of Goods Sold</option>
-                  <option value="operating_expense">Operating Expense</option>
-                  <option value="administrative_expense">Administrative Expense</option>
-                  <option value="selling_expense">Selling Expense</option>
-                  <option value="financial_expense">Financial Expense</option>
-                  <option value="other_expense">Other Expense</option>
-                </optgroup>
+                <option value="">Default (unspecified)</option>
+                {allowedReportCategoriesForAccountType(formData.account_type).map((c) => (
+                  <option key={c} value={c}>
+                    {formatReportCategoryLabel(c)}
+                  </option>
+                ))}
               </select>
+              <p className="md-body-small text-on-surface-variant mt-1">
+                Used for balance sheet sections and income statement lines (COGS vs operating expense, etc.).
+              </p>
              </div>
  
              <div className="flex items-center gap-2 pt-1">
@@ -1215,12 +1232,16 @@ export function Win11AccountsPage() {
                           )}
                         </p>
                       </div>
-                      {selectedAccount.group && (
+                      {(selectedAccount.report_category || selectedAccount.group) && (
                         <div>
-                          <label className="text-sm font-medium text-on-surface-variant">Group</label>
+                          <label className="text-sm font-medium text-on-surface-variant">
+                            Report category
+                          </label>
                           <p className="mt-1 text-sm text-on-surface">
                             <span className={accountMetaBadgeClass}>
-                              {selectedAccount.group.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                              {selectedAccount.report_category
+                                ? formatReportCategoryLabel(selectedAccount.report_category)
+                                : selectedAccount.group!.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
                             </span>
                           </p>
                       </div>

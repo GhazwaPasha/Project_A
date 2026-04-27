@@ -19,6 +19,9 @@ import { useToast } from '@/hooks/use-toast'
 
 interface IncomeStatementData {
   revenue: { total: number; breakdown: Array<{ account: string; amount: number }> }
+  costOfSales: { total: number; breakdown: Array<{ account: string; amount: number }> }
+  operatingExpenses: { total: number; breakdown: Array<{ account: string; amount: number }> }
+  otherExpenses: { total: number; breakdown: Array<{ account: string; amount: number }> }
   expenses: { total: number; breakdown: Array<{ account: string; amount: number }> }
   netIncome: number
   grossProfit: number
@@ -139,24 +142,46 @@ export function IncomeStatementReport({ onBack, fromDate, toDate }: IncomeStatem
           </div>
 
           <div class="section expenses">
-            <h3>EXPENSES</h3>
+            <h3>COST OF SALES</h3>
             <table>
-              <thead>
-                <tr>
-                  <th>Account</th>
-                  <th class="text-right">Amount</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Account</th><th class="text-right">Amount</th></tr></thead>
               <tbody>
-                ${data.expenses.breakdown.map(item => `
-                  <tr>
-                    <td>${item.account}</td>
-                    <td class="text-right expense-row">${formatCurrency(item.amount)}</td>
-                  </tr>
+                ${data.costOfSales.breakdown.map(item => `
+                  <tr><td>${item.account}</td><td class="text-right expense-row">${formatCurrency(item.amount)}</td></tr>
                 `).join('')}
                 <tr class="total-row">
-                  <td><strong>Total Expenses</strong></td>
-                  <td class="text-right expense-row"><strong>${formatCurrency(data.expenses.total)}</strong></td>
+                  <td><strong>Total cost of sales</strong></td>
+                  <td class="text-right expense-row"><strong>${formatCurrency(data.costOfSales.total)}</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="section expenses">
+            <h3>OPERATING EXPENSES</h3>
+            <table>
+              <thead><tr><th>Account</th><th class="text-right">Amount</th></tr></thead>
+              <tbody>
+                ${data.operatingExpenses.breakdown.map(item => `
+                  <tr><td>${item.account}</td><td class="text-right expense-row">${formatCurrency(item.amount)}</td></tr>
+                `).join('')}
+                <tr class="total-row">
+                  <td><strong>Total operating expenses</strong></td>
+                  <td class="text-right expense-row"><strong>${formatCurrency(data.operatingExpenses.total)}</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="section expenses">
+            <h3>OTHER EXPENSES</h3>
+            <table>
+              <thead><tr><th>Account</th><th class="text-right">Amount</th></tr></thead>
+              <tbody>
+                ${data.otherExpenses.breakdown.map(item => `
+                  <tr><td>${item.account}</td><td class="text-right expense-row">${formatCurrency(item.amount)}</td></tr>
+                `).join('')}
+                <tr class="total-row">
+                  <td><strong>Total other expenses</strong></td>
+                  <td class="text-right expense-row"><strong>${formatCurrency(data.otherExpenses.total)}</strong></td>
                 </tr>
               </tbody>
             </table>
@@ -167,12 +192,12 @@ export function IncomeStatementReport({ onBack, fromDate, toDate }: IncomeStatem
             <table>
               <tbody>
                 <tr>
-                  <td><strong>Total Revenue</strong></td>
-                  <td class="text-right revenue-row"><strong>${formatCurrency(data.revenue.total)}</strong></td>
+                  <td><strong>Gross profit</strong></td>
+                  <td class="text-right revenue-row"><strong>${formatCurrency(data.grossProfit)}</strong></td>
                 </tr>
                 <tr>
-                  <td><strong>Total Expenses</strong></td>
-                  <td class="text-right expense-row"><strong>${formatCurrency(data.expenses.total)}</strong></td>
+                  <td><strong>Operating income</strong></td>
+                  <td class="text-right revenue-row"><strong>${formatCurrency(data.operatingIncome)}</strong></td>
                 </tr>
                 <tr class="total-row" style="border-top: 2px solid #333;">
                   <td><strong>Net Income</strong></td>
@@ -192,6 +217,7 @@ export function IncomeStatementReport({ onBack, fromDate, toDate }: IncomeStatem
             <div class="total-card">
               <h3>TOTAL EXPENSES</h3>
               <div class="amount" style="color: #C62828;">${formatCurrency(data.expenses.total)}</div>
+              <div style="font-size: 11px; color: #888;">COGS + operating + other</div>
             </div>
             <div class="total-card">
               <h3>NET INCOME</h3>
@@ -355,29 +381,99 @@ export function IncomeStatementReport({ onBack, fromDate, toDate }: IncomeStatem
             </CardContent>
           </Card>
 
-          {/* Expenses Section */}
+          {/* Cost of sales */}
           <Card className="mb-6">
             <CardHeader>
-              <CardTitle className="text-lg text-red-600">Expenses</CardTitle>
+              <CardTitle className="text-lg text-red-600">Cost of sales</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <tbody className="divide-y divide-gray-200">
-                    {data.expenses.breakdown.map((item, index) => (
+                    {data.costOfSales.breakdown.map((item, index) => (
                       <tr key={index}>
-                        <td className="px-6 py-4 font-medium text-gray-900">
-                          {item.account}
-                        </td>
+                        <td className="px-6 py-4 font-medium text-gray-900">{item.account}</td>
                         <td className="px-6 py-4 text-right font-mono text-red-600">
                           {formatCurrency(item.amount)}
                         </td>
                       </tr>
                     ))}
                     <tr className="bg-red-50 font-bold border-t-2 border-red-200">
-                      <td className="px-6 py-4 text-gray-900">Total Expenses</td>
+                      <td className="px-6 py-4 text-gray-900">Total cost of sales</td>
                       <td className="px-6 py-4 text-right font-mono text-red-600">
-                        {formatCurrency(data.expenses.total)}
+                        {formatCurrency(data.costOfSales.total)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="mb-6 border border-gray-200">
+            <CardContent className="p-4 flex justify-between items-center">
+              <span className="font-semibold text-gray-900">Gross profit</span>
+              <span className="font-mono font-bold text-gray-900">{formatCurrency(data.grossProfit)}</span>
+            </CardContent>
+          </Card>
+
+          {/* Operating expenses */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-lg text-red-600">Operating expenses</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <tbody className="divide-y divide-gray-200">
+                    {data.operatingExpenses.breakdown.map((item, index) => (
+                      <tr key={index}>
+                        <td className="px-6 py-4 font-medium text-gray-900">{item.account}</td>
+                        <td className="px-6 py-4 text-right font-mono text-red-600">
+                          {formatCurrency(item.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="bg-red-50 font-bold border-t-2 border-red-200">
+                      <td className="px-6 py-4 text-gray-900">Total operating expenses</td>
+                      <td className="px-6 py-4 text-right font-mono text-red-600">
+                        {formatCurrency(data.operatingExpenses.total)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="mb-6 border border-gray-200">
+            <CardContent className="p-4 flex justify-between items-center">
+              <span className="font-semibold text-gray-900">Operating income</span>
+              <span className="font-mono font-bold text-gray-900">{formatCurrency(data.operatingIncome)}</span>
+            </CardContent>
+          </Card>
+
+          {/* Other expenses */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-lg text-red-600">Other expenses</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <tbody className="divide-y divide-gray-200">
+                    {data.otherExpenses.breakdown.map((item, index) => (
+                      <tr key={index}>
+                        <td className="px-6 py-4 font-medium text-gray-900">{item.account}</td>
+                        <td className="px-6 py-4 text-right font-mono text-red-600">
+                          {formatCurrency(item.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="bg-red-50 font-bold border-t-2 border-red-200">
+                      <td className="px-6 py-4 text-gray-900">Total other expenses</td>
+                      <td className="px-6 py-4 text-right font-mono text-red-600">
+                        {formatCurrency(data.otherExpenses.total)}
                       </td>
                     </tr>
                   </tbody>
@@ -391,15 +487,12 @@ export function IncomeStatementReport({ onBack, fromDate, toDate }: IncomeStatem
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Net Income</h3>
-                  <p className="text-gray-600">
-                    Revenue - Expenses
+                  <h3 className="text-lg font-semibold text-gray-900">Net income</h3>
+                  <p className="text-gray-600 text-sm">
+                    Operating income minus other expenses (per account report categories).
                   </p>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm text-gray-600 mb-1">
-                    {formatCurrency(data.revenue.total)} - {formatCurrency(data.expenses.total)}
-                  </div>
                   <div className={`text-2xl font-bold ${data.netIncome >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     {formatCurrency(data.netIncome)}
                   </div>
@@ -419,7 +512,8 @@ export function IncomeStatementReport({ onBack, fromDate, toDate }: IncomeStatem
             <Card>
               <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-red-600">{formatCurrency(data.expenses.total)}</div>
-                <div className="text-sm text-gray-600">Total Expenses</div>
+                <div className="text-sm text-gray-600">Total expenses</div>
+                <div className="text-xs text-gray-500 mt-1">COGS + operating + other</div>
               </CardContent>
             </Card>
             <Card>

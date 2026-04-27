@@ -118,6 +118,22 @@ export type Database = {
           description: string | null
           is_active: boolean
           group: string | null
+          report_category:
+            | 'current_asset'
+            | 'fixed_asset'
+            | 'other_asset'
+            | 'current_liability'
+            | 'long_term_liability'
+            | 'other_liability'
+            | 'owners_equity'
+            | 'retained_earnings'
+            | 'other_equity'
+            | 'operating_revenue'
+            | 'other_revenue'
+            | 'cost_of_sales'
+            | 'operating_expense'
+            | 'other_expense'
+            | null
           is_postable: boolean
           created_at: string
           updated_at: string
@@ -133,6 +149,22 @@ export type Database = {
           description?: string | null
           is_active?: boolean
           group?: string | null
+          report_category?:
+            | 'current_asset'
+            | 'fixed_asset'
+            | 'other_asset'
+            | 'current_liability'
+            | 'long_term_liability'
+            | 'other_liability'
+            | 'owners_equity'
+            | 'retained_earnings'
+            | 'other_equity'
+            | 'operating_revenue'
+            | 'other_revenue'
+            | 'cost_of_sales'
+            | 'operating_expense'
+            | 'other_expense'
+            | null
           is_postable?: boolean
           created_at?: string
           updated_at?: string
@@ -148,6 +180,22 @@ export type Database = {
           description?: string | null
           is_active?: boolean
           group?: string | null
+          report_category?:
+            | 'current_asset'
+            | 'fixed_asset'
+            | 'other_asset'
+            | 'current_liability'
+            | 'long_term_liability'
+            | 'other_liability'
+            | 'owners_equity'
+            | 'retained_earnings'
+            | 'other_equity'
+            | 'operating_revenue'
+            | 'other_revenue'
+            | 'cost_of_sales'
+            | 'operating_expense'
+            | 'other_expense'
+            | null
           is_postable?: boolean
           created_at?: string
           updated_at?: string

@@ -56,6 +56,23 @@ export interface OrganizationMember {
   permissions: any
 }
 
+/** Aligns with `public.account_report_category` — FS/P&L bucket (optional). */
+export type AccountReportCategory =
+  | 'current_asset'
+  | 'fixed_asset'
+  | 'other_asset'
+  | 'current_liability'
+  | 'long_term_liability'
+  | 'other_liability'
+  | 'owners_equity'
+  | 'retained_earnings'
+  | 'other_equity'
+  | 'operating_revenue'
+  | 'other_revenue'
+  | 'cost_of_sales'
+  | 'operating_expense'
+  | 'other_expense'
+
 export interface Account {
   id: number
   organization_id: string
@@ -66,6 +83,8 @@ export interface Account {
   description: string | null
   is_active: boolean
   group: string | null
+  /** Structured FS/P&L classification; must match account_type when set. */
+  report_category: AccountReportCategory | null
   is_postable: boolean
   created_at: string
   updated_at: string
@@ -310,6 +329,16 @@ export type TrialBalanceReportData = {
 /** Payload from `generateIncomeStatement` (UI shape). */
 export type IncomeStatementReportData = {
   revenue: { total: number; breakdown: Array<{ account: string; amount: number }> }
+  /** Cost of goods sold (expense accounts tagged cost_of_sales). */
+  costOfSales: { total: number; breakdown: Array<{ account: string; amount: number }> }
+  /** Operating expenses (excludes COGS and other_expense). */
+  operatingExpenses: { total: number; breakdown: Array<{ account: string; amount: number }> }
+  /** Non-operating / other expenses. */
+  otherExpenses: { total: number; breakdown: Array<{ account: string; amount: number }> }
+  /**
+   * All expense activity (COGS + operating + other) for backward-compatible totals.
+   * Breakdown is the concatenation of the three expense sections.
+   */
   expenses: { total: number; breakdown: Array<{ account: string; amount: number }> }
   netIncome: number
   grossProfit: number

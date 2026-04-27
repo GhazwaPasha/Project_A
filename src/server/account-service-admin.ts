@@ -1,7 +1,8 @@
 import { getSql } from '@/server/pg'
 import { fetchAccountNetBalance } from '@/server/data/ledger-sql'
 import { getActingUserId } from '@/server/request-context'
-import { Account, AccountType } from '@/types'
+import { assertReportCategoryCompatible } from '@/lib/account-report-category'
+import { Account, AccountType, AccountReportCategory } from '@/types'
 
 export class AccountServiceAdmin {
   static async getAccounts(
@@ -57,15 +58,37 @@ export class AccountServiceAdmin {
     parent_id?: number
     description?: string
     group?: string
+    report_category?: AccountReportCategory | null
     is_postable?: boolean
   }): Promise<Account> {
     const acting = getActingUserId()
     if (!acting) throw new Error('User not authenticated')
     const sql = getSql()
-    const a = { ...accountData, created_by: acting, is_postable: accountData.is_postable ?? true, is_active: true }
+    const a = {
+      ...accountData,
+      created_by: acting,
+      is_postable: accountData.is_postable ?? true,
+      is_active: true,
+      report_category: accountData.report_category ?? null,
+    }
+    assertReportCategoryCompatible(a.account_type, a.report_category)
+    if (a.parent_id != null) {
+      const parents = await sql<{ account_type: string; organization_id: string }[]>`
+        SELECT account_type::text AS account_type, organization_id::text AS organization_id
+        FROM public.accounts WHERE id = ${a.parent_id} LIMIT 1
+      `
+      const p = parents[0]
+      if (!p || p.organization_id !== a.organization_id) {
+        throw new Error('Parent account must belong to the same organization.')
+      }
+      if (p.account_type !== a.account_type) {
+        throw new Error('Child account must have the same account type as its parent.')
+      }
+    }
     const rows = (await sql<Account[]>`
       INSERT INTO public.accounts (
-        organization_id, code, name, account_type, parent_id, description, "group", is_postable, is_active, created_by
+        organization_id, code, name, account_type, parent_id, description, "group", report_category,
+        is_postable, is_active, created_by
       ) VALUES (
         ${a.organization_id}::uuid,
         ${a.code},
@@ -74,6 +97,7 @@ export class AccountServiceAdmin {
         ${a.parent_id ?? null},
         ${a.description ?? null},
         ${a.group ?? null},
+        ${a.report_category}::public.account_report_category,
         ${a.is_postable},
         true,
         ${a.created_by}::uuid
@@ -90,17 +114,47 @@ export class AccountServiceAdmin {
     const acting = getActingUserId()
     if (!acting) throw new Error('User not authenticated')
     const sql = getSql()
+    const existingRows = (await sql<Account[]>`
+      SELECT * FROM public.accounts WHERE id = ${id} LIMIT 1
+    `) as Account[]
+    const existing = existingRows[0]
+    if (!existing) {
+      throw new Error('Account not found')
+    }
+
     const u = accountData
+    const mergedType = u.account_type ?? existing.account_type
+    const mergedParent = u.parent_id !== undefined ? u.parent_id : existing.parent_id
+    const mergedReport =
+      u.report_category !== undefined ? u.report_category : existing.report_category
+
+    assertReportCategoryCompatible(mergedType, mergedReport ?? null)
+
+    if (mergedParent != null) {
+      const parents = await sql<{ account_type: string; organization_id: string }[]>`
+        SELECT account_type::text AS account_type, organization_id::text AS organization_id
+        FROM public.accounts WHERE id = ${mergedParent} LIMIT 1
+      `
+      const p = parents[0]
+      if (!p || p.organization_id !== existing.organization_id) {
+        throw new Error('Parent account must belong to the same organization.')
+      }
+      if (p.account_type !== mergedType) {
+        throw new Error('Child account must have the same account type as its parent.')
+      }
+    }
+
     const rows = (await sql<Account[]>`
       UPDATE public.accounts
       SET
         code = COALESCE(${u.code ?? null}, code),
         name = COALESCE(${u.name ?? null}, name),
         account_type = COALESCE(${u.account_type ?? null}::public.account_type, account_type),
-        parent_id = ${u.parent_id === undefined ? null : u.parent_id},
+        parent_id = ${mergedParent},
         description = ${u.description === undefined ? null : u.description},
         is_active = COALESCE(${u.is_active ?? null}, is_active),
         "group" = COALESCE(${u.group ?? null}, "group"),
+        report_category = ${mergedReport}::public.account_report_category,
         is_postable = COALESCE(${u.is_postable ?? null}, is_postable),
         updated_at = now()
       WHERE id = ${id}
@@ -281,9 +335,11 @@ export class AccountServiceAdmin {
     const out: Account[] = []
     await sql.begin(async (tx) => {
       for (const a of accounts) {
+        assertReportCategoryCompatible(a.account_type, a.report_category ?? null)
         const rows = (await tx<Account[]>`
           INSERT INTO public.accounts (
-            organization_id, code, name, account_type, parent_id, description, "group", is_postable, is_active, created_by
+            organization_id, code, name, account_type, parent_id, description, "group", report_category,
+            is_postable, is_active, created_by
           ) VALUES (
             ${organizationId}::uuid,
             ${a.code},
@@ -292,6 +348,7 @@ export class AccountServiceAdmin {
             ${a.parent_id},
             ${a.description},
             ${a.group},
+            ${a.report_category ?? null}::public.account_report_category,
             ${a.is_postable ?? true},
             ${a.is_active},
             ${acting}::uuid
