@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useQueryClient } from '@tanstack/react-query'
 import { authClient } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,7 +13,6 @@ import { useAuthStore } from '@/stores/auth-store'
 
 export function CreateOrganizationForm() {
   const router = useRouter()
-  const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -42,9 +40,7 @@ export function CreateOrganizationForm() {
         const { data: session } = await authClient.getSession()
         if (session?.user?.id) {
           void useAuthStore.getState().loadUserData()
-          void queryClient.invalidateQueries({ queryKey: ['user-organizations', session.user.id] })
         }
-        void queryClient.invalidateQueries({ queryKey: ['current-organization', data.organization.id] })
       }
     } catch {
       setError('An unexpected error occurred')

@@ -59,6 +59,12 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
     return storeOrgs.find((o) => o.id === currentOrganizationId) ?? null
   }, [currentOrganizationId, storeCurrent, storeOrgs])
 
+  /** When the auth store already has this org (from `getUserOrganizations`), treat RQ data as fresh so we do not duplicate `getOrganization` on mount. */
+  const currentOrgInitialDataUpdatedAt = useMemo(
+    () => (currentOrgPlaceholder ? Date.now() : undefined),
+    [currentOrganizationId, currentOrgPlaceholder?.id]
+  )
+
   const organizationIds = useMemo(() => new Set(organizations.map((o) => o.id)), [organizations])
 
   /** Stale `selectedOrganizationId` (e.g. after account switch) must not drive UI or requests. */
@@ -110,6 +116,8 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
       organizationIds.size > 0 &&
       organizationIds.has(currentOrganizationId),
     placeholderData: (previousData) => previousData ?? (currentOrgPlaceholder ?? undefined),
+    initialData: currentOrgPlaceholder ?? undefined,
+    initialDataUpdatedAt: currentOrgInitialDataUpdatedAt,
     // Shorter so reporting currency and other org settings update reasonably soon for all members.
     staleTime: 60 * 1000,
     gcTime: 30 * 60 * 1000,

@@ -148,36 +148,12 @@ export function Win11TrialBalancePage() {
     try {
       setLoading(true)
       setError(null)
-      
-      // Get current user and organization
-      const user = await DataService.getCurrentUser()
-      if (!user) {
-        console.error('No user found')
-        setError('No user found. Please log in.')
-        return
-      }
-
-      const userProfile = await DataService.getUserProfile(user.id)
-      if (!userProfile) {
-        console.error('No user profile found')
-        setError('No user profile found.')
-        return
-      }
-
-      // Get user organizations
-      const organizations = await DataService.getUserOrganizations(user.id)
-      if (organizations.length === 0) {
-        console.error('No organizations found')
-        setError('No organizations found.')
-        return
-      }
 
       if (!currentOrganization) {
         setError('No organization selected.')
         return
       }
 
-      // Load trial balance data for current organization
       const trialBalanceData = await DataService.getTrialBalance(currentOrganization.id)
       console.log('Trial balance data loaded:', trialBalanceData)
       console.log('Number of accounts:', trialBalanceData.length)
