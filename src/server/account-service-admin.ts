@@ -3,7 +3,6 @@ import { fetchAccountNetBalance } from '@/server/data/ledger-sql'
 import { getActingUserId } from '@/server/request-context'
 import { assertReportCategoryCompatible } from '@/lib/account-report-category'
 import { allocateStructuredAccountCode } from '@/server/account-code'
-import { isUndefinedColumnError } from '@/server/pg-undefined-column'
 import { Account, AccountCreatePayload, AccountType, AccountReportCategory } from '@/types'
 
 export class AccountServiceAdmin {
@@ -84,8 +83,8 @@ export class AccountServiceAdmin {
       a.account_type,
       a.parent_id ?? null
     )
-    const insertRow = async (includeReportCategory: boolean): Promise<Account> => {
-      if (includeReportCategory) {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      try {
         const rows = (await sql<Account[]>`
           INSERT INTO public.accounts (
             organization_id, code, name, account_type, parent_id, description, "group", report_category,
@@ -105,41 +104,10 @@ export class AccountServiceAdmin {
           )
           RETURNING *
         `) as Account[]
-        if (!rows[0]) throw new Error('Failed to create account')
-        return rows[0] as Account
-      }
-      const rows = (await sql<Account[]>`
-        INSERT INTO public.accounts (
-          organization_id, code, name, account_type, parent_id, description, "group",
-          is_postable, is_active, created_by
-        ) VALUES (
-          ${a.organization_id}::uuid,
-          ${generatedCode},
-          ${a.name},
-          ${a.account_type}::public.account_type,
-          ${a.parent_id ?? null},
-          ${a.description ?? null},
-          ${a.group ?? null},
-          ${a.is_postable},
-          true,
-          ${a.created_by}::uuid
-        )
-        RETURNING *
-      `) as Account[]
-      if (!rows[0]) throw new Error('Failed to create account')
-      return rows[0] as Account
-    }
-
-    for (let attempt = 0; attempt < 8; attempt++) {
-      try {
-        try {
-          return await insertRow(true)
-        } catch (e) {
-          if (isUndefinedColumnError(e, 'report_category')) {
-            return await insertRow(false)
-          }
-          throw e
+        if (!rows[0]) {
+          throw new Error('Failed to create account')
         }
+        return rows[0] as Account
       } catch (e) {
         const pgCode =
           e && typeof e === 'object' && 'code' in e ? String((e as { code: unknown }).code) : ''
@@ -193,47 +161,25 @@ export class AccountServiceAdmin {
       }
     }
 
-    try {
-      const rows = (await sql<Account[]>`
-        UPDATE public.accounts
-        SET
-          name = COALESCE(${u.name ?? null}, name),
-          account_type = COALESCE(${u.account_type ?? null}::public.account_type, account_type),
-          parent_id = ${mergedParent},
-          description = ${u.description === undefined ? null : u.description},
-          is_active = COALESCE(${u.is_active ?? null}, is_active),
-          "group" = COALESCE(${u.group ?? null}, "group"),
-          report_category = ${mergedReport}::public.account_report_category,
-          is_postable = COALESCE(${u.is_postable ?? null}, is_postable),
-          updated_at = now()
-        WHERE id = ${id}
-        RETURNING *
-      `) as Account[]
-      if (!rows[0]) {
-        throw new Error('Failed to update account')
-      }
-      return rows[0] as Account
-    } catch (e) {
-      if (!isUndefinedColumnError(e, 'report_category')) throw e
-      const rows = (await sql<Account[]>`
-        UPDATE public.accounts
-        SET
-          name = COALESCE(${u.name ?? null}, name),
-          account_type = COALESCE(${u.account_type ?? null}::public.account_type, account_type),
-          parent_id = ${mergedParent},
-          description = ${u.description === undefined ? null : u.description},
-          is_active = COALESCE(${u.is_active ?? null}, is_active),
-          "group" = COALESCE(${u.group ?? null}, "group"),
-          is_postable = COALESCE(${u.is_postable ?? null}, is_postable),
-          updated_at = now()
-        WHERE id = ${id}
-        RETURNING *
-      `) as Account[]
-      if (!rows[0]) {
-        throw new Error('Failed to update account')
-      }
-      return rows[0] as Account
+    const rows = (await sql<Account[]>`
+      UPDATE public.accounts
+      SET
+        name = COALESCE(${u.name ?? null}, name),
+        account_type = COALESCE(${u.account_type ?? null}::public.account_type, account_type),
+        parent_id = ${mergedParent},
+        description = ${u.description === undefined ? null : u.description},
+        is_active = COALESCE(${u.is_active ?? null}, is_active),
+        "group" = COALESCE(${u.group ?? null}, "group"),
+        report_category = ${mergedReport}::public.account_report_category,
+        is_postable = COALESCE(${u.is_postable ?? null}, is_postable),
+        updated_at = now()
+      WHERE id = ${id}
+      RETURNING *
+    `) as Account[]
+    if (!rows[0]) {
+      throw new Error('Failed to update account')
     }
+    return rows[0] as Account
   }
 
   static async deleteAccount(id: number): Promise<void> {
