@@ -1,0 +1,74 @@
+/* Professional finance look: neutral slate surfaces, one black accent (white in dark), crisp borders, exact figures.
+   Colour carries meaning only: black or white for actions, green for good, amber for warnings, red for errors. */
+:root {
+  --background: #f7f8fa;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #0a0a0a;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f3f6;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f3f6;
+  --muted-foreground: #5b6675;
+  --accent: #eef0f4;
+  --accent-foreground: #0f172a;
+  --destructive: #b42318;
+  --border: #e3e6eb;
+  --input: #d3d8e0;
+  --ring: #0a0a0a;
+  --radius: 0.5rem;
+  --note: #92620a;
+  --tick: #15803d;
+  --sidebar-bg: #ffffff;
+  color-scheme: light;
+}
+.dark {
+  --background: #0d1117;
+  --foreground: #e6e9ef;
+  --card: #151a21;
+  --card-foreground: #e6e9ef;
+  --popover: #1b212a;
+  --popover-foreground: #e6e9ef;
+  --primary: #f5f6f8;
+  --primary-foreground: #0a0a0a;
+  --secondary: #1d232c;
+  --secondary-foreground: #e6e9ef;
+  --muted: #1d232c;
+  --muted-foreground: #929cab;
+  --accent: #212832;
+  --accent-foreground: #e6e9ef;
+  --destructive: #f2877d;
+  --border: #262d37;
+  --input: #343c48;
+  --ring: #f5f6f8;
+  --note: #d9a93f;
+  --tick: #4ac07d;
+  --sidebar-bg: #11161c;
+  color-scheme: dark;
+}
+html {
+  font-family: "Inter Variable", "Segoe UI", system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--background);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+button, a, select { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+select option { background: var(--popover); color: var(--foreground); }
+.fig { font-family: "Geist Mono Variable", ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.sheet { background: var(--card); border: 1px solid var(--border); border-radius: 10px; min-width: 0; }
+.press { transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease-out; }
+.press:active { transform: scale(0.985); }
+.rule-total td { font-weight: 600; border-top: 1px solid var(--foreground); }
+.rule-total td:last-child { border-bottom: 3px double var(--foreground); }
+.agent-panel { transition: transform 240ms cubic-bezier(0.32, 0.72, 0, 1); }
+@media (prefers-reduced-motion: reduce) { .press, .agent-panel { transition: none; } }

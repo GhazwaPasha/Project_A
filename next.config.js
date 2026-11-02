@@ -16,6 +16,13 @@ for (const [key, value] of Object.entries(process.env)) {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   env: nextPublic,
+  // The rebuilt web app is a static build in public/app; every path under /app loads its index.
+  async rewrites() {
+    return [
+      { source: '/app', destination: '/app/index.html' },
+      { source: '/app/:path*', destination: '/app/index.html' },
+    ]
+  },
   async redirects() {
     return [
       { source: '/dashboard', destination: '/home', permanent: true },

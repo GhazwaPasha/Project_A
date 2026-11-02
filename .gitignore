@@ -351,3 +351,6 @@ config.local.json
 # Local-only test account notes (see TEST_CREDENTIALS.md)
 TEST_CREDENTIALS.md
 .gitnexus
+
+# Built output of the rebuilt web app
+public/app/
