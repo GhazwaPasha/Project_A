@@ -5,7 +5,7 @@
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true});\"",
     "dev": "next dev --turbopack",
-    "build": "npm --prefix web ci && npm --prefix web run build && next build",
+    "build": "npm --prefix web ci --include=dev && npm --prefix web run build && next build",
     "dev:web": "npm --prefix web run dev",
     "start": "next start",
     "type-check": "tsc --noEmit",
