@@ -1,6 +1,6 @@
 # Accountuitive
 
-Web-first accounting and financial management: multi-tenant organizations, role-based access, reporting, inventory, vouchers, and suppliers. The product UI is the **Next.js** app at the **repository root** (`src/app`, `package.json`, etc.).
+Web-first accounting and financial management: multi-tenant organizations, role-based access, reporting, inventory, vouchers, and suppliers. The product UI is a **Vite and React** app in `web/`. **Next.js** at the repository root hosts the API, authentication and the MCP server, and serves the built UI from `public/app`.
 
 ## Repository layout
 
@@ -25,7 +25,7 @@ Project_A/
 ## Configuration
 
 1. Copy [.env.example](.env.example) to `.env` at the **repository root**. Optional overrides: `.env.local`, `.env.development.local`, etc.  
-2. Never commit real secrets. If keys were ever committed in history, rotate them in the Supabase (and other) dashboards.
+2. Never commit real secrets. If keys were ever committed in history, rotate them.
 
 ## Quick start (web)
 

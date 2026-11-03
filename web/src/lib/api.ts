@@ -6,7 +6,7 @@ export class ApiError extends Error {
   }
 }
 
-export type Service = 'DataService' | 'VoucherService'
+export type Service = 'DataService' | 'VoucherService' | 'AccountService' | 'SupplierService'
 
 /** Dev only: `?demo=1` swaps the network for sample data, so screens can be built without signing in. */
 const useDemo = () => {
@@ -117,15 +117,56 @@ export async function revokeConnection(id: string) {
   return jsonOr(await fetch(`/api/v2/connections?id=${encodeURIComponent(id)}`, { method: 'DELETE', credentials: 'include' }), 'Could not remove the connection')
 }
 
+const json = (body: unknown): RequestInit => ({ credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+
+/** Neon Auth errors arrive as { message } or { error: { message } }. */
+async function authCall(path: string, body: unknown, fallback: string) {
+  const res = await fetch(`/api/auth/${path}`, { method: 'POST', ...json(body) })
+  const data = await res.json().catch(() => null)
+  if (!res.ok || data?.error) throw new ApiError(data?.message ?? data?.error?.message ?? fallback, res.status)
+  return data
+}
+
+export const signIn = (email: string, password: string) => authCall('sign-in/email', { email, password }, 'That email and password do not match.')
+export const signUp = (name: string, email: string, password: string) => authCall('sign-up/email', { name, email, password }, 'Could not create your account.')
+
+export async function completeProfile(fullName: string, organizationName: string) {
+  return jsonOr(await fetch('/api/auth/complete-profile', { method: 'POST', ...json({ fullName, organizationName, organizationType: 'business' }) }), 'Could not finish setting up your account')
+}
+
+/** Calls an app route, or the sample data when building screens locally. */
+export async function rest<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
+  if (import.meta.env.DEV && useDemo()) return (await import('./demo')).demoRest(path, init?.method ?? 'GET', init?.body) as T
+  const res = await fetch(path, init?.body !== undefined ? { method: init.method ?? 'POST', ...json(init.body) } : { method: init?.method ?? 'GET', credentials: 'include' })
+  return jsonOr(res, 'Something went wrong')
+}
+
+export const createOrganization = (name: string, description: string | null) => rest<{ id: string }>('/api/organizations', { body: { name, description } })
+
+export async function uploadAttachment(voucherId: string | number, file: File) {
+  if (import.meta.env.DEV && useDemo()) return { ok: true }
+  const form = new FormData()
+  form.set('voucherId', String(voucherId))
+  form.set('file', file)
+  return jsonOr(await fetch('/api/vouchers/attachments', { method: 'POST', credentials: 'include', body: form }), 'Could not upload the file')
+}
+
 export async function signOut() {
   await fetch('/api/auth/sign-out', { method: 'POST', credentials: 'include' })
   location.href = '/'
 }
 
-export type Org = { id: string; name: string; role: string | null; currency: string; decimals: number }
+export type OrgSettings = {
+  companyInfo: { legalName: string; taxId: string; registrationNumber: string; industry: string; website: string; email: string; phone: string; address: { street: string; city: string; state: string; zipCode: string; country: string } }
+  accountingSettings: { fiscalYearStart: string; reportingCurrency: string; decimalPlaces: number; [k: string]: unknown }
+  notificationSettings: { lowBalanceAlert: number; [k: string]: unknown }
+  securitySettings: { sessionTimeout: number; [k: string]: unknown }
+}
+export type Org = { id: string; name: string; description?: string | null; role: string | null; currency: string; decimals: number; settings?: OrgSettings }
 export type Bootstrap = {
   user: { id: string; email: string; name?: string | null }
   isSuperAdmin: boolean
   hasProfile: boolean
+  profile?: { full_name: string | null; phone: string | null } | null
   organizations: Org[]
 }

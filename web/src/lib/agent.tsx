@@ -61,7 +61,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     }
     void streamAgent({
       org: org.id,
-      screen: path.replace(/^\/app/, '') || '/home',
+      screen: path,
       mode: pro ? 'accountant' : 'simple',
       currency: org.currency,
       today: today(),

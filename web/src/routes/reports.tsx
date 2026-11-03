@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { AskLink } from '@/components/agent-panel'
-import { Cell, Head, Loaded, Range, Screen, Table, Tabs } from '@/components/page'
+import { Cell, Head, Loaded, PrintButton, Range, Screen, Table, Tabs } from '@/components/page'
 import { figure, shortDate, useApp } from '@/lib/boot'
 import { balanceSheet, incomeStatement, num, periodRange, today, type Money, type Period, type Section } from '@/lib/data'
 
@@ -59,7 +59,7 @@ export function IncomeStatementPage() {
     <Screen
       title={pro ? 'Income Statement' : 'Profit'}
       sub={`${shortDate(from)} to ${shortDate(to)}, ${org.currency}`}
-      actions={<Range label="Period" value={period} options={PERIODS} onChange={(p) => void navigate({ to: '/reports/income-statement', search: { period: p as Period } })} />}
+      actions={<><Range label="Period" value={period} options={PERIODS} onChange={(p) => void navigate({ to: '/reports/income-statement', search: { period: p as Period } })} /><PrintButton /></>}
       tabs={<Tabs items={tabs} />}
     >
       {!pro && q.data ? (
@@ -104,7 +104,7 @@ export function BalanceSheetPage() {
   const q = useQuery(balanceSheet(org.id, asOf))
   const d = org.decimals
   return (
-    <Screen title={pro ? 'Balance Sheet' : 'What you own and owe'} sub={`As of ${shortDate(asOf)}, ${org.currency}`} tabs={<Tabs items={tabs} />}>
+    <Screen title={pro ? 'Balance Sheet' : 'What you own and owe'} sub={`As of ${shortDate(asOf)}, ${org.currency}`} actions={<PrintButton />} tabs={<Tabs items={tabs} />}>
       <Loaded query={q}>
         {(r) => (
           <>

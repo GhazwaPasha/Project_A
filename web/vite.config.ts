@@ -3,12 +3,11 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-export default defineConfig({
-  base: '/app/',
+export default defineConfig(({ command }) => ({
+  // Next serves the build's files from public/app, while the app's own URLs start at the root.
+  base: command === 'build' ? '/app/' : '/',
   plugins: [react(), tailwindcss()],
-  // Keeps the old app's PostCSS and Tailwind 3 config in the repo root from applying here.
-  css: { postcss: { plugins: [] } },
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },
   build: { outDir: '../public/app', emptyOutDir: true },
   server: { port: 5180, proxy: { '/api': 'http://localhost:3000' } },
-})
+}))

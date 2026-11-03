@@ -1,48 +1,49 @@
 import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react'
-import { Link, Outlet, useRouterState } from '@tanstack/react-router'
-import { BookOpen, Boxes, Building2, CheckSquare, ChevronsUpDown, FileBarChart, House, Layers, ListTree, Menu, Moon, Plug, Scale, Search, Settings, Shield, Sun, Truck, UserCog, Users } from 'lucide-react'
+import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
+import { BookOpen, Boxes, Building2, CheckSquare, ChevronsUpDown, FileBarChart, House, Layers, ListTree, Menu, Moon, Plug, Scale, Search, Settings, Shield, Sun, Truck, Users } from 'lucide-react'
 import { Toaster } from 'sonner'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { AgentPanel, Composer } from '@/components/agent-panel'
 import { useAgent } from '@/lib/agent'
 import { signOut } from '@/lib/api'
-import { useApp } from '@/lib/boot'
+import { useApp, type Access } from '@/lib/boot'
 import { useTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
 const CommandMenu = lazy(() => import('@/components/command-menu').then((m) => ({ default: m.CommandMenu })))
 
 type Icon = ComponentType<{ className?: string }>
-export type Item = { label: string; icon: Icon; to?: string; href?: string; superOnly?: boolean; ownerOnly?: boolean }
-/** Items with `href` still open in the current app until they are rebuilt here. */
+export type Item = { label: string; icon: Icon; to: string; roles?: Access[]; superOnly?: boolean }
+const BOOKS: Access[] = ['owner', 'books']
 export const NAV: { group: string; items: Item[] }[] = [
-  { group: '', items: [{ label: 'Home', icon: House, to: '/home' }] },
+  { group: '', items: [{ label: 'Home', icon: House, to: '/home', roles: BOOKS }] },
   { group: 'Books', items: [
-    { label: 'Journal', icon: BookOpen, to: '/journal' },
-    { label: 'Ledger', icon: Layers, to: '/ledger' },
-    { label: 'Trial Balance', icon: Scale, to: '/trial-balance' },
-    { label: 'Accounts', icon: ListTree, href: '/accounts' },
-    { label: 'Reports', icon: FileBarChart, to: '/reports' },
+    { label: 'Journal', icon: BookOpen, to: '/journal', roles: BOOKS },
+    { label: 'Ledger', icon: Layers, to: '/ledger', roles: BOOKS },
+    { label: 'Trial Balance', icon: Scale, to: '/trial-balance', roles: BOOKS },
+    { label: 'Accounts', icon: ListTree, to: '/accounts', roles: BOOKS },
+    { label: 'Reports', icon: FileBarChart, to: '/reports', roles: BOOKS },
   ] },
   { group: 'Operations', items: [
-    { label: 'Inventory', icon: Boxes, href: '/inventory' },
-    { label: 'Suppliers', icon: Truck, href: '/suppliers' },
-    { label: 'Approvals', icon: CheckSquare, href: '/approvals' },
+    { label: 'Inventory', icon: Boxes, to: '/inventory' },
+    { label: 'Suppliers', icon: Truck, to: '/suppliers', roles: ['owner', 'books', 'member'] },
+    { label: 'Approvals', icon: CheckSquare, to: '/approvals' },
   ] },
   { group: 'Organization', items: [
-    { label: 'Connections', icon: Plug, to: '/connections' },
-    { label: 'Team Management', icon: Users, href: '/team' },
-    { label: 'Organization Settings', icon: Building2, href: '/organization', ownerOnly: true },
-    { label: 'User Management', icon: UserCog, href: '/users', ownerOnly: true },
-    { label: 'Settings', icon: Settings, href: '/settings' },
-    { label: 'Super Admin', icon: Shield, href: '/super-admin', superOnly: true },
+    { label: 'Connections', icon: Plug, to: '/connections', roles: BOOKS },
+    { label: 'Team Management', icon: Users, to: '/team', roles: ['owner', 'books', 'member'] },
+    { label: 'Organization Settings', icon: Building2, to: '/organization', roles: ['owner'] },
+    { label: 'Settings', icon: Settings, to: '/settings' },
+    { label: 'Super Admin', icon: Shield, to: '/super-admin', superOnly: true },
   ] },
 ]
 
+export const canOpen = (i: Item, access: Access, isSuperAdmin: boolean) => (i.superOnly ? isSuperAdmin : !i.roles || i.roles.includes(access))
+
 function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: () => void }) {
-  const { org, orgs, setOrg, email, isSuperAdmin, canSeeBooks } = useApp()
-  const isOwner = isSuperAdmin || org.role === 'organization_owner' || org.role === 'super_admin'
+  const { org, orgs, setOrg, email, isSuperAdmin, access } = useApp()
+  const navigate = useNavigate()
   const row = 'flex items-center gap-2.5 h-8 px-2.5 rounded-[6px] text-[13.5px] text-muted-foreground hover:bg-accent hover:text-foreground'
   return (
     <div className="flex flex-col h-full">
@@ -67,14 +68,12 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
 
       <nav className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 flex flex-col gap-4" aria-label="Main">
         {NAV.map((g) => {
-          const items = g.items.filter((i) => (!i.superOnly || isSuperAdmin) && (!i.ownerOnly || isOwner) && (canSeeBooks || i.href))
+          const items = g.items.filter((i) => canOpen(i, access, isSuperAdmin))
           if (!items.length) return null
           return (
             <div key={g.group || 'top'} className="flex flex-col gap-px">
               {g.group ? <h2 className="px-2.5 mb-1 text-[11.5px] font-medium text-muted-foreground">{g.group}</h2> : null}
-              {items.map((i) => i.to
-                ? <Link key={i.label} to={i.to} onClick={onNavigate} className={row} activeProps={{ className: 'bg-accent text-foreground! font-medium' }}><i.icon className="size-4 shrink-0" /><span className="truncate">{i.label}</span></Link>
-                : <a key={i.label} href={i.href} className={row}><i.icon className="size-4 shrink-0" /><span className="truncate">{i.label}</span></a>)}
+              {items.map((i) => <Link key={i.label} to={i.to} onClick={onNavigate} className={row} activeProps={{ className: 'bg-accent text-foreground! font-medium' }}><i.icon className="size-4 shrink-0" /><span className="truncate">{i.label}</span></Link>)}
             </div>
           )
         })}
@@ -87,7 +86,7 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
             <span className="truncate text-[12.5px] text-muted-foreground">{email}</span>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" side="top" className="w-[216px]">
-            <DropdownMenuItem onClick={() => { location.href = '/home' }}>Open the current app</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => { onNavigate?.(); void navigate({ to: '/settings' }) }}>Settings</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => void signOut()}>Sign out</DropdownMenuItem>
           </DropdownMenuContent>
@@ -101,11 +100,12 @@ export function Shell() {
   const [search, setSearch] = useState(false)
   const [searchLoaded, setSearchLoaded] = useState(false)
   const [menu, setMenu] = useState(false)
-  const { canSeeBooks, pro, setPro, org } = useApp()
+  const { canSeeBooks, pro, setPro, org, access, isSuperAdmin } = useApp()
+  const navigate = useNavigate()
   const { open: agentOpen, setOpen: setAgentOpen, turns } = useAgent()
   const { dark, toggle } = useTheme()
   const path = useRouterState({ select: (s) => s.location.pathname })
-  const onHome = path === '/app/home' || path === '/home'
+  const onHome = path === '/home'
 
   useEffect(() => { if (search) setSearchLoaded(true) }, [search])
   useEffect(() => {
@@ -118,13 +118,15 @@ export function Shell() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
-  // Roles without access to the books work in Inventory, which still lives in the current app.
-  useEffect(() => { if (!canSeeBooks) location.replace('/inventory') }, [canSeeBooks])
+  // Each role lands on a screen it can use. Inventory is the one everyone has. The server enforces the same rules.
+  const current = NAV.flatMap((g) => g.items).find((i) => path === i.to || path.startsWith(`${i.to}/`))
+  const blocked = current && !canOpen(current, access, isSuperAdmin)
+  useEffect(() => { if (blocked) void navigate({ to: '/inventory', replace: true }) }, [blocked, navigate])
   useEffect(() => { window.scrollTo(0, 0) }, [path])
 
   return (
     <>
-      <aside className="hidden lg:block fixed inset-y-0 left-0 w-[240px] border-r border-border z-10" style={{ background: 'var(--sidebar-bg)' }}>
+      <aside className="hidden lg:block print:hidden fixed inset-y-0 left-0 w-[240px] border-r border-border z-10" style={{ background: 'var(--sidebar-bg)' }}>
         <Sidebar onSearch={() => setSearch(true)} />
       </aside>
       <Sheet open={menu} onOpenChange={setMenu}>
@@ -134,8 +136,8 @@ export function Shell() {
         </SheetContent>
       </Sheet>
 
-      <div className={cn('lg:ml-[240px]', agentOpen && 'xl:pr-[400px]')}>
-        <header className="sticky top-0 z-[5] flex items-center gap-2 h-12 px-4 md:px-6 border-b border-border bg-background">
+      <div className={cn('lg:ml-[240px] print:ml-0 print:pr-0', agentOpen && 'xl:pr-[400px]')}>
+        <header className="print:hidden sticky top-0 z-[5] flex items-center gap-2 h-12 px-4 md:px-6 border-b border-border bg-background">
           <button onClick={() => setMenu(true)} aria-label="Open menu" className="lg:hidden size-8 -ml-1 grid place-items-center rounded-[6px] hover:bg-accent cursor-pointer"><Menu className="size-[18px]" /></button>
           <span className="lg:hidden font-semibold text-[13.5px] truncate">{org.name}</span>
           <div className="ml-auto flex items-center gap-2">
@@ -147,10 +149,10 @@ export function Shell() {
             <button onClick={toggle} aria-label={dark ? 'Use light theme' : 'Use dark theme'} className="size-8 grid place-items-center rounded-[6px] text-muted-foreground hover:bg-accent cursor-pointer">{dark ? <Sun className="size-4" /> : <Moon className="size-4" />}</button>
           </div>
         </header>
-        <main className="px-4 md:px-6 pt-6 pb-28 max-w-[1180px] mx-auto"><Outlet /></main>
+        <main className="px-4 md:px-6 pt-6 pb-28 print:p-0 max-w-[1180px] mx-auto"><Outlet /></main>
       </div>
 
-      <div className={cn('fixed bottom-4 right-0 left-0 lg:left-[240px] z-[5] px-4 md:px-6 pointer-events-none', (agentOpen || onHome) && 'hidden')}>
+      <div className={cn('print:hidden fixed bottom-4 right-0 left-0 lg:left-[240px] z-[5] px-4 md:px-6 pointer-events-none', (agentOpen || onHome || !canSeeBooks) && 'hidden')}>
         <div className="max-w-[1132px] mx-auto pointer-events-auto shadow-[0_8px_24px_rgb(15_23_42/0.12)] rounded-[10px]">
           <Composer id="agent-dock-input" placeholder="Ask the agent, or tell it what happened" />
         </div>

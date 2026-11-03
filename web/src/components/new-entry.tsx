@@ -16,7 +16,7 @@ const cents = (s: string) => Math.round((Number(s) || 0) * 100)
 
 /** Direct entry for accountants, and where a person corrects an agent proposal. Debits must equal credits. */
 export function NewEntry({ open, onOpenChange, draft, onRecorded }: { open: boolean; onOpenChange: (v: boolean) => void; draft?: Draft; onRecorded?: () => void }) {
-  const { org } = useApp()
+  const { org, userId } = useApp()
   const chart = useQuery({ ...accounts(org.id), enabled: open })
   const [date, setDate] = useState(today())
   const [description, setDescription] = useState('')
@@ -47,7 +47,7 @@ export function NewEntry({ open, onOpenChange, draft, onRecorded }: { open: bool
 
   const post = useMutation({
     mutationFn: () => call('DataService', 'createJournalEntry', [
-      { organization_id: org.id, entry_number: `JE-${Date.now()}`, entry_date: date, description: description.trim(), reference: null, total_amount: dr / 100, is_posted: true, created_by: null, posted_by: null, posted_at: new Date().toISOString() },
+      { organization_id: org.id, entry_number: `JE-${Date.now()}`, entry_date: date, description: description.trim(), reference: null, total_amount: dr / 100, is_posted: true, created_by: userId, posted_by: userId, posted_at: new Date().toISOString() },
       filled.map((r, i) => ({ account_id: Number(r.account), description: null, debit_amount: cents(r.debit) / 100, credit_amount: cents(r.credit) / 100, line_order: i + 1 })),
     ]),
     onSuccess: () => {

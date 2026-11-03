@@ -31,6 +31,8 @@ export function Composer({ placeholder, large, id = 'agent-input' }: { placehold
 
 export function AskLink({ prompt, children, className }: { prompt: string; children: React.ReactNode; className?: string }) {
   const { ask, busy } = useAgent()
+  const { canSeeBooks } = useApp()
+  if (!canSeeBooks) return null
   return <button type="button" disabled={busy} onClick={() => ask(prompt)} className={cn('text-primary font-medium underline decoration-border underline-offset-[3px] hover:decoration-primary cursor-pointer text-left disabled:opacity-50', className)}>{children}</button>
 }
 
@@ -103,7 +105,7 @@ export function AgentPanel() {
   }, [open, setOpen])
 
   return (
-    <aside aria-label="Agent" inert={!open} className={cn('agent-panel fixed top-0 right-0 bottom-0 z-20 w-full sm:w-[400px] bg-background border-l border-border flex flex-col', open ? 'translate-x-0' : 'translate-x-full')}>
+    <aside aria-label="Agent" inert={!open} className={cn('agent-panel print:hidden fixed top-0 right-0 bottom-0 z-20 w-full sm:w-[400px] bg-background border-l border-border flex flex-col', open ? 'translate-x-0' : 'translate-x-full')}>
       <div className="flex items-center justify-between h-12 px-4 shrink-0 border-b border-border">
         <h2 className="font-semibold text-[14px]">Agent</h2>
         <button aria-label="Close" onClick={() => setOpen(false)} className="size-8 -mr-1.5 grid place-items-center rounded-full text-muted-foreground hover:bg-accent cursor-pointer"><X className="size-4" /></button>

@@ -3,8 +3,9 @@ import { useQuery } from '@tanstack/react-query'
 import { ChevronRight, Download } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { AskLink } from '@/components/agent-panel'
+import { BulkEntry } from '@/components/bulk-entry'
 import { NewEntry } from '@/components/new-entry'
-import { Cell, Check, Empty, Head, Loaded, Range, Screen, Table, btn } from '@/components/page'
+import { Cell, Check, Empty, Head, Loaded, PrintButton, Range, Screen, Table, btn } from '@/components/page'
 import { figure, shortDate, useApp } from '@/lib/boot'
 import { useAgent } from '@/lib/agent'
 import { accountTxns, accounts, balanceSheet, balancesFor, journal, num, periodRange, today, trialBalance, type AccountBalance, type AccountType, type Entry, type Id, type Period } from '@/lib/data'
@@ -20,6 +21,7 @@ export function Journal() {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState<Id | null>(null)
   const [adding, setAdding] = useState(false)
+  const [bulk, setBulk] = useState(false)
   const names = useMemo(() => nameMap(chart.data), [chart.data])
   const shown = useMemo(() => {
     const s = search.trim().toLowerCase()
@@ -31,7 +33,7 @@ export function Journal() {
     <Screen
       title="Journal"
       sub={pro ? `${entries.data?.length ?? ''} latest entries` : 'Everything that has happened in your business.'}
-      actions={pro ? <><a href="/journal" className={btn.plain}>Bulk entry</a><button className={btn.primary} onClick={() => setAdding(true)}>New entry</button></> : undefined}
+      actions={pro ? <><button className={btn.plain} onClick={() => setBulk(true)}>Bulk entry</button><button className={btn.primary} onClick={() => setAdding(true)}>New entry</button></> : undefined}
     >
       {!pro ? (
         <section className="flex flex-wrap gap-x-4 gap-y-1 text-[13.5px]" aria-label="Examples">
@@ -48,6 +50,7 @@ export function Journal() {
         )}
       </Loaded>
       <NewEntry open={adding} onOpenChange={setAdding} />
+      <BulkEntry open={bulk} onClose={() => setBulk(false)} />
     </Screen>
   )
 }
@@ -241,7 +244,7 @@ export function TrialBalance() {
     <Screen
       title="Trial Balance"
       sub={pro ? `As of ${shortDate(today())}` : 'A check that your books are right.'}
-      actions={pro ? <button className={btn.plain} disabled={!data.length} onClick={exportCsv}><Download className="size-3.5 mr-1.5" />Export CSV</button> : undefined}
+      actions={pro ? <><button className={btn.plain} disabled={!data.length} onClick={exportCsv}><Download className="size-3.5 mr-1.5" />Export CSV</button><PrintButton /></> : undefined}
     >
       {checks}
       {pro ? <>

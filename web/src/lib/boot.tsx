@@ -1,13 +1,19 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ApiError, getBootstrap, type Org } from './api'
+import { ApiError, completeProfile, getBootstrap, type Org } from './api'
 import { Skeleton } from '@/components/ui/skeleton'
+import { AuthScreen, CreateOrganization } from '@/components/auth'
+
+export type Access = 'owner' | 'books' | 'member' | 'observer'
 
 type Ctx = {
+  userId: string
   email: string
+  profile: { full_name: string | null; phone: string | null } | null
   orgs: Org[]
   org: Org
   setOrg: (id: string) => void
+  access: Access
   canSeeBooks: boolean
   isSuperAdmin: boolean
   pro: boolean
@@ -29,6 +35,13 @@ const write = (k: string, v: string) => {
   try { localStorage.setItem(k, v) } catch { /* private mode: keep the choice for this session only */ }
 }
 
+function accessFor(role: string | null, superAdmin: boolean): Access {
+  if (superAdmin || role === 'organization_owner' || role === 'super_admin') return 'owner'
+  if (role === 'accountant') return 'books'
+  if (role === 'member') return 'member'
+  return 'observer'
+}
+
 export function BootProvider({ children }: { children: ReactNode }) {
   const boot = useQuery({ queryKey: ['bootstrap'], queryFn: getBootstrap, staleTime: 5 * 60_000 })
   const [orgId, setOrgId] = useState(() => read('selectedOrganizationId'))
@@ -44,29 +57,41 @@ export function BootProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const unauthorized = boot.error instanceof ApiError && boot.error.status === 401
+  // A signed-in person with no profile row (for example, sign-up was interrupted) is repaired here.
   const noProfile = boot.data && !boot.data.hasProfile
+  const refetch = boot.refetch
+  const user = boot.data?.user
   useEffect(() => {
-    if (unauthorized) location.replace('/')
-    // The current app repairs a missing profile on load, so hand over to it.
-    if (noProfile) location.replace('/home')
-  }, [unauthorized, noProfile])
+    if (noProfile && user) void completeProfile(user.name?.trim() || user.email.split('@')[0] || 'User', '').then(() => refetch())
+  }, [noProfile, user, refetch])
 
   const orgs = boot.data?.organizations
   const org = orgs?.find((o) => o.id === orgId) ?? orgs?.[0]
   const value = useMemo<Ctx | null>(() => {
     if (!boot.data || !org) return null
-    const money = makeMoney(org.currency, org.decimals)
-    const canSeeBooks = boot.data.isSuperAdmin || org.role === 'organization_owner' || org.role === 'accountant' || org.role === 'super_admin'
-    return { email: boot.data.user.email, orgs: boot.data.organizations, org, setOrg, canSeeBooks, isSuperAdmin: boot.data.isSuperAdmin, pro, setPro, money }
+    const access = accessFor(org.role, boot.data.isSuperAdmin)
+    return {
+      userId: boot.data.user.id,
+      email: boot.data.user.email,
+      profile: boot.data.profile ?? null,
+      orgs: boot.data.organizations,
+      org,
+      setOrg,
+      access,
+      canSeeBooks: access === 'owner' || access === 'books',
+      isSuperAdmin: boot.data.isSuperAdmin,
+      pro,
+      setPro,
+      money: makeMoney(org.currency, org.decimals),
+    }
   }, [boot.data, org, setOrg, pro, setPro])
 
-  if (boot.isError && !unauthorized) {
-    return <Centered title="Couldn't load your account" body="Check your connection and try again." action={<button className="text-primary font-medium" onClick={() => boot.refetch()}>Try again</button>} />
+  if (unauthorized) return <AuthScreen />
+  if (boot.isError) {
+    return <Centered title="Couldn't load your account" body="Check your connection and try again." action={<button className="text-primary font-medium underline underline-offset-[3px] cursor-pointer" onClick={() => boot.refetch()}>Try again</button>} />
   }
-  if (boot.data && !org) {
-    return <Centered title="Create your first organization" body="You need an organization before you can start." action={<a className="text-primary font-medium" href="/organization/new">Create organization</a>} />
-  }
-  if (!value) return <div className="p-6 max-w-5xl mx-auto"><Skeleton className="h-9 w-40 mt-12" /><Skeleton className="h-28 w-full mt-6 rounded-2xl" /></div>
+  if (boot.data && boot.data.hasProfile && !org) return <CreateOrganization first />
+  if (!value) return <div className="p-6 max-w-5xl mx-auto"><Skeleton className="h-9 w-40 mt-12" /><Skeleton className="h-28 w-full mt-6" /></div>
   return <BootContext.Provider value={value}>{children}</BootContext.Provider>
 }
 
