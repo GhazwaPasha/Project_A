@@ -4,6 +4,7 @@ import { authInApiRoute } from '@/auth'
 import { llmConfig, runAgent } from '@/server/agent/llm'
 import { AGENT_INSTRUCTIONS, toolsFor, type ToolContext } from '@/server/agent/tools'
 import { authorizeAppDataCall } from '@/server/app-data-authorize'
+import { allowRequest, tooMany } from '@/server/rate-limit'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -40,6 +41,9 @@ ${safe(page.text)}
 export async function POST(req: Request) {
   const session = await authInApiRoute()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Each message can run several paid model calls.
+  if (!(await allowRequest(`agent:${session.user.id}`, 20))) return tooMany()
 
   const parsed = Body.safeParse(await req.json().catch(() => null))
   if (!parsed.success || parsed.data.messages.at(-1)?.role !== 'user') {

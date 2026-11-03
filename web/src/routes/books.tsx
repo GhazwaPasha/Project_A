@@ -7,7 +7,9 @@ import { NewEntry } from '@/components/new-entry'
 import { Cell, Check, Empty, Head, Loaded, Paged, PrintLink, Screen, SearchIcon, Table, btn } from '@/components/page'
 import { Badge } from '@/components/chips'
 import { figure, shortDate, useApp } from '@/lib/boot'
-import { accounts, balanceSheet, balancesFor, journal, num, today, trialBalance, type Entry, type Id } from '@/lib/data'
+import { call } from '@/lib/api'
+import { FormBody, Modal, Text, useSave } from '@/components/form'
+import { accounts, balanceSheet, balancesFor, journal, num, refreshBooks, today, trialBalance, type Entry, type Id } from '@/lib/data'
 import { cn } from '@/lib/utils'
 
 const nameMap = (rows: { id: Id; code: string; name: string }[] | undefined) => new Map((rows ?? []).map((a) => [String(a.id), a]))
@@ -91,10 +93,36 @@ function EntryRow({ entry: e, open, onToggle, names, decimals, pro }: { entry: E
               ))}
             </tbody>
           </table>
-          <div className="mt-2 text-[13px]"><AskLink prompt={`Explain journal entry ${e.entry_number} ("${e.description}") to me, and whether it looks right.`}>Explain this entry</AskLink></div>
+          <div className="mt-2 flex flex-wrap items-center gap-4 text-[13px]">
+            <AskLink prompt={`Explain journal entry ${e.entry_number} ("${e.description}") to me, and whether it looks right.`}>Explain this entry</AskLink>
+            {pro && !e.reverses_entry_id ? <ReverseEntry entry={e} /> : null}
+          </div>
         </div>
       ) : null}
     </div>
+  )
+}
+
+/** Corrections add an opposite entry, so the history stays. */
+function ReverseEntry({ entry }: { entry: Entry }) {
+  const { org } = useApp()
+  const [open, setOpen] = useState(false)
+  const [date, setDate] = useState(today())
+  const [reason, setReason] = useState('')
+  const reverse = useSave(() => call('BooksService', 'reverseEntry', [org.id, entry.id, { date, reason }]), { success: 'Reversed. The opposite entry is in your journal.', refresh: [], onDone: () => { refreshBooks(); setOpen(false) } })
+  return (
+    <>
+      <button onClick={() => setOpen(true)} className="font-medium underline underline-offset-[3px] cursor-pointer">Reverse</button>
+      <Modal open={open} onClose={() => setOpen(false)} title={`Reverse ${entry.entry_number}`}>
+        <FormBody onSubmit={() => reverse.mutate()} submit="Reverse entry" pending={reverse.isPending} onCancel={() => setOpen(false)} disabled={!date}>
+          <p className="text-[13.5px] text-muted-foreground">This adds an opposite entry and keeps the original. Entries that came from an invoice, payment, voucher or stock movement have to be undone there.</p>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <Text label="Date of the reversal" type="date" value={date} onChange={setDate} />
+            <Text label="Reason" value={reason} onChange={setReason} />
+          </div>
+        </FormBody>
+      </Modal>
+    </>
   )
 }
 

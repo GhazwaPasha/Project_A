@@ -8,7 +8,7 @@ export class ApiError extends Error {
   }
 }
 
-export type Service = 'DataService' | 'VoucherService' | 'AccountService' | 'SupplierService'
+export type Service = 'DataService' | 'VoucherService' | 'AccountService' | 'SupplierService' | 'BooksService'
 
 /** Dev only: `?demo=1` swaps the network for sample data, so screens can be built without signing in. */
 const useDemo = () => {

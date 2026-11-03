@@ -9,13 +9,13 @@ import { Cell, Empty, Head, Loaded, Paged, Screen, SearchIcon, Table, Tabs, Tool
 import { Badge, Chips } from '@/components/chips'
 import { call, uploadAttachment } from '@/lib/api'
 import { figure, shortDate, useApp } from '@/lib/boot'
-import { accounts, num, q, today, type Id, type Money } from '@/lib/data'
+import { accounts, num, q, refreshBooks, today, type Id, type Money } from '@/lib/data'
 import { INVENTORY_TABS, items, useCanWriteStock } from '@/routes/inventory'
 
 type Status = 'draft' | 'pending_finance' | 'approved' | 'receiving' | 'issuing' | 'posted' | 'completed' | 'rejected' | 'expired' | 'cancelled'
-type Line = { id: Id; item_id: Id; line_number: number; quantity_requested: Money; quantity_actual?: Money | null; unit_cost_estimated?: Money | null; total_cost: Money; item?: { name: string; sku: string } }
+type Line = { id: Id; item_id: Id; line_number: number; quantity_requested: Money; quantity_actual?: Money | null; unit_cost_estimated?: Money | null; unit_cost_actual?: Money | null; total_cost: Money; item?: { name: string; sku: string } }
 type Attachment = { id: Id; file_name: string; file_size?: number }
-export type Voucher = { id: Id; voucher_number: string; voucher_type: 'purchase' | 'issuance'; status: Status; requested_date: string; vendor_name?: string | null; purpose?: string | null; destination?: string | null; description?: string | null; notes?: string | null; payment_type: string; total_estimated_cost: Money; approval_deadline?: string | null; renewal_count?: number; rejection_reason?: string | null; lines?: Line[]; attachments?: Attachment[] }
+export type Voucher = { id: Id; voucher_number: string; voucher_type: 'purchase' | 'issuance'; status: Status; requested_date: string; vendor_name?: string | null; purpose?: string | null; destination?: string | null; description?: string | null; notes?: string | null; payment_type: string; total_estimated_cost: Money; total_actual_cost?: Money | null; approval_deadline?: string | null; renewal_count?: number; rejection_reason?: string | null; lines?: Line[]; attachments?: Attachment[] }
 type StatsRow = { total_vouchers: Money; pending_approval: Money; approved: Money; rejected: Money; expired: Money; completed: Money; total_value: Money }
 
 const STATUS: Record<Status, { label: string; tone: 'neutral' | 'good' | 'warn' | 'bad' }> = {
@@ -128,17 +128,17 @@ function VoucherDetail({ id, onClose }: { id: Id | null; onClose: () => void }) 
   const canDecide = canAct
   const [reason, setReason] = useState('')
   const [actual, setActual] = useState<Record<string, string>>({})
-  const done = (msg: string) => ({ success: msg, refresh: REFRESH, onDone: () => { setReason(''); setActual({}) } })
+  const [costs, setCosts] = useState<Record<string, string>>({})
+  const done = (msg: string) => ({ success: msg, refresh: REFRESH, onDone: () => { setReason(''); setActual({}); setCosts({}) } })
   const submit = useSave(() => call('VoucherService', 'submitForApproval', [id, org.id]), done('Sent for approval'))
   const approve = useSave(() => call('VoucherService', 'approveVoucher', [id, reason.trim() || undefined]), done('Approved'))
   const reject = useSave(() => call('VoucherService', 'rejectVoucher', [id, reason.trim()]), done('Rejected'))
   const renew = useSave(() => call('VoucherService', 'renewExpiredVoucher', [id, reason.trim()]), done('Sent for approval again'))
-  const execute = useSave(() => call('VoucherService', 'executeVoucher', [id, Object.fromEntries((v?.lines ?? []).map((l) => [l.id, Number(actual[String(l.id)] ?? num(l.quantity_requested))]))]), done('Quantities recorded'))
-  const post = useSave(() => call('VoucherService', 'postVoucher', [id]), done('Marked as posted'))
+  const execute = useSave(() => call('VoucherService', 'executeVoucher', [id, Object.fromEntries((v?.lines ?? []).map((l) => [l.id, Number(actual[String(l.id)] ?? num(l.quantity_requested))])), Object.fromEntries((v?.lines ?? []).filter((l) => costs[String(l.id)]).map((l) => [l.id, Number(costs[String(l.id)])]))]), done('Quantities recorded'))
   const complete = useSave(() => call('VoucherService', 'completeVoucher', [id]), done('Completed'))
   const remove = useSave(() => call('VoucherService', 'deleteVoucher', [id]), { success: 'Voucher deleted', refresh: REFRESH, onDone: onClose })
   const removeFile = useSave((fileId: Id) => call('VoucherService', 'deleteAttachment', [fileId]), { success: 'File removed', refresh: REFRESH })
-  const busy = [submit, approve, reject, renew, execute, post, complete, remove].some((m) => m.isPending)
+  const busy = [submit, approve, reject, renew, execute, complete, remove].some((m) => m.isPending)
   const upload = async (file: File) => {
     try {
       await uploadAttachment(id!, file)
@@ -162,7 +162,7 @@ function VoucherDetail({ id, onClose }: { id: Id | null; onClose: () => void }) 
           </dl>
           <div className="border border-border rounded-[8px] overflow-x-auto">
             <table className="w-full text-[13px] min-w-[460px]">
-              <thead><tr><Head>Item</Head><Head right>Requested</Head><Head right>Actual</Head><Head right>Cost</Head></tr></thead>
+              <thead><tr><Head>Item</Head><Head right>Requested</Head><Head right>Actual</Head>{v.status === 'approved' && v.voucher_type === 'purchase' && canAct ? <Head right>Unit cost</Head> : null}<Head right>Cost</Head></tr></thead>
               <tbody>
                 {(v.lines ?? []).map((l) => (
                   <tr key={l.id}>
@@ -171,10 +171,11 @@ function VoucherDetail({ id, onClose }: { id: Id | null; onClose: () => void }) 
                     <Cell right>{v.status === 'approved' && canAct
                       ? <Input aria-label={`Actual quantity of ${l.item?.name ?? l.item_id}`} inputMode="decimal" value={actual[String(l.id)] ?? String(num(l.quantity_requested))} onChange={(e) => setActual((a) => ({ ...a, [String(l.id)]: e.target.value }))} className="h-7 w-20 ml-auto text-right fig" />
                       : l.quantity_actual != null ? figure(num(l.quantity_actual), 0) : ''}</Cell>
+                    {v.status === 'approved' && v.voucher_type === 'purchase' && canAct ? <Cell right><Input aria-label={`Actual unit cost of ${l.item?.name ?? l.item_id}`} inputMode="decimal" value={costs[String(l.id)] ?? String(num(l.unit_cost_estimated) || '')} onChange={(e) => setCosts((c) => ({ ...c, [String(l.id)]: e.target.value }))} className="h-7 w-24 ml-auto text-right fig" /></Cell> : null}
                     <Cell right>{figure(num(l.total_cost), org.decimals)}</Cell>
                   </tr>
                 ))}
-                <tr className="font-medium"><Cell className="border-b-0">Total</Cell><Cell className="border-b-0">{' '}</Cell><Cell className="border-b-0">{' '}</Cell><Cell right className="border-b-0">{figure(num(v.total_estimated_cost), org.decimals)}</Cell></tr>
+                <tr className="font-medium"><Cell className="border-b-0">Total</Cell><Cell className="border-b-0">{' '}</Cell><Cell className="border-b-0">{' '}</Cell>{v.status === 'approved' && v.voucher_type === 'purchase' && canAct ? <Cell className="border-b-0">{' '}</Cell> : null}<Cell right className="border-b-0">{figure(num(v.total_actual_cost ?? v.total_estimated_cost), org.decimals)}</Cell></tr>
               </tbody>
             </table>
           </div>
@@ -189,7 +190,8 @@ function VoucherDetail({ id, onClose }: { id: Id | null; onClose: () => void }) 
 
           {v.status === 'pending_finance' && canDecide ? <Text label="Note" hint="Required to reject. Optional to approve." value={reason} onChange={setReason} /> : null}
           {v.status === 'expired' && canAct ? <Text label="Why renew it?" required value={reason} onChange={setReason} /> : null}
-          {v.status === 'posted' ? <p className="text-[12.5px] text-muted-foreground">Completing closes this voucher. It does not update stock or post an entry to your books yet.</p> : null}
+          {v.status === 'receiving' || v.status === 'issuing' ? (access === 'owner' || access === 'books' ? <PostPanel voucher={v} /> : <p className="text-[13px] text-muted-foreground">Waiting for an accountant to post this to the books.</p>) : null}
+          {v.status === 'posted' ? <p className="text-[13px] text-muted-foreground">Stock is updated and the entry is in your books. Completing just closes this voucher.</p> : null}
 
           <div className="flex flex-wrap gap-2 justify-end border-t border-border pt-3">
             <span className="mr-auto self-center"><AskChip prompt={`Explain voucher ${v.voucher_number} and what should happen next.`}>Explain this voucher</AskChip></span>
@@ -197,13 +199,48 @@ function VoucherDetail({ id, onClose }: { id: Id | null; onClose: () => void }) 
             {canAct && v.status === 'draft' ? <button className={btn.primary} disabled={busy} onClick={() => submit.mutate()}>Send for approval</button> : null}
             {canDecide && v.status === 'pending_finance' ? <><button className={btn.plain} disabled={busy || !reason.trim()} onClick={() => reject.mutate()}>Reject</button><button className={btn.primary} disabled={busy} onClick={() => approve.mutate()}>Approve</button></> : null}
             {canAct && v.status === 'approved' ? <button className={btn.primary} disabled={busy} onClick={() => execute.mutate()}>{v.voucher_type === 'purchase' ? 'Record what arrived' : 'Record what was issued'}</button> : null}
-            {canAct && (v.status === 'receiving' || v.status === 'issuing') ? <button className={btn.primary} disabled={busy} onClick={() => post.mutate()}>Mark as posted</button> : null}
             {canAct && v.status === 'posted' ? <button className={btn.primary} disabled={busy} onClick={() => complete.mutate()}>Complete</button> : null}
             {canAct && v.status === 'expired' ? <button className={btn.primary} disabled={busy || !reason.trim()} onClick={() => renew.mutate()}>Renew and resubmit</button> : null}
           </div>
         </div>
       )}
     </Modal>
+  )
+}
+
+type Preview = { total: number; problems: string[]; needs_payable: boolean; suggested_payable_account_id: number | null; lines: { account_id: number; code: string; name: string; debit: number; credit: number }[] }
+
+/** Shows the exact entry before it's recorded, then posts it and the stock together. */
+function PostPanel({ voucher: v }: { voucher: Voucher }) {
+  const { org, pro } = useApp()
+  const chart = useQuery(accounts(org.id))
+  const [payable, setPayable] = useState('')
+  const [date, setDate] = useState(today())
+  const payableId = payable ? Number(payable) : null
+  const preview = useQuery(q<Preview>(['voucher', v.id, 'preview', payableId], 'VoucherService', 'previewVoucherPosting', [v.id, { payable_account_id: payableId }]))
+  const post = useSave(() => call('VoucherService', 'postVoucher', [v.id, { payable_account_id: payableId, date }]), { success: 'Posted. Stock and your books are updated.', refresh: REFRESH, onDone: refreshBooks })
+  const p = preview.data
+  const asking = p?.needs_payable || payable !== ''
+  const liabilities = (chart.data ?? []).filter((a) => a.is_postable !== false && a.account_type === 'liability')
+  return (
+    <section className="border border-border rounded-[8px] p-3 flex flex-col gap-2.5" aria-label="Post to your books">
+      <h3 className="font-semibold text-[13.5px]">{pro ? 'Post to the ledger' : 'Post to your books'}</h3>
+      <p className="text-[13px] text-muted-foreground">{v.voucher_type === 'purchase' ? 'This adds the stock and records the entry below, together.' : 'This takes the stock out at its average cost and records the entry below, together.'}</p>
+      {preview.isPending ? <p className="text-[13px] text-muted-foreground">Working it out…</p> : null}
+      {preview.isError ? <p role="alert" className="text-[13px] text-destructive">{preview.error.message}</p> : null}
+      {p?.lines.length ? (
+        <table className="w-full text-[13px]">
+          <thead><tr><Head>Account</Head><Head right>Debit</Head><Head right>Credit</Head></tr></thead>
+          <tbody>{p.lines.map((l) => <tr key={`${l.account_id}-${l.debit}-${l.credit}`}><Cell><span className="fig text-muted-foreground mr-1.5">{l.code}</span>{l.name}</Cell><Cell right>{l.debit ? figure(l.debit, org.decimals) : ''}</Cell><Cell right>{l.credit ? figure(l.credit, org.decimals) : ''}</Cell></tr>)}</tbody>
+        </table>
+      ) : null}
+      {p?.problems.length ? <ul role="alert" className="text-[13px] text-destructive flex flex-col gap-0.5">{p.problems.map((x) => <li key={x}>{x}</li>)}</ul> : null}
+      <div className="grid sm:grid-cols-2 gap-3">
+        {asking ? <Choice label="What you owe goes to" placeholder="Select account" value={payable} onChange={setPayable} options={liabilities.map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))} /> : null}
+        <Text label="Date" type="date" value={date} onChange={setDate} />
+      </div>
+      <div><button className={btn.primary} disabled={!p || p.problems.length > 0 || post.isPending} onClick={() => post.mutate()}>{post.isPending ? 'Posting…' : `Post ${p ? figure(p.total, org.decimals) : ''}`}</button></div>
+    </section>
   )
 }
 

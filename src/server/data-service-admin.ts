@@ -15,6 +15,7 @@ import {
   trialRowToDebitsCredits,
   fetchAccountOpening,
 } from '@/server/data/ledger-sql'
+import { assertPeriodOpen } from '@/server/books/lock'
 import { 
   User, 
   UserProfile, 
@@ -460,9 +461,10 @@ export class DataServiceAdmin {
       FROM public.accounts
       WHERE id = ANY(${ids}::bigint[])
     `) as { id: number; organization_id: string; is_postable: boolean }[]
-    const byId = new Map(rows.map((r) => [r.id, r]))
+    // Postgres returns bigint ids as text, while callers may send numbers or text.
+    const byId = new Map(rows.map((r) => [Number(r.id), r]))
     for (const id of ids) {
-      const a = byId.get(id)
+      const a = byId.get(Number(id))
       if (!a) {
         throw new Error(`Account ${id} was not found.`)
       }
@@ -481,54 +483,62 @@ export class DataServiceAdmin {
     entry: Omit<JournalEntry, 'id' | 'created_at' | 'updated_at'>,
     lines: Omit<JournalEntryLine, 'id' | 'journal_entry_id'>[]
   ): Promise<JournalEntry | null> {
-    const { totalDebits, normalized } = validateJournalLinesForSave(lines)
     const sql = getSql()
-    return await sql.begin(async (tx) => {
-      await this.assertJournalLineAccountsPostable(
-        tx as unknown as ReturnType<typeof getSql>,
-        entry.organization_id,
-        normalized
+    return await sql.begin((tx) => this.insertJournalEntry(tx as unknown as ReturnType<typeof getSql>, entry, lines))
+  }
+
+  /** Validates and writes an entry with its lines, inside the caller's transaction. */
+  static async insertJournalEntry(
+    tx: ReturnType<typeof getSql>,
+    entry: Omit<JournalEntry, 'id' | 'created_at' | 'updated_at'>,
+    lines: Omit<JournalEntryLine, 'id' | 'journal_entry_id'>[]
+  ): Promise<JournalEntry | null> {
+    const { totalDebits, normalized } = validateJournalLinesForSave(lines)
+    await assertPeriodOpen(tx, entry.organization_id, String(entry.entry_date))
+    await this.assertJournalLineAccountsPostable(
+      tx,
+      entry.organization_id,
+      normalized
+    )
+    const e = { ...entry, total_amount: totalDebits }
+    const inserted = (await tx<JournalEntry[]>`
+      INSERT INTO public.journal_entries (
+        organization_id, entry_number, entry_date, description, reference,
+        total_amount, is_posted, created_by, posted_by, posted_at
       )
-      const e = { ...entry, total_amount: totalDebits }
-      const inserted = (await tx<JournalEntry[]>`
-        INSERT INTO public.journal_entries (
-          organization_id, entry_number, entry_date, description, reference,
-          total_amount, is_posted, created_by, posted_by, posted_at
+      VALUES (
+        ${e.organization_id}::uuid,
+        ${e.entry_number},
+        ${e.entry_date}::date,
+        ${e.description},
+        ${e.reference},
+        ${e.total_amount},
+        ${e.is_posted},
+        ${e.created_by}::uuid,
+        ${e.posted_by}::uuid,
+        ${e.posted_at}
+      )
+      RETURNING *
+    `) as JournalEntry[]
+    const newEntry = inserted[0]
+    if (!newEntry) {
+      throw new Error('Failed to create journal entry')
+    }
+    for (const line of normalized) {
+      await tx`
+        INSERT INTO public.journal_entry_lines (
+          journal_entry_id, account_id, description, debit_amount, credit_amount, line_order
+        ) VALUES (
+          ${newEntry.id},
+          ${line.account_id},
+          ${line.description},
+          ${line.debit_amount},
+          ${line.credit_amount},
+          ${line.line_order}
         )
-        VALUES (
-          ${e.organization_id}::uuid,
-          ${e.entry_number},
-          ${e.entry_date}::date,
-          ${e.description},
-          ${e.reference},
-          ${e.total_amount},
-          ${e.is_posted},
-          ${e.created_by}::uuid,
-          ${e.posted_by}::uuid,
-          ${e.posted_at}
-        )
-        RETURNING *
-      `) as JournalEntry[]
-      const newEntry = inserted[0]
-      if (!newEntry) {
-        throw new Error('Failed to create journal entry')
-      }
-      for (const line of normalized) {
-        await tx`
-          INSERT INTO public.journal_entry_lines (
-            journal_entry_id, account_id, description, debit_amount, credit_amount, line_order
-          ) VALUES (
-            ${newEntry.id},
-            ${line.account_id},
-            ${line.description},
-            ${line.debit_amount},
-            ${line.credit_amount},
-            ${line.line_order}
-          )
-        `
-      }
-      return newEntry
-    })
+      `
+    }
+    return newEntry
   }
 
   // ================================
@@ -1630,110 +1640,122 @@ export class DataServiceAdmin {
     transaction: Omit<InventoryTransaction, 'id' | 'created_at'>
   ): Promise<InventoryTransaction | null> {
     const sql = getSql()
-    const t = transaction
-    const row = await sql.begin(async (tx) => {
-      const ins = (await tx<InventoryTransaction[]>`
-        INSERT INTO public.inventory_transactions (
-          organization_id, item_id, transaction_type, quantity, unit_cost, total_cost, journal_entry_id, reference, description, transaction_date, created_by
-        ) VALUES (
-          ${t.organization_id}::uuid,
-          ${t.item_id},
-          ${t.transaction_type},
-          ${t.quantity},
-          ${t.unit_cost},
-          ${t.total_cost},
-          ${t.journal_entry_id},
-          ${t.reference},
-          ${t.description},
-          ${t.transaction_date}::date,
-          ${t.created_by}::uuid
-        )
-        RETURNING *
-      `) as InventoryTransaction[]
-      const tr = ins[0]
-      if (!tr) return null
-
-      const locked = (await tx<InventoryItem[]>`
-        SELECT * FROM public.inventory_items
-        WHERE id = ${t.item_id} AND organization_id = ${t.organization_id}::uuid
-        FOR UPDATE
-      `) as InventoryItem[]
-      const item = locked[0]
-      if (!item) {
-        throw new Error('Inventory item not found for this organization')
-      }
-
-      const qty = Number(tr.quantity)
-      const qIn = Math.abs(qty)
-      let quantityIn = Number(item.quantity_in)
-      let quantityOut = Number(item.quantity_out)
-      const avail = Number(item.quantity_available)
-      const avg = Number(item.average_unit_cost)
-      let val = Number(item.total_value)
-      const kind = t.transaction_type
-
-      if (kind === 'in') {
-        const addQty = qIn
-        quantityIn += addQty
-        let addValue = 0
-        if (t.total_cost != null && Number(t.total_cost) > 0) {
-          addValue = Number(t.total_cost)
-        } else if (t.unit_cost != null && Number(t.unit_cost) > 0) {
-          addValue = addQty * Number(t.unit_cost)
-        } else {
-          addValue = addQty * avg
-        }
-        const newAvail = avail + addQty
-        const newTotal = val + addValue
-        const newAvg = newAvail > 0 ? newTotal / newAvail : 0
-        await tx`
-          UPDATE public.inventory_items
-          SET
-            quantity_in = ${quantityIn},
-            quantity_available = ${newAvail},
-            total_value = ${newTotal},
-            average_unit_cost = ${newAvg}
-          WHERE id = ${item.id} AND organization_id = ${t.organization_id}::uuid
-        `
-      } else if (kind === 'out') {
-        const outQty = qIn
-        if (avail + 1e-9 < outQty) {
-          throw new Error('Insufficient quantity on hand for this issue')
-        }
-        quantityOut += outQty
-        const newAvail = avail - outQty
-        const cogs = outQty * avg
-        const newTotal = Math.max(0, val - cogs)
-        await tx`
-          UPDATE public.inventory_items
-          SET
-            quantity_out = ${quantityOut},
-            quantity_available = ${newAvail},
-            total_value = ${newTotal}
-          WHERE id = ${item.id} AND organization_id = ${t.organization_id}::uuid
-        `
-      } else {
-        // adjustment: signed delta on available; value at current average
-        const newAvail = avail + qty
-        if (newAvail < -1e-9) {
-          throw new Error('Adjustment would make quantity negative')
-        }
-        const newTotal = newAvail * avg
-        await tx`
-          UPDATE public.inventory_items
-          SET
-            quantity_available = ${newAvail},
-            total_value = ${newTotal < 0 ? 0 : newTotal}
-          WHERE id = ${item.id} AND organization_id = ${t.organization_id}::uuid
-        `
-      }
-
-      return tr
-    })
+    const row = await sql.begin((tx) => this.applyInventoryTransaction(tx as unknown as ReturnType<typeof getSql>, transaction))
 
     if (!row) return null
     const [enriched] = await attachTransactionItem(sql, [row])
     return enriched ?? null
+  }
+
+  /** Records a stock movement and updates the item, inside the caller's transaction. */
+  static async applyInventoryTransaction(
+    tx: ReturnType<typeof getSql>,
+    t: Omit<InventoryTransaction, 'id' | 'created_at'>
+  ): Promise<InventoryTransaction | null> {
+    const ins = (await tx<InventoryTransaction[]>`
+      INSERT INTO public.inventory_transactions (
+        organization_id, item_id, transaction_type, quantity, unit_cost, total_cost, journal_entry_id, reference, description, transaction_date, created_by
+      ) VALUES (
+        ${t.organization_id}::uuid,
+        ${t.item_id},
+        ${t.transaction_type},
+        ${t.quantity},
+        ${t.unit_cost},
+        ${t.total_cost},
+        ${t.journal_entry_id},
+        ${t.reference},
+        ${t.description},
+        ${t.transaction_date}::date,
+        ${t.created_by}::uuid
+      )
+      RETURNING *
+    `) as InventoryTransaction[]
+    const tr = ins[0]
+    if (!tr) return null
+
+    const locked = (await tx<InventoryItem[]>`
+      SELECT * FROM public.inventory_items
+      WHERE id = ${t.item_id} AND organization_id = ${t.organization_id}::uuid
+      FOR UPDATE
+    `) as InventoryItem[]
+    const item = locked[0]
+    if (!item) {
+      throw new Error('Inventory item not found for this organization')
+    }
+
+    const qty = Number(tr.quantity)
+    const qIn = Math.abs(qty)
+    let quantityIn = Number(item.quantity_in)
+    let quantityOut = Number(item.quantity_out)
+    const avail = Number(item.quantity_available)
+    const avg = Number(item.average_unit_cost)
+    let val = Number(item.total_value)
+    const kind = t.transaction_type
+
+    if (kind === 'in') {
+      const addQty = qIn
+      quantityIn += addQty
+      let addValue = 0
+      if (t.total_cost != null && Number(t.total_cost) > 0) {
+        addValue = Number(t.total_cost)
+      } else if (t.unit_cost != null && Number(t.unit_cost) > 0) {
+        addValue = addQty * Number(t.unit_cost)
+      } else {
+        addValue = addQty * avg
+        await tx`UPDATE public.inventory_transactions SET unit_cost = ${avg}, total_cost = ${Math.round(addValue * 100) / 100} WHERE id = ${tr.id}`
+        tr.total_cost = Math.round(addValue * 100) / 100
+      }
+      const newAvail = avail + addQty
+      const newTotal = val + addValue
+      const newAvg = newAvail > 0 ? newTotal / newAvail : 0
+      await tx`
+        UPDATE public.inventory_items
+        SET
+          quantity_in = ${quantityIn},
+          quantity_available = ${newAvail},
+          total_value = ${newTotal},
+          average_unit_cost = ${newAvg}
+        WHERE id = ${item.id} AND organization_id = ${t.organization_id}::uuid
+      `
+    } else if (kind === 'out') {
+      const outQty = qIn
+      if (avail + 1e-9 < outQty) {
+        throw new Error('Insufficient quantity on hand for this issue')
+      }
+      quantityOut += outQty
+      const newAvail = avail - outQty
+      const cogs = outQty * avg
+      const newTotal = Math.max(0, val - cogs)
+      await tx`UPDATE public.inventory_transactions SET unit_cost = COALESCE(unit_cost, ${avg}), total_cost = COALESCE(total_cost, ${Math.round(cogs * 100) / 100}) WHERE id = ${tr.id}`
+      tr.total_cost = t.total_cost ?? Math.round(cogs * 100) / 100
+      await tx`
+        UPDATE public.inventory_items
+        SET
+          quantity_out = ${quantityOut},
+          quantity_available = ${newAvail},
+          total_value = ${newTotal}
+        WHERE id = ${item.id} AND organization_id = ${t.organization_id}::uuid
+      `
+    } else {
+      // adjustment: signed delta on available; value at current average
+      const newAvail = avail + qty
+      if (newAvail < -1e-9) {
+        throw new Error('Adjustment would make quantity negative')
+      }
+      const newTotal = newAvail * avg
+      const moved = Math.round(Math.abs(qty) * avg * 100) / 100
+      await tx`UPDATE public.inventory_transactions SET unit_cost = COALESCE(unit_cost, ${avg}), total_cost = ${moved} WHERE id = ${tr.id}`
+      tr.total_cost = moved
+      await tx`
+        UPDATE public.inventory_items
+        SET
+          quantity_available = ${newAvail},
+          total_value = ${newTotal < 0 ? 0 : newTotal}
+        WHERE id = ${item.id} AND organization_id = ${t.organization_id}::uuid
+      `
+    }
+
+    return tr
   }
 
   // Get low stock items

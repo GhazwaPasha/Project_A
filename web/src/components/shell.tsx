@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
-import { BookOpen, Boxes, Building2, CheckSquare, ChevronsUpDown, FileBarChart, House, Layers, ListTree, Menu, Plug, Scale, Search, Settings, Shield, Truck, Users } from 'lucide-react'
+import { BookOpen, Boxes, Building2, CheckSquare, ChevronsUpDown, Contact, FileBarChart, FileText, House, Landmark, Layers, ListTree, Lock, Menu, Percent, Plug, Receipt, Target, TrendingUp, Scale, Search, Settings, Shield, Truck, Users } from 'lucide-react'
 import { Toaster } from 'sonner'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
@@ -11,7 +11,7 @@ import { PageIcons } from '@/components/page-icons'
 import { useAgent } from '@/lib/agent'
 import { signOut } from '@/lib/api'
 import { useApp, type Access } from '@/lib/boot'
-import { lowStock, num, proposals, voucherStats } from '@/lib/data'
+import { lowStock, num, proposals, q, voucherStats } from '@/lib/data'
 import { useTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
@@ -28,6 +28,18 @@ export const NAV: { group: string; items: Item[] }[] = [
     { label: 'Trial Balance', icon: Scale, to: '/trial-balance', roles: BOOKS },
     { label: 'Accounts', icon: ListTree, to: '/accounts', roles: BOOKS },
     { label: 'Reports', icon: FileBarChart, to: '/reports', roles: BOOKS },
+  ] },
+  { group: 'Sales and bills', items: [
+    { label: 'Invoices', icon: FileText, to: '/invoices', roles: BOOKS },
+    { label: 'Bills', icon: Receipt, to: '/bills', roles: BOOKS },
+    { label: 'Customers', icon: Contact, to: '/customers', roles: BOOKS },
+    { label: 'Banking', icon: Landmark, to: '/banking', roles: BOOKS },
+  ] },
+  { group: 'Planning', items: [
+    { label: 'Budgets', icon: Target, to: '/budgets', roles: BOOKS },
+    { label: 'Forecast', icon: TrendingUp, to: '/forecast', roles: BOOKS },
+    { label: 'Tax', icon: Percent, to: '/tax', roles: BOOKS },
+    { label: 'Close books', icon: Lock, to: '/close', roles: BOOKS },
   ] },
   { group: 'Operations', items: [
     { label: 'Inventory', icon: Boxes, to: '/inventory' },
@@ -50,10 +62,14 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
   const waiting = useQuery({ ...proposals(org.id), enabled: canSeeBooks }).data?.length ?? 0
   const low = useQuery(lowStock(org.id)).data?.length ?? 0
   const pending = num(useQuery(voucherStats(org.id)).data?.pending_approval)
+  const work = useQuery({ ...q<{ overdue_invoices: number; overdue_bills: number; unmatched_bank_lines: number }>(['work-summary', org.id], 'BooksService', 'getWorkSummary', [org.id]), enabled: canSeeBooks, retry: false }).data
   const counts: Record<string, { n: number; tone: Tone; label: string }> = {
     '/home': { n: waiting, tone: 'solid', label: 'entries to approve' },
     '/inventory': { n: low, tone: 'warn', label: 'items running low' },
     '/approvals': { n: pending, tone: 'solid', label: 'vouchers need approval' },
+    '/invoices': { n: work?.overdue_invoices ?? 0, tone: 'warn', label: 'overdue invoices' },
+    '/bills': { n: work?.overdue_bills ?? 0, tone: 'warn', label: 'overdue bills' },
+    '/banking': { n: work?.unmatched_bank_lines ?? 0, tone: 'neutral', label: 'bank lines to sort' },
   }
   const navigate = useNavigate()
   const row = 'flex items-center gap-2.5 h-[30px] px-2.5 rounded-[6px] text-[13.5px] text-muted-foreground hover:bg-accent hover:text-foreground'
@@ -78,7 +94,7 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
         </button>
       </div>
 
-      <nav className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 flex flex-col gap-3" aria-label="Main">
+      <nav className="flex-1 min-h-0 overflow-y-auto [scrollbar-width:thin] px-3 pb-3 flex flex-col gap-3" aria-label="Main">
         {NAV.map((g) => {
           const items = g.items.filter((i) => !i.notInSidebar && canOpen(i, access, isSuperAdmin))
           if (!items.length) return null

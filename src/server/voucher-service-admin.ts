@@ -1,6 +1,8 @@
 import { getSql } from '@/server/pg'
 import { attachItemsCategories } from '@/server/data/inventory-helpers'
 import { getActingUserId } from '@/server/request-context'
+import { DataServiceAdmin } from '@/server/data-service-admin'
+import { planVoucherPosting, type PostingLine } from '@/server/voucher-posting'
 import type {
   Account,
   InventoryItem,
@@ -361,6 +363,7 @@ export class VoucherServiceAdmin {
     voucherData: Partial<VoucherFormData>
   ): Promise<InventoryVoucher> {
     const sql = getSql()
+    await this.requireStatus(sql, id, ['draft', 'rejected'], 'edited')
     const { lines } = voucherData
     const patch = formPatch(voucherData)
     const nextTotal =
@@ -486,6 +489,7 @@ export class VoucherServiceAdmin {
 
   static async deleteVoucher(id: number): Promise<void> {
     const sql = getSql()
+    await this.requireStatus(sql, id, ['draft', 'rejected', 'cancelled'], 'deleted')
     await sql`DELETE FROM public.inventory_vouchers WHERE id = ${id}`
   }
 
@@ -502,6 +506,7 @@ export class VoucherServiceAdmin {
     if (!organizationId) throw new Error('Organization ID is required')
 
     const sql = getSql()
+    await this.requireStatus(sql, id, ['draft', 'rejected'], 'sent for approval')
     let approverId: string | null = null
     const acc = (await sql<{ user_id: string }[]>`
       SELECT user_id::text as user_id FROM public.organization_members
@@ -578,6 +583,7 @@ export class VoucherServiceAdmin {
     const acting = getActingUserId()
     if (!acting) throw new Error('User not authenticated')
     const sql = getSql()
+    await this.requireStatus(sql, id, ['pending_finance'], 'approved')
     await sql`
       UPDATE public.inventory_vouchers
       SET
@@ -606,6 +612,7 @@ export class VoucherServiceAdmin {
     const acting = getActingUserId()
     if (!acting) throw new Error('User not authenticated')
     const sql = getSql()
+    await this.requireStatus(sql, id, ['pending_finance'], 'rejected')
     await sql`
       UPDATE public.inventory_vouchers
       SET
@@ -684,13 +691,18 @@ export class VoucherServiceAdmin {
 
   static async executeVoucher(
     id: number,
-    actualQuantities: { [lineId: number]: number }
+    actualQuantities: { [lineId: number]: number },
+    actualCosts?: { [lineId: number]: number }
   ): Promise<InventoryVoucher> {
     const acting = getActingUserId()
     if (!acting) throw new Error('User not authenticated')
     const sql = getSql()
     const voucher = await this.getVoucher(id)
     if (!voucher) throw new Error('Voucher not found')
+    await this.requireStatus(sql, id, ['approved'], 'received or issued')
+    for (const n of [...Object.values(actualQuantities), ...Object.values(actualCosts ?? {})]) {
+      if (!Number.isFinite(Number(n)) || Number(n) < 0) throw new Error('Quantities and costs must be zero or more.')
+    }
 
     const newStatus = voucher.voucher_type === 'purchase' ? 'receiving' : 'issuing'
     await sql`
@@ -710,19 +722,165 @@ export class VoucherServiceAdmin {
         WHERE id = ${parseInt(lineId, 10)} AND voucher_id = ${id}
       `
     }
+    for (const [lineId, cost] of Object.entries(actualCosts ?? {})) {
+      await sql`
+        UPDATE public.inventory_voucher_lines
+        SET unit_cost_actual = ${Number(cost)}
+        WHERE id = ${parseInt(lineId, 10)} AND voucher_id = ${id}
+      `
+    }
 
     const _v = await this.getVoucher(id)
     if (!_v) throw new Error('Failed to load voucher')
     return _v
   }
 
-  static async postVoucher(id: number): Promise<InventoryVoucher> {
+  /** The status a step needs. A voucher can't skip ahead, or repeat a step that changes the books. */
+  private static async requireStatus(exec: Pg, id: number, allowed: string[], action: string) {
+    const rows = (await exec<{ status: string }[]>`SELECT status::text AS status FROM public.inventory_vouchers WHERE id = ${id} LIMIT 1`) as { status: string }[]
+    if (!rows[0]) throw new Error('Voucher not found')
+    if (!allowed.includes(rows[0].status)) throw new Error(`This voucher is ${rows[0].status.replace('_', ' ')}, so it can't be ${action}.`)
+  }
+
+  /** Works out what posting would do from the voucher, its lines and their categories. */
+  private static async planPosting(exec: Pg, v: InventoryVoucher, payableAccountId: number | null | undefined, lock: boolean) {
+    const rows = (await exec<Record<string, string | number | null>[]>`
+      SELECT
+        l.id AS line_id, l.item_id, i.name AS item_name,
+        l.quantity_requested, l.quantity_actual, l.unit_cost_estimated, l.unit_cost_actual,
+        i.quantity_available, i.average_unit_cost,
+        c.inventory_account_id, c.expense_account_id
+      FROM public.inventory_voucher_lines l
+      INNER JOIN public.inventory_items i ON i.id = l.item_id
+      INNER JOIN public.inventory_categories c ON c.id = i.category_id
+      WHERE l.voucher_id = ${v.id}
+      ORDER BY l.line_number
+      ${lock ? exec`FOR UPDATE OF i` : exec``}
+    `) as Record<string, string | number | null>[]
+    const orNull = (x: string | number | null) => (x === null ? null : Number(x))
+    const lines: PostingLine[] = rows.map((r) => ({
+      line_id: Number(r.line_id),
+      item_id: Number(r.item_id),
+      item_name: String(r.item_name),
+      quantity_requested: Number(r.quantity_requested),
+      quantity_actual: orNull(r.quantity_actual),
+      unit_cost_estimated: orNull(r.unit_cost_estimated),
+      unit_cost_actual: orNull(r.unit_cost_actual),
+      quantity_available: Number(r.quantity_available),
+      average_unit_cost: Number(r.average_unit_cost),
+      inventory_account_id: Number(r.inventory_account_id),
+      expense_account_id: Number(r.expense_account_id),
+    }))
+    // Vouchers keep the vendor's name, not a link, so the supplier's payable account is found by name.
+    let suggested: number | null = null
+    if (v.voucher_type === 'purchase' && v.vendor_name) {
+      const found = (await exec<{ payable_account_id: number }[]>`
+        SELECT m.payable_account_id
+        FROM public.suppliers s
+        INNER JOIN public.supplier_account_mappings m ON m.supplier_id = s.id
+        WHERE s.organization_id = ${v.organization_id}::uuid AND lower(s.name) = lower(${v.vendor_name})
+        LIMIT 2
+      `) as { payable_account_id: number }[]
+      if (found.length === 1) suggested = Number(found[0].payable_account_id)
+    }
+    const v2 = v as unknown as { payment_type: string; payment_account_id: number | null; deposit_amount: number; destination_account_id: number | null }
+    const plan = planVoucherPosting({
+      voucher_type: v.voucher_type,
+      payment_type: v2.payment_type,
+      payment_account_id: orNull(v2.payment_account_id),
+      deposit_amount: Number(v2.deposit_amount) || 0,
+      destination_account_id: orNull(v2.destination_account_id),
+      payable_account_id: payableAccountId ?? suggested,
+      lines,
+    })
+    return { plan, suggested }
+  }
+
+  /** Shows what posting will record, without changing anything. */
+  static async previewVoucherPosting(id: number, options?: { payable_account_id?: number | null }) {
     const sql = getSql()
-    await sql`
-      UPDATE public.inventory_vouchers
-      SET status = 'posted' ::text, updated_at = now()
-      WHERE id = ${id}
-    `
+    await this.requireStatus(sql, id, ['receiving', 'issuing'], 'posted yet')
+    const rows = (await sql<InventoryVoucher[]>`SELECT * FROM public.inventory_vouchers WHERE id = ${id} LIMIT 1`) as InventoryVoucher[]
+    const v = rows[0]
+    const { plan, suggested } = await this.planPosting(sql, v, options?.payable_account_id, false)
+    const ids = plan.lines.map((l) => l.account_id)
+    const names = (await sql<{ id: number; code: string; name: string }[]>`
+      SELECT id, code, name FROM public.accounts
+      WHERE id = ANY(${ids}::bigint[]) AND organization_id = ${v.organization_id}::uuid
+    `) as { id: number; code: string; name: string }[]
+    const byId = new Map(names.map((a) => [Number(a.id), a]))
+    return {
+      total: plan.total,
+      problems: plan.problems,
+      needs_payable: plan.needs_payable,
+      suggested_payable_account_id: suggested,
+      lines: plan.lines.map((l) => ({ ...l, code: byId.get(l.account_id)?.code ?? '', name: byId.get(l.account_id)?.name ?? `Account ${l.account_id}` })),
+    }
+  }
+
+  /** Moves the stock and records the entry together: either both happen or neither does. */
+  static async postVoucher(id: number, options?: { payable_account_id?: number | null; date?: string }): Promise<InventoryVoucher> {
+    const acting = getActingUserId()
+    if (!acting) throw new Error('User not authenticated')
+    const date = options?.date && /^\d{4}-\d{2}-\d{2}$/.test(options.date) ? options.date : new Date().toISOString().slice(0, 10)
+    const sql = getSql()
+    await sql.begin(async (rawTx) => {
+      const tx = rawTx as unknown as Pg
+      const rows = (await tx<InventoryVoucher[]>`SELECT * FROM public.inventory_vouchers WHERE id = ${id} FOR UPDATE`) as InventoryVoucher[]
+      const v = rows[0]
+      if (!v) throw new Error('Voucher not found')
+      if (v.status !== 'receiving' && v.status !== 'issuing') throw new Error(`This voucher is ${String(v.status).replace('_', ' ')}, so it can't be posted.`)
+      const linked = (v as unknown as { journal_entry_id: number | null }).journal_entry_id
+      if (linked) throw new Error('This voucher has already been posted to your books.')
+
+      const { plan } = await this.planPosting(tx, v, options?.payable_account_id, true)
+      if (plan.problems.length) throw new Error(plan.problems[0])
+
+      const label = v.voucher_type === 'purchase' ? `Purchase from ${v.vendor_name ?? 'supplier'}` : `Stock issued${(v as unknown as { purpose?: string }).purpose ? `: ${(v as unknown as { purpose?: string }).purpose}` : ''}`
+      const entry = await DataServiceAdmin.insertJournalEntry(
+        tx,
+        {
+          organization_id: v.organization_id,
+          entry_number: `JE-${v.voucher_number}`,
+          entry_date: date,
+          description: `${label} (${v.voucher_number})`,
+          reference: v.voucher_number,
+          total_amount: plan.total,
+          is_posted: true,
+          created_by: acting,
+          posted_by: acting,
+          posted_at: new Date().toISOString(),
+        } as unknown as Parameters<typeof DataServiceAdmin.insertJournalEntry>[1],
+        plan.lines.map((l, i) => ({ account_id: l.account_id, description: l.description, debit_amount: l.debit, credit_amount: l.credit, line_order: i + 1 })) as unknown as Parameters<typeof DataServiceAdmin.insertJournalEntry>[2]
+      )
+      if (!entry) throw new Error('Could not record the journal entry')
+
+      for (const m of plan.moves) {
+        await DataServiceAdmin.applyInventoryTransaction(tx, {
+          organization_id: v.organization_id,
+          item_id: m.item_id,
+          transaction_type: m.type,
+          quantity: m.type === 'out' ? -m.quantity : m.quantity,
+          unit_cost: m.unit_cost,
+          total_cost: m.total_cost,
+          journal_entry_id: entry.id,
+          reference: v.voucher_number,
+          description: label,
+          transaction_date: date,
+          created_by: acting,
+        } as unknown as Parameters<typeof DataServiceAdmin.applyInventoryTransaction>[1])
+        await tx`
+          UPDATE public.inventory_voucher_lines
+          SET quantity_actual = ${m.quantity}, unit_cost_actual = ${m.unit_cost}, total_cost = ${m.total_cost}
+          WHERE id = ${m.line_id} AND voucher_id = ${id}
+        `
+      }
+      await tx`
+        UPDATE public.inventory_vouchers
+        SET status = 'posted', journal_entry_id = ${entry.id}, total_actual_cost = ${plan.total}, updated_at = now()
+        WHERE id = ${id}
+      `
+    })
     const _v = await this.getVoucher(id)
     if (!_v) throw new Error('Failed to load voucher')
     return _v
@@ -730,6 +888,7 @@ export class VoucherServiceAdmin {
 
   static async completeVoucher(id: number): Promise<InventoryVoucher> {
     const sql = getSql()
+    await this.requireStatus(sql, id, ['posted'], 'completed')
     await sql`
       UPDATE public.inventory_vouchers
       SET status = 'completed' ::text, updated_at = now()

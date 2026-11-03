@@ -1,5 +1,5 @@
 import { QueryClient, queryOptions } from '@tanstack/react-query'
-import { ApiError, call, getConnections, getMonthly, getProposals } from './api'
+import { ApiError, call, getConnections, getMonthly, getProposals, type Service } from './api'
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,14 +34,14 @@ type Breakdown = { total: Money; breakdown: { account: string; amount: Money }[]
 export type IncomeStatement = { revenue: Breakdown; costOfSales: Breakdown; operatingExpenses: Breakdown; otherExpenses: Breakdown; grossProfit: Money; netIncome: Money }
 export type TrialRow = { account_id: Id; account_code: string; account_name: string; account_type: string; debit_balance: Money; credit_balance: Money }
 export type Line = { id: Id; account_id: Id; description: string | null; debit_amount: Money; credit_amount: Money }
-export type Entry = { id: Id; entry_number: string; entry_date: string; description: string; reference: string | null; total_amount: Money; is_posted: boolean; lines: Line[] }
+export type Entry = { reverses_entry_id?: Id | null; id: Id; entry_number: string; entry_date: string; description: string; reference: string | null; total_amount: Money; is_posted: boolean; lines: Line[] }
 export type Account = { id: Id; code: string; name: string; account_type?: AccountType; parent_id?: Id | null; description?: string | null; group?: string | null; report_category?: string | null; is_postable?: boolean; is_active?: boolean }
 export type AccountTxn = { id: Id; entry_number: string; entry_date: string; description: string; reference?: string | null; debit_amount: Money; credit_amount: Money; balance: Money }
 export type StockItem = { id: Id; sku: string; name: string; unit_of_measure: string; quantity_available: Money; average_unit_cost: Money; total_value: Money; reorder_point: Money }
 export type VoucherStats = { pending_approval: Money }
 export type MonthRow = { month: string; revenue: Money; expenses: Money }
 
-export const q = <T,>(key: unknown[], service: 'DataService' | 'VoucherService' | 'AccountService' | 'SupplierService', method: string, args: unknown[]) =>
+export const q = <T,>(key: unknown[], service: Service, method: string, args: unknown[]) =>
   queryOptions<T>({ queryKey: key, queryFn: () => call<T>(service, method, args) })
 
 export const dashboard = (org: string, from: string, to: string) => q<DashboardBundle>(['dashboard', org, from, to], 'DataService', 'getDashboardBundle', [org, from, to])

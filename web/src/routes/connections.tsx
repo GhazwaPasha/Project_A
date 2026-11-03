@@ -52,6 +52,7 @@ export function Connections() {
       <div className="grid gap-3.5 lg:grid-cols-2 items-start">
       <form onSubmit={submit} className="sheet px-3.5 py-3 flex flex-col gap-2.5">
         <h2 className="font-semibold">Connect an AI app</h2>
+        <p className="text-[13px] text-muted-foreground">Apps that support sign-in only need this address, and you approve them here: <span className="fig break-all">{url}</span>. For other apps, create a token below.</p>
         <Input id="connection-name" aria-label="Connection name" placeholder="Name it, for example My laptop" value={name} onChange={(e) => setName(e.target.value)} className="max-w-sm" />
         <label className="flex items-start gap-3 cursor-pointer max-w-[60ch]">
           <Switch checked={canRecord} onCheckedChange={setCanRecord} className="mt-0.5" />

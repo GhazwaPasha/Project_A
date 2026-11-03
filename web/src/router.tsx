@@ -7,7 +7,7 @@ import type { Period } from '@/lib/data'
 import type { LedgerSearch } from '@/routes/ledger'
 
 function Root() {
-  const isDocument = useRouterState({ select: (s) => s.location.pathname.startsWith('/print/') })
+  const isDocument = useRouterState({ select: (s) => /^\/(print|oauth)\//.test(s.location.pathname) })
   return <AgentProvider>{isDocument ? <Outlet /> : <Shell />}</AgentProvider>
 }
 const root = createRootRoute({ component: Root })
@@ -64,6 +64,20 @@ const tree = root.addChildren([
   ledgerAccount,
   ledgerDoc,
   incomeDoc,
+  route('/invoices', lazyRouteComponent(() => import('@/routes/documents'), 'Invoices')),
+  route('/bills', lazyRouteComponent(() => import('@/routes/documents'), 'Bills')),
+  route('/customers', lazyRouteComponent(() => import('@/routes/documents'), 'Customers')),
+  route('/banking', lazyRouteComponent(() => import('@/routes/banking'), 'Banking')),
+  route('/budgets', lazyRouteComponent(() => import('@/routes/planning'), 'Budgets')),
+  route('/forecast', lazyRouteComponent(() => import('@/routes/planning'), 'ForecastPage')),
+  route('/tax', lazyRouteComponent(() => import('@/routes/planning'), 'Tax')),
+  route('/close', lazyRouteComponent(() => import('@/routes/planning'), 'CloseBooks')),
+  route('/reports/aged-receivables', lazyRouteComponent(() => import('@/routes/reports'), 'AgedReceivables')),
+  route('/reports/aged-payables', lazyRouteComponent(() => import('@/routes/reports'), 'AgedPayables')),
+  route('/oauth/authorize', lazyRouteComponent(() => import('@/routes/oauth'), 'OAuthConsent')),
+  route('/print/document/$documentId', lazyRouteComponent(() => import('@/routes/print'), 'DocumentDoc')),
+  route('/print/aged-receivables', lazyRouteComponent(() => import('@/routes/print'), 'AgedReceivablesDoc')),
+  route('/print/aged-payables', lazyRouteComponent(() => import('@/routes/print'), 'AgedPayablesDoc')),
   route('/print/balance-sheet', lazyRouteComponent(() => import('@/routes/print'), 'BalanceDoc')),
   route('/print/trial-balance', lazyRouteComponent(() => import('@/routes/print'), 'TrialDoc')),
   route('/trial-balance', TrialBalance),

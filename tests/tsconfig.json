@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "baseUrl": "..",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "es2022",
+    "paths": { "@/server/pg": ["./tests/helpers/pg.ts"], "@/*": ["./src/*"] }
+  }
+}

@@ -5,8 +5,10 @@ import { ArrowLeft, Download, Printer } from 'lucide-react'
 import { download } from '@/components/form'
 import { Empty, btn } from '@/components/page'
 import { figure, shortDate, useApp } from '@/lib/boot'
-import { balanceSheet, incomeStatement, num, periodRange, today, trialBalance, type Money, type Section } from '@/lib/data'
+import { balanceSheet, incomeStatement, num, periodRange, q, today, trialBalance, type Money, type Section } from '@/lib/data'
 import { useLedger } from '@/routes/ledger'
+import { statusBadge, type Doc } from '@/routes/documents'
+import { AGE_COLUMNS, type Aged } from '@/routes/reports'
 
 type Csv = (string | number)[][]
 
@@ -201,3 +203,57 @@ export function TrialDoc() {
     </PrintDoc>
   )
 }
+
+export function DocumentDoc() {
+  const { org } = useApp()
+  const { documentId } = useParams({ from: '/print/document/$documentId' })
+  const doc = useQuery(q<Doc>(['document', documentId], 'BooksService', 'getDocument', [org.id, Number(documentId)])).data
+  const d = org.decimals
+  const invoice = doc?.kind !== 'bill'
+  const n = (v: number) => num(v).toFixed(d)
+  const csv: Csv | null = doc ? [
+    ['Number', doc.number], [invoice ? 'Customer' : 'Supplier', doc.party_name], ['Date', doc.issue_date.slice(0, 10)], ['Due', doc.due_date.slice(0, 10)], ['Status', statusBadge(doc).label], [],
+    ['Description', 'Quantity', 'Price', 'Tax', 'Amount'],
+    ...doc.lines.map((l): (string | number)[] => [l.description, num(l.quantity), n(l.unit_price), l.tax_name ?? '', n(l.amount)]),
+    ['', '', '', 'Subtotal', n(doc.subtotal)], ['', '', '', 'Tax', n(doc.tax_total)], ['', '', '', 'Total', n(doc.total)], ['', '', '', 'Balance due', n(doc.balance)],
+  ] : null
+  return (
+    <PrintDoc title={invoice ? 'Invoice' : 'Bill'} heading={doc?.number} period={doc ? `${shortDate(doc.issue_date)}, due ${shortDate(doc.due_date)}` : ''} file={doc ? `${invoice ? 'Invoice' : 'Bill'} ${doc.number}` : 'Document'} back={{ to: invoice ? '/invoices' : '/bills', label: `Back to ${invoice ? 'invoices' : 'bills'}` }} csv={csv}>
+      {doc ? <>
+        <div className="mb-4"><p className="doc-muted">{invoice ? 'Bill to' : 'From'}</p><p className="text-[13px] font-semibold">{doc.party_name}</p>{doc.status === 'void' ? <p className="font-bold">VOID{doc.void_reason ? `: ${doc.void_reason}` : ''}</p> : doc.status === 'draft' ? <p className="font-bold">DRAFT</p> : null}</div>
+        <table className="doc-table">
+          <thead><tr><th>Description</th><th className="num">Qty</th><th className="num">Price</th><th>Tax</th><th className="num">Amount</th></tr></thead>
+          <tbody>
+            {doc.lines.map((l) => <tr key={l.id}><td>{l.description}</td><td className="num">{num(l.quantity)}</td><td className="num">{figure(num(l.unit_price), d)}</td><td>{l.tax_name ?? ''}</td><Num v={l.amount} d={d} /></tr>)}
+            <tr><td colSpan={4} className="text-right">Subtotal</td><Num v={doc.subtotal} d={d} /></tr>
+            <tr><td colSpan={4} className="text-right">Tax</td><Num v={doc.tax_total} d={d} /></tr>
+            <tr className="total"><td colSpan={4} className="text-right">Total ({org.currency})</td><Num v={doc.total} d={d} /></tr>
+            {num(doc.amount_paid) ? <><tr><td colSpan={4} className="text-right">Paid</td><Num v={doc.amount_paid} d={d} /></tr><tr className="sub"><td colSpan={4} className="text-right">Balance due</td><Num v={doc.balance} d={d} /></tr></> : null}
+          </tbody>
+        </table>
+        {doc.notes ? <p className="mt-4">{doc.notes}</p> : null}
+      </> : null}
+    </PrintDoc>
+  )
+}
+
+function AgedDoc({ kind }: { kind: 'invoice' | 'bill' }) {
+  const { org, pro } = useApp()
+  const a = useQuery(q<Aged>(['aged', org.id, kind, 'print'], 'BooksService', 'getAgedReport', [org.id, kind])).data
+  const d = org.decimals
+  const title = kind === 'invoice' ? (pro ? 'Aged Receivables' : 'Who owes you') : (pro ? 'Aged Payables' : 'Who you owe')
+  const csv: Csv | null = a ? [[kind === 'invoice' ? 'Customer' : 'Supplier', ...AGE_COLUMNS.map(([, l]) => l)], ...[...a.rows, a.totals].map((r): (string | number)[] => [r.party_name, ...AGE_COLUMNS.map(([k]) => num(r[k]).toFixed(d))])] : null
+  return (
+    <PrintDoc title={title} period={`As of ${shortDate(a?.as_of ?? today())}`} file={`${title} ${today()}`} back={{ to: kind === 'invoice' ? '/reports/aged-receivables' : '/reports/aged-payables', label: 'Back to report' }} csv={csv}>
+      <table className="doc-table">
+        <thead><tr><th>{kind === 'invoice' ? 'Customer' : 'Supplier'}</th>{AGE_COLUMNS.map(([k, l]) => <th key={k} className="num">{l}</th>)}</tr></thead>
+        <tbody>
+          {a?.rows.map((r) => <tr key={r.party_name}><td>{r.party_name}</td>{AGE_COLUMNS.map(([k]) => <td key={k} className="num">{r[k] ? figure(num(r[k]), d) : ''}</td>)}</tr>)}
+          {a ? <tr className="total"><td>Total</td>{AGE_COLUMNS.map(([k]) => <Num key={k} v={a.totals[k]} d={d} />)}</tr> : null}
+        </tbody>
+      </table>
+    </PrintDoc>
+  )
+}
+export const AgedReceivablesDoc = () => <AgedDoc kind="invoice" />
+export const AgedPayablesDoc = () => <AgedDoc kind="bill" />

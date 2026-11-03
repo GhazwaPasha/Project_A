@@ -5,6 +5,16 @@ import { hasOrgDataPermission, type OrgDataPermission } from '@/lib/organization
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
+const BOOKS_READ = new Set([
+  'getBooksLock', 'getCloseChecklist', 'listUnpostedStock', 'listCustomers', 'listTaxRates', 'listDocuments', 'getDocument', 'previewDocument',
+  'getAgedReport', 'getTaxSummary', 'listTaxReturns', 'getReconciliation', 'listBudgets', 'getBudgetReport', 'getForecast', 'getWorkSummary',
+])
+const BOOKS_WRITE = new Set([
+  'reverseEntry', 'closeBooks', 'postStockMovement', 'recordStockMovement', 'saveCustomer', 'archiveCustomer', 'saveTaxRate', 'saveDocument', 'deleteDocument',
+  'postDocument', 'recordPayment', 'voidDocument', 'recordTaxReturn', 'importStatement', 'matchStatementLine', 'unmatchStatementLine', 'ignoreStatementLine',
+  'createEntryFromStatementLine', 'completeReconciliation', 'saveBudget', 'deleteBudget',
+])
+
 /** Membership + specific data permission (or platform super admin). */
 async function requireDataPermission(
   userId: string,
@@ -380,6 +390,26 @@ export async function authorizeAppDataCall(
     await requireDataPermission(userId, orgId, 'inventory.read')
     return
   }
+  if (service === 'BooksService') {
+    const org = String(args[0] ?? '')
+    if (BOOKS_READ.has(method)) return requireDataPermission(userId, org, 'financial.read')
+    if (BOOKS_WRITE.has(method)) return requireDataPermission(userId, org, 'ledger.write')
+    // Reopening changes figures people may rely on, so it's the owner's call.
+    if (method === 'reopenBooks') {
+      if (!UUID_RE.test(org)) throw new Error('Forbidden')
+      const snap = await getOrgPermissionSnapshot(userId, org)
+      if (!snap) throw new Error('Forbidden')
+      if (snap.isSuperAdmin || snap.memberRole === 'organization_owner' || snap.memberRole === 'super_admin') return
+    }
+    throw new Error('Forbidden')
+  }
+
+  if (key === 'VoucherService.postVoucher' || key === 'VoucherService.previewVoucherPosting') {
+    const orgId = await orgFromVoucherId(Number(args[0]))
+    await requireDataPermission(userId, orgId, 'ledger.write')
+    return
+  }
+
   const voucherByIdWrite = new Set([
     'VoucherService.updateVoucher',
     'VoucherService.deleteVoucher',
@@ -387,7 +417,6 @@ export async function authorizeAppDataCall(
     'VoucherService.rejectVoucher',
     'VoucherService.renewExpiredVoucher',
     'VoucherService.executeVoucher',
-    'VoucherService.postVoucher',
     'VoucherService.completeVoucher',
   ])
   if (voucherByIdWrite.has(key)) {

@@ -1,11 +1,13 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Input } from '@/components/ui/input'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AskChip, AskLink } from '@/components/agent-panel'
-import { Cell, Head, Loaded, PrintLink, Screen, Table, Tabs } from '@/components/page'
+import { Cell, Head, Loaded, Empty, PrintLink, Screen, Table, Tabs, Toolbar } from '@/components/page'
 import { Badge, Chips } from '@/components/chips'
 import { figure, shortDate, useApp } from '@/lib/boot'
-import { balanceSheet, incomeStatement, num, periodRange, today, type Money, type Period, type Section } from '@/lib/data'
+import { balanceSheet, incomeStatement, num, periodRange, q as query, today, type Money, type Period, type Section } from '@/lib/data'
 
 const PERIODS = [{ id: 'month', label: 'This month' }, { id: 'quarter', label: 'This quarter' }, { id: 'year', label: 'This year' }]
 
@@ -14,6 +16,8 @@ function useTabs() {
   return [
     { to: '/reports/income-statement', label: pro ? 'Income Statement' : 'Profit' },
     { to: '/reports/balance-sheet', label: pro ? 'Balance Sheet' : 'What you own and owe' },
+    { to: '/reports/aged-receivables', label: pro ? 'Aged Receivables' : 'Who owes you' },
+    { to: '/reports/aged-payables', label: pro ? 'Aged Payables' : 'Who you owe' },
   ]
 }
 
@@ -22,11 +26,15 @@ export function ReportsIndex() {
   const { from, to } = periodRange('month')
   const income = useQuery(incomeStatement(org.id, from, to))
   const sheet = useQuery(balanceSheet(org.id, today()))
+  const agedIn = useQuery({ ...query<Aged>(['aged', org.id, 'invoice', 'today'], 'BooksService', 'getAgedReport', [org.id, 'invoice']), retry: false })
+  const agedOut = useQuery({ ...query<Aged>(['aged', org.id, 'bill', 'today'], 'BooksService', 'getAgedReport', [org.id, 'bill']), retry: false })
   return (
     <Screen title="Reports" sub={pro ? 'Financial statements from your books.' : 'Ask for any report below, or open one of these.'}>
       <div className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-3">
         <ReportRow to="/reports/income-statement" name={pro ? 'Income Statement' : 'Profit'} desc={pro ? 'Revenue, expenses and net income for a period.' : 'What you earned, what you spent, and what you kept.'} value={income.data ? money(num(income.data.netIncome)) : ''} label={pro ? 'Net income this month' : 'Profit this month'} />
         <ReportRow to="/reports/balance-sheet" name={pro ? 'Balance Sheet' : 'What you own and owe'} desc={pro ? 'Assets, liabilities and equity as of today.' : 'A snapshot of your business today.'} value={sheet.data ? money(num(sheet.data.totalAssets)) : ''} label={pro ? 'Total assets' : 'You own'} />
+        <ReportRow to="/reports/aged-receivables" name={pro ? 'Aged Receivables' : 'Who owes you'} desc="What customers owe, and how late it is." value={agedIn.data ? money(num(agedIn.data.totals.total)) : ''} label="Outstanding" />
+        <ReportRow to="/reports/aged-payables" name={pro ? 'Aged Payables' : 'Who you owe'} desc="What you owe suppliers, and how late it is." value={agedOut.data ? money(num(agedOut.data.totals.total)) : ''} label="Outstanding" />
         <ReportRow to="/trial-balance" name="Trial Balance" desc={pro ? 'Debits and credits by account, with book checks.' : 'A check that your books are right.'} value={sheet.data ? <Badge tone={sheet.data.isBalanced ? 'good' : 'bad'} dot>{sheet.data.isBalanced ? 'Balanced' : 'Out of balance'}</Badge> : ''} label="Books" />
       </div>
       <div className="grid gap-3.5 lg:grid-cols-2 items-start">
@@ -188,3 +196,37 @@ function Group({ title, sections, total, decimals }: { title: string; sections: 
     </>
   )
 }
+
+type AgedRow = { party_name: string; current: number; d1_30: number; d31_60: number; d61_90: number; d90_plus: number; total: number }
+export type Aged = { as_of: string; rows: AgedRow[]; totals: AgedRow }
+export const AGE_COLUMNS: [keyof AgedRow, string][] = [['current', 'Not yet due'], ['d1_30', '1-30 days'], ['d31_60', '31-60 days'], ['d61_90', '61-90 days'], ['d90_plus', 'Over 90 days'], ['total', 'Total']]
+
+function AgedReport({ kind }: { kind: 'invoice' | 'bill' }) {
+  const { org, pro } = useApp()
+  const tabs = useTabs()
+  const [asOf, setAsOf] = useState(today())
+  const report = useQuery(query<Aged>(['aged', org.id, kind, asOf], 'BooksService', 'getAgedReport', [org.id, kind, asOf]))
+  const d = org.decimals
+  const title = kind === 'invoice' ? (pro ? 'Aged Receivables' : 'Who owes you') : (pro ? 'Aged Payables' : 'Who you owe')
+  return (
+    <Screen title={title} sub={`As of ${shortDate(asOf)}, ${org.currency}. Age counts from each due date.`} actions={<PrintLink to={kind === 'invoice' ? '/print/aged-receivables' : '/print/aged-payables'} />} tabs={<Tabs items={tabs} />}>
+      <Toolbar>
+        <label className="flex items-center gap-2 text-[13px]"><span className="text-muted-foreground">As of</span><Input aria-label="As of date" type="date" value={asOf} onChange={(e) => setAsOf(e.target.value || today())} className="h-8 w-[150px]" /></label>
+        <span className="ml-auto"><AskChip prompt={kind === 'invoice' ? 'Who should I chase for payment first, and why?' : 'Which suppliers should I pay first, and why?'}>{kind === 'invoice' ? 'Who should I chase first?' : 'Who should I pay first?'}</AskChip></span>
+      </Toolbar>
+      <Loaded query={report} empty={(a) => (a.rows.length === 0 ? <Empty title="Nothing outstanding" body={kind === 'invoice' ? 'No customer owes you anything on this date.' : "You don't owe any supplier anything on this date."} /> : null)}>
+        {(a) => (
+          <Table min={760}>
+            <thead><tr><Head>{kind === 'invoice' ? 'Customer' : 'Supplier'}</Head>{AGE_COLUMNS.map(([k, l]) => <Head key={k} right>{l}</Head>)}</tr></thead>
+            <tbody>
+              {a.rows.map((r) => <tr key={r.party_name}><Cell>{r.party_name}</Cell>{AGE_COLUMNS.map(([k]) => <Cell key={k} right className={k === 'd90_plus' && r.d90_plus ? 'text-[var(--note)]' : undefined}>{r[k] ? figure(num(r[k]), d) : ''}</Cell>)}</tr>)}
+              <tr className="rule-total"><Cell className="border-b-0">Total</Cell>{AGE_COLUMNS.map(([k]) => <Cell key={k} right>{figure(num(a.totals[k]), d)}</Cell>)}</tr>
+            </tbody>
+          </Table>
+        )}
+      </Loaded>
+    </Screen>
+  )
+}
+export const AgedReceivables = () => <AgedReport kind="invoice" />
+export const AgedPayables = () => <AgedReport kind="bill" />

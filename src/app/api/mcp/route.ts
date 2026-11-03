@@ -1,13 +1,15 @@
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { createMcpServer } from '@/server/mcp/server'
 import { principalFromRequest } from '@/server/mcp/tokens'
+import { allowRequest, clientIp, tooMany } from '@/server/rate-limit'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
-const unauthorized = () => new Response(JSON.stringify({ error: 'A valid Accountuitive connection token is required.' }), {
+// The header points AI apps to sign-in, so a person can approve them without copying a token.
+const unauthorized = (req: Request) => new Response(JSON.stringify({ error: 'A valid Accountuitive connection token is required.' }), {
   status: 401,
-  headers: { 'Content-Type': 'application/json', 'WWW-Authenticate': 'Bearer' },
+  headers: { 'Content-Type': 'application/json', 'WWW-Authenticate': `Bearer resource_metadata="${new URL(req.url).origin}/.well-known/oauth-protected-resource"` },
 })
 
 /** Stateless Streamable HTTP: each request authenticates and gets its own server instance. */
@@ -21,7 +23,11 @@ async function handle(req: Request) {
     }
     throw e
   }
-  if (!principal) return unauthorized()
+  if (!principal) {
+    if (!(await allowRequest(`mcp-anon:${clientIp(req)}`, 30))) return tooMany()
+    return unauthorized(req)
+  }
+  if (!(await allowRequest(`mcp:${principal.userId}`, 120))) return tooMany()
 
   const server = createMcpServer({ userId: principal.userId, org: principal.org, source: 'mcp', sourceName: principal.name, canRecord: principal.canRecord })
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })

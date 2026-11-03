@@ -77,6 +77,7 @@ const vouchers = [
   { id: 1, voucher_number: 'PV-2026-0012', voucher_type: 'purchase', status: 'pending_finance', requested_date: '2026-11-01', vendor_name: 'Noor Packaging', description: 'Cartons for November', payment_type: 'credit', total_estimated_cost: 30000, approval_deadline: '2026-11-08', lines: [voucherLine(1, items[0], 50)], attachments: [] },
   { id: 2, voucher_number: 'IV-2026-0007', voucher_type: 'issuance', status: 'pending_finance', requested_date: '2026-11-02', purpose: 'Eid gift packing', destination: 'Warehouse B', description: 'Foam for gift packing', payment_type: 'cash', total_estimated_cost: 3000, approval_deadline: '2026-11-09', lines: [voucherLine(2, items[2], 20)], attachments: [] },
   { id: 3, voucher_number: 'PV-2026-0011', voucher_type: 'purchase', status: 'approved', requested_date: '2026-10-24', vendor_name: 'City Print House', description: 'Label rolls', payment_type: 'bank_transfer', total_estimated_cost: 5500, lines: [voucherLine(3, items[1], 10)], attachments: [{ id: 1, file_name: 'quote-city-print.pdf' }] },
+  { id: 6, voucher_number: 'PV-2026-0010', voucher_type: 'purchase', status: 'receiving', requested_date: '2026-10-20', vendor_name: 'City Print House', description: 'Label rolls', payment_type: 'credit', total_estimated_cost: 5500, lines: [voucherLine(6, items[1], 10)], attachments: [] },
   { id: 4, voucher_number: 'PV-2026-0009', voucher_type: 'purchase', status: 'completed', requested_date: '2026-10-11', vendor_name: 'Noor Packaging', description: 'Sealing tape', payment_type: 'credit', total_estimated_cost: 4600, lines: [voucherLine(4, items[3], 20)], attachments: [] },
   { id: 5, voucher_number: 'PV-2026-0008', voucher_type: 'purchase', status: 'rejected', requested_date: '2026-10-05', vendor_name: 'Gulf Trading', description: 'Foam at a higher price', rejection_reason: 'Noor Packaging quoted less.', payment_type: 'credit', total_estimated_cost: 18000, lines: [voucherLine(5, items[2], 100)], attachments: [] },
 ]
@@ -90,6 +91,69 @@ const members = [
   { id: 'm2', user_id: 'u2', email: 'accounts@example.com', full_name: 'Sample Accountant', role: 'accountant', joined_at: '2026-02-11' },
   { id: 'm3', user_id: 'u3', email: 'warehouse@example.com', full_name: null, role: 'member', joined_at: '2026-06-20' },
 ]
+
+const docLine = (id: number, description: string, quantity: number, unit_price: number, taxed = true) => ({ id, description, account_id: 6, quantity, unit_price, tax_rate_id: taxed ? 1 : null, tax_rate: taxed ? 17 : 0, tax_name: taxed ? 'GST' : null, amount: quantity * unit_price, tax_amount: taxed ? quantity * unit_price * 0.17 : 0 })
+const sampleDocs = [
+  { id: 1, kind: 'invoice', number: 'INV-0004', status: 'draft', party_name: 'Apex Retail', issue_date: '2026-11-02', due_date: '2026-12-02', subtotal: 100000, tax_total: 17000, total: 117000, amount_paid: 0, balance: 117000 },
+  { id: 2, kind: 'invoice', number: 'INV-0003', status: 'posted', party_name: 'Sunrise Foods', issue_date: '2026-10-20', due_date: '2026-11-19', subtotal: 50000, tax_total: 8500, total: 58500, amount_paid: 0, balance: 58500 },
+  { id: 3, kind: 'invoice', number: 'INV-0002', status: 'partial', party_name: 'Apex Retail', issue_date: '2026-08-05', due_date: '2026-09-04', subtotal: 200000, tax_total: 34000, total: 234000, amount_paid: 100000, balance: 134000 },
+  { id: 4, kind: 'invoice', number: 'INV-0001', status: 'paid', party_name: 'Delta Traders', issue_date: '2026-07-01', due_date: '2026-07-31', subtotal: 40000, tax_total: 6800, total: 46800, amount_paid: 46800, balance: 0 },
+  { id: 5, kind: 'bill', number: 'BILL-0002', status: 'posted', party_name: 'City Power', issue_date: '2026-10-01', due_date: '2026-10-15', subtotal: 18750, tax_total: 0, total: 18750, amount_paid: 0, balance: 18750 },
+  { id: 6, kind: 'bill', number: 'BILL-0001', status: 'paid', party_name: 'Noor Packaging', issue_date: '2026-09-10', due_date: '2026-10-10', subtotal: 30000, tax_total: 5100, total: 35100, amount_paid: 35100, balance: 0 },
+]
+const sampleDoc = (id: unknown) => {
+  const d = sampleDocs.find((x) => String(x.id) === String(id)) ?? sampleDocs[0]
+  return { ...d, customer_id: null, supplier_id: null, notes: null, void_reason: null, suggested_control_account_id: null, lines: [docLine(1, 'Packed goods', 10, d.subtotal / 10)], payments: d.amount_paid ? [{ id: 1, payment_date: '2026-09-01', amount: d.amount_paid, reference: 'Bank transfer' }] : [] }
+}
+const aged = (rows: { party_name: string; current?: number; d1_30?: number; d31_60?: number; d61_90?: number; d90_plus?: number }[]) => {
+  const full = rows.map((r) => ({ current: 0, d1_30: 0, d31_60: 0, d61_90: 0, ...r, d90_plus: r.d90_plus ?? 0, total: (r.current ?? 0) + (r.d1_30 ?? 0) + (r.d31_60 ?? 0) + (r.d61_90 ?? 0) + (r.d90_plus ?? 0) }))
+  const sum = (k: 'current' | 'd1_30' | 'd31_60' | 'd61_90' | 'd90_plus' | 'total') => full.reduce((t, r) => t + r[k], 0)
+  return { as_of: '2026-11-03', rows: full, totals: { party_name: 'Total', current: sum('current'), d1_30: sum('d1_30'), d31_60: sum('d31_60'), d61_90: sum('d61_90'), d90_plus: sum('d90_plus'), total: sum('total') } }
+}
+const bookSamples: Record<string, (args: unknown[]) => unknown> = {
+  getWorkSummary: () => ({ overdue_invoices: 1, overdue_bills: 1, unmatched_bank_lines: 2 }),
+  listDocuments: (args) => sampleDocs.filter((d) => d.kind === args[1]),
+  getDocument: (args) => sampleDoc(args[1]),
+  previewDocument: (args) => {
+    const chosen = (args[2] as { control_account_id?: number | null } | undefined)?.control_account_id
+    return { problems: chosen ? [] : ['Choose the account that tracks what customers owe you.'], suggested_control_account_id: null, lines: [...(chosen ? [{ account_id: 2, code: '1200', name: 'Accounts receivable', debit: 117000, credit: 0 }] : []), { account_id: 6, code: '4000', name: 'Sales', debit: 0, credit: 100000 }, { account_id: 4, code: '2000', name: 'GST payable', debit: 0, credit: 17000 }] }
+  },
+  listCustomers: () => [{ id: 1, name: 'Apex Retail', email: 'ap@example.com', phone: null, address: null, tax_id: null, receivable_account_id: null, balance: 251000 }, { id: 2, name: 'Sunrise Foods', email: null, phone: '+92 300 0000000', address: null, tax_id: null, receivable_account_id: 2, balance: 58500 }],
+  listTaxRates: () => [{ id: 1, name: 'GST', rate: 17, sales_account_id: 4, purchase_account_id: 3, is_active: true }, { id: 2, name: 'Old rate', rate: 16, sales_account_id: 4, purchase_account_id: 3, is_active: false }],
+  getTaxSummary: () => ({ from: '2026-10-01', to: '2026-11-03', output_tax: 25500, input_tax: 5100, net_tax: 20400, rates: [{ rate_name: 'GST', rate: 17, sales: 150000, output_tax: 25500, purchases: 30000, input_tax: 5100 }] }),
+  listTaxReturns: () => [{ id: 1, period_from: '2026-07-01', period_to: '2026-09-30', output_tax: 40800, input_tax: 5100, net_tax: 35700, reference: 'Q3 return', filed_at: '2026-10-14' }],
+  getAgedReport: (args) => (args[1] === 'invoice' ? aged([{ party_name: 'Apex Retail', current: 117000, d61_90: 134000 }, { party_name: 'Sunrise Foods', current: 58500 }]) : aged([{ party_name: 'City Power', d1_30: 18750 }])),
+  getReconciliation: (args) => {
+    const balance = (args[2] as { statement_balance?: number | null } | undefined)?.statement_balance
+    const outstanding = [{ id: 11, date: '2026-10-30', entry_number: 'JE-2040', description: 'Cheque to City Power', amount: -18750 }]
+    return { as_of: '2026-11-03', book_balance: 412300, outstanding, history: [], summary: balance == null ? null : { outstanding: -18750, unrecorded: -350, reconciled: 430700, difference: balance - 430700, balanced: false }, lines: [
+      { id: 1, date: '2026-10-28', description: 'Deposit, Apex Retail', reference: null, amount: 100000, status: 'unmatched', candidates: [{ id: 10, date: '2026-10-27', entry_number: 'JE-2039', description: 'Receipt from Apex Retail', amount: 100000 }] },
+      { id: 2, date: '2026-10-31', description: 'Monthly bank charge', reference: null, amount: -350, status: 'unmatched', candidates: [] },
+      { id: 3, date: '2026-10-15', description: 'Rent', reference: null, amount: -65000, status: 'matched', candidates: [] },
+    ] }
+  },
+  listBudgets: () => [{ id: 1, name: 'Plan', year: 2026, total: 1800000 }],
+  getBudgetReport: () => {
+    const row = (account_id: number, code: string, name: string, account_type: string, month: number, spent: number) => ({ account_id, code, name, account_type, budget: Array(12).fill(month), actual: Array.from({ length: 12 }, (_v, i) => (i < 10 ? spent : 0)), budget_total: month * 12, actual_total: spent * 10, variance: spent * 10 - month * 12 })
+    const accounts = [row(6, '4000', 'Sales', 'revenue', 70000, 64000), row(8, '6000', 'Salaries', 'expense', 12000, 12000), row(10, '6200', 'Rent', 'expense', 6000, 6500), row(9, '6100', 'Utilities', 'expense', 1500, 2040)]
+    return { id: 1, name: 'Plan', year: 2026, accounts, revenue: { budget: 840000, actual: 640000 }, expense: { budget: 234000, actual: 205400 } }
+  },
+  getForecast: (args) => {
+    const n = Number(args[1]) || 6
+    return { months_of_history: 9, confidence: 'reasonable', cash_today: 412300, history: [], rows: Array.from({ length: n }, (_v, i) => {
+      const d = new Date(2026, 10 + i, 1)
+      const revenue = 420000 + i * 8000, expenses = 360000 + i * 3000
+      return { month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, revenue, expenses, net: revenue - expenses, receivable_due: i === 0 ? 175500 : 0, payable_due: i === 0 ? 18750 : 0, cash: 412300 + (i + 1) * 60000 + (i * (i + 1) * 2500) }
+    }) }
+  },
+  getBooksLock: () => ({ closed_through: '2026-09-30', history: [{ id: 1, through_date: '2026-09-30', notes: 'Q3 done', closed_at: '2026-10-05', reopened_at: null, reopen_reason: null }] }),
+  getCloseChecklist: () => ({ balanced: true, draft_documents: 1, unmatched_bank_lines: 2, pending_proposals: 0, unposted_stock: 0, unposted_vouchers: 1 }),
+  listUnpostedStock: () => [],
+  ...Object.fromEntries(['reverseEntry', 'closeBooks', 'reopenBooks', 'postStockMovement', 'recordStockMovement', 'saveCustomer', 'archiveCustomer', 'saveTaxRate', 'deleteDocument', 'postDocument', 'recordPayment', 'voidDocument', 'recordTaxReturn', 'matchStatementLine', 'unmatchStatementLine', 'ignoreStatementLine', 'createEntryFromStatementLine', 'completeReconciliation', 'deleteBudget'].map((m) => [m, () => ({})])),
+  saveDocument: () => ({ id: 1 }),
+  saveBudget: () => ({ id: 1 }),
+  importStatement: () => ({ added: 12, skipped: 0 }),
+}
 
 const handlers: Record<string, (args: unknown[]) => unknown> = {
   getDashboardBundle: () => ({ financialMetrics: { totalRevenue: 640000, totalExpenses: 572000 }, accountBalances }),
@@ -130,7 +194,13 @@ const handlers: Record<string, (args: unknown[]) => unknown> = {
   getVoucher: (args) => vouchers.find((v) => v.id === args[0]) ?? null,
   createVoucher: () => ({ id: Date.now() }),
   ...Object.fromEntries(['submitForApproval', 'approveVoucher', 'rejectVoucher', 'renewExpiredVoucher', 'executeVoucher', 'postVoucher', 'completeVoucher', 'deleteVoucher', 'deleteAttachment'].map((m) => [m, () => ({})])),
+  previewVoucherPosting: (args) => {
+    const payable = (args[1] as { payable_account_id?: number | null } | undefined)?.payable_account_id
+    const owed = payable ?? null
+    return { total: 5500, needs_payable: !owed, suggested_payable_account_id: null, problems: owed ? [] : ['Choose the account that tracks what you owe this supplier.'], lines: [{ account_id: 3, code: '1300', name: 'Inventory', debit: 5500, credit: 0 }, ...(owed ? [{ account_id: 4, code: '2000', name: 'Accounts payable', debit: 0, credit: 5500 }] : [])] }
+  },
   getSuppliers: () => suppliers,
+  ...bookSamples,
   getSuppliersForVoucher: () => suppliers.map(({ id, supplier_code, name }) => ({ id, supplier_code, name })),
   getSupplierContacts: () => [{ id: 1, name: 'Sana Malik', title: 'Sales', email: 'orders@example.com', phone: null, mobile: null, is_primary: true, is_billing: false }],
   getSupplierAccountMappings: () => ({ payable_account_id: 4 }),
@@ -183,6 +253,7 @@ export async function demoRest(path: string, method: string, _body: unknown) {
   await new Promise((r) => setTimeout(r, 120))
   if (method !== 'GET') return { id: 'o1' }
   if (path.endsWith('/members')) return { members }
+  if (path.startsWith('/api/oauth/client')) return { name: 'Claude Desktop' }
   if (path === '/api/super-admin/overview') {
     return {
       stats: { totalUsers: 3, totalOrganizations: 2, superAdmins: 1, activeMemberships: 4 },

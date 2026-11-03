@@ -7,7 +7,7 @@ import { Cell, Empty, Head, Loaded, Paged, Screen, SearchIcon, Table, Tabs, Tool
 import { Badge, Chip, Chips } from '@/components/chips'
 import { call } from '@/lib/api'
 import { figure, shortDate, useApp } from '@/lib/boot'
-import { accounts, num, q, today, type Id, type Money, type StockItem } from '@/lib/data'
+import { accounts, num, q, refreshBooks, today, type Id, type Money, type StockItem } from '@/lib/data'
 import { cn } from '@/lib/utils'
 
 export const INVENTORY_TABS = [
@@ -18,7 +18,7 @@ export const INVENTORY_TABS = [
 ]
 export type Item = StockItem & { category_id: Id; description: string | null; reorder_quantity: Money; category?: { name: string } }
 export type Category = { id: Id; name: string; description: string | null; inventory_account_id: Id; expense_account_id: Id }
-type Movement = { id: Id; item_id: Id; transaction_type: 'in' | 'out' | 'adjustment'; quantity: Money; unit_cost: Money | null; total_cost: Money | null; reference: string | null; description: string | null; transaction_date: string; item?: { name: string; sku: string } }
+type Movement = { journal_entry_id?: Id | null; id: Id; item_id: Id; transaction_type: 'in' | 'out' | 'adjustment'; quantity: Money; unit_cost: Money | null; total_cost: Money | null; reference: string | null; description: string | null; transaction_date: string; item?: { name: string; sku: string } }
 
 export const items = (org: string) => q<Item[]>(['stock', org], 'DataService', 'getInventoryItems', [org, false])
 export const categories = (org: string) => q<Category[]>(['categories', org], 'DataService', 'getInventoryCategories', [org, false])
@@ -135,22 +135,31 @@ function MovementForm({ open, itemList, onClose }: { open: boolean; itemList: It
   const item = itemList.find((i) => String(i.id) === f.item_id)
   const qty = Number(f.quantity)
   const tooMany = f.type === 'out' && item != null && qty > num(item.quantity_available)
-  const save = useSave(() => call('DataService', 'createInventoryTransaction', [{
-    organization_id: org.id,
-    item_id: Number(f.item_id),
-    transaction_type: f.type,
-    quantity: f.type === 'out' ? -Math.abs(qty) : qty,
-    unit_cost: f.unit_cost ? Number(f.unit_cost) : null,
-    total_cost: f.unit_cost ? Math.abs(qty) * Number(f.unit_cost) : null,
-    journal_entry_id: null,
-    reference: f.reference.trim() || null,
-    description: f.description.trim() || null,
-    transaction_date: f.date,
-    created_by: userId,
-  }]), { success: 'Stock movement recorded', refresh: REFRESH, onDone: onClose })
+  const { canSeeBooks } = useApp()
+  const chart = useQuery({ ...accounts(org.id), enabled: open && canSeeBooks })
+  const [offset, setOffset] = useState('')
+  const signed = f.type === 'out' ? -Math.abs(qty) : qty
+  // People with access to the books record the stock and its entry together. Others record stock for an accountant to post.
+  const save = useSave(() => canSeeBooks
+    ? call('BooksService', 'recordStockMovement', [org.id, { item_id: Number(f.item_id), transaction_type: f.type, quantity: f.type === 'adjustment' ? qty : Math.abs(qty), unit_cost: f.unit_cost ? Number(f.unit_cost) : null, reference: f.reference.trim() || null, description: f.description.trim() || null, transaction_date: f.date, offset_account_id: offset ? Number(offset) : null }])
+    : call('DataService', 'createInventoryTransaction', [{
+      organization_id: org.id,
+      item_id: Number(f.item_id),
+      transaction_type: f.type,
+      quantity: signed,
+      unit_cost: f.unit_cost ? Number(f.unit_cost) : null,
+      total_cost: f.unit_cost ? Math.abs(qty) * Number(f.unit_cost) : null,
+      journal_entry_id: null,
+      reference: f.reference.trim() || null,
+      description: f.description.trim() || null,
+      transaction_date: f.date,
+      created_by: userId,
+    }]), { success: canSeeBooks ? 'Recorded, with its entry in your books' : 'Recorded. An accountant will post it to the books.', refresh: REFRESH, onDone: () => { refreshBooks(); onClose() } })
+  const offsetOptions = (chart.data ?? []).filter((a) => a.is_postable !== false).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))
+  const needsOffset = canSeeBooks && f.type === 'in'
   return (
     <Modal open={open} onClose={onClose} title="Record stock movement">
-      <FormBody onSubmit={() => save.mutate()} submit="Record" pending={save.isPending} onCancel={onClose} disabled={!f.item_id || !qty || tooMany}>
+      <FormBody onSubmit={() => save.mutate()} submit="Record" pending={save.isPending} onCancel={onClose} disabled={!f.item_id || !qty || tooMany || (needsOffset && !offset)}>
         <Choice label="Item" required placeholder="Select item" value={f.item_id} onChange={set('item_id')} options={itemList.map((i) => ({ value: String(i.id), label: `${i.name} (${figure(num(i.quantity_available), 0)} ${i.unit_of_measure})` }))} />
         <div className="grid sm:grid-cols-2 gap-3">
           <Choice label="What happened" value={f.type} onChange={set('type')} options={[{ value: 'in', label: 'Stock came in' }, { value: 'out', label: 'Stock went out' }, { value: 'adjustment', label: 'Count correction' }]} />
@@ -161,7 +170,7 @@ function MovementForm({ open, itemList, onClose }: { open: boolean; itemList: It
         </div>
         <Text label="Notes" value={f.description} onChange={set('description')} />
         {tooMany ? <p role="alert" className="text-[13px] text-destructive">Only {figure(num(item!.quantity_available), 0)} {item!.unit_of_measure} on hand.</p> : null}
-        <p className="text-[12.5px] text-muted-foreground">This updates stock only. It does not post an entry to your books yet.</p>
+        {canSeeBooks ? <Choice label={f.type === 'in' ? 'Where did it come from?' : 'Where does the cost go?'} required={needsOffset} hint={f.type === 'in' ? 'For example, what you owe a supplier, or the bank.' : "Leave blank to use the category's cost account."} placeholder={f.type === 'in' ? 'Select account' : "Category's cost account"} value={offset} onChange={setOffset} options={offsetOptions} /> : <p className="text-[12.5px] text-muted-foreground">This updates stock. An accountant then posts it to the books.</p>}
       </FormBody>
     </Modal>
   )
@@ -232,7 +241,8 @@ function CategoryForm({ draft, onClose }: { draft: CatDraft | null; onClose: () 
 const MOVE_LABEL = { in: 'In', out: 'Out', adjustment: 'Correction' }
 
 export function Movements() {
-  const { org, pro } = useApp()
+  const { org, pro, canSeeBooks } = useApp()
+  const [posting, setPosting] = useState<Movement | null>(null)
   const list = useQuery(movements(org.id))
   const [search, setSearch] = useState('')
   const [kind, setKind] = useState('all')
@@ -248,7 +258,7 @@ export function Movements() {
           <Paged rows={rows}>
             {(page, pager) => (
           <Table min={720} footer={pager}>
-            <thead><tr><Head>Date</Head><Head>Item</Head><Head>Type</Head><Head>Notes</Head>{pro ? <Head>Reference</Head> : null}<Head right>Quantity</Head><Head right>Cost</Head></tr></thead>
+            <thead><tr><Head>Date</Head><Head>Item</Head><Head>Type</Head><Head>Notes</Head>{pro ? <Head>Reference</Head> : null}<Head>Books</Head><Head right>Quantity</Head><Head right>Cost</Head></tr></thead>
             <tbody>
               {page.map((m) => (
                 <tr key={m.id}>
@@ -257,6 +267,7 @@ export function Movements() {
                   <Cell><Badge dot tone={m.transaction_type === 'in' ? 'good' : m.transaction_type === 'out' ? 'bad' : 'warn'}>{MOVE_LABEL[m.transaction_type]}</Badge></Cell>
                   <Cell className="max-w-0 w-full truncate text-muted-foreground">{m.description ?? ''}</Cell>
                   {pro ? <Cell className="text-muted-foreground">{m.reference ?? ''}</Cell> : null}
+                  <Cell>{m.journal_entry_id ? <Badge dot tone="good">In books</Badge> : !num(m.total_cost) ? <Badge>No value</Badge> : canSeeBooks ? <button onClick={() => setPosting(m)} className="text-[13px] font-medium underline underline-offset-[3px] cursor-pointer">Post</button> : <Badge dot tone="warn">Not yet</Badge>}</Cell>
                   <Cell right>{figure(num(m.quantity), 0)}</Cell>
                   <Cell right>{m.total_cost != null ? figure(num(m.total_cost), org.decimals) : ''}</Cell>
                 </tr>
@@ -267,6 +278,23 @@ export function Movements() {
           </Paged>
         )}
       </Loaded>
+      {posting ? <PostMovement movement={posting} onClose={() => setPosting(null)} /> : null}
     </Screen>
+  )
+}
+
+function PostMovement({ movement: m, onClose }: { movement: Movement; onClose: () => void }) {
+  const { org } = useApp()
+  const chart = useQuery(accounts(org.id))
+  const [offset, setOffset] = useState('')
+  const save = useSave(() => call('BooksService', 'postStockMovement', [org.id, m.id, { offset_account_id: offset ? Number(offset) : null }]), { success: 'Posted to your books', refresh: REFRESH, onDone: () => { refreshBooks(); onClose() } })
+  const needsOffset = m.transaction_type === 'in'
+  return (
+    <Modal open onClose={onClose} title="Post to your books">
+      <FormBody onSubmit={() => save.mutate()} submit={`Post ${figure(Math.abs(num(m.total_cost)), org.decimals)}`} pending={save.isPending} onCancel={onClose} disabled={needsOffset && !offset}>
+        <p className="text-[13.5px]">{m.item?.name ?? `Item ${m.item_id}`}, {shortDate(m.transaction_date)}.</p>
+        <Choice label={needsOffset ? 'Where did it come from?' : 'Where does the cost go?'} placeholder={needsOffset ? 'Select account' : "Category's cost account"} value={offset} onChange={setOffset} options={(chart.data ?? []).filter((a) => a.is_postable !== false).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))} />
+      </FormBody>
+    </Modal>
   )
 }

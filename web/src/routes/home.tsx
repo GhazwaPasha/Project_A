@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { AlertTriangle, CheckCircle2, ClipboardCheck, PackageOpen } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ClipboardCheck, FileText, PackageOpen, Receipt } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AskLink, ProposalCard } from '@/components/agent-panel'
 import { NewEntry } from '@/components/new-entry'
@@ -10,7 +10,7 @@ import { btn } from '@/components/page'
 import { Chips, Count } from '@/components/chips'
 import { figure, shortDate, useApp } from '@/lib/boot'
 import { ApiError } from '@/lib/api'
-import { balanceSheet, dashboard, incomeStatement, journal, lowStock, monthly, num, periodRange, proposals, today, voucherStats, type MonthRow, type Period } from '@/lib/data'
+import { balanceSheet, dashboard, incomeStatement, journal, lowStock, monthly, num, periodRange, proposals, q, today, voucherStats, type MonthRow, type Period } from '@/lib/data'
 
 const PERIODS = [{ id: 'month', label: 'This month' }, { id: 'quarter', label: 'This quarter' }, { id: 'year', label: 'This year' }]
 
@@ -25,6 +25,7 @@ export function Home() {
   const months = useQuery(monthly(org.id))
   const entries = useQuery(journal(org.id))
   const low = useQuery(lowStock(org.id))
+  const work = useQuery({ ...q<{ overdue_invoices: number; overdue_bills: number; unmatched_bank_lines: number }>(['work-summary', org.id], 'BooksService', 'getWorkSummary', [org.id]), retry: false }).data
   const vouchers = useQuery(voucherStats(org.id))
   const waiting = useQuery(proposals(org.id))
 
@@ -37,7 +38,7 @@ export function Home() {
   const lowItems = low.data ?? []
   const proposalList = waiting.data ?? []
   const notMigrated = waiting.error instanceof ApiError && waiting.error.status === 503
-  const needCount = proposalList.length + (pending > 0 ? 1 : 0) + lowItems.length
+  const needCount = proposalList.length + (pending > 0 ? 1 : 0) + lowItems.length + (work?.overdue_invoices ? 1 : 0) + (work?.overdue_bills ? 1 : 0)
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -72,6 +73,8 @@ export function Home() {
             <SectionHead title="Needs your attention" right={<Count n={needCount} tone="warn" label="items need attention" />} />
             {proposalList.map((p) => <div key={p.id} className="px-3.5 py-2.5 border-t border-border"><ProposalCard proposal={p} /></div>)}
             {pending > 0 ? <Row icon={<ClipboardCheck className="size-4" />} title={`${pending} ${pending === 1 ? 'voucher needs' : 'vouchers need'} approval`} body="Stock can't move until these are decided." action={<Link to="/approvals" className={btn.plain}>Review</Link>} /> : null}
+            {work?.overdue_invoices ? <Row icon={<FileText className="size-4" />} title={`${work.overdue_invoices} overdue ${work.overdue_invoices === 1 ? 'invoice' : 'invoices'}`} body="Customers who haven't paid on time." action={<Link to="/invoices" className={btn.plain}>Review</Link>} /> : null}
+            {work?.overdue_bills ? <Row icon={<Receipt className="size-4" />} title={`${work.overdue_bills} overdue ${work.overdue_bills === 1 ? 'bill' : 'bills'}`} body="Suppliers waiting to be paid." action={<Link to="/bills" className={btn.plain}>Review</Link>} /> : null}
             {lowItems.slice(0, 3).map((i) => <Row key={i.id} icon={<PackageOpen className="size-4" />} title={`${i.name} is running low`} body={`${figure(num(i.quantity_available), 0)} ${i.unit_of_measure} on hand. Reorder point is ${figure(num(i.reorder_point), 0)}.`} action={<Link to="/inventory" className={btn.plain}>Open</Link>} />)}
             {sheet.data?.isBalanced === false ? <Row icon={<AlertTriangle className="size-4 text-[var(--note)]" />} title="Your books don't balance" body="Assets don't equal liabilities plus equity." action={<AskLink prompt="My books don't balance. Find out why and tell me how to fix it." className="text-[13px]">Find out why</AskLink>} /> : null}
             {needCount === 0 && sheet.data?.isBalanced !== false ? <p className="px-3.5 py-2.5 border-t border-border flex items-center gap-2 text-muted-foreground"><CheckCircle2 className="size-4 text-[var(--tick)]" />You're all caught up.</p> : null}
@@ -153,7 +156,7 @@ function Stat({ label, value, loading, to, search }: { label: string; value: num
 const Ratio = ({ label, value }: { label: string; value: string }) => <><dt className="text-muted-foreground truncate">{label}</dt><dd className="fig text-right">{value}</dd></>
 
 /** Twelve real months from the database. Nothing here is estimated. */
-function Trend({ rows }: { rows: MonthRow[] }) {
+export function Trend({ rows }: { rows: MonthRow[] }) {
   // Drawn at the width it's given, so the chart stays the same height on any screen.
   const box = useRef<HTMLDivElement>(null)
   const [W, setW] = useState(640)

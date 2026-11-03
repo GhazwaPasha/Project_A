@@ -15,12 +15,11 @@ Project_A/
 └── tools/         # Optional development tools
 ```
 
-## Technology stack (web)
+## Technology stack
 
-- **Framework**: Next.js 14, React 18, TypeScript  
-- **Styling**: Tailwind CSS, Radix UI  
-- **State**: Zustand  
-- **Data**: TanStack Query, Supabase client  
+- **Web app**: Vite, React 19, TanStack Router, TanStack Query, Tailwind CSS 4, shadcn/ui on Base UI  
+- **Server**: Next.js 16 route handlers, TypeScript, Neon Postgres, Neon Auth  
+- **Agent**: any OpenAI-compatible model, set with `AGENT_PROVIDER`, `AGENT_MODEL`, `AGENT_API_KEY` and `AGENT_BASE_URL`  
 
 ## Configuration
 
@@ -31,7 +30,9 @@ Project_A/
 
 ```bash
 npm install
+npm --prefix web install
 npm run dev
+npm run dev:web
 ```
 
 ## Database and scripts
@@ -42,9 +43,10 @@ SQL artifacts live in [database/](database/). Node helpers that share `DATABASE_
 
 **Web app**
 
-- `npm run dev` — development server  
-- `npm run build` — production build  
-- `npm run lint` — ESLint  
+- `npm run dev` — API server  
+- `npm run dev:web` — web app development server  
+- `npm run build` — builds the web app, then the server  
+- `npm test` — accounting rules and service tests, on a throwaway in-memory Postgres using the real migrations  
 
 ## License
 
