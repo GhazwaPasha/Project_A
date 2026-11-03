@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod/v4'
 import { authInApiRoute } from '@/auth'
-import { llmConfig, runAgent } from '@/server/agent/llm'
+import { llmConfig, ProviderBusyError, runAgent } from '@/server/agent/llm'
 import { AGENT_INSTRUCTIONS, toolsFor, type ToolContext } from '@/server/agent/tools'
 import { authorizeAppDataCall } from '@/server/app-data-authorize'
 import { allowRequest, tooMany } from '@/server/rate-limit'
@@ -88,7 +88,7 @@ export async function POST(req: Request) {
         send({ type: 'done' })
       } catch (e) {
         console.error('agent error', e instanceof Error ? e.message : e)
-        send({ type: 'error', message: "Something went wrong and I couldn't finish. Nothing was recorded." })
+        send({ type: 'error', message: e instanceof ProviderBusyError ? "The AI service is at its limit right now. Try again in a minute. Nothing was recorded." : "Something went wrong and I couldn't finish. Nothing was recorded." })
       } finally {
         controller.close()
       }
