@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { useQuery, queryOptions } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
-import { Input } from '@/components/ui/input'
 import { CreateOrganization } from '@/components/auth'
 import { Choice, FormBody, Modal, Stat, Stats, Text, useSave } from '@/components/form'
-import { Cell, Empty, Head, Loaded, Paged, Screen, SettingsTabs, Table, Toolbar, btn } from '@/components/page'
+import { Cell, Empty, Head, Loaded, Paged, Screen, SearchIcon, SettingsTabs, Table, Toolbar, btn } from '@/components/page'
 import { Badge, Chip, Chips } from '@/components/chips'
 import { call, rest } from '@/lib/api'
 import { shortDate, useApp } from '@/lib/boot'
@@ -34,13 +33,12 @@ export function Team() {
   const roles = [...new Set(everyone.map((m) => m.role))]
   const rows = everyone.filter((m) => roleFilter === 'all' || m.role === roleFilter).filter((m) => !search.trim() || `${m.email} ${m.full_name} ${ROLE_LABEL[m.role]}`.toLowerCase().includes(search.trim().toLowerCase()))
   return (
-    <Screen
+    <Screen search={<SearchIcon label="Search team" placeholder="Search team" value={search} onChange={setSearch} />}
       title="Team Management"
       sub={`People who can access ${org.name}.`}
       actions={isOwner ? <button className={btn.primary} onClick={() => setAdding(true)}><Plus className="size-3.5 mr-1.5" />Add team member</button> : undefined}
     >
       <Toolbar>
-        <Input aria-label="Search team" placeholder="Search by name, email or role" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
         <Chips label="Role" value={roleFilter} onChange={setRoleFilter} options={[{ id: 'all', label: 'Everyone', count: everyone.length }, ...roles.map((r) => ({ id: r, label: ROLE_LABEL[r] ?? r, count: everyone.filter((m) => m.role === r).length }))]} />
       </Toolbar>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No team members" body="Add people to work with you." /> : null)}>
@@ -196,7 +194,7 @@ export function SuperAdmin() {
   if (!isSuperAdmin) return <Screen title="Super Admin"><Empty title="Super admins only" body="This area is for platform administrators." /></Screen>
   const match = (...v: (string | null | undefined)[]) => !search.trim() || v.join(' ').toLowerCase().includes(search.trim().toLowerCase())
   return (
-    <Screen title="Super Admin" sub="Every user and organization on the platform.">
+    <Screen search={<SearchIcon label="Search" placeholder="Search" value={search} onChange={setSearch} />} title="Super Admin" sub="Every user and organization on the platform.">
       <Loaded query={data}>
         {(o) => (
           <>
@@ -208,7 +206,6 @@ export function SuperAdmin() {
             </Stats>
             <div className="flex flex-wrap items-center gap-3">
               <Chips label="Show" value={tab} onChange={(id) => setTab(id as typeof tab)} options={[{ id: 'users', label: 'Users', count: o.users.length }, { id: 'organizations', label: 'Organizations', count: o.organizations.length }, { id: 'memberships', label: 'Memberships', count: o.memberships.length }]} />
-              <Input aria-label="Search" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
             </div>
             {tab === 'users' ? (
               <Paged rows={o.users.filter((u) => match(u.email, u.full_name))}>{(page, pager) => (

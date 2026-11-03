@@ -100,13 +100,14 @@ export function Stat({ label, value, tone }: { label: string; value: ReactNode; 
   return (
     <div className="px-3.5 py-2.5 min-w-0">
       <p className="text-[12.5px] text-muted-foreground truncate">{label}</p>
-      <p className={cn('text-[18px] leading-tight font-semibold tracking-[-0.02em] truncate', tone === 'warn' && 'text-[var(--note)]')}>{value}</p>
+      <p className={cn('text-[18px] print:text-[13px] leading-tight font-semibold tracking-[-0.02em] truncate', tone === 'warn' && 'text-[var(--note)]')}>{value}</p>
     </div>
   )
 }
 
-export function Stats({ children, cols = 4 }: { children: ReactNode; cols?: 3 | 4 }) {
-  return <section className={cn('sheet grid grid-cols-2 overflow-hidden', cols === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3', '[&>*]:border-border [&>*:not(:last-child)]:border-r max-lg:[&>*:nth-child(2n)]:border-r-0 max-lg:[&>*:nth-child(-n+2)]:border-b')}>{children}</section>
+export function Stats({ children, cols = 4 }: { children: ReactNode; cols?: 2 | 3 | 4 }) {
+  if (cols === 2) return <section className="sheet grid grid-cols-2 overflow-hidden [&>*]:border-border [&>*:nth-child(odd)]:border-r [&>*:nth-child(-n+2)]:border-b">{children}</section>
+  return <section className={cn('sheet grid grid-cols-2 overflow-hidden', cols === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3', '[&>*]:border-border [&>*:not(:last-child)]:border-r max-lg:[&>*:nth-child(2n)]:border-r-0 max-lg:[&>*:nth-child(-n+2)]:border-b', 'print:grid-cols-4 print:[&>*]:border-b-0! print:[&>*:not(:last-child)]:border-r!')}>{children}</section>
 }
 
 /** Downloads text as a file. */

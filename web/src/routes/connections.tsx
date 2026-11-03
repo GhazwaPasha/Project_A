@@ -61,7 +61,7 @@ export function Connections() {
       </form>
 
       {created ? (
-        <section className="sheet border-primary/50 px-3.5 py-3 flex flex-col gap-2.5 lg:row-start-2 lg:col-span-2">
+        <section data-agent-private className="sheet border-primary/50 px-3.5 py-3 flex flex-col gap-2.5 lg:row-start-2 lg:col-span-2">
           <div><h2 className="font-semibold">Copy this now</h2><p className="text-[13.5px] text-muted-foreground">This is the only time the token is shown. Anyone who has it can use this connection, so treat it like a password.</p></div>
           <CodeBlock label="Claude Code" text={`claude mcp add --transport http accountuitive ${url} --header "Authorization: Bearer ${created}"`} />
           <CodeBlock label="Other apps that take an MCP server config" text={JSON.stringify({ mcpServers: { accountuitive: { type: 'http', url, headers: { Authorization: `Bearer ${created}` } } } }, null, 2)} />

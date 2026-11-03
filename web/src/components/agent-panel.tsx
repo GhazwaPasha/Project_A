@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowUp, Sparkles, X } from 'lucide-react'
+import { useRouterState } from '@tanstack/react-router'
+import { ArrowUp, Eye, Sparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/chips'
 import { NewEntry, type Draft } from '@/components/new-entry'
@@ -9,6 +10,7 @@ import { decideProposal, type Proposal } from '@/lib/api'
 import { useAgent } from '@/lib/agent'
 import { figure, shortDate, useApp } from '@/lib/boot'
 import { proposals, queryClient, refreshBooks } from '@/lib/data'
+import { suggestionsFor } from '@/lib/page-context'
 import { cn } from '@/lib/utils'
 
 export function Composer({ placeholder, large, id = 'agent-input' }: { placeholder: string; large?: boolean; id?: string }) {
@@ -107,10 +109,26 @@ export function ProposalCard({ proposal: p }: { proposal: Proposal }) {
   )
 }
 
-const STARTERS = ['How is my business doing this month?', 'I paid rent of 65,000 from the bank today', 'What is my biggest expense this year?', 'Do my books look right?']
+/** The heading of the page behind the panel, kept current as the page changes or finishes loading. */
+function usePageTitle(active: boolean) {
+  const [title, setTitle] = useState('')
+  useEffect(() => {
+    const main = document.querySelector('main')
+    if (!active || !main) return
+    const read = () => setTitle(main.querySelector('h1')?.textContent?.trim() ?? '')
+    read()
+    const watch = new MutationObserver(read)
+    watch.observe(main, { childList: true, subtree: true, characterData: true })
+    return () => watch.disconnect()
+  }, [active])
+  return title
+}
 
 export function AgentPanel() {
   const { turns, open, setOpen } = useAgent()
+  const path = useRouterState({ select: (x) => x.location.pathname })
+  const title = usePageTitle(open)
+  const suggestions = suggestionsFor(path)
   const end = useRef<HTMLDivElement>(null)
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }) }, [turns])
   useEffect(() => {
@@ -122,14 +140,16 @@ export function AgentPanel() {
   return (
     <aside aria-label="Agent" inert={!open} className={cn('agent-panel print:hidden fixed top-0 right-0 bottom-0 z-20 w-full sm:w-[400px] bg-background border-l border-border flex flex-col', open ? 'translate-x-0' : 'translate-x-full')}>
       <div className="flex items-center justify-between h-12 px-4 shrink-0 border-b border-border">
-        <h2 className="font-semibold text-[14px]">Agent</h2>
+        <div className="flex items-center gap-2 min-w-0">
+          <h2 className="font-semibold text-[14px]">Agent</h2>
+          {title ? <span title={`The agent can see this page: ${title}`} className="inline-flex items-center gap-1 min-w-0 h-5 px-2 rounded-full bg-muted text-muted-foreground text-[11.5px] font-medium"><Eye aria-hidden className="size-3 shrink-0" /><span className="sr-only">The agent can see </span><span className="truncate">{title}</span></span> : null}
+        </div>
         <button aria-label="Close" onClick={() => setOpen(false)} className="size-8 -mr-1.5 grid place-items-center rounded-full text-muted-foreground hover:bg-accent cursor-pointer"><X className="size-4" /></button>
       </div>
       <div className="flex-1 overflow-y-auto overscroll-contain p-4 flex flex-col gap-4" aria-live="polite">
         {turns.length === 0 ? (
           <div className="flex flex-col gap-2.5 items-start">
-            <p className="text-muted-foreground">Tell me what happened in your business, or ask me anything about your books. I'll prepare the entries, and nothing is recorded until you approve it.</p>
-            <div className="flex flex-wrap gap-1.5">{STARTERS.map((s) => <AskChip key={s} prompt={s}>{s}</AskChip>)}</div>
+            <p className="text-muted-foreground">I can see the page you're on, so ask about it, or tell me what happened in your business. I'll prepare the entries, and nothing is recorded until you approve it.</p>
           </div>
         ) : turns.map((t) => t.role === 'user' ? (
           <p key={t.id} className="self-end max-w-[85%] rounded-[8px] bg-accent px-3.5 py-2">{t.text}</p>
@@ -143,7 +163,10 @@ export function AgentPanel() {
         ))}
         <div ref={end} />
       </div>
-      <div className="px-4 pt-2 shrink-0 pb-[calc(16px+env(safe-area-inset-bottom))]"><Composer id="agent-panel-input" placeholder="Reply or ask something" /></div>
+      <div className="px-4 pt-2 shrink-0 pb-[calc(16px+env(safe-area-inset-bottom))] flex flex-col gap-2">
+        <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] -mx-4 px-4" aria-label="Suggestions for this page">{suggestions.map((s) => <AskChip key={s} prompt={s}>{s}</AskChip>)}</div>
+        <Composer id="agent-panel-input" placeholder="Ask about this page" />
+      </div>
     </aside>
   )
 }

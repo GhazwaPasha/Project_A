@@ -1,7 +1,7 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import type { UseQueryResult } from '@tanstack/react-query'
-import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Printer } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Printer, Search, X } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { PageIcons } from '@/components/page-icons'
@@ -9,7 +9,7 @@ import { ApiError } from '@/lib/api'
 import { useApp } from '@/lib/boot'
 import { cn } from '@/lib/utils'
 
-export function Screen({ title, sub, actions, tabs, children }: { title: string; sub?: ReactNode; actions?: ReactNode; tabs?: ReactNode; children: ReactNode }) {
+export function Screen({ title, sub, search, actions, tabs, children }: { title: string; sub?: ReactNode; search?: ReactNode; actions?: ReactNode; tabs?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-3.5">
       <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
@@ -18,12 +18,41 @@ export function Screen({ title, sub, actions, tabs, children }: { title: string;
           {sub ? <p className="text-[13px] text-muted-foreground">{sub}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2 print:hidden">
+          {search}
           {actions}
           <PageIcons className="hidden lg:flex" />
         </div>
       </header>
       {tabs}
       {children}
+    </div>
+  )
+}
+
+/** A search icon that opens into a field. It stays open while there's a search, so a filtered list is never a mystery. */
+export function SearchIcon({ label, placeholder, value, onChange }: { label: string; placeholder?: string; value: string; onChange: (v: string) => void }) {
+  const [opened, setOpened] = useState(false)
+  const input = useRef<HTMLInputElement>(null)
+  const open = opened || value !== ''
+  useEffect(() => { if (opened) input.current?.focus() }, [opened])
+  const close = () => { onChange(''); setOpened(false) }
+  return (
+    <div className={cn('flex items-center h-8 max-w-full rounded-[6px] border bg-card overflow-hidden transition-[width] duration-150 ease-out motion-reduce:transition-none', open ? 'w-[200px] border-primary' : 'w-8 border-input')}>
+      <button type="button" aria-label={label} aria-expanded={open} title={label} tabIndex={open ? -1 : 0} onClick={() => setOpened(true)} className={cn('size-[30px] shrink-0 grid place-items-center text-muted-foreground', !open && 'cursor-pointer hover:bg-accent hover:text-foreground')}>
+        <Search className="size-4" />
+      </button>
+      <input
+        ref={input}
+        aria-label={label}
+        placeholder={placeholder ?? label}
+        tabIndex={open ? 0 : -1}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => { if (!value) setOpened(false) }}
+        onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); close() } }}
+        className="flex-1 min-w-0 bg-transparent outline-none text-[13.5px] placeholder:text-muted-foreground"
+      />
+      {value ? <button type="button" aria-label="Clear search" onClick={() => { onChange(''); input.current?.focus() }} className="size-[26px] mr-0.5 shrink-0 grid place-items-center rounded-[4px] text-muted-foreground cursor-pointer hover:bg-accent hover:text-foreground"><X className="size-3.5" /></button> : null}
     </div>
   )
 }
@@ -121,16 +150,9 @@ export function Toolbar({ children }: { children: ReactNode }) {
 const BTN = 'press inline-flex items-center justify-center h-8 px-3 rounded-[6px] text-[13px] font-medium whitespace-nowrap cursor-pointer disabled:opacity-50 disabled:pointer-events-none'
 export const btn = { primary: `${BTN} bg-primary text-primary-foreground hover:opacity-90`, plain: `${BTN} border border-input bg-card hover:bg-accent` }
 
-/** Prints the page, or saves it as a PDF, always on a white background. */
-export function PrintButton() {
-  const print = () => {
-    const root = document.documentElement
-    const dark = root.classList.contains('dark')
-    root.classList.remove('dark')
-    window.print()
-    if (dark) root.classList.add('dark')
-  }
-  return <button className={btn.plain} onClick={print}><Printer className="size-3.5 mr-1.5" />Print or save PDF</button>
+/** Opens a report's document page, where it can be printed or exported. */
+export function PrintLink({ to, search }: { to: string; search?: Record<string, unknown> }) {
+  return <Link to={to} search={search as never} className={btn.plain}><Printer className="size-3.5 mr-1.5" />Print or export</Link>
 }
 
 export function Check({ ok, title, body, children }: { ok: boolean; title: string; body?: ReactNode; children?: ReactNode }) {

@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
-import { Input } from '@/components/ui/input'
 import { AskChip } from '@/components/agent-panel'
 import { Choice, ConfirmDelete, FormBody, Modal, Stat, Stats, Text, Toggle, useSave } from '@/components/form'
-import { Cell, Empty, Head, Loaded, Paged, Screen, Table, Toolbar, btn } from '@/components/page'
+import { Cell, Empty, Head, Loaded, Paged, Screen, SearchIcon, Table, Toolbar, btn } from '@/components/page'
 import { Badge, Chip, Chips } from '@/components/chips'
 import { call } from '@/lib/api'
 import { figure, useApp } from '@/lib/boot'
@@ -36,7 +35,7 @@ export function Suppliers() {
   const [opened, setOpened] = useState<Supplier | null>(null)
   const owed = all.reduce((s, x) => s + num(x.current_balance), 0)
   return (
-    <Screen
+    <Screen search={<SearchIcon label="Search suppliers" placeholder="Search suppliers" value={search} onChange={setSearch} />}
       title="Suppliers"
       sub={pro ? 'Vendor records, terms and account mappings.' : 'The businesses you buy from.'}
       actions={canWrite ? <button className={btn.primary} onClick={() => setDraft({ ...blank, currency: org.currency })}><Plus className="size-3.5 mr-1.5" />New supplier</button> : undefined}
@@ -47,7 +46,6 @@ export function Suppliers() {
         <Stat label={pro ? 'Current balance' : 'You owe them'} value={`${org.currency} ${figure(owed, 0)}`} />
       </Stats>
       <Toolbar>
-        <Input aria-label="Search suppliers" placeholder="Search suppliers" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
         <Chips label="Status" value={status} onChange={setStatus} options={[{ id: 'all', label: 'Any status' }, { id: 'active', label: 'Active' }, { id: 'inactive', label: 'Inactive' }, { id: 'suspended', label: 'Suspended' }]} />
         <Chip active={preferredOnly} count={all.filter((s) => s.is_preferred).length} onClick={() => setPreferredOnly((v) => !v)}>Preferred</Chip>
       </Toolbar>

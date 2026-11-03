@@ -2,10 +2,9 @@ import { useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronRight, Download, Plus, Upload } from 'lucide-react'
 import { toast } from 'sonner'
-import { Input } from '@/components/ui/input'
 import { AskChip } from '@/components/agent-panel'
 import { Choice, ConfirmDelete, FormBody, Modal, Text, Toggle, download, parseCsv, useSave } from '@/components/form'
-import { Empty, Loaded, Paged, Screen, Toolbar, btn } from '@/components/page'
+import { Empty, Loaded, Paged, Screen, SearchIcon, Toolbar, btn } from '@/components/page'
 import { Badge, Chips } from '@/components/chips'
 import { call } from '@/lib/api'
 import { figure, useApp } from '@/lib/boot'
@@ -100,7 +99,7 @@ export function Accounts() {
   }
 
   return (
-    <Screen
+    <Screen search={<SearchIcon label="Search accounts" placeholder="Search accounts" value={search} onChange={setSearch} />}
       title="Accounts"
       sub={pro ? `Chart of accounts. ${rows.length} accounts.` : 'The categories your money is sorted into. The agent uses these when it records things.'}
       actions={<>
@@ -110,7 +109,6 @@ export function Accounts() {
       </>}
     >
       <Toolbar>
-        <Input aria-label="Search accounts" placeholder="Search accounts" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
         <Chips label="Account type" value={term ? '' : type} onChange={(id) => { setType(id as AccountType); setSearch('') }} options={TYPES.map((t) => ({ id: t.id, label: pro ? t.pro : t.simple, count: rows.filter((a) => a.account_type === t.id).length }))} />
         {!pro ? <span className="ml-auto"><AskChip prompt="Look at my accounts and tell me if anything is missing or set up wrong for my business.">Check these for me</AskChip></span> : null}
       </Toolbar>

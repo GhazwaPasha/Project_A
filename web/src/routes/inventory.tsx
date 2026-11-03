@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
-import { Input } from '@/components/ui/input'
 import { AskChip } from '@/components/agent-panel'
 import { Choice, ConfirmDelete, FormBody, Modal, Stat, Stats, Text, useSave } from '@/components/form'
-import { Cell, Empty, Head, Loaded, Paged, Screen, Table, Tabs, Toolbar, btn } from '@/components/page'
+import { Cell, Empty, Head, Loaded, Paged, Screen, SearchIcon, Table, Tabs, Toolbar, btn } from '@/components/page'
 import { Badge, Chip, Chips } from '@/components/chips'
 import { call } from '@/lib/api'
 import { figure, shortDate, useApp } from '@/lib/boot'
@@ -53,7 +52,7 @@ export function Inventory() {
   const catName = new Map((cats.data ?? []).map((c) => [String(c.id), c.name]))
 
   return (
-    <Screen
+    <Screen search={<SearchIcon label="Search items" placeholder="Search items" value={search} onChange={setSearch} />}
       title="Inventory"
       sub={pro ? 'Items, quantities and average cost.' : 'What you have in stock and what it is worth.'}
       actions={canWrite ? <>
@@ -68,7 +67,6 @@ export function Inventory() {
         <Stat label="Running low" value={low} tone={low ? 'warn' : undefined} />
       </Stats>
       <Toolbar>
-        <Input aria-label="Search items" placeholder="Search items" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
         <Chip active={lowOnly} count={low} onClick={() => setLowOnly((v) => !v)}>Running low</Chip>
         <span className="ml-auto"><AskChip prompt="Look at my stock. What is running low, and what should I reorder first?">What should I reorder?</AskChip></span>
       </Toolbar>
@@ -241,9 +239,8 @@ export function Movements() {
   const all = list.data ?? []
   const rows = all.filter((m) => (kind === 'all' || m.transaction_type === kind) && (!search.trim() || `${m.item?.name} ${m.reference} ${m.description}`.toLowerCase().includes(search.trim().toLowerCase())))
   return (
-    <Screen title="Inventory" sub="Every time stock came in, went out or was corrected." tabs={<Tabs items={INVENTORY_TABS} />}>
+    <Screen search={<SearchIcon label="Search stock movements" placeholder="Search" value={search} onChange={setSearch} />} title="Inventory" sub="Every time stock came in, went out or was corrected." tabs={<Tabs items={INVENTORY_TABS} />}>
       <Toolbar>
-        <Input aria-label="Search stock movements" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
         <Chips label="Type" value={kind} onChange={setKind} options={[{ id: 'all', label: 'All', count: all.length }, ...(['in', 'out', 'adjustment'] as const).map((k) => ({ id: k, label: MOVE_LABEL[k], count: all.filter((m) => m.transaction_type === k).length }))]} />
       </Toolbar>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No stock movements yet" body="They appear here as stock comes in and goes out." /> : null)}>

@@ -1,17 +1,23 @@
-import { createRootRoute, createRoute, createRouter, lazyRouteComponent, redirect } from '@tanstack/react-router'
+import { Outlet, createRootRoute, createRoute, createRouter, lazyRouteComponent, redirect, useRouterState } from '@tanstack/react-router'
 import { Empty } from '@/components/page'
 import { Shell } from '@/components/shell'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AgentProvider } from '@/lib/agent'
 import type { Period } from '@/lib/data'
+import type { LedgerSearch } from '@/routes/ledger'
 
-const root = createRootRoute({ component: () => <AgentProvider><Shell /></AgentProvider> })
+function Root() {
+  const isDocument = useRouterState({ select: (s) => s.location.pathname.startsWith('/print/') })
+  return <AgentProvider>{isDocument ? <Outlet /> : <Shell />}</AgentProvider>
+}
+const root = createRootRoute({ component: Root })
 const route = (path: string, component: ReturnType<typeof lazyRouteComponent>) =>
   createRoute({ getParentRoute: () => root, path, component })
 
 const Home = lazyRouteComponent(() => import('@/routes/home'), 'Home')
 const Journal = lazyRouteComponent(() => import('@/routes/books'), 'Journal')
-const Ledger = lazyRouteComponent(() => import('@/routes/books'), 'Ledger')
+const Ledger = lazyRouteComponent(() => import('@/routes/ledger'), 'Ledger')
+const LedgerAccount = lazyRouteComponent(() => import('@/routes/ledger'), 'LedgerAccount')
 const TrialBalance = lazyRouteComponent(() => import('@/routes/books'), 'TrialBalance')
 const ReportsIndex = lazyRouteComponent(() => import('@/routes/reports'), 'ReportsIndex')
 const IncomeStatementPage = lazyRouteComponent(() => import('@/routes/reports'), 'IncomeStatementPage')
@@ -38,11 +44,28 @@ const income = createRoute({
   }),
 })
 
+const ledgerSearch = (s: Record<string, unknown>): LedgerSearch => {
+  const date = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined)
+  const range = s.range === 'month' || s.range === 'quarter' || s.range === 'year' || s.range === 'custom' ? s.range : 'all'
+  return range === 'custom' ? { range, from: date(s.from), to: date(s.to) } : { range }
+}
+const periodSearch = (s: Record<string, unknown>): { period: Period } => ({
+  period: s.period === 'quarter' || s.period === 'year' ? s.period : 'month',
+})
+const ledgerAccount = createRoute({ getParentRoute: () => root, path: '/ledger/$accountId', component: LedgerAccount, validateSearch: ledgerSearch })
+const ledgerDoc = createRoute({ getParentRoute: () => root, path: '/print/ledger/$accountId', component: lazyRouteComponent(() => import('@/routes/print'), 'LedgerDoc'), validateSearch: ledgerSearch })
+const incomeDoc = createRoute({ getParentRoute: () => root, path: '/print/income-statement', component: lazyRouteComponent(() => import('@/routes/print'), 'IncomeDoc'), validateSearch: periodSearch })
+
 const tree = root.addChildren([
   createRoute({ getParentRoute: () => root, path: '/', beforeLoad: () => { throw redirect({ to: '/home' }) } }),
   route('/home', Home),
   route('/journal', Journal),
   route('/ledger', Ledger),
+  ledgerAccount,
+  ledgerDoc,
+  incomeDoc,
+  route('/print/balance-sheet', lazyRouteComponent(() => import('@/routes/print'), 'BalanceDoc')),
+  route('/print/trial-balance', lazyRouteComponent(() => import('@/routes/print'), 'TrialDoc')),
   route('/trial-balance', TrialBalance),
   route('/reports', ReportsIndex),
   route('/reports/balance-sheet', BalanceSheetPage),

@@ -136,7 +136,16 @@ const handlers: Record<string, (args: unknown[]) => unknown> = {
   getSupplierAccountMappings: () => ({ payable_account_id: 4 }),
   ...Object.fromEntries(['createSupplier', 'updateSupplier', 'deleteSupplier', 'addSupplierContact', 'deleteSupplierContact', 'updateUserProfile'].map((m) => [m, () => ({})])),
   getAccountBalances: () => accountBalances,
-  getAccountTransactions: () => entries.slice(0, 8).map((e, i) => ({ id: e.id, entry_number: e.entry_number, entry_date: e.entry_date, description: e.description, debit_amount: i % 2 ? 0 : e.total_amount, credit_amount: i % 2 ? e.total_amount : 0, balance: 200000 + i * 1000 })),
+  getAccountTransactions: () => {
+    let balance = 0
+    return Array.from({ length: longMode() ? 150 : 60 }, (_, i) => {
+      const amount = 1200 + ((i * 3517) % 40000)
+      const debit = i % 3 !== 2
+      balance += debit ? amount : -amount
+      const day = new Date(2026, 3, 1 + Math.floor((i * 215) / (longMode() ? 150 : 60)))
+      return { id: i + 1, entry_id: i + 1, entry_number: `JE-${1000 + i}`, entry_date: `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`, description: ['Bank charge', 'Stock sold to Apex Retail', 'Receipt from Apex Retail', 'Shop rent', 'City Power bill'][i % 5], reference: i % 4 ? null : `REF-${i}`, debit_amount: debit ? amount : 0, credit_amount: debit ? 0 : amount, balance }
+    })
+  },
   getInventoryItems: () => stockItems,
   getLowStockItems: () => items.filter((i) => i.quantity_available <= i.reorder_point),
   getVoucherStats: () => ({ total_vouchers: 5, pending_approval: 2, approved: 1, rejected: 1, expired: 0, completed: 1, total_value: 61100 }),
@@ -147,7 +156,7 @@ const handlers: Record<string, (args: unknown[]) => unknown> = {
 }
 
 /** `?long=1` makes lists as long as a real business's, to check how screens hold up. */
-const LONG: Record<string, number> = { getAccounts: 126, getAccountBalances: 126, getTrialBalance: 126, getJournalEntriesWithLines: 200, getAccountTransactions: 150, getInventoryItems: 80, getInventoryTransactions: 120, getVouchers: 70, getSuppliers: 45 }
+const LONG: Record<string, number> = { getAccounts: 126, getAccountBalances: 126, getTrialBalance: 126, getJournalEntriesWithLines: 200, getInventoryItems: 80, getInventoryTransactions: 120, getVouchers: 70, getSuppliers: 45 }
 const longMode = () => {
   if (new URLSearchParams(location.search).has('long')) sessionStorage.setItem('long', '1')
   return sessionStorage.getItem('long') === '1'
@@ -207,6 +216,7 @@ export async function streamDemo(body: AgentRequest, onEvent: (e: AgentEvent) =>
   }
   onEvent({ type: 'status', text: 'Reading your income statement' })
   await pause(500)
+  onEvent({ type: 'text', text: `[Sample: I can see "${body.page?.title}" at ${body.page?.url}, filters: ${body.page?.filters.join(', ') || 'none'}, ${body.page?.text.length} characters of page.] ` })
   for (const word of 'Sample answer: you made 68,000 profit from 640,000 in sales. Your biggest cost after stock is salaries at 120,000.'.split(' ')) {
     onEvent({ type: 'text', text: `${word} ` })
     await pause(25)

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { AlertTriangle, CheckCircle2, ClipboardCheck, PackageOpen } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AskChip, AskLink, Composer, ProposalCard } from '@/components/agent-panel'
+import { AskLink, ProposalCard } from '@/components/agent-panel'
 import { NewEntry } from '@/components/new-entry'
 import { PageIcons } from '@/components/page-icons'
 import { btn } from '@/components/page'
@@ -53,12 +53,6 @@ export function Home() {
         </div>
       </header>
 
-      <Composer placeholder="Tell the agent what happened, or ask about your books" />
-      <div className="flex flex-wrap gap-1.5 -mt-1.5" aria-label="Suggestions">
-        <AskChip prompt="How is my business doing this month?">How am I doing this month?</AskChip>
-        <AskChip prompt="What are my biggest costs this year, and where could I save?">Where can I save?</AskChip>
-        <AskChip prompt="Do my books look right? Check for anything that needs fixing.">Check my books</AskChip>
-      </div>
 
       <section aria-label="Key figures" className="sheet grid grid-cols-2 lg:grid-cols-4 overflow-hidden divide-border [&>*]:border-border max-lg:[&>*:nth-child(odd)]:border-r max-lg:[&>*:nth-child(-n+2)]:border-b lg:[&>*:not(:last-child)]:border-r">
         <Stat label={pro ? 'Net income' : 'Profit'} value={revenue - expenses} loading={dash.isPending} to="/reports/income-statement" search={{ period }} />

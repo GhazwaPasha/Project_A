@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { AskChip } from '@/components/agent-panel'
 import { Choice, ConfirmDelete, FormBody, Modal, Stat, Stats, Text, useSave } from '@/components/form'
-import { Cell, Empty, Head, Loaded, Paged, Screen, Table, Tabs, Toolbar, btn } from '@/components/page'
+import { Cell, Empty, Head, Loaded, Paged, Screen, SearchIcon, Table, Tabs, Toolbar, btn } from '@/components/page'
 import { Badge, Chips } from '@/components/chips'
 import { call, uploadAttachment } from '@/lib/api'
 import { figure, shortDate, useApp } from '@/lib/boot'
@@ -74,14 +74,13 @@ export function Vouchers() {
   const [opened, setOpened] = useState<Id | null>(null)
   const [creating, setCreating] = useState(false)
   return (
-    <Screen
+    <Screen search={<SearchIcon label="Search vouchers" placeholder="Search vouchers" value={search} onChange={setSearch} />}
       title="Inventory"
       sub={pro ? 'Purchase and issuance vouchers.' : 'Requests to buy stock or take it out, and where each one stands.'}
       actions={canWrite ? <button className={btn.primary} onClick={() => setCreating(true)}><Plus className="size-3.5 mr-1.5" />New voucher</button> : undefined}
       tabs={<Tabs items={INVENTORY_TABS} />}
     >
       <Toolbar>
-        <Input aria-label="Search vouchers" placeholder="Search vouchers, vendors or purposes" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
         <Chips label="Type" value={type} onChange={setType} options={[{ id: 'all', label: 'All' }, { id: 'purchase', label: 'Purchases' }, { id: 'issuance', label: 'Issuances' }]} />
         <Chips label="Status" value={status} onChange={setStatus} options={[{ id: 'all', label: 'Any status' }, ...Object.entries(STATUS).map(([id, s]) => ({ id, label: s.label }))]} />
       </Toolbar>
@@ -102,7 +101,7 @@ export function Approvals() {
   const list = useQuery(vouchersQuery(org.id, status, type, search.trim()))
   const [opened, setOpened] = useState<Id | null>(null)
   return (
-    <Screen title="Approvals" sub={pro ? 'Vouchers awaiting a finance decision.' : 'Spending and stock requests waiting on a decision.'}>
+    <Screen search={<SearchIcon label="Search vouchers" placeholder="Search vouchers" value={search} onChange={setSearch} />} title="Approvals" sub={pro ? 'Vouchers awaiting a finance decision.' : 'Spending and stock requests waiting on a decision.'}>
       <Stats>
         <Stat label="Waiting" value={num(stats.data?.pending_approval)} tone={num(stats.data?.pending_approval) ? 'warn' : undefined} />
         <Stat label="Approved" value={num(stats.data?.approved)} />
@@ -110,7 +109,6 @@ export function Approvals() {
         <Stat label="Expired" value={num(stats.data?.expired)} />
       </Stats>
       <Toolbar>
-        <Input aria-label="Search vouchers" placeholder="Search vouchers" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
         <Chips label="Type" value={type} onChange={setType} options={[{ id: 'all', label: 'All' }, { id: 'purchase', label: 'Purchases' }, { id: 'issuance', label: 'Issuances' }]} />
         <Chips label="Status" value={status} onChange={setStatus} options={[{ id: 'pending_finance', label: 'Needs approval', count: num(stats.data?.pending_approval) }, { id: 'approved', label: 'Approved', count: num(stats.data?.approved) }, { id: 'rejected', label: 'Rejected', count: num(stats.data?.rejected) }, { id: 'expired', label: 'Expired', count: num(stats.data?.expired) }, { id: 'all', label: 'Any status' }]} />
       </Toolbar>

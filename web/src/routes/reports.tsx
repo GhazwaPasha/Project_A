@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AskChip, AskLink } from '@/components/agent-panel'
-import { Cell, Head, Loaded, PrintButton, Screen, Table, Tabs } from '@/components/page'
+import { Cell, Head, Loaded, PrintLink, Screen, Table, Tabs } from '@/components/page'
 import { Badge, Chips } from '@/components/chips'
 import { figure, shortDate, useApp } from '@/lib/boot'
 import { balanceSheet, incomeStatement, num, periodRange, today, type Money, type Period, type Section } from '@/lib/data'
@@ -98,7 +98,7 @@ export function IncomeStatementPage() {
     <Screen
       title={pro ? 'Income Statement' : 'Profit'}
       sub={`${shortDate(from)} to ${shortDate(to)}, ${org.currency}`}
-      actions={<><Chips label="Period" value={period} options={PERIODS} onChange={(p) => void navigate({ to: '/reports/income-statement', search: { period: p as Period } })} /><PrintButton /></>}
+      actions={<><Chips label="Period" value={period} options={PERIODS} onChange={(p) => void navigate({ to: '/reports/income-statement', search: { period: p as Period } })} /><PrintLink to="/print/income-statement" search={{ period }} /></>}
       tabs={<Tabs items={tabs} />}
     >
       <Loaded query={q}>
@@ -148,7 +148,7 @@ export function BalanceSheetPage() {
   const q = useQuery(balanceSheet(org.id, asOf))
   const d = org.decimals
   return (
-    <Screen title={pro ? 'Balance Sheet' : 'What you own and owe'} sub={`As of ${shortDate(asOf)}, ${org.currency}`} actions={<PrintButton />} tabs={<Tabs items={tabs} />}>
+    <Screen title={pro ? 'Balance Sheet' : 'What you own and owe'} sub={`As of ${shortDate(asOf)}, ${org.currency}`} actions={<PrintLink to="/print/balance-sheet" />} tabs={<Tabs items={tabs} />}>
       <Loaded query={q}>
         {(r) => (
           <>

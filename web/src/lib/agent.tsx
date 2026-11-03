@@ -3,6 +3,7 @@ import { useRouterState } from '@tanstack/react-router'
 import { streamAgent, type AgentEvent, type AgentRequest, type Proposal } from './api'
 import { useApp } from './boot'
 import { queryClient, today } from './data'
+import { readPage } from './page-context'
 
 export type Turn =
   | { id: number; role: 'user'; text: string }
@@ -65,6 +66,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       mode: pro ? 'accountant' : 'simple',
       currency: org.currency,
       today: today(),
+      page: readPage(),
       messages: [...history, { role: 'user', text }],
     }, onEvent)
       .catch((e: Error) => patch((t) => ({ ...t, error: e.message })))

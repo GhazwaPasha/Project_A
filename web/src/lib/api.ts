@@ -1,3 +1,5 @@
+import type { PageContext } from './page-context'
+
 export class ApiError extends Error {
   status: number
   constructor(message: string, status: number) {
@@ -60,7 +62,7 @@ export type AgentEvent =
   | { type: 'proposal'; proposal: Proposal }
   | { type: 'error'; message: string }
   | { type: 'done' }
-export type AgentRequest = { org: string; screen: string; mode: 'simple' | 'accountant'; currency: string; today: string; messages: { role: 'user' | 'assistant'; text: string }[] }
+export type AgentRequest = { org: string; screen: string; mode: 'simple' | 'accountant'; currency: string; today: string; page?: PageContext; messages: { role: 'user' | 'assistant'; text: string }[] }
 
 /** Streams the agent's reply as newline-delimited JSON events. */
 export async function streamAgent(body: AgentRequest, onEvent: (e: AgentEvent) => void) {
