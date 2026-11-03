@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { AskLink } from '@/components/agent-panel'
 import { Choice, ConfirmDelete, FormBody, Modal, Pill, Stat, Stats, Text, useSave } from '@/components/form'
-import { Cell, Empty, Head, Loaded, Range, Screen, Table, Tabs, btn } from '@/components/page'
+import { Cell, Empty, Head, Loaded, Paged, Range, Screen, Table, Tabs, Toolbar, btn } from '@/components/page'
 import { call, uploadAttachment } from '@/lib/api'
 import { figure, shortDate, useApp } from '@/lib/boot'
 import { accounts, num, q, today, type Id, type Money } from '@/lib/data'
@@ -36,13 +36,16 @@ const statsQuery = (org: string) => q<StatsRow>(['voucher-stats', org, 'full'], 
 function VoucherTable({ rows, onOpen }: { rows: Voucher[]; onOpen: (v: Voucher) => void }) {
   const { org, pro } = useApp()
   return (
-    <Table min={640}>
-      <thead><tr><Head>Voucher</Head><Head>{pro ? 'Vendor or purpose' : 'For'}</Head><Head>Status</Head><Head>Date</Head><Head right>Amount</Head></tr></thead>
+    <Paged rows={rows}>
+      {(page, pager) => (
+    <Table min={720} footer={pager}>
+      <thead><tr><Head>Voucher</Head><Head>Type</Head><Head>{pro ? 'Vendor or purpose' : 'For'}</Head><Head>Status</Head><Head>Date</Head><Head right>Amount</Head></tr></thead>
       <tbody>
-        {rows.map((v) => (
+        {page.map((v) => (
           <tr key={v.id} tabIndex={0} className="cursor-pointer hover:bg-accent/50 focus-visible:bg-accent/50 outline-none" onClick={() => onOpen(v)} onKeyDown={(e) => { if (e.key === 'Enter') onOpen(v) }}>
-            <Cell><span className="fig text-[12.5px]">{v.voucher_number}</span><span className="block text-[12px] text-muted-foreground">{v.voucher_type === 'purchase' ? 'Purchase' : 'Issuance'}</span></Cell>
-            <Cell>{v.vendor_name || v.purpose || v.description || ''}</Cell>
+            <Cell className="fig text-[12.5px] whitespace-nowrap">{v.voucher_number}</Cell>
+            <Cell className="text-muted-foreground">{v.voucher_type === 'purchase' ? 'Purchase' : 'Issuance'}</Cell>
+            <Cell className="max-w-0 w-full truncate">{v.vendor_name || v.purpose || v.description || ''}</Cell>
             <Cell><Pill tone={STATUS[v.status]?.tone}>{STATUS[v.status]?.label ?? v.status}</Pill></Cell>
             <Cell className="text-muted-foreground whitespace-nowrap">{shortDate(v.requested_date)}</Cell>
             <Cell right>{figure(num(v.total_estimated_cost), org.decimals)}</Cell>
@@ -50,6 +53,8 @@ function VoucherTable({ rows, onOpen }: { rows: Voucher[]; onOpen: (v: Voucher) 
         ))}
       </tbody>
     </Table>
+      )}
+    </Paged>
   )
 }
 
@@ -74,11 +79,11 @@ export function Vouchers() {
       actions={canWrite ? <button className={btn.primary} onClick={() => setCreating(true)}><Plus className="size-3.5 mr-1.5" />New voucher</button> : undefined}
       tabs={<Tabs items={INVENTORY_TABS} />}
     >
-      <div className="flex flex-wrap gap-2">
+      <Toolbar>
         <Input aria-label="Search vouchers" placeholder="Search vouchers, vendors or purposes" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
         <Range label="Type" value={type} onChange={setType} options={[{ id: 'all', label: 'All types' }, { id: 'purchase', label: 'Purchases' }, { id: 'issuance', label: 'Issuances' }]} />
         <Range label="Status" value={status} onChange={setStatus} options={[{ id: 'all', label: 'All statuses' }, ...Object.entries(STATUS).map(([id, s]) => ({ id, label: s.label }))]} />
-      </div>
+      </Toolbar>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No vouchers found" body={canWrite ? 'Create one when you need to buy stock or take it out.' : 'Nothing matches right now.'} /> : null)}>
         {(rows) => <VoucherTable rows={rows} onOpen={(v) => setOpened(v.id)} />}
       </Loaded>
@@ -103,11 +108,11 @@ export function Approvals() {
         <Stat label="Rejected" value={num(stats.data?.rejected)} />
         <Stat label="Expired" value={num(stats.data?.expired)} />
       </Stats>
-      <div className="flex flex-wrap items-center gap-2">
+      <Toolbar>
         <Input aria-label="Search vouchers" placeholder="Search vouchers" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
         <Range label="Type" value={type} onChange={setType} options={[{ id: 'all', label: 'All types' }, { id: 'purchase', label: 'Purchases' }, { id: 'issuance', label: 'Issuances' }]} />
         <Range label="Status" value={status} onChange={setStatus} options={[{ id: 'pending_finance', label: 'Needs approval' }, { id: 'approved', label: 'Approved' }, { id: 'rejected', label: 'Rejected' }, { id: 'expired', label: 'Expired' }, { id: 'all', label: 'All statuses' }]} />
-      </div>
+      </Toolbar>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title={status === 'pending_finance' ? "You're all caught up" : 'No vouchers found'} body={status === 'pending_finance' ? 'Nothing is waiting for a decision.' : 'Nothing matches right now.'} /> : null)}>
         {(rows) => <VoucherTable rows={rows} onOpen={(v) => setOpened(v.id)} />}
       </Loaded>

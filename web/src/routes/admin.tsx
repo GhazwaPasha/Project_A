@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { CreateOrganization } from '@/components/auth'
 import { Choice, FormBody, Modal, Pill, Stat, Stats, Text, useSave } from '@/components/form'
-import { Cell, Empty, Head, Loaded, Screen, Table, btn } from '@/components/page'
+import { Cell, Empty, Head, Loaded, Paged, Screen, Table, Toolbar, btn } from '@/components/page'
 import { call, rest } from '@/lib/api'
 import { shortDate, useApp } from '@/lib/boot'
 import { useTheme } from '@/lib/theme'
@@ -35,15 +35,18 @@ export function Team() {
       sub={`People who can access ${org.name}.`}
       actions={isOwner ? <button className={btn.primary} onClick={() => setAdding(true)}><Plus className="size-3.5 mr-1.5" />Add team member</button> : undefined}
     >
-      <Input aria-label="Search team" placeholder="Search by name, email or role" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
+      <Toolbar><Input aria-label="Search team" placeholder="Search by name, email or role" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" /></Toolbar>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No team members" body="Add people to work with you." /> : null)}>
         {() => (
-          <Table min={520}>
-            <thead><tr><Head>Person</Head><Head>Role</Head><Head>Joined</Head></tr></thead>
+          <Paged rows={rows}>
+            {(page, pager) => (
+          <Table min={560} footer={pager}>
+            <thead><tr><Head>Name</Head><Head>Email</Head><Head>Role</Head><Head>Joined</Head></tr></thead>
             <tbody>
-              {rows.map((m) => (
+              {page.map((m) => (
                 <tr key={m.id}>
-                  <Cell>{m.full_name || m.email}{m.email === email ? <span className="ml-2"><Pill>You</Pill></span> : null}<span className="block text-[12.5px] text-muted-foreground">{m.email}</span></Cell>
+                  <Cell>{m.full_name || m.email}{m.email === email ? <span className="ml-2"><Pill>You</Pill></span> : null}</Cell>
+                  <Cell className="text-muted-foreground">{m.email}</Cell>
                   <Cell>{isOwner && m.role !== 'organization_owner'
                     ? <select aria-label={`Role for ${m.email}`} value={m.role} disabled={change.isPending} onChange={(e) => change.mutate({ memberId: m.id, role: e.target.value })} className="h-7 rounded-[6px] border border-input bg-transparent px-1.5 text-[13px]">{ASSIGNABLE.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>
                     : ROLE_LABEL[m.role] ?? m.role}</Cell>
@@ -52,6 +55,8 @@ export function Team() {
               ))}
             </tbody>
           </Table>
+            )}
+          </Paged>
         )}
       </Loaded>
       <Modal open={adding} onClose={() => setAdding(false)} title="Add team member">
@@ -88,7 +93,7 @@ export function OrganizationSettings() {
     },
   } }), { success: 'Organization saved', refresh: ['bootstrap'] })
   if (access !== 'owner') return <Screen title="Organization Settings"><Empty title="Owners only" body="Ask the organization owner to change these settings." /></Screen>
-  const Section = ({ title, children }: { title: string; children: React.ReactNode }) => <section className="sheet p-5 flex flex-col gap-3"><h2 className="font-semibold text-[14px]">{title}</h2><div className="grid sm:grid-cols-2 gap-3">{children}</div></section>
+  const Section = ({ title, children }: { title: string; children: React.ReactNode }) => <section className="sheet px-3.5 py-3 flex flex-col gap-2.5"><h2 className="font-semibold text-[13.5px]">{title}</h2><div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">{children}</div></section>
   return (
     <Screen title="Organization Settings" sub="Details used across your books and reports.">
       <FormBody onSubmit={() => save.mutate()} submit="Save changes" pending={save.isPending} disabled={!f.name.trim()}>
@@ -131,8 +136,9 @@ export function Settings() {
   const segment = (active: boolean) => cn('h-7 px-3 rounded-[5px] text-[13px] cursor-pointer', active ? 'bg-card font-medium shadow-[0_0_0_1px_var(--border)]' : 'text-muted-foreground')
   return (
     <Screen title="Settings" sub={email}>
-      <section className="sheet p-5">
-        <h2 className="font-semibold text-[14px] mb-3">Profile</h2>
+      <div className="grid gap-3.5 lg:grid-cols-2 items-start">
+      <section className="sheet px-3.5 py-3">
+        <h2 className="font-semibold text-[13.5px] mb-2.5">Profile</h2>
         <FormBody onSubmit={() => save.mutate()} submit="Save profile" pending={save.isPending}>
           <div className="grid sm:grid-cols-2 gap-3">
             <Text label="Full name" autoComplete="name" value={name} onChange={setName} />
@@ -140,8 +146,8 @@ export function Settings() {
           </div>
         </FormBody>
       </section>
-      <section className="sheet p-5 flex flex-col gap-4">
-        <h2 className="font-semibold text-[14px]">Preferences</h2>
+      <section className="sheet px-3.5 py-3 flex flex-col gap-3">
+        <h2 className="font-semibold text-[13.5px]">Preferences</h2>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div><p className="font-medium text-[13.5px]">Appearance</p><p className="text-[12.5px] text-muted-foreground">Light or dark theme.</p></div>
           <div className="flex p-0.5 rounded-[7px] border border-border bg-muted" role="group" aria-label="Appearance"><button aria-pressed={!dark} onClick={() => { if (dark) toggle() }} className={segment(!dark)}>Light</button><button aria-pressed={dark} onClick={() => { if (!dark) toggle() }} className={segment(dark)}>Dark</button></div>
@@ -151,9 +157,10 @@ export function Settings() {
           <div className="flex p-0.5 rounded-[7px] border border-border bg-muted" role="group" aria-label="Level of detail"><button aria-pressed={!pro} onClick={() => setPro(false)} className={segment(!pro)}>Simple</button><button aria-pressed={pro} onClick={() => setPro(true)} className={segment(pro)}>Accountant</button></div>
         </div>
       </section>
-      <section className="sheet p-5">
+      </div>
+      <section className="sheet px-3.5 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><h2 className="font-semibold text-[14px]">Organizations</h2><p className="text-[12.5px] text-muted-foreground">You belong to {orgs.length}. Switch between them from the top of the sidebar.</p></div>
+          <div><h2 className="font-semibold text-[13.5px]">Organizations</h2><p className="text-[12.5px] text-muted-foreground">You belong to {orgs.length}. Switch between them from the top of the sidebar.</p></div>
           <button className={btn.plain} onClick={() => setAddingOrg(true)}>New organization</button>
         </div>
       </section>
@@ -196,26 +203,32 @@ export function SuperAdmin() {
               <Input aria-label="Search" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
             </div>
             {tab === 'users' ? (
-              <Table>
-                <thead><tr><Head>User</Head><Head>Super admin</Head></tr></thead>
-                <tbody>{o.users.filter((u) => match(u.email, u.full_name)).map((u) => (
-                  <tr key={u.id}><Cell>{u.full_name || u.email}{u.email === email ? <span className="ml-2"><Pill>You</Pill></span> : null}<span className="block text-[12.5px] text-muted-foreground">{u.email}</span></Cell>
+              <Paged rows={o.users.filter((u) => match(u.email, u.full_name))}>{(page, pager) => (
+              <Table footer={pager}>
+                <thead><tr><Head>Name</Head><Head>Email</Head><Head>Super admin</Head></tr></thead>
+                <tbody>{page.map((u) => (
+                  <tr key={u.id}><Cell>{u.full_name || u.email}{u.email === email ? <span className="ml-2"><Pill>You</Pill></span> : null}</Cell><Cell className="text-muted-foreground">{u.email}</Cell>
                   <Cell><label className="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" aria-label={`Super admin: ${u.email}`} checked={u.is_super_admin} disabled={setAdmin.isPending || u.email === email} onChange={(e) => setAdmin.mutate({ userId: u.id, isSuperAdmin: e.target.checked })} />{u.is_super_admin ? 'Yes' : 'No'}</label></Cell></tr>
                 ))}</tbody>
               </Table>
+              )}</Paged>
             ) : tab === 'organizations' ? (
-              <Table>
+              <Paged rows={o.organizations.filter((x) => match(x.name, x.owner_emails.join(' ')))}>{(page, pager) => (
+              <Table footer={pager}>
                 <thead><tr><Head>Organization</Head><Head>Owners</Head><Head right>Members</Head><Head>Created</Head></tr></thead>
-                <tbody>{o.organizations.filter((x) => match(x.name, x.owner_emails.join(' '))).map((x) => <tr key={x.id}><Cell>{x.name}</Cell><Cell className="text-muted-foreground">{x.owner_emails.join(', ')}</Cell><Cell right>{x.member_count}</Cell><Cell className="text-muted-foreground whitespace-nowrap">{shortDate(x.created_at)}</Cell></tr>)}</tbody>
+                <tbody>{page.map((x) => <tr key={x.id}><Cell>{x.name}</Cell><Cell className="text-muted-foreground">{x.owner_emails.join(', ')}</Cell><Cell right>{x.member_count}</Cell><Cell className="text-muted-foreground whitespace-nowrap">{shortDate(x.created_at)}</Cell></tr>)}</tbody>
               </Table>
+              )}</Paged>
             ) : (
-              <Table>
+              <Paged rows={o.memberships.filter((m) => match(m.email, m.organization_name, m.role))}>{(page, pager) => (
+              <Table footer={pager}>
                 <thead><tr><Head>Person</Head><Head>Organization</Head><Head>Role</Head></tr></thead>
-                <tbody>{o.memberships.filter((m) => match(m.email, m.organization_name, m.role)).map((m) => (
+                <tbody>{page.map((m) => (
                   <tr key={m.id}><Cell>{m.email}</Cell><Cell className="text-muted-foreground">{m.organization_name}</Cell>
                   <Cell>{m.role === 'organization_owner' ? 'Owner' : <select aria-label={`Role for ${m.email} in ${m.organization_name}`} value={m.role} disabled={setRole.isPending} onChange={(e) => setRole.mutate({ membershipId: m.id, role: e.target.value })} className="h-7 rounded-[6px] border border-input bg-transparent px-1.5 text-[13px]">{ASSIGNABLE.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>}</Cell></tr>
                 ))}</tbody>
               </Table>
+              )}</Paged>
             )}
           </>
         )}

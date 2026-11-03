@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { AskLink } from '@/components/agent-panel'
 import { Choice, ConfirmDelete, FormBody, Modal, Pill, Text, Toggle, download, parseCsv, useSave } from '@/components/form'
-import { Empty, Loaded, Screen, btn } from '@/components/page'
+import { Empty, Loaded, Paged, Screen, Toolbar, btn } from '@/components/page'
 import { call } from '@/lib/api'
 import { figure, useApp } from '@/lib/boot'
 import { balancesFor, num, q, type Account, type AccountType, type Id } from '@/lib/data'
@@ -39,12 +39,15 @@ export function Accounts() {
   const [draft, setDraft] = useState<Draft | null>(null)
   const [closed, setClosed] = useState<Set<string>>(new Set())
   const [importing, setImporting] = useState(false)
+  const [type, setType] = useState<AccountType>('asset')
   const balanceOf = useMemo(() => new Map((balances.data ?? []).map((b) => [String(b.id), num(b.balance)])), [balances.data])
   const rows = list.data ?? []
   const childrenOf = useMemo(() => {
     const m = new Map<string, Account[]>()
+    const known = new Set(rows.map((a) => String(a.id)))
     rows.forEach((a) => {
-      const k = a.parent_id == null ? 'root' : String(a.parent_id)
+      // An account whose parent isn't in the list still has to appear somewhere.
+      const k = a.parent_id != null && known.has(String(a.parent_id)) ? String(a.parent_id) : 'root'
       m.set(k, [...(m.get(k) ?? []), a])
     })
     return m
@@ -60,7 +63,16 @@ export function Accounts() {
   }
 
   const term = search.trim().toLowerCase()
-  const flat = term ? rows.filter((a) => `${a.code} ${a.name} ${a.group ?? ''}`.toLowerCase().includes(term)) : null
+  const visible = useMemo(() => {
+    if (term) return rows.filter((a) => `${a.code} ${a.name} ${a.group ?? ''}`.toLowerCase().includes(term)).map((a) => ({ a, depth: 0 }))
+    const out: { a: Account; depth: number }[] = []
+    const walk = (a: Account, depth: number) => {
+      out.push({ a, depth })
+      if (!closed.has(String(a.id))) (childrenOf.get(String(a.id)) ?? []).forEach((k) => walk(k, depth + 1))
+    }
+    ;(childrenOf.get('root') ?? []).filter((a) => a.account_type === type).forEach((a) => walk(a, 0))
+    return out
+  }, [term, rows, childrenOf, closed, type])
 
   const Row = ({ a, depth }: { a: Account; depth: number }) => {
     const kids = childrenOf.get(String(a.id)) ?? []
@@ -73,7 +85,7 @@ export function Accounts() {
           <button aria-label={isClosed ? `Expand ${a.name}` : `Collapse ${a.name}`} disabled={!kids.length} onClick={() => setClosed((s) => { const n = new Set(s); if (n.has(String(a.id))) n.delete(String(a.id)); else n.add(String(a.id)); return n })} className={cn('size-5 grid place-items-center text-muted-foreground shrink-0', kids.length ? 'cursor-pointer' : 'invisible')}>
             <ChevronRight className={cn('size-3.5 transition-transform duration-100', !isClosed && 'rotate-90')} />
           </button>
-          <button onClick={canEdit ? open : undefined} className={cn('flex-1 min-w-0 flex items-center gap-2.5 py-2 text-left text-[13.5px]', canEdit && 'cursor-pointer')}>
+          <button onClick={canEdit ? open : undefined} className={cn('flex-1 min-w-0 flex items-center gap-2.5 py-1.5 text-left text-[13.5px]', canEdit && 'cursor-pointer')}>
             {pro ? <span className="fig text-[12.5px] text-muted-foreground shrink-0">{a.code}</span> : null}
             <span className={cn('truncate', header && 'font-medium')}>{a.name}</span>
             {pro && header ? <Pill>Header</Pill> : null}
@@ -81,7 +93,6 @@ export function Accounts() {
           </button>
           <span className={cn('fig text-[13px] shrink-0', (balanceOf.get(String(a.id)) ?? 0) < 0 && 'text-[var(--note)]')}>{balanceOf.has(String(a.id)) && !header ? figure(balanceOf.get(String(a.id))!, org.decimals) : ''}</span>
         </div>
-        {!isClosed ? kids.map((k) => <Row key={k.id} a={k} depth={depth + 1} />) : null}
       </>
     )
   }
@@ -96,26 +107,23 @@ export function Accounts() {
         {canEdit ? <button className={btn.primary} onClick={() => setDraft(blank)}><Plus className="size-3.5 mr-1.5" />New account</button> : null}
       </>}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <Toolbar>
         <Input aria-label="Search accounts" placeholder="Search accounts" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
-        {!pro ? <AskLink className="text-[13px]" prompt="Look at my accounts and tell me if anything is missing or set up wrong for my business.">Ask the agent to check these</AskLink> : null}
-      </div>
+        <div role="group" aria-label="Account type" className="flex p-0.5 rounded-[7px] border border-border bg-muted text-[13px] overflow-x-auto max-w-full">
+          {TYPES.map((t) => <button key={t.id} aria-pressed={!term && type === t.id} onClick={() => { setType(t.id); setSearch('') }} className={cn('h-7 px-2.5 rounded-[5px] whitespace-nowrap cursor-pointer', !term && type === t.id ? 'bg-card font-medium shadow-[0_0_0_1px_var(--border)]' : 'text-muted-foreground')}>{pro ? t.pro : t.simple} <span className="fig text-[12px] text-muted-foreground">{rows.filter((a) => a.account_type === t.id).length}</span></button>)}
+        </div>
+        {!pro ? <AskLink className="text-[13px] ml-auto" prompt="Look at my accounts and tell me if anything is missing or set up wrong for my business.">Ask the agent to check these</AskLink> : null}
+      </Toolbar>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No accounts yet" body="Add your first account, or import a chart of accounts." /> : null)}>
-        {() => flat ? (
-          <div className="sheet overflow-hidden">{flat.length ? flat.map((a) => <Row key={a.id} a={{ ...a }} depth={0} />) : <p className="p-4 text-muted-foreground">No matches.</p>}</div>
-        ) : (
-          <div className="flex flex-col gap-4">
-            {TYPES.map((t) => {
-              const top = (childrenOf.get('root') ?? []).filter((a) => a.account_type === t.id)
-              if (!top.length) return null
-              return (
-                <section key={t.id} className="sheet overflow-hidden">
-                  <h2 className="px-4 py-2.5 font-semibold text-[14px]">{pro ? t.pro : t.simple}</h2>
-                  {top.map((a) => <Row key={a.id} a={a} depth={0} />)}
-                </section>
-              )
-            })}
-          </div>
+        {() => (
+          <Paged rows={visible}>
+            {(page, pager) => (
+              <div className="sheet overflow-hidden [&>div:first-child]:border-t-0">
+                {page.length ? page.map(({ a, depth }) => <Row key={a.id} a={a} depth={depth} />) : <p className="p-3.5 text-muted-foreground">{term ? 'No matches.' : 'No accounts of this type yet.'}</p>}
+                {pager}
+              </div>
+            )}
+          </Paged>
         )}
       </Loaded>
 

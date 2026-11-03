@@ -48,7 +48,8 @@ export function Connections() {
 
   return (
     <Screen title="Connections" sub="Use your own AI app with your books. It gets the same tools as the built-in agent, through MCP.">
-      <form onSubmit={submit} className="sheet p-5 flex flex-col gap-3">
+      <div className="grid gap-3.5 lg:grid-cols-2 items-start">
+      <form onSubmit={submit} className="sheet px-3.5 py-3 flex flex-col gap-2.5">
         <h2 className="font-semibold">Connect an AI app</h2>
         <Input id="connection-name" aria-label="Connection name" placeholder="Name it, for example My laptop" value={name} onChange={(e) => setName(e.target.value)} className="max-w-sm" />
         <label className="flex items-start gap-3 cursor-pointer max-w-[60ch]">
@@ -59,7 +60,7 @@ export function Connections() {
       </form>
 
       {created ? (
-        <section className="sheet border-primary/50 p-5 flex flex-col gap-3">
+        <section className="sheet border-primary/50 px-3.5 py-3 flex flex-col gap-2.5 lg:row-start-2 lg:col-span-2">
           <div><h2 className="font-semibold">Copy this now</h2><p className="text-[13.5px] text-muted-foreground">This is the only time the token is shown. Anyone who has it can use this connection, so treat it like a password.</p></div>
           <CodeBlock label="Claude Code" text={`claude mcp add --transport http accountuitive ${url} --header "Authorization: Bearer ${created}"`} />
           <CodeBlock label="Other apps that take an MCP server config" text={JSON.stringify({ mcpServers: { accountuitive: { type: 'http', url, headers: { Authorization: `Bearer ${created}` } } } }, null, 2)} />
@@ -73,7 +74,7 @@ export function Connections() {
           {(rows) => (
             <div className="sheet divide-y divide-border overflow-hidden">
               {rows.map((c) => (
-                <div key={c.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <div key={c.id} className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2">
                   <div className="min-w-0">
                     <p className="font-medium truncate">{c.name}</p>
                     <p className="text-[12.5px] text-muted-foreground">{c.can_record ? 'Can record entries' : 'Can propose entries'} · ending <span className="fig">{c.token_hint}</span> · {c.last_used_at ? `last used ${shortDate(c.last_used_at)}` : 'never used'}</p>
@@ -85,6 +86,7 @@ export function Connections() {
           )}
         </Loaded>
       </section>
+      </div>
     </Screen>
   )
 }

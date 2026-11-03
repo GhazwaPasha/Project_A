@@ -98,9 +98,9 @@ export function useSave<T, V = void>(fn: (v: V) => Promise<T>, opts: { success?:
 
 export function Stat({ label, value, tone }: { label: string; value: ReactNode; tone?: 'warn' }) {
   return (
-    <div className="p-4 min-w-0">
+    <div className="px-3.5 py-2.5 min-w-0">
       <p className="text-[12.5px] text-muted-foreground truncate">{label}</p>
-      <p className={cn('mt-1 text-[20px] leading-tight font-semibold tracking-[-0.02em] truncate', tone === 'warn' && 'text-[var(--note)]')}>{value}</p>
+      <p className={cn('text-[18px] leading-tight font-semibold tracking-[-0.02em] truncate', tone === 'warn' && 'text-[var(--note)]')}>{value}</p>
     </div>
   )
 }

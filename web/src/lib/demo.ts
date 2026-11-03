@@ -146,11 +146,27 @@ const handlers: Record<string, (args: unknown[]) => unknown> = {
   })),
 }
 
+/** `?long=1` makes lists as long as a real business's, to check how screens hold up. */
+const LONG: Record<string, number> = { getAccounts: 126, getAccountBalances: 126, getTrialBalance: 126, getJournalEntriesWithLines: 200, getAccountTransactions: 150, getInventoryItems: 80, getInventoryTransactions: 120, getVouchers: 70, getSuppliers: 45 }
+const longMode = () => {
+  if (new URLSearchParams(location.search).has('long')) sessionStorage.setItem('long', '1')
+  return sessionStorage.getItem('long') === '1'
+}
+const stretch = (rows: Record<string, unknown>[], n: number, method: string) => Array.from({ length: n }, (_, i) => {
+  const row = rows[i % rows.length]
+  if (i < rows.length) return row
+  const text = (k: string) => (typeof row[k] === 'string' ? { [k]: `${row[k]} ${i}` } : {})
+  const ids = method === 'getTrialBalance' ? { account_id: i + 1 } : { id: i + 1 }
+  const nested = method === 'getAccounts' ? { parent_id: row.id } : {}
+  return { ...row, ...ids, ...nested, ...text('name'), ...text('account_name'), ...text('code'), ...text('account_code'), ...text('sku'), ...text('supplier_code'), ...text('voucher_number'), ...text('entry_number') }
+})
+
 export async function respond(method: string, args: unknown[]) {
   await new Promise((r) => setTimeout(r, 120))
   const handler = handlers[method]
   if (!handler) throw new Error(`No sample data for ${method}`)
-  return handler(args)
+  const result = handler(args)
+  return longMode() && LONG[method] && Array.isArray(result) ? stretch(result, LONG[method], method) : result
 }
 
 /** Sample answers for the app's REST routes. Saves succeed without changing anything. */

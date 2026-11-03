@@ -4,7 +4,7 @@ import { Plus, Star, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { AskLink } from '@/components/agent-panel'
 import { Choice, ConfirmDelete, FormBody, Modal, Pill, Stat, Stats, Text, Toggle, useSave } from '@/components/form'
-import { Cell, Empty, Head, Loaded, Range, Screen, Table, btn } from '@/components/page'
+import { Cell, Empty, Head, Loaded, Paged, Range, Screen, Table, Toolbar, btn } from '@/components/page'
 import { call } from '@/lib/api'
 import { figure, useApp } from '@/lib/boot'
 import { accounts, num, q, type Id, type Money } from '@/lib/data'
@@ -43,18 +43,21 @@ export function Suppliers() {
         <Stat label="Preferred" value={all.filter((s) => s.is_preferred).length} />
         <Stat label={pro ? 'Current balance' : 'You owe them'} value={`${org.currency} ${figure(owed, 0)}`} />
       </Stats>
-      <div className="flex flex-wrap items-center gap-2">
+      <Toolbar>
         <Input aria-label="Search suppliers" placeholder="Search suppliers" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
         <Range label="Status" value={status} onChange={setStatus} options={[{ id: 'all', label: 'All statuses' }, { id: 'active', label: 'Active' }, { id: 'inactive', label: 'Inactive' }, { id: 'suspended', label: 'Suspended' }]} />
-      </div>
+      </Toolbar>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No suppliers found" body={canWrite ? 'Add the businesses you buy from.' : 'Nothing matches right now.'} /> : null)}>
         {() => (
-          <Table min={620}>
-            <thead><tr><Head>Supplier</Head><Head>Contact</Head><Head>Terms</Head><Head>Status</Head><Head right>Balance</Head></tr></thead>
+          <Paged rows={all}>
+            {(page, pager) => (
+          <Table min={620} footer={pager}>
+            <thead><tr>{pro ? <Head>Code</Head> : null}<Head>Supplier</Head><Head>Contact</Head><Head>Terms</Head><Head>Status</Head><Head right>Balance</Head></tr></thead>
             <tbody>
-              {all.map((s) => (
+              {page.map((s) => (
                 <tr key={s.id} tabIndex={0} className="cursor-pointer hover:bg-accent/50 focus-visible:bg-accent/50 outline-none" onClick={() => setOpened(s)} onKeyDown={(e) => { if (e.key === 'Enter') setOpened(s) }}>
-                  <Cell><span className="flex items-center gap-1.5">{s.name}{s.is_preferred ? <Star aria-label="Preferred" className="size-3 fill-current text-[var(--note)]" /> : null}</span>{pro ? <span className="fig text-[12px] text-muted-foreground">{s.supplier_code}</span> : null}</Cell>
+                  {pro ? <Cell className="fig text-[12.5px] text-muted-foreground whitespace-nowrap">{s.supplier_code}</Cell> : null}
+                  <Cell><span className="flex items-center gap-1.5">{s.name}{s.is_preferred ? <Star aria-label="Preferred" className="size-3 fill-current text-[var(--note)]" /> : null}</span></Cell>
                   <Cell className="text-muted-foreground">{s.contact_person || s.email || s.phone || ''}</Cell>
                   <Cell className="text-muted-foreground">{TERMS.find((t) => t.value === s.payment_terms)?.label ?? ''}</Cell>
                   <Cell><Pill tone={STATUS_TONE[s.status]}>{s.status[0].toUpperCase() + s.status.slice(1)}</Pill></Cell>
@@ -63,6 +66,8 @@ export function Suppliers() {
               ))}
             </tbody>
           </Table>
+            )}
+          </Paged>
         )}
       </Loaded>
       <SupplierForm key={String(draft?.id ?? (draft ? 'new' : 'closed'))} draft={draft} onClose={() => setDraft(null)} />

@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { AskLink } from '@/components/agent-panel'
 import { Choice, ConfirmDelete, FormBody, Modal, Pill, Stat, Stats, Text, useSave } from '@/components/form'
-import { Cell, Empty, Head, Loaded, Screen, Table, Tabs, btn } from '@/components/page'
+import { Cell, Empty, Head, Loaded, Paged, Screen, Table, Tabs, Toolbar, btn } from '@/components/page'
 import { call } from '@/lib/api'
 import { figure, shortDate, useApp } from '@/lib/boot'
 import { accounts, num, q, today, type Id, type Money, type StockItem } from '@/lib/data'
@@ -66,17 +66,19 @@ export function Inventory() {
         <Stat label={pro ? 'Inventory value' : 'Worth'} value={`${org.currency} ${figure(value, 0)}`} />
         <Stat label="Running low" value={low} tone={low ? 'warn' : undefined} />
       </Stats>
-      <div className="flex flex-wrap items-center gap-3">
+      <Toolbar>
         <Input aria-label="Search items" placeholder="Search items" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
-        <label className="flex items-center gap-2 text-[13px] cursor-pointer"><input type="checkbox" checked={lowOnly} onChange={(e) => setLowOnly(e.target.checked)} />Only running low</label>
+        <label className="flex items-center gap-2 text-[13px] cursor-pointer ml-1"><input type="checkbox" checked={lowOnly} onChange={(e) => setLowOnly(e.target.checked)} />Only running low</label>
         <AskLink className="text-[13px] ml-auto" prompt="Look at my stock. What is running low, and what should I reorder first?">What should I reorder?</AskLink>
-      </div>
+      </Toolbar>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No items yet" body={cats.data?.length ? 'Add your first stock item.' : 'Create a category first, then add items to it.'} /> : null)}>
-        {() => (
-          <Table min={640}>
+        {() => rows.length === 0 ? <Empty title="No matches" body="Try a different word, or turn off the filter." /> : (
+          <Paged rows={rows}>
+            {(page, pager) => (
+          <Table min={640} footer={pager}>
             <thead><tr>{pro ? <Head>SKU</Head> : null}<Head>Item</Head>{pro ? <Head>Category</Head> : null}<Head right>On hand</Head>{pro ? <Head right>Avg. cost</Head> : null}<Head right>Value</Head></tr></thead>
             <tbody>
-              {rows.map((i) => (
+              {page.map((i) => (
                 <tr key={i.id} className={cn('hover:bg-accent/50', canWrite && 'cursor-pointer')} onClick={canWrite ? () => setDraft({ id: i.id, category_id: String(i.category_id), sku: i.sku, name: i.name, description: i.description ?? '', unit_of_measure: i.unit_of_measure, reorder_point: String(num(i.reorder_point)), reorder_quantity: String(num(i.reorder_quantity)) }) : undefined}>
                   {pro ? <Cell className="fig text-[12.5px] text-muted-foreground">{i.sku}</Cell> : null}
                   <Cell><span className="flex items-center gap-2">{i.name}{isLow(i) ? <Pill tone="warn">Low</Pill> : null}</span></Cell>
@@ -88,6 +90,8 @@ export function Inventory() {
               ))}
             </tbody>
           </Table>
+            )}
+          </Paged>
         )}
       </Loaded>
       <ItemForm key={`item-${draft?.id ?? (draft ? 'new' : 'closed')}`} draft={draft} cats={cats.data ?? []} onClose={() => setDraft(null)} />
@@ -177,18 +181,22 @@ export function Categories() {
     <Screen title="Inventory" sub="Categories decide which accounts stock uses." tabs={<Tabs items={INVENTORY_TABS} />} actions={canWrite ? <button className={btn.primary} onClick={() => setDraft({ name: '', description: '', inventory_account_id: '', expense_account_id: '' })}><Plus className="size-3.5 mr-1.5" />New category</button> : undefined}>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No categories yet" body="Create a category, for example Packaging or Raw materials." /> : null)}>
         {(rows) => (
-          <Table min={560}>
+          <Paged rows={rows}>
+            {(page, pager) => (
+          <Table min={560} footer={pager}>
             <thead><tr><Head>Category</Head><Head>Stock account</Head><Head>Cost account</Head></tr></thead>
             <tbody>
-              {rows.map((c) => (
+              {page.map((c) => (
                 <tr key={c.id} className={cn('hover:bg-accent/50', canWrite && 'cursor-pointer')} onClick={canWrite ? () => setDraft({ id: c.id, name: c.name, description: c.description ?? '', inventory_account_id: String(c.inventory_account_id), expense_account_id: String(c.expense_account_id) }) : undefined}>
-                  <Cell>{c.name}{c.description ? <span className="block text-[12.5px] text-muted-foreground">{c.description}</span> : null}</Cell>
+                  <Cell>{c.name}{c.description ? <span className="ml-2 text-[12.5px] text-muted-foreground">{c.description}</span> : null}</Cell>
                   <Cell className="text-muted-foreground">{nameOf.get(String(c.inventory_account_id)) ?? ''}</Cell>
                   <Cell className="text-muted-foreground">{nameOf.get(String(c.expense_account_id)) ?? ''}</Cell>
                 </tr>
               ))}
             </tbody>
           </Table>
+            )}
+          </Paged>
         )}
       </Loaded>
       <CategoryForm key={String(draft?.id ?? (draft ? 'new' : 'closed'))} draft={draft} onClose={() => setDraft(null)} />
@@ -231,17 +239,20 @@ export function Movements() {
   const rows = (list.data ?? []).filter((m) => !search.trim() || `${m.item?.name} ${m.reference} ${m.description}`.toLowerCase().includes(search.trim().toLowerCase()))
   return (
     <Screen title="Inventory" sub="Every time stock came in, went out or was corrected." tabs={<Tabs items={INVENTORY_TABS} />}>
-      <Input aria-label="Search stock movements" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
+      <Toolbar><Input aria-label="Search stock movements" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" /></Toolbar>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No stock movements yet" body="They appear here as stock comes in and goes out." /> : null)}>
         {() => (
-          <Table min={640}>
-            <thead><tr><Head>Date</Head><Head>Item</Head><Head>Type</Head>{pro ? <Head>Reference</Head> : null}<Head right>Quantity</Head><Head right>Cost</Head></tr></thead>
+          <Paged rows={rows}>
+            {(page, pager) => (
+          <Table min={720} footer={pager}>
+            <thead><tr><Head>Date</Head><Head>Item</Head><Head>Type</Head><Head>Notes</Head>{pro ? <Head>Reference</Head> : null}<Head right>Quantity</Head><Head right>Cost</Head></tr></thead>
             <tbody>
-              {rows.map((m) => (
+              {page.map((m) => (
                 <tr key={m.id}>
                   <Cell className="text-muted-foreground whitespace-nowrap">{shortDate(m.transaction_date)}</Cell>
-                  <Cell>{m.item?.name ?? `Item ${m.item_id}`}{m.description ? <span className="block text-[12.5px] text-muted-foreground">{m.description}</span> : null}</Cell>
+                  <Cell className="whitespace-nowrap">{m.item?.name ?? `Item ${m.item_id}`}</Cell>
                   <Cell><Pill tone={m.transaction_type === 'in' ? 'good' : 'neutral'}>{MOVE_LABEL[m.transaction_type]}</Pill></Cell>
+                  <Cell className="max-w-0 w-full truncate text-muted-foreground">{m.description ?? ''}</Cell>
                   {pro ? <Cell className="text-muted-foreground">{m.reference ?? ''}</Cell> : null}
                   <Cell right>{figure(num(m.quantity), 0)}</Cell>
                   <Cell right>{m.total_cost != null ? figure(num(m.total_cost), org.decimals) : ''}</Cell>
@@ -249,6 +260,8 @@ export function Movements() {
               ))}
             </tbody>
           </Table>
+            )}
+          </Paged>
         )}
       </Loaded>
     </Screen>

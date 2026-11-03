@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ChevronRight, Download } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { AskLink } from '@/components/agent-panel'
 import { BulkEntry } from '@/components/bulk-entry'
 import { NewEntry } from '@/components/new-entry'
-import { Cell, Check, Empty, Head, Loaded, PrintButton, Range, Screen, Table, btn } from '@/components/page'
+import { Cell, Check, Empty, Head, Loaded, Paged, PrintButton, Range, Screen, Table, Toolbar, btn } from '@/components/page'
 import { figure, shortDate, useApp } from '@/lib/boot'
 import { useAgent } from '@/lib/agent'
 import { accountTxns, accounts, balanceSheet, balancesFor, journal, num, periodRange, today, trialBalance, type AccountBalance, type AccountType, type Entry, type Id, type Period } from '@/lib/data'
@@ -16,7 +16,8 @@ const nameMap = (rows: { id: Id; code: string; name: string }[] | undefined) => 
 export function Journal() {
   const { org, pro } = useApp()
   const { ask } = useAgent()
-  const entries = useQuery(journal(org.id))
+  const [limit, setLimit] = useState(200)
+  const entries = useQuery({ ...journal(org.id, limit), placeholderData: keepPreviousData })
   const chart = useQuery(accounts(org.id))
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState<Id | null>(null)
@@ -41,14 +42,20 @@ export function Journal() {
           {['I paid rent of 65,000 from the bank', 'A customer paid 40,000 in cash', 'Bought stock for 120,000 on credit'].map((t) => <button key={t} onClick={() => ask(t)} className="text-primary hover:underline cursor-pointer">{t}</button>)}
         </section>
       ) : null}
-      <Input aria-label="Search entries" placeholder={pro ? 'Search number, description or reference' : 'Search'} value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
+      <Toolbar><Input aria-label="Search entries" placeholder={pro ? 'Search number, description or reference' : 'Search'} value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" /></Toolbar>
       <Loaded query={entries} empty={(d) => (d.length === 0 ? <Empty title="Nothing recorded yet" body="Tell me what happened in the box below, and I'll prepare it for your approval." /> : null)}>
         {() => shown.length === 0 ? <Empty title="No matches" body="Try a different word." /> : (
-          <div className="sheet overflow-hidden">
-            {shown.map((e) => <EntryRow key={e.id} entry={e} open={open === e.id} onToggle={() => setOpen(open === e.id ? null : e.id)} names={names} decimals={org.decimals} pro={pro} />)}
-          </div>
+          <Paged rows={shown}>
+            {(page, pager) => (
+              <div className="sheet overflow-hidden">
+                {page.map((e) => <EntryRow key={e.id} entry={e} open={open === e.id} onToggle={() => setOpen(open === e.id ? null : e.id)} names={names} decimals={org.decimals} pro={pro} />)}
+                {pager}
+              </div>
+            )}
+          </Paged>
         )}
       </Loaded>
+      {entries.data?.length === limit ? <p className="text-[13px] text-muted-foreground">Showing the latest {limit} entries. <button onClick={() => setLimit((n) => n + 200)} disabled={entries.isFetching} className="text-foreground font-medium underline underline-offset-[3px] cursor-pointer">{entries.isFetching ? 'Loading…' : 'Load 200 older entries'}</button></p> : null}
       <NewEntry open={adding} onOpenChange={setAdding} />
       <BulkEntry open={bulk} onClose={() => setBulk(false)} />
     </Screen>
@@ -60,19 +67,21 @@ function EntryRow({ entry: e, open, onToggle, names, decimals, pro }: { entry: E
   const into = e.lines.filter((l) => num(l.debit_amount) > 0).map((l) => name(l.account_id))
   const outOf = e.lines.filter((l) => num(l.credit_amount) > 0).map((l) => name(l.account_id))
   return (
-    <div className="border-b border-border last:border-b-0">
-      <button onClick={onToggle} aria-expanded={open} className="w-full grid grid-cols-[14px_minmax(0,1fr)_auto] items-baseline gap-3 px-3.5 py-2.5 text-left cursor-pointer hover:bg-accent">
-        <ChevronRight className={cn('size-3.5 self-center text-muted-foreground transition-transform duration-100', open && 'rotate-90')} />
-        <span className="min-w-0">
-          <span className="block truncate">{e.description || 'No description'}</span>
-          <span className="block truncate text-[12.5px] text-muted-foreground">
-            {shortDate(e.entry_date)}{pro ? <span className="fig"> · {e.entry_number}</span> : outOf.length && into.length ? ` · ${outOf.join(', ')} → ${into.join(', ')}` : ''}
+    <div className="border-b border-border">
+      <button onClick={onToggle} aria-expanded={open} className="w-full flex items-center gap-3 px-3.5 py-1.5 text-left cursor-pointer hover:bg-accent">
+        <ChevronRight className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform duration-100', open && 'rotate-90')} />
+        <span className="hidden md:block w-[92px] shrink-0 text-[13px] text-muted-foreground">{shortDate(e.entry_date)}</span>
+        {pro ? <span className="hidden md:block w-[120px] shrink-0 truncate fig text-[12.5px] text-muted-foreground">{e.entry_number}</span> : null}
+        <span className="flex-1 min-w-0 md:flex md:gap-3">
+          <span className="block truncate md:shrink-0 md:max-w-[50%]">{e.description || 'No description'}</span>
+          <span className="block truncate text-[12.5px] text-muted-foreground md:self-center">
+            <span className="md:hidden">{shortDate(e.entry_date)}{outOf.length && into.length ? ' · ' : ''}</span>{outOf.length && into.length ? `${outOf.join(', ')} → ${into.join(', ')}` : ''}
           </span>
         </span>
-        <span className="fig">{figure(num(e.total_amount), decimals)}</span>
+        <span className="fig shrink-0">{figure(num(e.total_amount), decimals)}</span>
       </button>
       {open ? (
-        <div className="px-3.5 pb-3 pl-[31px] overflow-x-auto">
+        <div className="px-3.5 pb-2.5 pl-[39px] overflow-x-auto max-w-[900px]">
           <table className="w-full text-[13px] min-w-[360px]">
             <thead><tr className="text-muted-foreground text-left"><th className="font-medium py-1">Account</th><th className="font-medium text-right">Debit</th><th className="font-medium text-right pl-5">Credit</th></tr></thead>
             <tbody>
@@ -119,19 +128,21 @@ export function Ledger() {
     <Screen
       title="Ledger"
       sub={pro ? `${list.data?.length ?? ''} accounts` : 'Where your money is, account by account.'}
-      actions={<Range label="Date range" value={range} options={RANGES} onChange={setRange} />}
     >
-      <Input aria-label="Search accounts" placeholder="Search accounts" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
+      <Toolbar>
+        <Input aria-label="Search accounts" placeholder="Search accounts" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
+        <Range label="Date range" value={range} options={RANGES} onChange={setRange} />
+      </Toolbar>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No accounts yet" body="Accounts appear here once your chart of accounts is set up." /> : null)}>
         {() => (
-          <div className="grid lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] gap-5 items-start">
-            <div className="sheet overflow-hidden">
+          <div className="grid lg:grid-cols-[minmax(320px,2fr)_minmax(0,3fr)] gap-3.5 items-start">
+            <div className="sheet overflow-y-auto max-h-[50dvh] lg:max-h-[max(360px,calc(100dvh-174px))]">
               {GROUPS.map((g) => {
                 const rows = shown.filter((a) => a.account_type === g.type)
                 if (!rows.length) return null
                 return (
                   <div key={g.type}>
-                    <h2 className="px-3.5 pt-3 pb-1 text-[12.5px] font-semibold text-muted-foreground">{pro ? g.pro : g.simple}</h2>
+                    <h2 className="sticky top-0 bg-card px-3.5 py-1.5 border-b border-border text-[12.5px] font-semibold text-muted-foreground">{pro ? g.pro : g.simple}</h2>
                     {rows.map((a) => (
                       <button key={a.id} aria-pressed={current?.id === a.id} onClick={() => setPicked(a)} className={cn('w-full flex justify-between gap-3 px-3.5 py-1.5 text-left border-b border-border cursor-pointer hover:bg-accent', current?.id === a.id && 'bg-accent')}>
                         <span className="min-w-0 truncate">{pro ? <span className="fig text-[12.5px] text-muted-foreground mr-2">{a.code}</span> : null}{a.name}</span>
@@ -142,13 +153,13 @@ export function Ledger() {
                 )
               })}
             </div>
-            <div className="sheet lg:sticky lg:top-8 min-w-0">
+            <div className="sheet overflow-hidden min-w-0">
               {current ? <>
-                <div className="p-4 pb-2.5 border-b border-border flex flex-wrap items-baseline justify-between gap-2">
+                <div className="px-3.5 py-2 border-b border-border flex flex-wrap items-baseline justify-between gap-2">
                   <div className="min-w-0"><h2 className="font-semibold truncate">{current.name}</h2>{pro ? <p className="fig text-[12.5px] text-muted-foreground">{current.code} · {current.account_type}</p> : null}</div>
                   <AskLink className="text-[13.5px]" prompt={`Explain the recent activity on my ${current.name} account (code ${current.code}).`}>Explain this account</AskLink>
                 </div>
-                <div className="max-h-[60vh] overflow-auto"><AccountDetail id={current.id} from={dates?.from} to={dates?.to} /></div>
+                <div className="overflow-auto max-h-[60dvh] lg:max-h-[max(310px,calc(100dvh-224px))] [&_thead_th]:sticky [&_thead_th]:top-0"><AccountDetail id={current.id} from={dates?.from} to={dates?.to} /></div>
               </> : <p className="p-4 text-[13.5px] text-muted-foreground">Select an account to see what happened on it.</p>}
             </div>
           </div>
@@ -164,12 +175,13 @@ function AccountDetail({ id, from, to }: { id: Id; from?: string; to?: string })
   return (
     <Loaded query={txns} empty={(d) => (d.length === 0 ? <p className="p-4 text-[13.5px] text-muted-foreground">Nothing happened on this account in this range.</p> : null)}>
       {(rows) => pro ? (
-        <table className="w-full text-[13px] min-w-[420px]">
-          <thead><tr><Head>Entry</Head><Head right>Debit</Head><Head right>Credit</Head><Head right>Balance</Head></tr></thead>
+        <table className="w-full text-[13px] min-w-[520px] border-separate border-spacing-0">
+          <thead><tr><Head>Date</Head><Head>Entry</Head><Head right>Debit</Head><Head right>Credit</Head><Head right>Balance</Head></tr></thead>
           <tbody>
             {rows.map((t) => (
               <tr key={t.id}>
-                <Cell><span className="block truncate max-w-[200px]">{t.description || t.entry_number}</span><span className="text-[12px] text-muted-foreground">{shortDate(t.entry_date)}</span></Cell>
+                <Cell className="whitespace-nowrap text-muted-foreground text-[12.5px]">{shortDate(t.entry_date)}</Cell>
+                <Cell className="max-w-0 w-full truncate">{t.description || t.entry_number}</Cell>
                 <Cell right>{num(t.debit_amount) ? figure(num(t.debit_amount), org.decimals) : ''}</Cell>
                 <Cell right>{num(t.credit_amount) ? figure(num(t.credit_amount), org.decimals) : ''}</Cell>
                 <Cell right>{figure(num(t.balance), org.decimals)}</Cell>
@@ -182,8 +194,9 @@ function AccountDetail({ id, from, to }: { id: Id; from?: string; to?: string })
           {rows.map((t) => {
             const net = num(t.debit_amount) - num(t.credit_amount)
             return (
-              <li key={t.id} className="flex justify-between gap-3 px-4 py-2 border-b border-border last:border-b-0">
-                <span className="min-w-0"><span className="block truncate">{t.description || t.entry_number}</span><span className="text-[12.5px] text-muted-foreground">{shortDate(t.entry_date)}</span></span>
+              <li key={t.id} className="flex items-center gap-3 px-3.5 py-1.5 border-b border-border last:border-b-0">
+                <span className="w-[92px] shrink-0 text-[12.5px] text-muted-foreground">{shortDate(t.entry_date)}</span>
+                <span className="flex-1 min-w-0 truncate">{t.description || t.entry_number}</span>
                 <span className="fig shrink-0">{net >= 0 ? '+' : '−'}{figure(Math.abs(net), org.decimals)}</span>
               </li>
             )
@@ -225,7 +238,7 @@ export function TrialBalance() {
   }
 
   const checks = (
-    <section className="sheet" aria-label="Book checks">
+    <section className="sheet overflow-hidden grid gap-px bg-border md:grid-cols-2 xl:grid-cols-5 md:[&>*:last-child]:col-span-2 xl:[&>*:last-child]:col-span-1 print:hidden" aria-label="Book checks">
       <Check ok={balanced} title={balanced ? (pro ? `Debits equal credits at ${figure(dr, org.decimals)}` : 'Everything adds up') : `Out of balance by ${figure(Math.abs(dr - cr), org.decimals)}`} body={pro ? undefined : 'Every amount going out of one place has gone into another.'}>
         {balanced ? null : <AskLink prompt="My trial balance is out of balance. Find out why.">Find out why</AskLink>}
       </Check>
@@ -248,14 +261,17 @@ export function TrialBalance() {
     >
       {checks}
       {pro ? <>
-        <Input aria-label="Search accounts" placeholder="Search accounts" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
+        <Toolbar><Input aria-label="Search accounts" placeholder="Search accounts" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" /></Toolbar>
         <Loaded query={rows} empty={(d) => (d.length === 0 ? <Empty title="No accounts with balances" body="Balances appear once entries are recorded." /> : null)}>
           {() => (
-            <Table>
+            <Paged rows={shown}>
+              {(page, pager) => (
+            <Table footer={pager}>
               <thead><tr><Head>Account</Head><Head right>Debit</Head><Head right>Credit</Head></tr></thead>
               <tbody>
+                {/* Every row stays in the page, so printing always gives the whole trial balance. */}
                 {shown.map((r) => (
-                  <tr key={r.account_id}>
+                  <tr key={r.account_id} className={page.includes(r) ? undefined : 'hidden print:table-row'}>
                     <Cell><span className="fig text-[12.5px] text-muted-foreground mr-2">{r.account_code}</span>{r.account_name}</Cell>
                     <Cell right>{num(r.debit_balance) ? figure(num(r.debit_balance), org.decimals) : ''}</Cell>
                     <Cell right>{num(r.credit_balance) ? figure(num(r.credit_balance), org.decimals) : ''}</Cell>
@@ -268,6 +284,8 @@ export function TrialBalance() {
                 </tr>
               </tbody>
             </Table>
+              )}
+            </Paged>
           )}
         </Loaded>
       </> : <p><AskLink prompt="Go through my books and tell me if anything looks wrong or needs fixing.">Ask me to review your books in more depth</AskLink></p>}
