@@ -4,6 +4,7 @@ import { createProposal, listProposals, recordDirectly, type Proposal } from '@/
 import { DataServiceAdmin } from '@/server/data-service-admin'
 import { actingUserStore } from '@/server/request-context'
 import { VoucherServiceAdmin } from '@/server/voucher-service-admin'
+import { fetchAccountOpening } from '@/server/data/ledger-sql'
 
 /** Everything a tool may know about who is calling. Permissions are rechecked on every call. */
 export type ToolContext = {
@@ -88,8 +89,12 @@ const TOOLS: AgentTool[] = [
   }),
   define({
     name: 'get_account_transactions', title: 'Get account transactions', readOnly: true, schema: z.object({ account_id: z.coerce.number().int().positive(), from: DATE.optional(), to: DATE.optional() }),
-    description: 'Every transaction on one account with a running balance, optionally for a date range.',
-    run: ({ account_id, from, to }, c) => read(c, 'DataService', 'getAccountTransactions', [account_id, c.org, from, to], 'Reading account activity', () => DataServiceAdmin.getAccountTransactions(account_id, c.org, from, to)),
+    description: "Every transaction on one account, optionally for a date range, with the balance before the range and at its end. Balances are in the account's natural direction, so a positive balance on a liability, equity or revenue account is normal.",
+    run: ({ account_id, from, to }, c) => read(c, 'DataService', 'getAccountTransactions', [account_id, c.org, from, to], 'Reading account activity', async () => {
+      const opening = (await fetchAccountOpening(account_id, c.org, from))?.opening ?? 0
+      const transactions = await DataServiceAdmin.getAccountTransactions(account_id, c.org, from, to)
+      return { opening_balance: opening, closing_balance: transactions.at(-1)?.balance ?? opening, transactions }
+    }),
   }),
   define({
     name: 'get_inventory_items', title: 'Get inventory items', readOnly: true, schema: z.object({}),

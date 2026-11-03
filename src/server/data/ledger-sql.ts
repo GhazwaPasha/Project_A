@@ -186,3 +186,40 @@ export async function fetchAccountNetBalance(
   const cr = Number(rows[0].cr)
   return netAmountForAccountType(dr, cr, String(rows[0].at))
 }
+
+/**
+ * An account's type and its balance before a date, in the account's natural direction.
+ * With no date there's nothing before the first entry, so the balance is 0.
+ */
+export async function fetchAccountOpening(
+  accountId: number,
+  organizationId: string,
+  beforeDate?: string
+): Promise<{ accountType: string; opening: number } | null> {
+  const sql = getSql()
+  const rows = await sql<{ at: string; dr: string; cr: string }[]>`
+    SELECT
+      a.account_type AS at,
+      COALESCE(t.dr, 0)::numeric::text AS dr,
+      COALESCE(t.cr, 0)::numeric::text AS cr
+    FROM public.accounts a
+    LEFT JOIN (
+      SELECT
+        jel.account_id,
+        COALESCE(SUM(jel.debit_amount), 0) AS dr,
+        COALESCE(SUM(jel.credit_amount), 0) AS cr
+      FROM public.journal_entry_lines jel
+      INNER JOIN public.journal_entries je ON je.id = jel.journal_entry_id
+      WHERE jel.account_id = ${accountId}
+        AND je.organization_id = ${organizationId}::uuid
+        AND ${beforeDate ? sql`je.entry_date < ${beforeDate}::date` : sql`false`}
+      GROUP BY jel.account_id
+    ) t ON t.account_id = a.id
+    WHERE a.id = ${accountId}
+      AND a.organization_id = ${organizationId}::uuid
+    LIMIT 1
+  `
+  if (rows.length === 0) return null
+  const accountType = String(rows[0].at)
+  return { accountType, opening: netAmountForAccountType(Number(rows[0].dr), Number(rows[0].cr), accountType) }
+}

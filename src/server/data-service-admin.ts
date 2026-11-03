@@ -13,6 +13,7 @@ import {
   fetchTrialBalanceSums,
   netAmountForAccountType,
   trialRowToDebitsCredits,
+  fetchAccountOpening,
 } from '@/server/data/ledger-sql'
 import { 
   User, 
@@ -1385,11 +1386,14 @@ export class DataServiceAdmin {
       `) as R[]
     }
 
-    let runningBalance = 0
+    // A period carries forward what came before it, and balances run in the account's natural direction.
+    const start = await fetchAccountOpening(accountId, organizationId, fromDate)
+    const accountType = start?.accountType ?? 'asset'
+    let runningBalance = start?.opening ?? 0
     return rows.map((line) => {
       const dr = parseFloat(line.debit_amount) || 0
       const cr = parseFloat(line.credit_amount) || 0
-      runningBalance += dr - cr
+      runningBalance += netAmountForAccountType(dr, cr, accountType)
       return {
         id: line.id,
         entry_id: line.entry_id,
