@@ -6,6 +6,9 @@ import {
   agedReport, documentEntry, documentTotals, forecastSeries, matchCandidates, money, paymentEntry, reconciliation,
   reversalLines, stockEntry, statementAmount, taxSummary, type EntryLine,
 } from '@/server/books/rules'
+import { nextNumber } from '@/server/numbering'
+import { costOfSalesEntry, parseSerials } from '@/server/inventory/rules'
+import { CostPlanner } from '@/server/inventory/costing'
 
 type Pg = ReturnType<typeof getSql>
 type Row = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -35,7 +38,7 @@ export type DocumentForm = {
   issue_date: string
   due_date: string
   notes?: string | null
-  lines: { description: string; account_id: number; quantity: number; unit_price: number; tax_rate_id?: number | null }[]
+  lines: { description: string; account_id?: number | null; quantity: number; unit_price: number; tax_rate_id?: number | null; item_id?: number | null; warehouse_id?: number | null; unit_id?: number | null; serial_numbers?: string[] | string | null }[]
 }
 
 /** Every method takes the organization first, and every query is limited to it. */
@@ -178,7 +181,7 @@ export class BooksServiceAdmin {
   }
 
   /** Records the stock change and its entry together, so neither can happen alone. */
-  static async recordStockMovement(org: string, form: { item_id: number; transaction_type: 'in' | 'out' | 'adjustment'; quantity: number; unit_cost?: number | null; reference?: string | null; description?: string | null; transaction_date: string; offset_account_id?: number | null }) {
+  static async recordStockMovement(org: string, form: { item_id: number; transaction_type: 'in' | 'out' | 'adjustment'; quantity: number; unit_cost?: number | null; reference?: string | null; description?: string | null; transaction_date: string; offset_account_id?: number | null; warehouse_id?: number | null; lot_id?: number | null; lot_number?: string | null; expiry_date?: string | null; serial_numbers?: string[] | string | null }) {
     const date = requireDate(form.transaction_date)
     const quantity = Number(form.quantity)
     if (!Number.isFinite(quantity) || quantity === 0) throw new Error('Quantity must not be zero.')
@@ -192,6 +195,7 @@ export class BooksServiceAdmin {
         unit_cost: form.unit_cost ?? null,
         total_cost: form.unit_cost ? money(Math.abs(quantity) * Number(form.unit_cost)) : null,
         journal_entry_id: null, reference: label(form.reference), description: label(form.description), transaction_date: date, created_by: user,
+        warehouse_id: form.warehouse_id ?? null, lot_id: form.lot_id ?? null, lot_number: label(form.lot_number), expiry_date: form.expiry_date ? requireDate(form.expiry_date, 'Expiry date') : null, serial_numbers: form.serial_numbers ?? null,
       } as never)
       if (!row) throw new Error('Could not record the movement.')
       const entry = await this.postMovement(tx, org, Number(row.id), form.offset_account_id)
@@ -266,8 +270,10 @@ export class BooksServiceAdmin {
     `) as Row[]
     if (!d) throw new Error('Document not found.')
     const lines = await sql`
-      SELECT l.id, l.description, l.account_id, l.quantity::float, l.unit_price::float, l.tax_rate_id, l.tax_rate::float, l.amount::float, l.tax_amount::float, r.name AS tax_name
+      SELECT l.id, l.description, l.account_id, l.quantity::float, l.unit_price::float, l.tax_rate_id, l.tax_rate::float, l.amount::float, l.tax_amount::float, r.name AS tax_name,
+             l.item_id, l.warehouse_id, l.cost_amount::float, l.unit_name, l.unit_factor::float, l.serial_numbers, (SELECT u.id FROM public.item_units u WHERE u.item_id = l.item_id AND u.name = l.unit_name) AS unit_id, i.sku, i.name AS item_name, w.name AS warehouse_name
       FROM public.trade_document_lines l LEFT JOIN public.tax_rates r ON r.id = l.tax_rate_id
+      LEFT JOIN public.inventory_items i ON i.id = l.item_id LEFT JOIN public.warehouses w ON w.id = l.warehouse_id
       WHERE l.document_id = ${id} ORDER BY l.line_order
     `
     const payments = await sql`SELECT id, payment_date::text AS payment_date, amount::float, reference, bank_account_id FROM public.trade_payments WHERE document_id = ${id} ORDER BY payment_date, id`
@@ -284,9 +290,35 @@ export class BooksServiceAdmin {
       if (!r) throw new Error('That tax rate is not available.')
       return Number(r.rate)
     }
-    const accountIds = form.lines.map((l) => Number(l.account_id))
+    const itemIds = form.lines.map((l) => l.item_id).filter(Boolean).map(Number)
+    const items = itemIds.length ? ((await tx`
+      SELECT i.id, i.income_account_id, c.inventory_account_id FROM public.inventory_items i JOIN public.inventory_categories c ON c.id = i.category_id
+      WHERE i.organization_id = ${org}::uuid AND i.id = ANY(${itemIds}::bigint[])
+    `) as Row[]) : []
+    const warehouseIds = form.lines.map((l) => l.warehouse_id).filter(Boolean).map(Number)
+    const warehouses = warehouseIds.length ? ((await tx`SELECT id FROM public.warehouses WHERE organization_id = ${org}::uuid AND id = ANY(${warehouseIds}::bigint[])`) as Row[]) : []
+    // A bought item always goes to its stock account, or stock and the books would disagree. A sold item uses the account chosen, or its own.
+    const lines = form.lines.map((l) => {
+      if (l.warehouse_id && !warehouses.some((w) => Number(w.id) === Number(l.warehouse_id))) throw new Error('Warehouse not found.')
+      if (!l.item_id) return l
+      const item = items.find((x) => Number(x.id) === Number(l.item_id))
+      if (!item) throw new Error('Item not found.')
+      return { ...l, account_id: form.kind === 'bill' ? Number(item.inventory_account_id) : l.account_id || (item.income_account_id ? Number(item.income_account_id) : null) }
+    })
+    const unitIds = lines.map((l) => l.unit_id).filter(Boolean).map(Number)
+    const units = unitIds.length ? ((await tx`
+      SELECT u.id, u.item_id, u.name, u.factor::float AS factor FROM public.item_units u JOIN public.inventory_items i ON i.id = u.item_id
+      WHERE i.organization_id = ${org}::uuid AND u.id = ANY(${unitIds}::bigint[])
+    `) as Row[]) : []
+    const unitOf = (l: { unit_id?: number | null; item_id?: number | null }) => {
+      if (!l.unit_id) return null
+      const u = units.find((x) => Number(x.id) === Number(l.unit_id) && Number(x.item_id) === Number(l.item_id))
+      if (!u) throw new Error('That unit is not set up for this item.')
+      return u
+    }
+    const accountIds = lines.map((l) => Number(l.account_id)).filter(Boolean)
     const known = (await tx`SELECT id FROM public.accounts WHERE organization_id = ${org}::uuid AND id = ANY(${accountIds}::bigint[])`) as Row[]
-    const priced = form.lines.map((l) => {
+    const priced = lines.map((l) => {
       if (!label(l.description)) throw new Error('Every line needs a description.')
       if (!known.some((a) => Number(a.id) === Number(l.account_id))) throw new Error('Choose an account for every line.')
       const quantity = positive(l.quantity, 'Quantity')
@@ -299,8 +331,8 @@ export class BooksServiceAdmin {
     for (let i = 0; i < priced.length; i++) {
       const l = priced[i]
       await tx`
-        INSERT INTO public.trade_document_lines (document_id, line_order, description, account_id, quantity, unit_price, tax_rate_id, tax_rate, amount, tax_amount)
-        VALUES (${id}, ${i + 1}, ${l.description.trim()}, ${Number(l.account_id)}, ${l.quantity}, ${l.unit_price}, ${l.tax_rate_id ? Number(l.tax_rate_id) : null}, ${l.tax_rate}, ${totals.lines[i].amount}, ${totals.lines[i].tax_amount})
+        INSERT INTO public.trade_document_lines (document_id, line_order, description, account_id, quantity, unit_price, tax_rate_id, tax_rate, amount, tax_amount, item_id, warehouse_id, unit_name, unit_factor, serial_numbers)
+        VALUES (${id}, ${i + 1}, ${l.description.trim()}, ${Number(l.account_id)}, ${l.quantity}, ${l.unit_price}, ${l.tax_rate_id ? Number(l.tax_rate_id) : null}, ${l.tax_rate}, ${totals.lines[i].amount}, ${totals.lines[i].tax_amount}, ${l.item_id ? Number(l.item_id) : null}, ${l.warehouse_id ? Number(l.warehouse_id) : null}, ${unitOf(l)?.name ?? null}, ${unitOf(l)?.factor ?? 1}, ${l.item_id && parseSerials(l.serial_numbers).length ? parseSerials(l.serial_numbers) : null})
       `
     }
     await tx`UPDATE public.trade_documents SET subtotal = ${totals.subtotal}, tax_total = ${totals.tax_total}, total = ${totals.total}, updated_at = now() WHERE id = ${id}`
@@ -324,36 +356,35 @@ export class BooksServiceAdmin {
 
   /** Saves a draft. A draft doesn't touch the books until someone posts it. */
   static async saveDocument(org: string, form: DocumentForm & { id?: number }) {
+    return getSql().begin((raw) => this.saveDocumentIn(raw as unknown as Pg, org, form))
+  }
+
+  /** The same, inside the caller's transaction. */
+  static async saveDocumentIn(tx: Pg, org: string, form: DocumentForm & { id?: number }) {
     if (form.kind !== 'invoice' && form.kind !== 'bill') throw new Error('Unknown document type.')
     const issue = requireDate(form.issue_date, 'Issue date')
     const due = requireDate(form.due_date, 'Due date')
     if (due < issue) throw new Error("The due date can't be before the issue date.")
-    return getSql().begin(async (raw) => {
-      const tx = raw as unknown as Pg
-      const party = await this.partyName(tx, org, form)
-      const customer = form.kind === 'invoice' ? form.customer_id ?? null : null
-      const supplier = form.kind === 'bill' ? form.supplier_id ?? null : null
-      let id = Number(form.id ?? 0)
-      if (id) {
-        const [d] = (await tx`SELECT status FROM public.trade_documents WHERE id = ${id} AND organization_id = ${org}::uuid FOR UPDATE`) as Row[]
-        if (!d) throw new Error('Document not found.')
-        if (d.status !== 'draft') throw new Error('Only a draft can be edited.')
-        await tx`UPDATE public.trade_documents SET customer_id = ${customer}, supplier_id = ${supplier}, party_name = ${party}, issue_date = ${issue}::date, due_date = ${due}::date, notes = ${label(form.notes)}, updated_at = now() WHERE id = ${id}`
-      } else {
-        // One number at a time per type, so two people can't get the same one.
-        await tx`SELECT pg_advisory_xact_lock(hashtext(${`${org}:${form.kind}`}))`
-        const prefix = form.kind === 'invoice' ? 'INV' : 'BILL'
-        const [n] = (await tx`SELECT COUNT(*)::int + 1 AS next FROM public.trade_documents WHERE organization_id = ${org}::uuid AND kind = ${form.kind}`) as Row[]
-        const [row] = (await tx`
-          INSERT INTO public.trade_documents (organization_id, kind, number, customer_id, supplier_id, party_name, issue_date, due_date, notes, created_by)
-          VALUES (${org}::uuid, ${form.kind}, ${`${prefix}-${String(n.next).padStart(4, '0')}`}, ${customer}, ${supplier}, ${party}, ${issue}::date, ${due}::date, ${label(form.notes)}, ${acting()}::uuid)
-          RETURNING id
-        `) as Row[]
-        id = Number(row.id)
-      }
-      await this.writeLines(tx, org, id, form)
-      return { id }
-    })
+    const party = await this.partyName(tx, org, form)
+    const customer = form.kind === 'invoice' ? form.customer_id ?? null : null
+    const supplier = form.kind === 'bill' ? form.supplier_id ?? null : null
+    let id = Number(form.id ?? 0)
+    if (id) {
+      const [d] = (await tx`SELECT status FROM public.trade_documents WHERE id = ${id} AND organization_id = ${org}::uuid FOR UPDATE`) as Row[]
+      if (!d) throw new Error('Document not found.')
+      if (d.status !== 'draft') throw new Error('Only a draft can be edited.')
+      await tx`UPDATE public.trade_documents SET customer_id = ${customer}, supplier_id = ${supplier}, party_name = ${party}, issue_date = ${issue}::date, due_date = ${due}::date, notes = ${label(form.notes)}, updated_at = now() WHERE id = ${id}`
+    } else {
+      const number = await nextNumber(tx, org, form.kind === 'invoice' ? 'INV' : 'BILL', 'public.trade_documents', 'number')
+      const [row] = (await tx`
+        INSERT INTO public.trade_documents (organization_id, kind, number, customer_id, supplier_id, party_name, issue_date, due_date, notes, created_by)
+        VALUES (${org}::uuid, ${form.kind}, ${number}, ${customer}, ${supplier}, ${party}, ${issue}::date, ${due}::date, ${label(form.notes)}, ${acting()}::uuid)
+        RETURNING id
+      `) as Row[]
+      id = Number(row.id)
+    }
+    await this.writeLines(tx, org, id, form)
+    return { id }
   }
 
   static async deleteDocument(org: string, id: number) {
@@ -373,6 +404,22 @@ export class BooksServiceAdmin {
     })))
   }
 
+  /** Item lines of a document, with what each sold line costs. Selling everything takes the item's whole value, so no cents get left behind. */
+  private static async stockLines(tx: Pg, docId: number) {
+    const rows = (await tx`
+      SELECT l.id, l.item_id, l.warehouse_id, l.quantity::float * l.unit_factor::float AS quantity, l.amount::float, l.cost_amount::float, l.serial_numbers,
+             i.name AS item_name, i.costing_method, i.quantity_available::float AS on_hand, i.total_value::float AS value, i.average_unit_cost::float AS average, c.inventory_account_id, c.expense_account_id
+      FROM public.trade_document_lines l
+      JOIN public.inventory_items i ON i.id = l.item_id
+      JOIN public.inventory_categories c ON c.id = i.category_id
+      WHERE l.document_id = ${docId} ORDER BY l.item_id, l.id
+    `) as Row[]
+    const planner = new CostPlanner(tx)
+    const out: Row[] = []
+    for (const r of rows) out.push({ ...r, cost: await planner.cost({ id: Number(r.item_id), method: r.costing_method, on_hand: Number(r.on_hand), value: Number(r.value), average: Number(r.average) }, Number(r.quantity)) })
+    return out
+  }
+
   /** Shows the exact entry posting would make, with account names, without changing anything. */
   static async previewDocument(org: string, id: number, options: { control_account_id?: number | null } = {}) {
     const sql = getSql()
@@ -381,7 +428,22 @@ export class BooksServiceAdmin {
     const problems: string[] = []
     if (!control) problems.push(doc.kind === 'invoice' ? 'Choose the account that tracks what customers owe you.' : 'Choose the account that tracks what you owe suppliers.')
     if (!(Number(doc.total) > 0)) problems.push('This document has no amount.')
+    const stock = await this.stockLines(sql as unknown as Pg, id)
     const lines = await this.entryForDocument(sql as unknown as Pg, doc, control || -1)
+    if (doc.kind === 'invoice' && stock.length) {
+      lines.push(...costOfSalesEntry(stock.map((s) => ({ expense_account_id: Number(s.expense_account_id), inventory_account_id: Number(s.inventory_account_id), amount: s.cost }))))
+      const levels = (await sql`
+        SELECT l.item_id, l.warehouse_id, l.quantity::float, w.is_default, w.name FROM public.stock_levels l JOIN public.warehouses w ON w.id = l.warehouse_id
+        WHERE w.organization_id = ${org}::uuid AND l.item_id = ANY(${stock.map((s) => Number(s.item_id))}::bigint[])
+      `) as Row[]
+      const wanted: Record<string, number> = {}
+      stock.forEach((s) => {
+        const level = levels.find((l) => Number(l.item_id) === Number(s.item_id) && (s.warehouse_id ? Number(l.warehouse_id) === Number(s.warehouse_id) : l.is_default))
+        const key = `${s.item_id}:${s.warehouse_id ?? ''}`
+        wanted[key] = (wanted[key] ?? 0) + Number(s.quantity)
+        if (wanted[key] > Number(level?.quantity ?? 0) + 1e-9) problems.push(`Only ${Number(level?.quantity ?? 0)} of ${s.item_name} in ${level?.name ?? 'that warehouse'}.`)
+      })
+    }
     const ids = lines.map((l) => l.account_id).filter((x) => x > 0)
     const names = (await sql`SELECT id, code, name FROM public.accounts WHERE organization_id = ${org}::uuid AND id = ANY(${ids}::bigint[])`) as Row[]
     return {
@@ -410,8 +472,20 @@ export class BooksServiceAdmin {
       const control = Number(options.control_account_id ?? d.suggested ?? 0)
       if (!control) throw new Error('Choose the account this goes to.')
       const lines = await this.entryForDocument(tx, d, control)
-      const what = d.kind === 'invoice' ? 'Invoice' : 'Bill'
+      await tx`SELECT id FROM public.inventory_items WHERE id IN (SELECT item_id FROM public.trade_document_lines WHERE document_id = ${id}) ORDER BY id FOR UPDATE`
+      const stock = await this.stockLines(tx, id)
+      const sale = d.kind === 'invoice'
+      if (sale) lines.push(...costOfSalesEntry(stock.map((s) => ({ expense_account_id: Number(s.expense_account_id), inventory_account_id: Number(s.inventory_account_id), amount: s.cost }))))
+      const what = sale ? 'Invoice' : 'Bill'
       const entry = await this.post(tx, org, { number: `JE-${d.number}`, date: d.issue_text, description: `${what} ${d.number}, ${d.party_name}`, reference: d.number }, lines)
+      for (const s of stock) {
+        const moved = (await DataServiceAdmin.applyInventoryTransaction(tx, {
+          organization_id: org, item_id: Number(s.item_id), transaction_type: sale ? 'out' : 'in', quantity: sale ? -Number(s.quantity) : Number(s.quantity),
+          unit_cost: sale ? null : Number(s.amount) / Number(s.quantity), total_cost: sale ? s.cost : Number(s.amount), journal_entry_id: entry, reference: d.number, description: `${what} ${d.number}, ${d.party_name}`,
+          transaction_date: d.issue_text, created_by: acting(), warehouse_id: s.warehouse_id ? Number(s.warehouse_id) : null, source_type: 'document', source_id: id, serial_numbers: s.serial_numbers ?? null,
+        } as never)) as Row
+        await tx`UPDATE public.trade_document_lines SET cost_amount = ${sale ? s.cost : Number(s.amount)}, serial_numbers = ${moved.serials?.length ? moved.serials : null} WHERE id = ${s.id}`
+      }
       await tx`UPDATE public.trade_documents SET status = 'posted', control_account_id = ${control}, journal_entry_id = ${entry}, updated_at = now() WHERE id = ${id}`
     })
     return this.getDocument(org, id)
@@ -444,12 +518,29 @@ export class BooksServiceAdmin {
     const date = form.date ? requireDate(form.date) : today()
     await getSql().begin(async (raw) => {
       const tx = raw as unknown as Pg
-      const [d] = (await tx`SELECT * FROM public.trade_documents WHERE id = ${id} AND organization_id = ${org}::uuid FOR UPDATE`) as Row[]
+      const [d] = (await tx`SELECT *, issue_date::text AS issue_text FROM public.trade_documents WHERE id = ${id} AND organization_id = ${org}::uuid FOR UPDATE`) as Row[]
       if (!d) throw new Error('Document not found.')
       if (d.status !== 'posted') throw new Error(d.status === 'draft' ? 'Delete a draft instead of voiding it.' : d.status === 'void' ? 'This is already void.' : 'This has payments against it, so it cannot be voided.')
       const [e] = (await tx`SELECT entry_number FROM public.journal_entries WHERE id = ${d.journal_entry_id}`) as Row[]
       const lines = (await tx`SELECT account_id, description, debit_amount, credit_amount FROM public.journal_entry_lines WHERE journal_entry_id = ${d.journal_entry_id} ORDER BY line_order`) as Row[]
-      await this.post(tx, org, { number: `REV-${e.entry_number}`, date, description: `Void ${d.number}: ${reason}`, reference: d.number, reverses: Number(d.journal_entry_id) }, reversalLines(lines.map((l) => ({ account_id: Number(l.account_id), description: l.description, debit: Number(l.debit_amount), credit: Number(l.credit_amount) }))))
+      const reversal = await this.post(tx, org, { number: `REV-${e.entry_number}`, date, description: `Void ${d.number}: ${reason}`, reference: d.number, reverses: Number(d.journal_entry_id) }, reversalLines(lines.map((l) => ({ account_id: Number(l.account_id), description: l.description, debit: Number(l.debit_amount), credit: Number(l.credit_amount) }))))
+      // Stock goes back the way it came, at the value it left or arrived at, which is what the reversal puts back in the books.
+      const sale = d.kind === 'invoice'
+      const stock = (await tx`SELECT item_id, warehouse_id, quantity::float * unit_factor::float AS quantity, cost_amount::float FROM public.trade_document_lines WHERE document_id = ${id} AND item_id IS NOT NULL ORDER BY item_id, id`) as Row[]
+      // Movements were made in this same order, so each line undoes its own: same batches, serials and cost.
+      const made = (await tx`SELECT id, item_id FROM public.inventory_transactions WHERE organization_id = ${org}::uuid AND source_type = 'document' AND source_id = ${id} AND transaction_type = ${sale ? 'out' : 'in'} ORDER BY item_id, id`) as Row[]
+      for (let n = 0; n < stock.length; n++) {
+        const s = stock[n]
+        const cost = Number(s.cost_amount ?? 0)
+        await DataServiceAdmin.applyInventoryTransaction(tx, {
+          organization_id: org, item_id: Number(s.item_id), transaction_type: sale ? 'in' : 'out', quantity: sale ? Number(s.quantity) : -Number(s.quantity),
+          unit_cost: null, total_cost: cost, journal_entry_id: reversal, reference: d.number, description: `Void ${d.number}: ${reason}`,
+          transaction_date: date, created_by: acting(), warehouse_id: s.warehouse_id ? Number(s.warehouse_id) : null, source_type: 'document', source_id: id,
+          from_transaction_ids: made[n] ? [Number(made[n].id)] : null, layer_date: d.issue_text,
+        } as never)
+      }
+      // A voided bill's goods are still received, so they can go on a new bill.
+      if (!sale) await tx`UPDATE public.goods_receipts SET bill_id = NULL WHERE bill_id = ${id}`
       await tx`UPDATE public.trade_documents SET status = 'void', void_reason = ${reason}, updated_at = now() WHERE id = ${id}`
     })
     return this.getDocument(org, id)

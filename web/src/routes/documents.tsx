@@ -11,16 +11,17 @@ import { call } from '@/lib/api'
 import { figure, shortDate, useApp } from '@/lib/boot'
 import { accounts, iso, num, q, refreshBooks, today, type Account, type Id } from '@/lib/data'
 import { cn } from '@/lib/utils'
+import { items, unitsQuery, warehousesQuery } from '@/routes/inventory'
 
 export type Kind = 'invoice' | 'bill'
 type DocRow = { id: Id; kind: Kind; number: string; status: string; party_name: string; issue_date: string; due_date: string; subtotal: number; tax_total: number; total: number; amount_paid: number; balance: number }
-type DocLine = { id: Id; description: string; account_id: Id; quantity: number; unit_price: number; tax_rate_id: Id | null; tax_rate: number; amount: number; tax_amount: number; tax_name?: string | null }
+type DocLine = { id: Id; description: string; account_id: Id; quantity: number; unit_price: number; tax_rate_id: Id | null; tax_rate: number; amount: number; tax_amount: number; tax_name?: string | null; item_id?: Id | null; warehouse_id?: Id | null; sku?: string | null; unit_id?: Id | null; unit_name?: string | null; unit_factor?: number; serial_numbers?: string[] | null }
 export type Doc = DocRow & { customer_id: Id | null; supplier_id: Id | null; notes: string | null; void_reason: string | null; lines: DocLine[]; payments: { id: Id; payment_date: string; amount: number; reference: string | null }[] }
 type Customer = { id: Id; name: string; email: string | null; phone: string | null; address: string | null; tax_id: string | null; receivable_account_id: Id | null; balance: number }
 type Rate = { id: Id; name: string; rate: number; is_active: boolean }
 type Preview = { problems: string[]; suggested_control_account_id: number | null; lines: { account_id: number; code: string; name: string; debit: number; credit: number }[] }
 
-const REFRESH = ['documents', 'document', 'customers', 'aged', 'work-summary', 'tax']
+const REFRESH = ['documents', 'document', 'customers', 'aged', 'work-summary', 'tax', 'stock', 'low-stock', 'movements']
 const docs = (org: string, kind: Kind) => q<DocRow[]>(['documents', org, kind], 'BooksService', 'listDocuments', [org, kind])
 export const customersQuery = (org: string) => q<Customer[]>(['customers', org], 'BooksService', 'listCustomers', [org])
 export const ratesQuery = (org: string) => q<Rate[]>(['tax', org, 'rates'], 'BooksService', 'listTaxRates', [org])
@@ -104,7 +105,7 @@ function Documents({ kind }: { kind: Kind }) {
 export const Invoices = () => <Documents kind="invoice" />
 export const Bills = () => <Documents kind="bill" />
 
-type FormLine = { key: number; description: string; account_id: string; quantity: string; unit_price: string; tax_rate_id: string }
+type FormLine = { key: number; item_id: string; unit_id: string; serials: string; description: string; account_id: string; quantity: string; unit_price: string; tax_rate_id: string }
 const plusDays = (d: string, n: number) => { const x = new Date(`${d}T00:00:00`); x.setDate(x.getDate() + n); return iso(x) }
 
 function DocumentForm({ kind, doc, onClose, onSaved }: { kind: Kind; doc: Doc | null; onClose: () => void; onSaved: (id: Id) => void }) {
@@ -114,12 +115,17 @@ function DocumentForm({ kind, doc, onClose, onSaved }: { kind: Kind; doc: Doc | 
   const customers = useQuery({ ...customersQuery(org.id), enabled: kind === 'invoice' })
   const suppliers = useQuery({ ...q<{ id: Id; name: string }[]>(['supplier-picker', org.id], 'SupplierService', 'getSuppliersForVoucher', [org.id]), enabled: kind === 'bill' })
   const rates = useQuery(ratesQuery(org.id))
+  const stock = useQuery(items(org.id))
+  const units = useQuery(unitsQuery(org.id))
+  const warehouses = useQuery(warehousesQuery(org.id))
+  const openWarehouses = (warehouses.data ?? []).filter((w) => w.is_active)
+  const [warehouse, setWarehouse] = useState(String(doc?.lines.find((l) => l.warehouse_id)?.warehouse_id ?? ''))
   const [party, setParty] = useState(String((kind === 'invoice' ? doc?.customer_id : doc?.supplier_id) ?? ''))
   const [name, setName] = useState(doc && !doc.customer_id && !doc.supplier_id ? doc.party_name : '')
   const [issue, setIssue] = useState(doc?.issue_date.slice(0, 10) ?? today())
   const [due, setDue] = useState(doc?.due_date.slice(0, 10) ?? plusDays(today(), 30))
   const [notes, setNotes] = useState(doc?.notes ?? '')
-  const [lines, setLines] = useState<FormLine[]>(doc?.lines.map((l, i) => ({ key: i + 1, description: l.description, account_id: String(l.account_id), quantity: String(l.quantity), unit_price: String(l.unit_price), tax_rate_id: l.tax_rate_id ? String(l.tax_rate_id) : '' })) ?? [{ key: 1, description: '', account_id: '', quantity: '1', unit_price: '', tax_rate_id: '' }])
+  const [lines, setLines] = useState<FormLine[]>(doc?.lines.map((l, i) => ({ key: i + 1, item_id: l.item_id ? String(l.item_id) : '', unit_id: l.unit_id ? String(l.unit_id) : '', serials: (l.serial_numbers ?? []).join(', '), description: l.description, account_id: String(l.account_id), quantity: String(l.quantity), unit_price: String(l.unit_price), tax_rate_id: l.tax_rate_id ? String(l.tax_rate_id) : '' })) ?? [{ key: 1, item_id: '', unit_id: '', serials: '', description: '', account_id: '', quantity: '1', unit_price: '', tax_rate_id: '' }])
   const [next, setNext] = useState((doc?.lines.length ?? 1) + 1)
   const options = postable(chart.data, ...(kind === 'invoice' ? ['revenue'] : ['expense', 'asset']))
   const active = (rates.data ?? []).filter((r) => r.is_active)
@@ -128,7 +134,28 @@ function DocumentForm({ kind, doc, onClose, onSaved }: { kind: Kind; doc: Doc | 
   const subtotal = lines.reduce((s, l) => s + round(Number(l.quantity) * Number(l.unit_price) || 0), 0)
   const tax = lines.reduce((s, l) => s + round(round(Number(l.quantity) * Number(l.unit_price) || 0) * rateOf(l.tax_rate_id) / 100), 0)
   const update = (key: number, patch: Partial<FormLine>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)))
-  const ready = (party || name.trim()) && lines.every((l) => l.description.trim() && l.account_id && Number(l.quantity) > 0 && l.unit_price !== '')
+  // An item fills in the line. On a bill its stock account is always used, so there is no account to choose.
+  const pick = (key: number, id: string) => {
+    const item = stock.data?.find((i) => String(i.id) === id)
+    update(key, !item ? { item_id: '', unit_id: '', serials: '' } : {
+      item_id: id,
+      unit_id: '',
+      serials: '',
+      description: item.name,
+      account_id: kind === 'invoice' && item.income_account_id ? String(item.income_account_id) : kind === 'bill' ? '' : lines.find((l) => l.key === key)?.account_id ?? '',
+      unit_price: kind === 'invoice' ? (item.selling_price == null ? '' : String(num(item.selling_price))) : num(item.average_unit_cost) ? String(num(item.average_unit_cost)) : '',
+    })
+  }
+  const unitsOf = (l: FormLine) => (units.data ?? []).filter((u) => String(u.item_id) === l.item_id)
+  const itemOf = (l: FormLine) => stock.data?.find((i) => String(i.id) === l.item_id)
+  // A price is per the unit chosen, so changing the unit moves the price with it.
+  const pickUnit = (l: FormLine, id: string) => {
+    const was = num(unitsOf(l).find((u) => String(u.id) === l.unit_id)?.factor) || 1
+    const now = num(unitsOf(l).find((u) => String(u.id) === id)?.factor) || 1
+    update(l.key, { unit_id: id, unit_price: l.unit_price ? String(Math.round((Number(l.unit_price) / was) * now * 10000) / 10000) : '' })
+  }
+  const stockAccount = (l: FormLine) => kind === 'bill' && Boolean(l.item_id)
+  const ready = (party || name.trim()) && lines.every((l) => l.description.trim() && (l.account_id || stockAccount(l)) && Number(l.quantity) > 0 && l.unit_price !== '')
   const save = useSave(() => call<{ id: Id }>('BooksService', 'saveDocument', [org.id, {
     id: doc?.id,
     kind,
@@ -138,7 +165,7 @@ function DocumentForm({ kind, doc, onClose, onSaved }: { kind: Kind; doc: Doc | 
     issue_date: issue,
     due_date: due,
     notes: notes.trim() || null,
-    lines: lines.map((l) => ({ description: l.description.trim(), account_id: Number(l.account_id), quantity: Number(l.quantity), unit_price: Number(l.unit_price), tax_rate_id: l.tax_rate_id ? Number(l.tax_rate_id) : null })),
+    lines: lines.map((l) => ({ description: l.description.trim(), account_id: l.account_id ? Number(l.account_id) : null, quantity: Number(l.quantity), unit_price: Number(l.unit_price), tax_rate_id: l.tax_rate_id ? Number(l.tax_rate_id) : null, item_id: l.item_id ? Number(l.item_id) : null, warehouse_id: l.item_id && warehouse ? Number(warehouse) : null, unit_id: l.unit_id ? Number(l.unit_id) : null, serial_numbers: l.serials.trim() || null })),
   }]), { success: 'Draft saved. It is not in your books until you post it.', refresh: REFRESH, onDone: (r) => onSaved(r.id) })
   const people = (kind === 'invoice' ? customers.data : suppliers.data) ?? []
 
@@ -150,16 +177,23 @@ function DocumentForm({ kind, doc, onClose, onSaved }: { kind: Kind; doc: Doc | 
           {party ? <span className="hidden sm:block" /> : <Text label={`Or just a name`} value={name} onChange={setName} />}
           <Text label={kind === 'invoice' ? 'Invoice date' : 'Bill date'} type="date" value={issue} onChange={(v) => { setIssue(v); if (v && due < v) setDue(v) }} />
           <Text label="Due date" type="date" min={issue} value={due} onChange={setDue} />
+          {openWarehouses.length > 1 && lines.some((l) => l.item_id) ? <Choice label={kind === 'invoice' ? 'Items leave from' : 'Items arrive at'} placeholder="Default warehouse" value={warehouse} onChange={setWarehouse} options={openWarehouses.map((w) => ({ value: String(w.id), label: w.name }))} /> : null}
         </div>
         <div className="flex flex-col gap-2">
-          <div className="hidden md:grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_64px_88px_minmax(0,0.7fr)_24px] gap-1.5 text-[12px] text-muted-foreground"><span>Description</span><span>{kind === 'invoice' ? 'Income account' : 'Cost account'}</span><span className="text-right">Qty</span><span className="text-right">Price</span><span>Tax</span><span /></div>
+          <div className="hidden md:grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_56px_84px_minmax(0,0.7fr)_24px] gap-1.5 text-[12px] text-muted-foreground"><span>Stock item</span><span>Description</span><span>{kind === 'invoice' ? 'Income account' : 'Cost account'}</span><span className="text-right">Qty</span><span className="text-right">Price</span><span>Tax</span><span /></div>
           {lines.map((l) => (
-            <div key={l.key} className="grid grid-cols-2 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_64px_88px_minmax(0,0.7fr)_24px] gap-1.5 items-center max-md:border-b max-md:border-border max-md:pb-2">
+            <div key={l.key} className="grid grid-cols-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_56px_84px_minmax(0,0.7fr)_24px] gap-1.5 items-center max-md:border-b max-md:border-border max-md:pb-2">
+              <select aria-label="Stock item" value={l.item_id} onChange={(e) => pick(l.key, e.target.value)} className="h-8 min-w-0 w-full rounded-[6px] border border-input bg-transparent px-2 text-[13px] max-md:col-span-2">
+                <option value="">Not a stock item</option>
+                {(stock.data ?? []).map((i) => <option key={i.id} value={String(i.id)}>{i.sku} · {i.name}</option>)}
+              </select>
               <Input aria-label="Description" placeholder="Description" value={l.description} onChange={(e) => update(l.key, { description: e.target.value })} className="h-8 max-md:col-span-2" />
+              {stockAccount(l) ? <span className="h-8 flex items-center px-2 text-[13px] text-muted-foreground max-md:col-span-2">Stock account</span> : (
               <select aria-label="Account" value={l.account_id} onChange={(e) => update(l.key, { account_id: e.target.value })} className="h-8 min-w-0 w-full rounded-[6px] border border-input bg-transparent px-2 text-[13px] max-md:col-span-2">
                 <option value="">Choose account</option>
                 {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
+              )}
               <Input aria-label="Quantity" inputMode="decimal" value={l.quantity} onChange={(e) => update(l.key, { quantity: e.target.value })} className="h-8 text-right fig" />
               <Input aria-label="Price" inputMode="decimal" placeholder="0.00" value={l.unit_price} onChange={(e) => update(l.key, { unit_price: e.target.value })} className="h-8 text-right fig" />
               <select aria-label="Tax" value={l.tax_rate_id} onChange={(e) => update(l.key, { tax_rate_id: e.target.value })} className="h-8 min-w-0 w-full rounded-[6px] border border-input bg-transparent px-2 text-[13px]">
@@ -167,10 +201,21 @@ function DocumentForm({ kind, doc, onClose, onSaved }: { kind: Kind; doc: Doc | 
                 {active.map((r) => <option key={r.id} value={String(r.id)}>{r.name} {r.rate}%</option>)}
               </select>
               <button type="button" aria-label="Remove line" disabled={lines.length < 2} onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} className="grid place-items-center text-muted-foreground cursor-pointer disabled:opacity-30"><X className="size-3.5" /></button>
+              {unitsOf(l).length || itemOf(l)?.track_serials ? (
+                <div className="col-span-full grid sm:grid-cols-[140px_minmax(0,1fr)] gap-1.5 mb-1">
+                  {unitsOf(l).length ? (
+                    <select aria-label="Unit" value={l.unit_id} onChange={(e) => pickUnit(l, e.target.value)} className="h-8 min-w-0 w-full rounded-[6px] border border-input bg-transparent px-2 text-[13px]">
+                      <option value="">{itemOf(l)?.unit_of_measure}</option>
+                      {unitsOf(l).map((u) => <option key={u.id} value={String(u.id)}>{u.name} ({u.factor})</option>)}
+                    </select>
+                  ) : <span className="max-sm:hidden" />}
+                  {itemOf(l)?.track_serials ? <Input aria-label="Serial numbers" placeholder={kind === 'invoice' ? 'Serial numbers, separated by commas. Blank takes the oldest.' : 'Serial numbers, separated by commas. Blank creates them.'} value={l.serials} onChange={(e) => update(l.key, { serials: e.target.value })} className="h-8" /> : null}
+                </div>
+              ) : null}
             </div>
           ))}
           <div className="flex flex-wrap items-center justify-between gap-3 mt-1 text-[13px]">
-            <button type="button" onClick={() => { setLines((ls) => [...ls, { key: next, description: '', account_id: '', quantity: '1', unit_price: '', tax_rate_id: '' }]); setNext((k) => k + 1) }} className="inline-flex items-center gap-1 font-medium cursor-pointer"><Plus className="size-3.5" />Add line</button>
+            <button type="button" onClick={() => { setLines((ls) => [...ls, { key: next, item_id: '', unit_id: '', serials: '', description: '', account_id: '', quantity: '1', unit_price: '', tax_rate_id: '' }]); setNext((k) => k + 1) }} className="inline-flex items-center gap-1 font-medium cursor-pointer"><Plus className="size-3.5" />Add line</button>
             <span className="flex gap-4"><span>Subtotal <span className="fig ml-1">{figure(subtotal, org.decimals)}</span></span><span>Tax <span className="fig ml-1">{figure(tax, org.decimals)}</span></span><span className="font-semibold">Total <span className="fig ml-1">{figure(subtotal + tax, org.decimals)}</span></span></span>
           </div>
         </div>
@@ -203,7 +248,7 @@ function DocumentDetail({ id, kind, onClose, onEdit }: { id: Id; kind: Kind; onC
             <table className="w-full text-[13px] min-w-[480px]">
               <thead><tr><Head>Description</Head><Head right>Qty</Head><Head right>Price</Head><Head>Tax</Head><Head right>Amount</Head></tr></thead>
               <tbody>
-                {d.lines.map((l) => <tr key={l.id}><Cell>{l.description}</Cell><Cell right>{figure(num(l.quantity), 0)}</Cell><Cell right>{figure(num(l.unit_price), org.decimals)}</Cell><Cell className="text-muted-foreground">{l.tax_name ?? ''}</Cell><Cell right>{figure(num(l.amount), org.decimals)}</Cell></tr>)}
+                {d.lines.map((l) => <tr key={l.id}><Cell>{l.sku ? <span className="fig text-[12.5px] text-muted-foreground mr-1.5">{l.sku}</span> : null}{l.description}{l.serial_numbers?.length ? <span className="block fig text-[12px] text-muted-foreground">{l.serial_numbers.join(', ')}</span> : null}</Cell><Cell right>{figure(num(l.quantity), 0)}{l.unit_name ? ` ${l.unit_name}` : ''}</Cell><Cell right>{figure(num(l.unit_price), org.decimals)}</Cell><Cell className="text-muted-foreground">{l.tax_name ?? ''}</Cell><Cell right>{figure(num(l.amount), org.decimals)}</Cell></tr>)}
                 <tr><td colSpan={4} className="px-3.5 py-1 text-right text-muted-foreground">Subtotal</td><Cell right className="border-b-0">{figure(num(d.subtotal), org.decimals)}</Cell></tr>
                 <tr><td colSpan={4} className="px-3.5 py-1 text-right text-muted-foreground">Tax</td><Cell right className="border-b-0">{figure(num(d.tax_total), org.decimals)}</Cell></tr>
                 <tr className="font-semibold"><td colSpan={4} className="px-3.5 py-1 text-right">Total</td><Cell right className="border-b-0">{figure(num(d.total), org.decimals)}</Cell></tr>

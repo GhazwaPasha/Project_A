@@ -7,6 +7,7 @@ import { AccountServiceAdmin } from '@/server/account-service-admin'
 import { VoucherServiceAdmin } from '@/server/voucher-service-admin'
 import { SupplierServiceAdmin } from '@/server/supplier-service-admin'
 import { BooksServiceAdmin } from '@/server/books/service'
+import { InventoryServiceAdmin } from '@/server/inventory/service'
 
 const services = {
   DataService: DataServiceAdmin,
@@ -14,6 +15,7 @@ const services = {
   VoucherService: VoucherServiceAdmin,
   SupplierService: SupplierServiceAdmin,
   BooksService: BooksServiceAdmin,
+  InventoryService: InventoryServiceAdmin,
 } as const
 
 export async function POST(req: Request) {

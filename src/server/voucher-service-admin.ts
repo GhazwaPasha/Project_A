@@ -2,6 +2,7 @@ import { getSql } from '@/server/pg'
 import { attachItemsCategories } from '@/server/data/inventory-helpers'
 import { getActingUserId } from '@/server/request-context'
 import { DataServiceAdmin } from '@/server/data-service-admin'
+import { CostPlanner } from '@/server/inventory/costing'
 import { planVoucherPosting, type PostingLine } from '@/server/voucher-posting'
 import type {
   Account,
@@ -748,7 +749,7 @@ export class VoucherServiceAdmin {
       SELECT
         l.id AS line_id, l.item_id, i.name AS item_name,
         l.quantity_requested, l.quantity_actual, l.unit_cost_estimated, l.unit_cost_actual,
-        i.quantity_available, i.average_unit_cost,
+        i.quantity_available, i.average_unit_cost, i.costing_method, i.total_value,
         c.inventory_account_id, c.expense_account_id
       FROM public.inventory_voucher_lines l
       INNER JOIN public.inventory_items i ON i.id = l.item_id
@@ -771,6 +772,14 @@ export class VoucherServiceAdmin {
       inventory_account_id: Number(r.inventory_account_id),
       expense_account_id: Number(r.expense_account_id),
     }))
+    if (v.voucher_type !== 'purchase') {
+      const planner = new CostPlanner(exec)
+      for (let n = 0; n < lines.length; n++) {
+        const l = lines[n]
+        const quantity = l.quantity_actual ?? l.quantity_requested
+        if (rows[n].costing_method === 'fifo' && quantity > 0) l.issue_cost = await planner.cost({ id: l.item_id, method: 'fifo', on_hand: l.quantity_available, value: Number(rows[n].total_value), average: l.average_unit_cost }, quantity)
+      }
+    }
     // Vouchers keep the vendor's name, not a link, so the supplier's payable account is found by name.
     let suggested: number | null = null
     if (v.voucher_type === 'purchase' && v.vendor_name) {
@@ -819,7 +828,7 @@ export class VoucherServiceAdmin {
   }
 
   /** Moves the stock and records the entry together: either both happen or neither does. */
-  static async postVoucher(id: number, options?: { payable_account_id?: number | null; date?: string }): Promise<InventoryVoucher> {
+  static async postVoucher(id: number, options?: { payable_account_id?: number | null; date?: string; warehouse_id?: number | null }): Promise<InventoryVoucher> {
     const acting = getActingUserId()
     if (!acting) throw new Error('User not authenticated')
     const date = options?.date && /^\d{4}-\d{2}-\d{2}$/.test(options.date) ? options.date : new Date().toISOString().slice(0, 10)
@@ -868,6 +877,9 @@ export class VoucherServiceAdmin {
           description: label,
           transaction_date: date,
           created_by: acting,
+          warehouse_id: options?.warehouse_id ?? null,
+          source_type: 'voucher',
+          source_id: id,
         } as unknown as Parameters<typeof DataServiceAdmin.applyInventoryTransaction>[1])
         await tx`
           UPDATE public.inventory_voucher_lines

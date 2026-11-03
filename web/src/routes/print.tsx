@@ -224,7 +224,7 @@ export function DocumentDoc() {
         <table className="doc-table">
           <thead><tr><th>Description</th><th className="num">Qty</th><th className="num">Price</th><th>Tax</th><th className="num">Amount</th></tr></thead>
           <tbody>
-            {doc.lines.map((l) => <tr key={l.id}><td>{l.description}</td><td className="num">{num(l.quantity)}</td><td className="num">{figure(num(l.unit_price), d)}</td><td>{l.tax_name ?? ''}</td><Num v={l.amount} d={d} /></tr>)}
+            {doc.lines.map((l) => <tr key={l.id}><td>{l.description}{l.serial_numbers?.length ? ` (${l.serial_numbers.join(', ')})` : ''}</td><td className="num">{num(l.quantity)}{l.unit_name ? ` ${l.unit_name}` : ''}</td><td className="num">{figure(num(l.unit_price), d)}</td><td>{l.tax_name ?? ''}</td><Num v={l.amount} d={d} /></tr>)}
             <tr><td colSpan={4} className="text-right">Subtotal</td><Num v={doc.subtotal} d={d} /></tr>
             <tr><td colSpan={4} className="text-right">Tax</td><Num v={doc.tax_total} d={d} /></tr>
             <tr className="total"><td colSpan={4} className="text-right">Total ({org.currency})</td><Num v={doc.total} d={d} /></tr>

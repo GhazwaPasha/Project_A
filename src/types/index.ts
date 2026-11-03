@@ -188,6 +188,16 @@ export interface InventoryItem {
   // Reorder
   reorder_point: number
   reorder_quantity: number
+
+  // Selling and buying
+  barcode?: string | null
+  selling_price?: number | null
+  income_account_id?: number | null
+  preferred_supplier_id?: number | null
+  lead_time_days?: number
+  track_lots?: boolean
+  track_serials?: boolean
+  costing_method?: 'average' | 'fifo'
   
   // Metadata
   is_active: boolean
@@ -203,7 +213,7 @@ export interface InventoryTransaction {
   id: number
   organization_id: string
   item_id: number
-  transaction_type: 'in' | 'out' | 'adjustment'
+  transaction_type: 'in' | 'out' | 'adjustment' | 'transfer_in' | 'transfer_out'
   
   quantity: number              // Positive for IN, Negative for OUT
   unit_cost: number | null
@@ -216,6 +226,20 @@ export interface InventoryTransaction {
   transaction_date: string
   created_at: string
   created_by: string | null
+
+  // Where it happened. The default warehouse if left out.
+  warehouse_id?: number | null
+  lot_id?: number | null
+  lot_number?: string | null
+  expiry_date?: string | null
+  source_type?: string | null
+  source_id?: number | null
+  lots?: { lot_number: string; expiry_date: string | null; quantity: number }[]
+  serial_numbers?: string[] | string | null
+  serials?: string[]
+  // Undoing earlier movements: same batches, serials and cost layers.
+  from_transaction_ids?: number[] | null
+  layer_date?: string | null
   
   // Relations
   item?: InventoryItem

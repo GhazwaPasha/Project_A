@@ -61,7 +61,15 @@ const sect = (type: string, name: string) => {
   return { name, total: accounts.reduce((s, a) => s + a.balance, 0), accounts }
 }
 
-const stockItems = items.map((i, n) => ({ ...i, category_id: n < 2 ? 1 : 2, description: null, reorder_quantity: i.reorder_point * 2 }))
+const stockItems = items.map((i, n) => ({ ...i, category_id: n < 2 ? 1 : 2, description: null, reorder_quantity: i.reorder_point * 2, barcode: n % 2 ? null : `89012${1000 + n}`, selling_price: Math.round(i.average_unit_cost * 1.4), lead_time_days: 14, track_lots: n === 1, track_serials: n === 2, costing_method: n === 0 ? 'fifo' : 'average', preferred_supplier_id: 1, income_account_id: null }))
+const demoUnits = [{ id: 1, item_id: stockItems[0].id, name: 'Bundle', factor: 25 }, { id: 2, item_id: stockItems[0].id, name: 'Pallet', factor: 500 }]
+const demoWarehouses = [{ id: 1, name: 'Main', code: 'MN', address: 'Plot 12, Industrial Area', is_default: true, is_active: true, units: 180, value: 164000, items: 3 }, { id: 2, name: 'North store', code: 'NS', address: null, is_default: false, is_active: true, units: 40, value: 22000, items: 1 }]
+const demoOrders = [
+  { id: 1, number: 'PO-0003', status: 'draft', supplier_name: 'Noor Packaging', order_date: '2026-11-01', expected_date: '2026-11-15', warehouse_name: 'Main', total: 42000, ordered: 70, received: 0, has_unbilled: false },
+  { id: 2, number: 'PO-0002', status: 'partial', supplier_name: 'Noor Packaging', order_date: '2026-10-12', expected_date: '2026-10-26', warehouse_name: 'Main', total: 30000, ordered: 50, received: 30, has_unbilled: true },
+  { id: 3, number: 'PO-0001', status: 'received', supplier_name: 'Delta Supplies', order_date: '2026-09-20', expected_date: '2026-10-04', warehouse_name: 'North store', total: 22000, ordered: 40, received: 40, has_unbilled: false },
+]
+const demoCount = { id: 1, number: 'SC-0001', status: 'open', count_date: '2026-11-02', warehouse_name: 'Main', notes: null, lines: stockItems.map((i, n) => ({ id: n + 1, item_id: i.id, expected: i.quantity_available, counted: n === 0 ? i.quantity_available - 2 : null, item_name: i.name, sku: i.sku, barcode: i.barcode, unit_of_measure: i.unit_of_measure, average_unit_cost: i.average_unit_cost, current: i.quantity_available })) }
 const categories = [
   { id: 1, name: 'Packaging', description: 'Cartons and labels', inventory_account_id: 3, expense_account_id: 7 },
   { id: 2, name: 'Supplies', description: null, inventory_account_id: 3, expense_account_id: 7 },
@@ -217,6 +225,33 @@ const handlers: Record<string, (args: unknown[]) => unknown> = {
     })
   },
   getInventoryItems: () => stockItems,
+  listWarehouses: () => demoWarehouses,
+  getAllUnits: () => demoUnits,
+  findSerial: () => [{ id: 1, serial_number: 'FOAM-S0001', in_stock: true, item_id: stockItems[2].id, sku: stockItems[2].sku, item_name: stockItems[2].name, warehouse_name: 'Main', history: [] }],
+  listBoms: () => [{ id: 1, item_id: stockItems[0].id, output_quantity: 1, notes: null, sku: stockItems[0].sku, name: stockItems[0].name, unit_of_measure: stockItems[0].unit_of_measure, on_hand: stockItems[0].quantity_available, cost_each: 610, can_build: 6, lines: stockItems.slice(1, 3).map((i, n) => ({ id: n + 1, item_id: i.id, quantity: n + 1, sku: i.sku, name: i.name, unit_of_measure: i.unit_of_measure, on_hand: i.quantity_available, cost: i.average_unit_cost })) }, { id: 2, item_id: stockItems[3].id, output_quantity: 10, notes: null, sku: stockItems[3].sku, name: stockItems[3].name, unit_of_measure: stockItems[3].unit_of_measure, on_hand: stockItems[3].quantity_available, cost_each: 42, can_build: 0, lines: [{ id: 3, item_id: stockItems[1].id, quantity: 20, sku: stockItems[1].sku, name: stockItems[1].name, unit_of_measure: stockItems[1].unit_of_measure, on_hand: stockItems[1].quantity_available, cost: stockItems[1].average_unit_cost }] }],
+  listAssemblies: () => [{ id: 1, number: 'AS-0002', status: 'built', item_id: stockItems[0].id, quantity: 4, build_date: '2026-11-01', components_cost: 2440, extra_cost: 300, sku: stockItems[0].sku, name: stockItems[0].name, unit_of_measure: stockItems[0].unit_of_measure, warehouse_name: 'Main' }, { id: 2, number: 'AS-0001', status: 'reversed', item_id: stockItems[0].id, quantity: 2, build_date: '2026-10-20', components_cost: 1220, extra_cost: 0, sku: stockItems[0].sku, name: stockItems[0].name, unit_of_measure: stockItems[0].unit_of_measure, warehouse_name: 'Main' }],
+  getAllLevels: () => [],
+  getItemDetail: (args) => {
+    const i = stockItems.find((x) => Number(x.id) === Number(args[1])) ?? stockItems[0]
+    return { ...i, category_name: 'Packaging', supplier_name: 'Noor Packaging', on_order: 20, units: demoUnits.filter((u) => u.item_id === i.id), serials: i.track_serials ? Array.from({ length: 14 }, (_v, n) => ({ id: n + 1, serial_number: `${i.sku}-S${String(n + 1).padStart(4, '0')}`, warehouse_name: 'Main' })) : [], levels: [{ warehouse_id: 1, warehouse_name: 'Main', quantity: i.quantity_available }], lots: i.track_lots ? [{ id: 1, lot_number: 'LOT-2041', expiry_date: '2026-11-20', quantity: 12, warehouse_name: 'Main', warehouse_id: 1, status: 'soon' }, { id: 2, lot_number: 'LOT-2107', expiry_date: '2027-06-01', quantity: 20, warehouse_name: 'Main', warehouse_id: 1, status: 'ok' }] : [] }
+  },
+  getStockCard: () => [
+    { id: 3, date: '2026-10-31', transaction_type: 'adjustment', quantity: -2, unit_cost: 600, total_cost: 1200, reference: 'SC-0001', description: 'Stock count', journal_entry_id: 9, warehouse_name: 'Main', lots: null, serials: null, balance: 12 },
+    { id: 2, date: '2026-10-30', transaction_type: 'out', quantity: -36, unit_cost: 600, total_cost: 21600, reference: 'INV-0012', description: 'Invoice', journal_entry_id: 8, warehouse_name: 'Main', lots: null, balance: 14 },
+    { id: 1, date: '2026-10-28', transaction_type: 'in', quantity: 50, unit_cost: 600, total_cost: 30000, reference: 'GR-0002', description: 'PO-0002', journal_entry_id: 7, warehouse_name: 'Main', lots: null, balance: 50 },
+  ],
+  getSettings: () => ({ grni_account_id: 4, grni_code: '2000', grni_name: 'Accounts payable', default_costing_method: 'average' }),
+  listPurchaseOrders: () => demoOrders,
+  getPurchaseOrder: (args) => {
+    const o = demoOrders.find((x) => x.id === Number(args[1])) ?? demoOrders[0]
+    return { ...o, supplier_id: 1, warehouse_id: 1, notes: null, lines: stockItems.slice(0, 2).map((i, n) => ({ id: n + 1, item_id: i.id, quantity: 25, quantity_received: o.status === 'received' ? 25 : o.status === 'partial' ? 15 : 0, unit_cost: i.average_unit_cost, item_name: i.name, sku: i.sku, unit_of_measure: i.unit_of_measure, track_lots: i.track_lots, track_serials: i.track_serials, unit_id: n === 0 ? 1 : null, unit_name: n === 0 ? 'Bundle' : null, unit_factor: n === 0 ? 25 : 1 })), receipts: o.received ? [{ id: 1, number: 'GR-0002', receipt_date: '2026-10-28', total: 18000, bill_id: null, bill_number: null }] : [] }
+  },
+  listStockCounts: () => [{ id: 1, number: 'SC-0001', status: 'open', count_date: '2026-11-02', warehouse_name: 'Main', lines: stockItems.length, counted: 1, differences: 1 }],
+  getStockCount: () => demoCount,
+  getReorderPlan: () => stockItems.map((i, n) => ({ item_id: i.id, sku: i.sku, name: i.name, unit_of_measure: i.unit_of_measure, unit_cost: i.average_unit_cost, on_hand: i.quantity_available, on_order: n === 0 ? 20 : 0, used_90_days: 90 - n * 20, lead_time_days: 14, supplier_name: 'Noor Packaging', daily_usage: (90 - n * 20) / 90, days_of_cover: Math.floor(i.quantity_available / Math.max((90 - n * 20) / 90, 0.1)), suggested: n < 2 ? 40 : 0, stockout_risk: n === 1 })),
+  getAnalysis: () => ({ total_value: 186000, usage_12_months: 610000, turnover: 3.3, by_category: [{ category_name: 'Packaging', value: 142000, items: 2 }, { category_name: 'Supplies', value: 44000, items: 1 }], slow_moving: stockItems.slice(0, 1).map((i) => ({ item_id: i.id, sku: i.sku, name: i.name, on_hand: i.quantity_available, unit_of_measure: i.unit_of_measure, value: i.total_value, last_used: '2026-05-02', days_idle: 185 })), abc: stockItems.map((i, n) => ({ item_id: i.id, sku: i.sku, name: i.name, usage_value: 400000 - n * 150000, share: 66 - n * 25, class: ['A', 'B', 'C'][Math.min(n, 2)] })), expiring: [{ id: 1, lot_number: 'LOT-2041', expiry_date: '2026-11-20', quantity: 12, item_name: stockItems[1].name, item_id: stockItems[1].id, warehouse_name: 'Main', value: 2400, status: 'soon' }] }),
+  getBooksCheck: () => ({ agrees: true, rows: [{ account_id: 3, code: '1300', name: 'Inventory', stock_value: 186000, book_value: 186000, difference: 0 }] }),
+  ...Object.fromEntries(['saveWarehouse', 'transferStock', 'saveItemDetails', 'importItems', 'savePurchaseOrder', 'approvePurchaseOrder', 'cancelPurchaseOrder', 'receivePurchaseOrder', 'createBillFromReceipts', 'createStockCount', 'saveStockCountLines', 'cancelStockCount', 'postStockCount', 'createOrdersFromPlan', 'saveSettings', 'createGrniAccount', 'saveUnit', 'deleteUnit', 'saveBom', 'deleteBom', 'buildAssembly', 'reverseAssembly', 'setItemCosting', 'setDefaultCosting'].map((m) => [m, () => ({ id: 1, orders: [1] })])),
   getLowStockItems: () => items.filter((i) => i.quantity_available <= i.reorder_point),
   getVoucherStats: () => ({ total_vouchers: 5, pending_approval: 2, approved: 1, rejected: 1, expired: 0, completed: 1, total_value: 61100 }),
   createJournalEntry: () => ({ id: 9999 }),

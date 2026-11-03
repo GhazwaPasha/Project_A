@@ -10,7 +10,7 @@ import { Badge, Chips } from '@/components/chips'
 import { call, uploadAttachment } from '@/lib/api'
 import { figure, shortDate, useApp } from '@/lib/boot'
 import { accounts, num, q, refreshBooks, today, type Id, type Money } from '@/lib/data'
-import { INVENTORY_TABS, items, useCanWriteStock } from '@/routes/inventory'
+import { INVENTORY_TABS, items, useCanWriteStock, warehousesQuery } from '@/routes/inventory'
 
 type Status = 'draft' | 'pending_finance' | 'approved' | 'receiving' | 'issuing' | 'posted' | 'completed' | 'rejected' | 'expired' | 'cancelled'
 type Line = { id: Id; item_id: Id; line_number: number; quantity_requested: Money; quantity_actual?: Money | null; unit_cost_estimated?: Money | null; unit_cost_actual?: Money | null; total_cost: Money; item?: { name: string; sku: string } }
@@ -216,9 +216,12 @@ function PostPanel({ voucher: v }: { voucher: Voucher }) {
   const chart = useQuery(accounts(org.id))
   const [payable, setPayable] = useState('')
   const [date, setDate] = useState(today())
+  const [warehouse, setWarehouse] = useState('')
+  const warehouses = useQuery(warehousesQuery(org.id))
+  const openWarehouses = (warehouses.data ?? []).filter((w) => w.is_active)
   const payableId = payable ? Number(payable) : null
   const preview = useQuery(q<Preview>(['voucher', v.id, 'preview', payableId], 'VoucherService', 'previewVoucherPosting', [v.id, { payable_account_id: payableId }]))
-  const post = useSave(() => call('VoucherService', 'postVoucher', [v.id, { payable_account_id: payableId, date }]), { success: 'Posted. Stock and your books are updated.', refresh: REFRESH, onDone: refreshBooks })
+  const post = useSave(() => call('VoucherService', 'postVoucher', [v.id, { payable_account_id: payableId, date, warehouse_id: warehouse ? Number(warehouse) : null }]), { success: 'Posted. Stock and your books are updated.', refresh: REFRESH, onDone: refreshBooks })
   const p = preview.data
   const asking = p?.needs_payable || payable !== ''
   const liabilities = (chart.data ?? []).filter((a) => a.is_postable !== false && a.account_type === 'liability')
@@ -238,6 +241,7 @@ function PostPanel({ voucher: v }: { voucher: Voucher }) {
       <div className="grid sm:grid-cols-2 gap-3">
         {asking ? <Choice label="What you owe goes to" placeholder="Select account" value={payable} onChange={setPayable} options={liabilities.map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))} /> : null}
         <Text label="Date" type="date" value={date} onChange={setDate} />
+        {openWarehouses.length > 1 ? <Choice label="Warehouse" placeholder="Default warehouse" value={warehouse} onChange={setWarehouse} options={openWarehouses.map((w) => ({ value: String(w.id), label: w.name }))} /> : null}
       </div>
       <div><button className={btn.primary} disabled={!p || p.problems.length > 0 || post.isPending} onClick={() => post.mutate()}>{post.isPending ? 'Posting…' : `Post ${p ? figure(p.total, org.decimals) : ''}`}</button></div>
     </section>

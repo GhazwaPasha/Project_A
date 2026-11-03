@@ -12,6 +12,8 @@ export type PostingLine = {
   average_unit_cost: number
   inventory_account_id: number
   expense_account_id: number
+  /** What issuing this line costs, when it isn't just quantity times average: first-in, first-out items. */
+  issue_cost?: number
 }
 
 export type PostingInput = {
@@ -101,8 +103,8 @@ export function planVoucherPosting(input: PostingInput): PostingPlan {
       problems.push(`${l.item_name} has no cost on record, so its value can't be taken out of your books.`)
       continue
     }
-    const total_cost = money(quantity * l.average_unit_cost)
-    moves.push({ line_id: l.line_id, item_id: l.item_id, type: 'out', quantity, unit_cost: l.average_unit_cost, total_cost })
+    const total_cost = l.issue_cost ?? money(quantity * l.average_unit_cost)
+    moves.push({ line_id: l.line_id, item_id: l.item_id, type: 'out', quantity, unit_cost: l.issue_cost !== undefined ? total_cost / quantity : l.average_unit_cost, total_cost })
     costs.push({ account_id: input.destination_account_id ?? l.expense_account_id, amount: total_cost, description: l.item_name })
     stock.push({ account_id: l.inventory_account_id, amount: total_cost, description: l.item_name })
   }

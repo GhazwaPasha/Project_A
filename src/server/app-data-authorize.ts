@@ -15,6 +15,14 @@ const BOOKS_WRITE = new Set([
   'createEntryFromStatementLine', 'completeReconciliation', 'saveBudget', 'deleteBudget',
 ])
 
+const INVENTORY_PERMISSIONS: Record<OrgDataPermission & string, string[]> = {
+  'inventory.read': ['listWarehouses', 'getAllLevels', 'getItemDetail', 'getStockCard', 'getSettings', 'listPurchaseOrders', 'getPurchaseOrder', 'listStockCounts', 'getStockCount', 'getReorderPlan', 'getAnalysis', 'listUnits', 'getAllUnits', 'findSerial', 'listBoms', 'listAssemblies'],
+  'inventory.write': ['saveWarehouse', 'transferStock', 'saveItemDetails', 'importItems', 'savePurchaseOrder', 'cancelPurchaseOrder', 'createOrdersFromPlan', 'receivePurchaseOrder', 'createStockCount', 'saveStockCountLines', 'cancelStockCount', 'saveUnit', 'deleteUnit', 'saveBom', 'deleteBom', 'buildAssembly'],
+  // These decide what's committed or what reaches the books, so they need someone who keeps the books.
+  'ledger.write': ['approvePurchaseOrder', 'saveSettings', 'createGrniAccount', 'createBillFromReceipts', 'postStockCount', 'setItemCosting', 'setDefaultCosting', 'reverseAssembly'],
+  'financial.read': ['getBooksCheck'],
+} as Record<OrgDataPermission & string, string[]>
+
 /** Membership + specific data permission (or platform super admin). */
 async function requireDataPermission(
   userId: string,
@@ -402,6 +410,14 @@ export async function authorizeAppDataCall(
       if (snap.isSuperAdmin || snap.memberRole === 'organization_owner' || snap.memberRole === 'super_admin') return
     }
     throw new Error('Forbidden')
+  }
+
+  if (service === 'InventoryService') {
+    // A build with an extra cost posts to an account of the person's choosing, so it needs someone who keeps the books.
+    if (method === 'buildAssembly' && Number((args[1] as { extra_cost?: number } | undefined)?.extra_cost ?? 0) !== 0) return requireDataPermission(userId, String(args[0] ?? ''), 'ledger.write')
+    const needed = (Object.keys(INVENTORY_PERMISSIONS) as OrgDataPermission[]).find((p) => INVENTORY_PERMISSIONS[p].includes(method))
+    if (!needed) throw new Error('Forbidden')
+    return requireDataPermission(userId, String(args[0] ?? ''), needed)
   }
 
   if (key === 'VoucherService.postVoucher' || key === 'VoucherService.previewVoucherPosting') {

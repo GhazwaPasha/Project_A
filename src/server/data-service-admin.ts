@@ -16,6 +16,9 @@ import {
   fetchAccountOpening,
 } from '@/server/data/ledger-sql'
 import { assertPeriodOpen } from '@/server/books/lock'
+import { applySerials, applyToWarehouse, defaultWarehouse, lotAddedBy, restoreLots, serialsMovedBy } from '@/server/inventory/stock'
+import { addLayer, restoreLayers, takeLayers } from '@/server/inventory/costing'
+import { nextNumber } from '@/server/numbering'
 import { 
   User, 
   UserProfile, 
@@ -1537,32 +1540,63 @@ export class DataServiceAdmin {
     return attachItemCategory(sql, rows[0] ?? null)
   }
 
+  /** A blank SKU gets the next one automatically, so nobody has to invent a code to add an item. */
   static async createInventoryItem(
-    item: Omit<InventoryItem, 'id' | 'created_at' | 'updated_at' | 'quantity_available' | 'total_value'>
+    item: Omit<InventoryItem, 'id' | 'created_at' | 'updated_at' | 'quantity_available' | 'total_value' | 'sku'> & { sku?: string | null }
   ): Promise<InventoryItem | null> {
     const sql = getSql()
     const i = item
-    const ins = (await sql<InventoryItem[]>`
-      INSERT INTO public.inventory_items (
-        organization_id, category_id, sku, name, description, unit_of_measure, quantity_in, quantity_out, average_unit_cost, reorder_point, reorder_quantity, is_active, created_by
-      ) VALUES (
-        ${i.organization_id}::uuid,
-        ${i.category_id},
-        ${i.sku},
-        ${i.name},
-        ${i.description},
-        ${i.unit_of_measure},
-        ${i.quantity_in},
-        ${i.quantity_out},
-        ${i.average_unit_cost},
-        ${i.reorder_point},
-        ${i.reorder_quantity},
-        ${i.is_active},
-        ${i.created_by}::uuid
-      )
-      RETURNING *
-    `) as InventoryItem[]
-    return ins[0] ? this.getInventoryItem(ins[0].id) : null
+    const id = await sql.begin(async (raw) => {
+      const tx = raw as unknown as ReturnType<typeof getSql>
+      const typed = (i.sku ?? '').trim()
+      const sku = typed || (await nextNumber(tx, i.organization_id, 'SKU', 'public.inventory_items', 'sku'))
+      const barcode = (i.barcode ?? '').trim() || null
+      const [used] = (await tx`
+        SELECT sku, barcode, name FROM public.inventory_items
+        WHERE organization_id = ${i.organization_id}::uuid AND (sku = ${sku} OR (${barcode}::text IS NOT NULL AND barcode = ${barcode}::text)) LIMIT 1
+      `) as unknown as { sku: string; barcode: string | null; name: string }[]
+      if (used) throw new Error(used.sku === sku ? `The SKU ${sku} is already on ${used.name}.` : `That barcode is already on ${used.name}.`)
+      if (i.track_lots && i.track_serials) throw new Error('Track batches or serial numbers, not both.')
+      if (i.preferred_supplier_id) {
+        const [s] = (await tx`SELECT id FROM public.suppliers WHERE id = ${i.preferred_supplier_id} AND organization_id = ${i.organization_id}::uuid`) as unknown as { id: number }[]
+        if (!s) throw new Error('Supplier not found.')
+      }
+      if (i.income_account_id) {
+        const [a] = (await tx`SELECT id FROM public.accounts WHERE id = ${i.income_account_id} AND organization_id = ${i.organization_id}::uuid`) as unknown as { id: number }[]
+        if (!a) throw new Error('Account not found.')
+      }
+      const ins = (await tx<InventoryItem[]>`
+        INSERT INTO public.inventory_items (
+          organization_id, category_id, sku, name, description, unit_of_measure, quantity_in, quantity_out, average_unit_cost, reorder_point, reorder_quantity, is_active, created_by,
+          barcode, selling_price, income_account_id, preferred_supplier_id, lead_time_days, track_lots, track_serials, costing_method
+        ) VALUES (
+          ${i.organization_id}::uuid,
+          ${i.category_id},
+          ${sku},
+          ${i.name},
+          ${i.description},
+          ${i.unit_of_measure},
+          ${i.quantity_in},
+          ${i.quantity_out},
+          ${i.average_unit_cost},
+          ${i.reorder_point},
+          ${i.reorder_quantity},
+          ${i.is_active},
+          ${i.created_by}::uuid,
+          ${barcode},
+          ${i.selling_price ?? null},
+          ${i.income_account_id ?? null},
+          ${i.preferred_supplier_id ?? null},
+          ${i.lead_time_days ?? 14},
+          ${i.track_lots ?? false},
+          ${i.track_serials ?? false},
+          COALESCE((SELECT default_costing_method FROM public.inventory_settings WHERE organization_id = ${i.organization_id}::uuid), 'average')
+        )
+        RETURNING *
+      `) as InventoryItem[]
+      return ins[0]?.id
+    })
+    return id ? this.getInventoryItem(id) : null
   }
 
   static async updateInventoryItem(
@@ -1579,11 +1613,6 @@ export class DataServiceAdmin {
         name = COALESCE(${u.name ?? null}, name),
         description = ${u.description === undefined ? null : u.description},
         unit_of_measure = COALESCE(${u.unit_of_measure ?? null}, unit_of_measure),
-        quantity_in = COALESCE(${u.quantity_in ?? null}, quantity_in),
-        quantity_out = COALESCE(${u.quantity_out ?? null}, quantity_out),
-        quantity_available = COALESCE(${u.quantity_available ?? null}, quantity_available),
-        average_unit_cost = COALESCE(${u.average_unit_cost ?? null}, average_unit_cost),
-        total_value = COALESCE(${u.total_value ?? null}, total_value),
         reorder_point = COALESCE(${u.reorder_point ?? null}, reorder_point),
         reorder_quantity = COALESCE(${u.reorder_quantity ?? null}, reorder_quantity),
         is_active = COALESCE(${u.is_active ?? null}, is_active)
@@ -1594,7 +1623,12 @@ export class DataServiceAdmin {
 
   static async deleteInventoryItem(itemId: number): Promise<boolean> {
     const sql = getSql()
-    const r = await sql`DELETE FROM public.inventory_items WHERE id = ${itemId}`
+    const [held] = await sql`SELECT quantity_available::float AS q FROM public.inventory_items WHERE id = ${itemId}`
+    if (held && Number(held.q) !== 0) throw new Error("This item still has stock, so it can't be deleted.")
+    const r = await sql`DELETE FROM public.inventory_items WHERE id = ${itemId}`.catch((e: { code?: string }) => {
+      if (e.code === '23503') throw new Error("This item is on purchase orders, invoices or bills, so it can't be deleted.")
+      throw e
+    })
     return ((r as { count?: number }).count ?? 1) > 0
   }
 
@@ -1647,14 +1681,34 @@ export class DataServiceAdmin {
     return enriched ?? null
   }
 
-  /** Records a stock movement and updates the item, inside the caller's transaction. */
+  /** Records a stock movement and updates the item, its warehouse and its batches, inside the caller's transaction. */
   static async applyInventoryTransaction(
     tx: ReturnType<typeof getSql>,
     t: Omit<InventoryTransaction, 'id' | 'created_at'>
   ): Promise<InventoryTransaction | null> {
+    // The item is locked first, so two movements of it can't both read the same balance.
+    const locked = (await tx<InventoryItem[]>`
+      SELECT * FROM public.inventory_items
+      WHERE id = ${t.item_id} AND organization_id = ${t.organization_id}::uuid
+      FOR UPDATE
+    `) as InventoryItem[]
+    const item = locked[0]
+    if (!item) {
+      throw new Error('Inventory item not found for this organization')
+    }
+
+    let warehouseId: number
+    if (t.warehouse_id) {
+      const found = (await tx`SELECT id FROM public.warehouses WHERE id = ${t.warehouse_id} AND organization_id = ${t.organization_id}::uuid`) as unknown as { id: number }[]
+      if (!found[0]) throw new Error('Warehouse not found.')
+      warehouseId = Number(found[0].id)
+    } else {
+      warehouseId = await defaultWarehouse(tx, t.organization_id)
+    }
+
     const ins = (await tx<InventoryTransaction[]>`
       INSERT INTO public.inventory_transactions (
-        organization_id, item_id, transaction_type, quantity, unit_cost, total_cost, journal_entry_id, reference, description, transaction_date, created_by
+        organization_id, item_id, transaction_type, quantity, unit_cost, total_cost, journal_entry_id, reference, description, transaction_date, created_by, warehouse_id, source_type, source_id
       ) VALUES (
         ${t.organization_id}::uuid,
         ${t.item_id},
@@ -1666,22 +1720,15 @@ export class DataServiceAdmin {
         ${t.reference},
         ${t.description},
         ${t.transaction_date}::date,
-        ${t.created_by}::uuid
+        ${t.created_by}::uuid,
+        ${warehouseId},
+        ${t.source_type ?? null},
+        ${t.source_id ?? null}
       )
       RETURNING *
     `) as InventoryTransaction[]
     const tr = ins[0]
     if (!tr) return null
-
-    const locked = (await tx<InventoryItem[]>`
-      SELECT * FROM public.inventory_items
-      WHERE id = ${t.item_id} AND organization_id = ${t.organization_id}::uuid
-      FOR UPDATE
-    `) as InventoryItem[]
-    const item = locked[0]
-    if (!item) {
-      throw new Error('Inventory item not found for this organization')
-    }
 
     const qty = Number(tr.quantity)
     const qIn = Math.abs(qty)
@@ -1689,22 +1736,29 @@ export class DataServiceAdmin {
     let quantityOut = Number(item.quantity_out)
     const avail = Number(item.quantity_available)
     const avg = Number(item.average_unit_cost)
-    let val = Number(item.total_value)
+    const val = Number(item.total_value)
     const kind = t.transaction_type
+    const cents = (n: number) => Math.round(n * 100) / 100
+    // Taking everything clears the whole value, so rounding can't leave a few cents on nothing.
+    const valueOf = (taken: number) => (taken >= avail - 1e-9 ? cents(val) : cents(taken * avg))
+    const fifo = item.costing_method === 'fifo'
+    const from = t.from_transaction_ids?.length ? t.from_transaction_ids.map(Number) : null
+    const movedOn = String(t.transaction_date).slice(0, 10)
 
     if (kind === 'in') {
       const addQty = qIn
       quantityIn += addQty
       let addValue = 0
-      if (t.total_cost != null && Number(t.total_cost) > 0) {
+      if (t.total_cost != null && (Number(t.total_cost) > 0 || t.source_type)) {
         addValue = Number(t.total_cost)
       } else if (t.unit_cost != null && Number(t.unit_cost) > 0) {
         addValue = addQty * Number(t.unit_cost)
       } else {
         addValue = addQty * avg
-        await tx`UPDATE public.inventory_transactions SET unit_cost = ${avg}, total_cost = ${Math.round(addValue * 100) / 100} WHERE id = ${tr.id}`
-        tr.total_cost = Math.round(addValue * 100) / 100
+        await tx`UPDATE public.inventory_transactions SET unit_cost = ${avg}, total_cost = ${cents(addValue)} WHERE id = ${tr.id}`
+        tr.total_cost = cents(addValue)
       }
+      if (fifo && !(from && (await restoreLayers(tx, from)))) await addLayer(tx, Number(item.id), Number(tr.id), String(t.layer_date ?? movedOn).slice(0, 10), addQty, cents(addValue))
       const newAvail = avail + addQty
       const newTotal = val + addValue
       const newAvg = newAvail > 0 ? newTotal / newAvail : 0
@@ -1724,37 +1778,72 @@ export class DataServiceAdmin {
       }
       quantityOut += outQty
       const newAvail = avail - outQty
-      const cogs = outQty * avg
-      const newTotal = Math.max(0, val - cogs)
-      await tx`UPDATE public.inventory_transactions SET unit_cost = COALESCE(unit_cost, ${avg}), total_cost = COALESCE(total_cost, ${Math.round(cogs * 100) / 100}) WHERE id = ${tr.id}`
-      tr.total_cost = t.total_cost ?? Math.round(cogs * 100) / 100
+      const standard = valueOf(outQty)
+      let cost: number
+      if (fifo) {
+        // First in, first out decides the cost. Callers work it out the same way beforehand for their entry.
+        const taken = await takeLayers(tx, Number(item.id), Number(tr.id), outQty, from ?? undefined)
+        if (from && taken.short) throw new Error(`Some of this ${item.name} has already been used, so this can't be undone.`)
+        cost = taken.cost
+      } else {
+        // The value leaving has to match what the entry records, or stock and the books drift apart.
+        cost = t.total_cost != null ? cents(Number(t.total_cost)) : standard
+      }
+      const newTotal = newAvail > 1e-9 ? Math.max(0, val - cost) : 0
+      const newAvg = newAvail > 1e-9 && (fifo || Math.abs(cost - standard) > 0.01) ? newTotal / newAvail : avg
+      await tx`UPDATE public.inventory_transactions SET unit_cost = COALESCE(unit_cost, ${avg}), total_cost = ${cost} WHERE id = ${tr.id}`
+      tr.total_cost = cost
       await tx`
         UPDATE public.inventory_items
         SET
           quantity_out = ${quantityOut},
           quantity_available = ${newAvail},
-          total_value = ${newTotal}
+          total_value = ${newTotal},
+          average_unit_cost = ${newAvg}
         WHERE id = ${item.id} AND organization_id = ${t.organization_id}::uuid
       `
-    } else {
-      // adjustment: signed delta on available; value at current average
+    } else if (kind === 'adjustment') {
+      // Signed change to what's available, valued at the current average.
       const newAvail = avail + qty
       if (newAvail < -1e-9) {
         throw new Error('Adjustment would make quantity negative')
       }
-      const newTotal = newAvail * avg
-      const moved = Math.round(Math.abs(qty) * avg * 100) / 100
+      let moved = qty < 0 ? valueOf(qIn) : cents(qIn * avg)
+      if (fifo && qty < 0) moved = (await takeLayers(tx, Number(item.id), Number(tr.id), qIn)).cost
+      if (fifo && qty > 0) await addLayer(tx, Number(item.id), Number(tr.id), movedOn, qIn, moved)
+      const newTotal = qty < 0 ? val - moved : val + moved
       await tx`UPDATE public.inventory_transactions SET unit_cost = COALESCE(unit_cost, ${avg}), total_cost = ${moved} WHERE id = ${tr.id}`
       tr.total_cost = moved
       await tx`
         UPDATE public.inventory_items
         SET
           quantity_available = ${newAvail},
-          total_value = ${newTotal < 0 ? 0 : newTotal}
+          total_value = ${newTotal < 0 ? 0 : newTotal},
+          average_unit_cost = ${fifo && newAvail > 1e-9 ? Math.max(newTotal, 0) / newAvail : avg}
         WHERE id = ${item.id} AND organization_id = ${t.organization_id}::uuid
       `
     }
+    // A transfer only changes where stock is, so the item's totals stay as they are.
 
+    const delta = kind === 'adjustment' ? qty : kind === 'in' || kind === 'transfer_in' ? qIn : -qIn
+    const restoring = Boolean(from && delta > 0 && item.track_lots)
+    tr.lots = await applyToWarehouse(tx, {
+      org: t.organization_id,
+      itemId: Number(item.id),
+      itemName: item.name,
+      trackLots: Boolean(item.track_lots) && !restoring,
+      warehouseId,
+      transactionId: Number(tr.id),
+      delta,
+      lotId: t.lot_id ?? (from && delta < 0 && item.track_lots ? await lotAddedBy(tx, from) : null),
+      lotNumber: t.lot_number ?? null,
+      expiryDate: t.expiry_date ?? null,
+      fallbackLot: (t.reference ?? '').trim() || `LOT-${movedOn}`,
+    })
+    if (restoring && from) tr.lots = await restoreLots(tx, Number(item.id), warehouseId, Number(tr.id), from, delta, (t.reference ?? '').trim() || `LOT-${movedOn}`)
+    if (item.track_serials && delta) {
+      tr.serials = await applySerials(tx, { itemId: Number(item.id), itemName: item.name, sku: item.sku, warehouseId, transactionId: Number(tr.id), delta, serialNumbers: from ? await serialsMovedBy(tx, from) : t.serial_numbers ?? null })
+    }
     return tr
   }
 
