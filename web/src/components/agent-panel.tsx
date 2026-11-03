@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowUp, X } from 'lucide-react'
+import { ArrowUp, Sparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
+import { Badge } from '@/components/chips'
 import { NewEntry, type Draft } from '@/components/new-entry'
 import { btn } from '@/components/page'
 import { decideProposal, type Proposal } from '@/lib/api'
@@ -36,6 +37,19 @@ export function AskLink({ prompt, children, className }: { prompt: string; child
   return <button type="button" disabled={busy} onClick={() => ask(prompt)} className={cn('text-primary font-medium underline decoration-border underline-offset-[3px] hover:decoration-primary cursor-pointer text-left disabled:opacity-50', className)}>{children}</button>
 }
 
+/** Something to ask the agent, one click away. */
+export function AskChip({ prompt, children }: { prompt: string; children: React.ReactNode }) {
+  const { ask, busy } = useAgent()
+  const { canSeeBooks } = useApp()
+  if (!canSeeBooks) return null
+  return (
+    <button type="button" disabled={busy} onClick={() => ask(prompt)} className="press inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border border-input bg-card text-[12.5px] font-medium whitespace-nowrap max-w-full cursor-pointer hover:bg-accent disabled:opacity-50">
+      <Sparkles aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+      <span className="truncate">{children}</span>
+    </button>
+  )
+}
+
 export function ProposalCard({ proposal: p }: { proposal: Proposal }) {
   const { org, pro } = useApp()
   const [status, setStatus] = useState(p.status)
@@ -63,10 +77,11 @@ export function ProposalCard({ proposal: p }: { proposal: Proposal }) {
         <span className="font-semibold shrink-0 whitespace-nowrap">{org.currency} {figure(total, org.decimals)}</span>
       </div>
       <p className="text-[13px] text-muted-foreground">{p.explanation}</p>
-      <p className="text-[12px] text-muted-foreground">
-        {shortDate(p.date)}{p.source === 'mcp' ? ` · from ${p.source_name ?? 'a connected app'}` : ''}
-        {p.confidence !== 'high' ? <span className="text-[var(--note)] font-medium"> · {p.confidence === 'medium' ? 'Please check this one' : 'The agent is unsure about this one'}</span> : null}
-      </p>
+      <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-muted-foreground">
+        <span className="mr-0.5">{shortDate(p.date)}</span>
+        {p.source === 'mcp' ? <Badge>From {p.source_name ?? 'a connected app'}</Badge> : null}
+        {p.confidence === 'medium' ? <Badge tone="warn" dot>Please check this one</Badge> : p.confidence === 'low' ? <Badge tone="bad" dot>The agent is unsure</Badge> : null}
+      </div>
       {pro || showLines ? (
         <table className="w-full text-[12.5px] rounded-[6px] bg-muted">
           <tbody>
@@ -86,7 +101,7 @@ export function ProposalCard({ proposal: p }: { proposal: Proposal }) {
           <button className={btn.plain} disabled={decide.isPending} onClick={() => setEditing({ date: p.date, description: p.description, lines: p.lines.map((l) => ({ account: String(l.account_id), debit: l.debit ? String(l.debit) : '', credit: l.credit ? String(l.credit) : '' })) })}>Change</button>
           <button className={btn.plain} disabled={decide.isPending} onClick={() => decide.mutate('discard')}>Discard</button>
         </div>
-      ) : <p className={cn('text-[13px] font-medium', status === 'recorded' ? 'text-[var(--tick)]' : 'text-muted-foreground')}>{status === 'recorded' ? '✓ Recorded' : status === 'discarded' ? 'Discarded' : 'Already decided'}</p>}
+      ) : <div><Badge tone={status === 'recorded' ? 'good' : 'neutral'} dot>{status === 'recorded' ? 'Recorded' : status === 'discarded' ? 'Discarded' : 'Already decided'}</Badge></div>}
       <NewEntry open={editing !== null} draft={editing ?? undefined} onOpenChange={(v) => { if (!v) setEditing(null) }} onRecorded={() => decide.mutate('discard')} />
     </div>
   )
@@ -95,7 +110,7 @@ export function ProposalCard({ proposal: p }: { proposal: Proposal }) {
 const STARTERS = ['How is my business doing this month?', 'I paid rent of 65,000 from the bank today', 'What is my biggest expense this year?', 'Do my books look right?']
 
 export function AgentPanel() {
-  const { turns, open, setOpen, ask, busy } = useAgent()
+  const { turns, open, setOpen } = useAgent()
   const end = useRef<HTMLDivElement>(null)
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }) }, [turns])
   useEffect(() => {
@@ -114,7 +129,7 @@ export function AgentPanel() {
         {turns.length === 0 ? (
           <div className="flex flex-col gap-2.5 items-start">
             <p className="text-muted-foreground">Tell me what happened in your business, or ask me anything about your books. I'll prepare the entries, and nothing is recorded until you approve it.</p>
-            {STARTERS.map((s) => <button key={s} disabled={busy} onClick={() => ask(s)} className="text-left text-[13px] px-3 py-1.5 rounded-[6px] border border-input text-muted-foreground hover:text-foreground cursor-pointer">{s}</button>)}
+            <div className="flex flex-wrap gap-1.5">{STARTERS.map((s) => <AskChip key={s} prompt={s}>{s}</AskChip>)}</div>
           </div>
         ) : turns.map((t) => t.role === 'user' ? (
           <p key={t.id} className="self-end max-w-[85%] rounded-[8px] bg-accent px-3.5 py-2">{t.text}</p>

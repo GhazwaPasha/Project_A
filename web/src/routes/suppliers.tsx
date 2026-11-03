@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Plus, Star, Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { AskLink } from '@/components/agent-panel'
-import { Choice, ConfirmDelete, FormBody, Modal, Pill, Stat, Stats, Text, Toggle, useSave } from '@/components/form'
-import { Cell, Empty, Head, Loaded, Paged, Range, Screen, Table, Toolbar, btn } from '@/components/page'
+import { AskChip } from '@/components/agent-panel'
+import { Choice, ConfirmDelete, FormBody, Modal, Stat, Stats, Text, Toggle, useSave } from '@/components/form'
+import { Cell, Empty, Head, Loaded, Paged, Screen, Table, Toolbar, btn } from '@/components/page'
+import { Badge, Chip, Chips } from '@/components/chips'
 import { call } from '@/lib/api'
 import { figure, useApp } from '@/lib/boot'
 import { accounts, num, q, type Id, type Money } from '@/lib/data'
@@ -29,6 +30,8 @@ export function Suppliers() {
   const filters = { ...(search.trim() ? { search: search.trim() } : {}), ...(status !== 'all' ? { status: [status] } : {}) }
   const list = useQuery(q<Supplier[]>(['suppliers', org.id, search.trim(), status], 'SupplierService', 'getSuppliers', [org.id, filters]))
   const all = list.data ?? []
+  const [preferredOnly, setPreferredOnly] = useState(false)
+  const shown = preferredOnly ? all.filter((s) => s.is_preferred) : all
   const [draft, setDraft] = useState<Draft | null>(null)
   const [opened, setOpened] = useState<Supplier | null>(null)
   const owed = all.reduce((s, x) => s + num(x.current_balance), 0)
@@ -45,11 +48,12 @@ export function Suppliers() {
       </Stats>
       <Toolbar>
         <Input aria-label="Search suppliers" placeholder="Search suppliers" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
-        <Range label="Status" value={status} onChange={setStatus} options={[{ id: 'all', label: 'All statuses' }, { id: 'active', label: 'Active' }, { id: 'inactive', label: 'Inactive' }, { id: 'suspended', label: 'Suspended' }]} />
+        <Chips label="Status" value={status} onChange={setStatus} options={[{ id: 'all', label: 'Any status' }, { id: 'active', label: 'Active' }, { id: 'inactive', label: 'Inactive' }, { id: 'suspended', label: 'Suspended' }]} />
+        <Chip active={preferredOnly} count={all.filter((s) => s.is_preferred).length} onClick={() => setPreferredOnly((v) => !v)}>Preferred</Chip>
       </Toolbar>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No suppliers found" body={canWrite ? 'Add the businesses you buy from.' : 'Nothing matches right now.'} /> : null)}>
         {() => (
-          <Paged rows={all}>
+          <Paged rows={shown}>
             {(page, pager) => (
           <Table min={620} footer={pager}>
             <thead><tr>{pro ? <Head>Code</Head> : null}<Head>Supplier</Head><Head>Contact</Head><Head>Terms</Head><Head>Status</Head><Head right>Balance</Head></tr></thead>
@@ -57,10 +61,10 @@ export function Suppliers() {
               {page.map((s) => (
                 <tr key={s.id} tabIndex={0} className="cursor-pointer hover:bg-accent/50 focus-visible:bg-accent/50 outline-none" onClick={() => setOpened(s)} onKeyDown={(e) => { if (e.key === 'Enter') setOpened(s) }}>
                   {pro ? <Cell className="fig text-[12.5px] text-muted-foreground whitespace-nowrap">{s.supplier_code}</Cell> : null}
-                  <Cell><span className="flex items-center gap-1.5">{s.name}{s.is_preferred ? <Star aria-label="Preferred" className="size-3 fill-current text-[var(--note)]" /> : null}</span></Cell>
+                  <Cell><span className="flex items-center gap-2">{s.name}{s.is_preferred ? <Badge tone="solid">Preferred</Badge> : null}</span></Cell>
                   <Cell className="text-muted-foreground">{s.contact_person || s.email || s.phone || ''}</Cell>
-                  <Cell className="text-muted-foreground">{TERMS.find((t) => t.value === s.payment_terms)?.label ?? ''}</Cell>
-                  <Cell><Pill tone={STATUS_TONE[s.status]}>{s.status[0].toUpperCase() + s.status.slice(1)}</Pill></Cell>
+                  <Cell>{s.payment_terms ? <Badge>{TERMS.find((t) => t.value === s.payment_terms)?.label ?? s.payment_terms}</Badge> : null}</Cell>
+                  <Cell><Badge dot tone={STATUS_TONE[s.status]}>{s.status[0].toUpperCase() + s.status.slice(1)}</Badge></Cell>
                   <Cell right>{figure(num(s.current_balance), org.decimals)}</Cell>
                 </tr>
               ))}
@@ -144,7 +148,7 @@ function SupplierDetail({ supplier: s, canWrite, onClose, onEdit }: { supplier: 
   return (
     <Modal wide open onClose={onClose} title={s.name}>
       <div className="flex flex-col gap-4 min-w-0">
-        <div className="flex flex-wrap items-center gap-2"><Pill tone={STATUS_TONE[s.status]}>{s.status[0].toUpperCase() + s.status.slice(1)}</Pill>{s.is_preferred ? <Pill tone="warn">Preferred</Pill> : null}<span className="fig text-[12.5px] text-muted-foreground">{s.supplier_code}</span></div>
+        <div className="flex flex-wrap items-center gap-2"><Badge dot tone={STATUS_TONE[s.status]}>{s.status[0].toUpperCase() + s.status.slice(1)}</Badge>{s.is_preferred ? <Badge tone="solid">Preferred</Badge> : null}<span className="fig text-[12.5px] text-muted-foreground">{s.supplier_code}</span></div>
         <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-[13.5px]">
           {[['Email', s.email], ['Phone', s.phone], ['Website', s.website], ['Terms', TERMS.find((t) => t.value === s.payment_terms)?.label], ['Credit limit', s.credit_limit != null ? `${s.currency} ${figure(num(s.credit_limit), org.decimals)}` : null], ['Balance', `${s.currency} ${figure(num(s.current_balance), org.decimals)}`], ['Tax ID', s.tax_id], ['Address', [s.billing_address_line1, s.billing_city, s.billing_country].filter(Boolean).join(', ')], ['Payable account', pro && payable ? `${payable.code} ${payable.name}` : null], ['Notes', s.notes]].filter(([, v]) => v).map(([k, v]) => <div key={k as string}><dt className="text-[12px] text-muted-foreground">{k}</dt><dd>{v}</dd></div>)}
         </dl>
@@ -168,7 +172,7 @@ function SupplierDetail({ supplier: s, canWrite, onClose, onEdit }: { supplier: 
               <ul className="flex flex-col divide-y divide-border border border-border rounded-[8px]">
                 {rows.map((x) => (
                   <li key={x.id} className="flex items-center justify-between gap-3 px-3 py-2 text-[13.5px]">
-                    <span className="min-w-0"><span className="font-medium">{x.name}</span>{x.is_primary ? <span className="ml-2"><Pill>Primary</Pill></span> : null}<span className="block text-[12.5px] text-muted-foreground truncate">{[x.title, x.email, x.phone].filter(Boolean).join(' · ')}</span></span>
+                    <span className="min-w-0"><span className="font-medium">{x.name}</span>{x.is_primary ? <span className="ml-2"><Badge>Primary</Badge></span> : null}<span className="block text-[12.5px] text-muted-foreground truncate">{[x.title, x.email, x.phone].filter(Boolean).join(' · ')}</span></span>
                     {canWrite ? <button aria-label={`Remove ${x.name}`} onClick={() => removeContact.mutate(x.id)} className="text-muted-foreground cursor-pointer"><Trash2 className="size-3.5" /></button> : null}
                   </li>
                 ))}
@@ -177,7 +181,7 @@ function SupplierDetail({ supplier: s, canWrite, onClose, onEdit }: { supplier: 
           </Loaded>
         </section>
         <div className="flex flex-wrap gap-2 justify-end border-t border-border pt-3">
-          <AskLink className="text-[13px] mr-auto self-center" prompt={`What have we bought from ${s.name}, and how much do we owe them?`}>Ask about this supplier</AskLink>
+          <span className="mr-auto self-center"><AskChip prompt={`What have we bought from ${s.name}, and how much do we owe them?`}>Ask about this supplier</AskChip></span>
           {canWrite ? <><ConfirmDelete label="Delete" pending={remove.isPending} onConfirm={() => remove.mutate()} /><button className={btn.primary} onClick={edit}>Edit</button></> : null}
         </div>
       </div>

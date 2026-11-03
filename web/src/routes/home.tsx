@@ -3,9 +3,11 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { AlertTriangle, CheckCircle2, ClipboardCheck, PackageOpen } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AskLink, Composer, ProposalCard } from '@/components/agent-panel'
+import { AskChip, AskLink, Composer, ProposalCard } from '@/components/agent-panel'
 import { NewEntry } from '@/components/new-entry'
-import { Range, btn } from '@/components/page'
+import { PageIcons } from '@/components/page-icons'
+import { btn } from '@/components/page'
+import { Chips, Count } from '@/components/chips'
 import { figure, shortDate, useApp } from '@/lib/boot'
 import { ApiError } from '@/lib/api'
 import { balanceSheet, dashboard, incomeStatement, journal, lowStock, monthly, num, periodRange, proposals, today, voucherStats, type MonthRow, type Period } from '@/lib/data'
@@ -39,18 +41,24 @@ export function Home() {
 
   return (
     <div className="flex flex-col gap-3.5">
-      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 lg:pr-[76px]">
+      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div>
           <h1 className="text-[20px] leading-tight font-semibold tracking-[-0.018em]">Home</h1>
           <p className="text-[13px] text-muted-foreground">{needCount ? `${needCount} ${needCount === 1 ? 'item needs' : 'items need'} your attention.` : 'Nothing needs your attention right now.'}</p>
         </div>
-        <div className="flex gap-2">
-          <Range label="Period" value={period} options={PERIODS} onChange={(p) => setPeriod(p as Period)} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Chips label="Period" value={period} options={PERIODS} onChange={(p) => setPeriod(p as Period)} />
           {pro ? <button className={btn.primary} onClick={() => setEntry(true)}>New entry</button> : null}
+          <PageIcons className="hidden lg:flex" />
         </div>
       </header>
 
       <Composer placeholder="Tell the agent what happened, or ask about your books" />
+      <div className="flex flex-wrap gap-1.5 -mt-1.5" aria-label="Suggestions">
+        <AskChip prompt="How is my business doing this month?">How am I doing this month?</AskChip>
+        <AskChip prompt="What are my biggest costs this year, and where could I save?">Where can I save?</AskChip>
+        <AskChip prompt="Do my books look right? Check for anything that needs fixing.">Check my books</AskChip>
+      </div>
 
       <section aria-label="Key figures" className="sheet grid grid-cols-2 lg:grid-cols-4 overflow-hidden divide-border [&>*]:border-border max-lg:[&>*:nth-child(odd)]:border-r max-lg:[&>*:nth-child(-n+2)]:border-b lg:[&>*:not(:last-child)]:border-r">
         <Stat label={pro ? 'Net income' : 'Profit'} value={revenue - expenses} loading={dash.isPending} to="/reports/income-statement" search={{ period }} />
@@ -67,7 +75,7 @@ export function Home() {
             </div>
           </section>
           <section className="sheet overflow-y-auto lg:max-h-[266px]" aria-label="Needs your attention">
-            <SectionHead title="Needs your attention" />
+            <SectionHead title="Needs your attention" right={<Count n={needCount} tone="warn" label="items need attention" />} />
             {proposalList.map((p) => <div key={p.id} className="px-3.5 py-2.5 border-t border-border"><ProposalCard proposal={p} /></div>)}
             {pending > 0 ? <Row icon={<ClipboardCheck className="size-4" />} title={`${pending} ${pending === 1 ? 'voucher needs' : 'vouchers need'} approval`} body="Stock can't move until these are decided." action={<Link to="/approvals" className={btn.plain}>Review</Link>} /> : null}
             {lowItems.slice(0, 3).map((i) => <Row key={i.id} icon={<PackageOpen className="size-4" />} title={`${i.name} is running low`} body={`${figure(num(i.quantity_available), 0)} ${i.unit_of_measure} on hand. Reorder point is ${figure(num(i.reorder_point), 0)}.`} action={<Link to="/inventory" className={btn.plain}>Open</Link>} />)}

@@ -3,8 +3,9 @@ import { useQuery, queryOptions } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { CreateOrganization } from '@/components/auth'
-import { Choice, FormBody, Modal, Pill, Stat, Stats, Text, useSave } from '@/components/form'
-import { Cell, Empty, Head, Loaded, Paged, Screen, Table, Toolbar, btn } from '@/components/page'
+import { Choice, FormBody, Modal, Stat, Stats, Text, useSave } from '@/components/form'
+import { Cell, Empty, Head, Loaded, Paged, Screen, SettingsTabs, Table, Toolbar, btn } from '@/components/page'
+import { Badge, Chip, Chips } from '@/components/chips'
 import { call, rest } from '@/lib/api'
 import { shortDate, useApp } from '@/lib/boot'
 import { useTheme } from '@/lib/theme'
@@ -23,19 +24,25 @@ export function Team() {
   const isOwner = access === 'owner'
   const list = useQuery(queryOptions<Member[]>({ queryKey: ['members', org.id], queryFn: () => rest<{ members: Member[] }>(`/api/organizations/${org.id}/members`).then((r) => r.members) }))
   const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
   const [adding, setAdding] = useState(false)
   const [newEmail, setNewEmail] = useState('')
   const [role, setRole] = useState('member')
   const add = useSave(() => rest(`/api/organizations/${org.id}/members`, { body: { email: newEmail.trim(), role } }), { success: 'Team member added', refresh: ['members'], onDone: () => { setAdding(false); setNewEmail(''); setRole('member') } })
   const change = useSave((v: { memberId: string; role: string }) => rest(`/api/organizations/${org.id}/members`, { method: 'PATCH', body: v }), { success: 'Role updated', refresh: ['members'] })
-  const rows = (list.data ?? []).filter((m) => !search.trim() || `${m.email} ${m.full_name} ${ROLE_LABEL[m.role]}`.toLowerCase().includes(search.trim().toLowerCase()))
+  const everyone = list.data ?? []
+  const roles = [...new Set(everyone.map((m) => m.role))]
+  const rows = everyone.filter((m) => roleFilter === 'all' || m.role === roleFilter).filter((m) => !search.trim() || `${m.email} ${m.full_name} ${ROLE_LABEL[m.role]}`.toLowerCase().includes(search.trim().toLowerCase()))
   return (
     <Screen
       title="Team Management"
       sub={`People who can access ${org.name}.`}
       actions={isOwner ? <button className={btn.primary} onClick={() => setAdding(true)}><Plus className="size-3.5 mr-1.5" />Add team member</button> : undefined}
     >
-      <Toolbar><Input aria-label="Search team" placeholder="Search by name, email or role" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" /></Toolbar>
+      <Toolbar>
+        <Input aria-label="Search team" placeholder="Search by name, email or role" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
+        <Chips label="Role" value={roleFilter} onChange={setRoleFilter} options={[{ id: 'all', label: 'Everyone', count: everyone.length }, ...roles.map((r) => ({ id: r, label: ROLE_LABEL[r] ?? r, count: everyone.filter((m) => m.role === r).length }))]} />
+      </Toolbar>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No team members" body="Add people to work with you." /> : null)}>
         {() => (
           <Paged rows={rows}>
@@ -45,11 +52,11 @@ export function Team() {
             <tbody>
               {page.map((m) => (
                 <tr key={m.id}>
-                  <Cell>{m.full_name || m.email}{m.email === email ? <span className="ml-2"><Pill>You</Pill></span> : null}</Cell>
+                  <Cell>{m.full_name || m.email}{m.email === email ? <span className="ml-2"><Badge>You</Badge></span> : null}</Cell>
                   <Cell className="text-muted-foreground">{m.email}</Cell>
                   <Cell>{isOwner && m.role !== 'organization_owner'
                     ? <select aria-label={`Role for ${m.email}`} value={m.role} disabled={change.isPending} onChange={(e) => change.mutate({ memberId: m.id, role: e.target.value })} className="h-7 rounded-[6px] border border-input bg-transparent px-1.5 text-[13px]">{ASSIGNABLE.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>
-                    : ROLE_LABEL[m.role] ?? m.role}</Cell>
+                    : <Badge tone={m.role === 'organization_owner' ? 'solid' : 'neutral'}>{ROLE_LABEL[m.role] ?? m.role}</Badge>}</Cell>
                   <Cell className="text-muted-foreground whitespace-nowrap">{m.joined_at ? shortDate(m.joined_at) : ''}</Cell>
                 </tr>
               ))}
@@ -127,7 +134,7 @@ export function OrganizationSettings() {
 }
 
 export function Settings() {
-  const { userId, profile, email, pro, setPro, orgs } = useApp()
+  const { userId, profile, email, pro, setPro, orgs, org, setOrg } = useApp()
   const { dark, toggle } = useTheme()
   const [name, setName] = useState(profile?.full_name ?? '')
   const [phone, setPhone] = useState(profile?.phone ?? '')
@@ -135,7 +142,7 @@ export function Settings() {
   const save = useSave(() => call('DataService', 'updateUserProfile', [userId, { full_name: name.trim() || null, phone: phone.trim() || null }]), { success: 'Profile saved', refresh: ['bootstrap'] })
   const segment = (active: boolean) => cn('h-7 px-3 rounded-[5px] text-[13px] cursor-pointer', active ? 'bg-card font-medium shadow-[0_0_0_1px_var(--border)]' : 'text-muted-foreground')
   return (
-    <Screen title="Settings" sub={email}>
+    <Screen title="Settings" sub={email} tabs={<SettingsTabs />}>
       <div className="grid gap-3.5 lg:grid-cols-2 items-start">
       <section className="sheet px-3.5 py-3">
         <h2 className="font-semibold text-[13.5px] mb-2.5">Profile</h2>
@@ -149,19 +156,22 @@ export function Settings() {
       <section className="sheet px-3.5 py-3 flex flex-col gap-3">
         <h2 className="font-semibold text-[13.5px]">Preferences</h2>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><p className="font-medium text-[13.5px]">Appearance</p><p className="text-[12.5px] text-muted-foreground">Light or dark theme.</p></div>
+          <div className="flex-1 basis-[220px] min-w-0"><p className="font-medium text-[13.5px]">Appearance</p><p className="text-[12.5px] text-muted-foreground">Light or dark theme.</p></div>
           <div className="flex p-0.5 rounded-[7px] border border-border bg-muted" role="group" aria-label="Appearance"><button aria-pressed={!dark} onClick={() => { if (dark) toggle() }} className={segment(!dark)}>Light</button><button aria-pressed={dark} onClick={() => { if (!dark) toggle() }} className={segment(dark)}>Dark</button></div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><p className="font-medium text-[13.5px]">Level of detail</p><p className="text-[12.5px] text-muted-foreground">Simple uses everyday words. Accountant shows codes, debits and credits.</p></div>
+          <div className="flex-1 basis-[220px] min-w-0"><p className="font-medium text-[13.5px]">Level of detail</p><p className="text-[12.5px] text-muted-foreground">Simple uses everyday words. Accountant shows codes, debits and credits.</p></div>
           <div className="flex p-0.5 rounded-[7px] border border-border bg-muted" role="group" aria-label="Level of detail"><button aria-pressed={!pro} onClick={() => setPro(false)} className={segment(!pro)}>Simple</button><button aria-pressed={pro} onClick={() => setPro(true)} className={segment(pro)}>Accountant</button></div>
         </div>
       </section>
       </div>
       <section className="sheet px-3.5 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><h2 className="font-semibold text-[13.5px]">Organizations</h2><p className="text-[12.5px] text-muted-foreground">You belong to {orgs.length}. Switch between them from the top of the sidebar.</p></div>
+          <div><h2 className="font-semibold text-[13.5px]">Organizations</h2><p className="text-[12.5px] text-muted-foreground">Choose the one to work in.</p></div>
           <button className={btn.plain} onClick={() => setAddingOrg(true)}>New organization</button>
+        </div>
+        <div role="group" aria-label="Organizations" className="flex flex-wrap gap-1.5 mt-2.5">
+          {orgs.map((o) => <Chip key={o.id} active={o.id === org.id} onClick={() => setOrg(o.id)}>{o.name}<span className="opacity-70 text-[11.5px]">{ROLE_LABEL[o.role ?? ''] ?? ''}</span></Chip>)}
         </div>
       </section>
       <Modal open={addingOrg} onClose={() => setAddingOrg(false)} title="New organization"><CreateOrganization /></Modal>
@@ -197,9 +207,7 @@ export function SuperAdmin() {
               <Stat label="Active memberships" value={o.stats.activeMemberships} />
             </Stats>
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex p-0.5 rounded-[7px] border border-border bg-muted text-[13px]" role="group" aria-label="Show">
-                {(['users', 'organizations', 'memberships'] as const).map((t) => <button key={t} aria-pressed={tab === t} onClick={() => setTab(t)} className={cn('h-7 px-3 rounded-[5px] capitalize cursor-pointer', tab === t ? 'bg-card font-medium shadow-[0_0_0_1px_var(--border)]' : 'text-muted-foreground')}>{t}</button>)}
-              </div>
+              <Chips label="Show" value={tab} onChange={(id) => setTab(id as typeof tab)} options={[{ id: 'users', label: 'Users', count: o.users.length }, { id: 'organizations', label: 'Organizations', count: o.organizations.length }, { id: 'memberships', label: 'Memberships', count: o.memberships.length }]} />
               <Input aria-label="Search" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
             </div>
             {tab === 'users' ? (
@@ -207,7 +215,7 @@ export function SuperAdmin() {
               <Table footer={pager}>
                 <thead><tr><Head>Name</Head><Head>Email</Head><Head>Super admin</Head></tr></thead>
                 <tbody>{page.map((u) => (
-                  <tr key={u.id}><Cell>{u.full_name || u.email}{u.email === email ? <span className="ml-2"><Pill>You</Pill></span> : null}</Cell><Cell className="text-muted-foreground">{u.email}</Cell>
+                  <tr key={u.id}><Cell>{u.full_name || u.email}{u.email === email ? <span className="ml-2"><Badge>You</Badge></span> : null}</Cell><Cell className="text-muted-foreground">{u.email}</Cell>
                   <Cell><label className="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" aria-label={`Super admin: ${u.email}`} checked={u.is_super_admin} disabled={setAdmin.isPending || u.email === email} onChange={(e) => setAdmin.mutate({ userId: u.id, isSuperAdmin: e.target.checked })} />{u.is_super_admin ? 'Yes' : 'No'}</label></Cell></tr>
                 ))}</tbody>
               </Table>
@@ -225,7 +233,7 @@ export function SuperAdmin() {
                 <thead><tr><Head>Person</Head><Head>Organization</Head><Head>Role</Head></tr></thead>
                 <tbody>{page.map((m) => (
                   <tr key={m.id}><Cell>{m.email}</Cell><Cell className="text-muted-foreground">{m.organization_name}</Cell>
-                  <Cell>{m.role === 'organization_owner' ? 'Owner' : <select aria-label={`Role for ${m.email} in ${m.organization_name}`} value={m.role} disabled={setRole.isPending} onChange={(e) => setRole.mutate({ membershipId: m.id, role: e.target.value })} className="h-7 rounded-[6px] border border-input bg-transparent px-1.5 text-[13px]">{ASSIGNABLE.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>}</Cell></tr>
+                  <Cell>{m.role === 'organization_owner' ? <Badge tone="solid">Owner</Badge> : <select aria-label={`Role for ${m.email} in ${m.organization_name}`} value={m.role} disabled={setRole.isPending} onChange={(e) => setRole.mutate({ membershipId: m.id, role: e.target.value })} className="h-7 rounded-[6px] border border-input bg-transparent px-1.5 text-[13px]">{ASSIGNABLE.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>}</Cell></tr>
                 ))}</tbody>
               </Table>
               )}</Paged>

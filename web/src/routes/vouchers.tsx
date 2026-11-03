@@ -3,9 +3,10 @@ import { useQuery } from '@tanstack/react-query'
 import { Paperclip, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
-import { AskLink } from '@/components/agent-panel'
-import { Choice, ConfirmDelete, FormBody, Modal, Pill, Stat, Stats, Text, useSave } from '@/components/form'
-import { Cell, Empty, Head, Loaded, Paged, Range, Screen, Table, Tabs, Toolbar, btn } from '@/components/page'
+import { AskChip } from '@/components/agent-panel'
+import { Choice, ConfirmDelete, FormBody, Modal, Stat, Stats, Text, useSave } from '@/components/form'
+import { Cell, Empty, Head, Loaded, Paged, Screen, Table, Tabs, Toolbar, btn } from '@/components/page'
+import { Badge, Chips } from '@/components/chips'
 import { call, uploadAttachment } from '@/lib/api'
 import { figure, shortDate, useApp } from '@/lib/boot'
 import { accounts, num, q, today, type Id, type Money } from '@/lib/data'
@@ -44,9 +45,9 @@ function VoucherTable({ rows, onOpen }: { rows: Voucher[]; onOpen: (v: Voucher) 
         {page.map((v) => (
           <tr key={v.id} tabIndex={0} className="cursor-pointer hover:bg-accent/50 focus-visible:bg-accent/50 outline-none" onClick={() => onOpen(v)} onKeyDown={(e) => { if (e.key === 'Enter') onOpen(v) }}>
             <Cell className="fig text-[12.5px] whitespace-nowrap">{v.voucher_number}</Cell>
-            <Cell className="text-muted-foreground">{v.voucher_type === 'purchase' ? 'Purchase' : 'Issuance'}</Cell>
+            <Cell><Badge>{v.voucher_type === 'purchase' ? 'Purchase' : 'Issuance'}</Badge></Cell>
             <Cell className="max-w-0 w-full truncate">{v.vendor_name || v.purpose || v.description || ''}</Cell>
-            <Cell><Pill tone={STATUS[v.status]?.tone}>{STATUS[v.status]?.label ?? v.status}</Pill></Cell>
+            <Cell><Badge dot tone={STATUS[v.status]?.tone}>{STATUS[v.status]?.label ?? v.status}</Badge></Cell>
             <Cell className="text-muted-foreground whitespace-nowrap">{shortDate(v.requested_date)}</Cell>
             <Cell right>{figure(num(v.total_estimated_cost), org.decimals)}</Cell>
           </tr>
@@ -81,8 +82,8 @@ export function Vouchers() {
     >
       <Toolbar>
         <Input aria-label="Search vouchers" placeholder="Search vouchers, vendors or purposes" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
-        <Range label="Type" value={type} onChange={setType} options={[{ id: 'all', label: 'All types' }, { id: 'purchase', label: 'Purchases' }, { id: 'issuance', label: 'Issuances' }]} />
-        <Range label="Status" value={status} onChange={setStatus} options={[{ id: 'all', label: 'All statuses' }, ...Object.entries(STATUS).map(([id, s]) => ({ id, label: s.label }))]} />
+        <Chips label="Type" value={type} onChange={setType} options={[{ id: 'all', label: 'All' }, { id: 'purchase', label: 'Purchases' }, { id: 'issuance', label: 'Issuances' }]} />
+        <Chips label="Status" value={status} onChange={setStatus} options={[{ id: 'all', label: 'Any status' }, ...Object.entries(STATUS).map(([id, s]) => ({ id, label: s.label }))]} />
       </Toolbar>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No vouchers found" body={canWrite ? 'Create one when you need to buy stock or take it out.' : 'Nothing matches right now.'} /> : null)}>
         {(rows) => <VoucherTable rows={rows} onOpen={(v) => setOpened(v.id)} />}
@@ -110,8 +111,8 @@ export function Approvals() {
       </Stats>
       <Toolbar>
         <Input aria-label="Search vouchers" placeholder="Search vouchers" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
-        <Range label="Type" value={type} onChange={setType} options={[{ id: 'all', label: 'All types' }, { id: 'purchase', label: 'Purchases' }, { id: 'issuance', label: 'Issuances' }]} />
-        <Range label="Status" value={status} onChange={setStatus} options={[{ id: 'pending_finance', label: 'Needs approval' }, { id: 'approved', label: 'Approved' }, { id: 'rejected', label: 'Rejected' }, { id: 'expired', label: 'Expired' }, { id: 'all', label: 'All statuses' }]} />
+        <Chips label="Type" value={type} onChange={setType} options={[{ id: 'all', label: 'All' }, { id: 'purchase', label: 'Purchases' }, { id: 'issuance', label: 'Issuances' }]} />
+        <Chips label="Status" value={status} onChange={setStatus} options={[{ id: 'pending_finance', label: 'Needs approval', count: num(stats.data?.pending_approval) }, { id: 'approved', label: 'Approved', count: num(stats.data?.approved) }, { id: 'rejected', label: 'Rejected', count: num(stats.data?.rejected) }, { id: 'expired', label: 'Expired', count: num(stats.data?.expired) }, { id: 'all', label: 'Any status' }]} />
       </Toolbar>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title={status === 'pending_finance' ? "You're all caught up" : 'No vouchers found'} body={status === 'pending_finance' ? 'Nothing is waiting for a decision.' : 'Nothing matches right now.'} /> : null)}>
         {(rows) => <VoucherTable rows={rows} onOpen={(v) => setOpened(v.id)} />}
@@ -155,7 +156,7 @@ function VoucherDetail({ id, onClose }: { id: Id | null; onClose: () => void }) 
       {!v ? <p className="text-muted-foreground">{detail.isPending ? 'Loading…' : "This voucher didn't load."}</p> : (
         <div className="flex flex-col gap-4 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <Pill tone={STATUS[v.status]?.tone}>{STATUS[v.status]?.label ?? v.status}</Pill>
+            <Badge dot tone={STATUS[v.status]?.tone}>{STATUS[v.status]?.label ?? v.status}</Badge>
             <span className="text-[13px] text-muted-foreground">{v.voucher_type === 'purchase' ? 'Purchase' : 'Issuance'} · {shortDate(v.requested_date)}{v.approval_deadline && v.status === 'pending_finance' ? ` · decide by ${shortDate(v.approval_deadline)}` : ''}</span>
           </div>
           <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-[13.5px]">
@@ -193,7 +194,7 @@ function VoucherDetail({ id, onClose }: { id: Id | null; onClose: () => void }) 
           {v.status === 'posted' ? <p className="text-[12.5px] text-muted-foreground">Completing closes this voucher. It does not update stock or post an entry to your books yet.</p> : null}
 
           <div className="flex flex-wrap gap-2 justify-end border-t border-border pt-3">
-            <AskLink className="text-[13px] mr-auto self-center" prompt={`Explain voucher ${v.voucher_number} and what should happen next.`}>Explain this voucher</AskLink>
+            <span className="mr-auto self-center"><AskChip prompt={`Explain voucher ${v.voucher_number} and what should happen next.`}>Explain this voucher</AskChip></span>
             {canAct && (v.status === 'draft' || v.status === 'rejected') ? <ConfirmDelete label="Delete" pending={busy} onConfirm={() => remove.mutate()} /> : null}
             {canAct && v.status === 'draft' ? <button className={btn.primary} disabled={busy} onClick={() => submit.mutate()}>Send for approval</button> : null}
             {canDecide && v.status === 'pending_finance' ? <><button className={btn.plain} disabled={busy || !reason.trim()} onClick={() => reject.mutate()}>Reject</button><button className={btn.primary} disabled={busy} onClick={() => approve.mutate()}>Approve</button></> : null}

@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { AskLink } from '@/components/agent-panel'
-import { Choice, ConfirmDelete, FormBody, Modal, Pill, Stat, Stats, Text, useSave } from '@/components/form'
+import { AskChip } from '@/components/agent-panel'
+import { Choice, ConfirmDelete, FormBody, Modal, Stat, Stats, Text, useSave } from '@/components/form'
 import { Cell, Empty, Head, Loaded, Paged, Screen, Table, Tabs, Toolbar, btn } from '@/components/page'
+import { Badge, Chip, Chips } from '@/components/chips'
 import { call } from '@/lib/api'
 import { figure, shortDate, useApp } from '@/lib/boot'
 import { accounts, num, q, today, type Id, type Money, type StockItem } from '@/lib/data'
@@ -68,8 +69,8 @@ export function Inventory() {
       </Stats>
       <Toolbar>
         <Input aria-label="Search items" placeholder="Search items" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
-        <label className="flex items-center gap-2 text-[13px] cursor-pointer ml-1"><input type="checkbox" checked={lowOnly} onChange={(e) => setLowOnly(e.target.checked)} />Only running low</label>
-        <AskLink className="text-[13px] ml-auto" prompt="Look at my stock. What is running low, and what should I reorder first?">What should I reorder?</AskLink>
+        <Chip active={lowOnly} count={low} onClick={() => setLowOnly((v) => !v)}>Running low</Chip>
+        <span className="ml-auto"><AskChip prompt="Look at my stock. What is running low, and what should I reorder first?">What should I reorder?</AskChip></span>
       </Toolbar>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No items yet" body={cats.data?.length ? 'Add your first stock item.' : 'Create a category first, then add items to it.'} /> : null)}>
         {() => rows.length === 0 ? <Empty title="No matches" body="Try a different word, or turn off the filter." /> : (
@@ -81,8 +82,8 @@ export function Inventory() {
               {page.map((i) => (
                 <tr key={i.id} className={cn('hover:bg-accent/50', canWrite && 'cursor-pointer')} onClick={canWrite ? () => setDraft({ id: i.id, category_id: String(i.category_id), sku: i.sku, name: i.name, description: i.description ?? '', unit_of_measure: i.unit_of_measure, reorder_point: String(num(i.reorder_point)), reorder_quantity: String(num(i.reorder_quantity)) }) : undefined}>
                   {pro ? <Cell className="fig text-[12.5px] text-muted-foreground">{i.sku}</Cell> : null}
-                  <Cell><span className="flex items-center gap-2">{i.name}{isLow(i) ? <Pill tone="warn">Low</Pill> : null}</span></Cell>
-                  {pro ? <Cell className="text-muted-foreground">{i.category?.name ?? catName.get(String(i.category_id)) ?? ''}</Cell> : null}
+                  <Cell><span className="flex items-center gap-2">{i.name}{num(i.quantity_available) <= 0 ? <Badge tone="bad" dot>Out of stock</Badge> : isLow(i) ? <Badge tone="warn" dot>Low</Badge> : null}</span></Cell>
+                  {pro ? <Cell><Badge>{i.category?.name ?? catName.get(String(i.category_id)) ?? 'None'}</Badge></Cell> : null}
                   <Cell right>{figure(num(i.quantity_available), 0)} {i.unit_of_measure}</Cell>
                   {pro ? <Cell right>{figure(num(i.average_unit_cost), org.decimals)}</Cell> : null}
                   <Cell right>{figure(num(i.total_value), org.decimals)}</Cell>
@@ -236,10 +237,15 @@ export function Movements() {
   const { org, pro } = useApp()
   const list = useQuery(movements(org.id))
   const [search, setSearch] = useState('')
-  const rows = (list.data ?? []).filter((m) => !search.trim() || `${m.item?.name} ${m.reference} ${m.description}`.toLowerCase().includes(search.trim().toLowerCase()))
+  const [kind, setKind] = useState('all')
+  const all = list.data ?? []
+  const rows = all.filter((m) => (kind === 'all' || m.transaction_type === kind) && (!search.trim() || `${m.item?.name} ${m.reference} ${m.description}`.toLowerCase().includes(search.trim().toLowerCase())))
   return (
     <Screen title="Inventory" sub="Every time stock came in, went out or was corrected." tabs={<Tabs items={INVENTORY_TABS} />}>
-      <Toolbar><Input aria-label="Search stock movements" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" /></Toolbar>
+      <Toolbar>
+        <Input aria-label="Search stock movements" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
+        <Chips label="Type" value={kind} onChange={setKind} options={[{ id: 'all', label: 'All', count: all.length }, ...(['in', 'out', 'adjustment'] as const).map((k) => ({ id: k, label: MOVE_LABEL[k], count: all.filter((m) => m.transaction_type === k).length }))]} />
+      </Toolbar>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No stock movements yet" body="They appear here as stock comes in and goes out." /> : null)}>
         {() => (
           <Paged rows={rows}>
@@ -251,7 +257,7 @@ export function Movements() {
                 <tr key={m.id}>
                   <Cell className="text-muted-foreground whitespace-nowrap">{shortDate(m.transaction_date)}</Cell>
                   <Cell className="whitespace-nowrap">{m.item?.name ?? `Item ${m.item_id}`}</Cell>
-                  <Cell><Pill tone={m.transaction_type === 'in' ? 'good' : 'neutral'}>{MOVE_LABEL[m.transaction_type]}</Pill></Cell>
+                  <Cell><Badge dot tone={m.transaction_type === 'in' ? 'good' : m.transaction_type === 'out' ? 'bad' : 'warn'}>{MOVE_LABEL[m.transaction_type]}</Badge></Cell>
                   <Cell className="max-w-0 w-full truncate text-muted-foreground">{m.description ?? ''}</Cell>
                   {pro ? <Cell className="text-muted-foreground">{m.reference ?? ''}</Cell> : null}
                   <Cell right>{figure(num(m.quantity), 0)}</Cell>

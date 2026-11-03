@@ -4,7 +4,8 @@ import { Copy, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import { Empty, Loaded, Screen, btn } from '@/components/page'
+import { Empty, Loaded, Screen, SettingsTabs, btn } from '@/components/page'
+import { Badge } from '@/components/chips'
 import { createConnection, revokeConnection } from '@/lib/api'
 import { shortDate, useApp } from '@/lib/boot'
 import { connections, queryClient } from '@/lib/data'
@@ -47,7 +48,7 @@ export function Connections() {
   }
 
   return (
-    <Screen title="Connections" sub="Use your own AI app with your books. It gets the same tools as the built-in agent, through MCP.">
+    <Screen title="Settings" tabs={<SettingsTabs />} sub="Use your own AI app with your books. It gets the same tools as the built-in agent, through MCP.">
       <div className="grid gap-3.5 lg:grid-cols-2 items-start">
       <form onSubmit={submit} className="sheet px-3.5 py-3 flex flex-col gap-2.5">
         <h2 className="font-semibold">Connect an AI app</h2>
@@ -76,8 +77,8 @@ export function Connections() {
               {rows.map((c) => (
                 <div key={c.id} className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2">
                   <div className="min-w-0">
-                    <p className="font-medium truncate">{c.name}</p>
-                    <p className="text-[12.5px] text-muted-foreground">{c.can_record ? 'Can record entries' : 'Can propose entries'} · ending <span className="fig">{c.token_hint}</span> · {c.last_used_at ? `last used ${shortDate(c.last_used_at)}` : 'never used'}</p>
+                    <p className="flex items-center gap-2 font-medium min-w-0"><span className="truncate">{c.name}</span><Badge tone={c.can_record ? 'warn' : 'neutral'}>{c.can_record ? 'Can record' : 'Can propose'}</Badge></p>
+                    <p className="text-[12.5px] text-muted-foreground">Ending <span className="fig">{c.token_hint}</span> · {c.last_used_at ? `last used ${shortDate(c.last_used_at)}` : 'never used'}</p>
                   </div>
                   <button aria-label={`Remove ${c.name}`} disabled={revoke.isPending} onClick={() => revoke.mutate(c.id)} className={btn.plain}><Trash2 className="size-3.5 mr-1.5" />Remove</button>
                 </div>

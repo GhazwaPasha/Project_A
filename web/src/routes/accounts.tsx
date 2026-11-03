@@ -3,9 +3,10 @@ import { useQuery } from '@tanstack/react-query'
 import { ChevronRight, Download, Plus, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
-import { AskLink } from '@/components/agent-panel'
-import { Choice, ConfirmDelete, FormBody, Modal, Pill, Text, Toggle, download, parseCsv, useSave } from '@/components/form'
+import { AskChip } from '@/components/agent-panel'
+import { Choice, ConfirmDelete, FormBody, Modal, Text, Toggle, download, parseCsv, useSave } from '@/components/form'
 import { Empty, Loaded, Paged, Screen, Toolbar, btn } from '@/components/page'
+import { Badge, Chips } from '@/components/chips'
 import { call } from '@/lib/api'
 import { figure, useApp } from '@/lib/boot'
 import { balancesFor, num, q, type Account, type AccountType, type Id } from '@/lib/data'
@@ -88,7 +89,8 @@ export function Accounts() {
           <button onClick={canEdit ? open : undefined} className={cn('flex-1 min-w-0 flex items-center gap-2.5 py-1.5 text-left text-[13.5px]', canEdit && 'cursor-pointer')}>
             {pro ? <span className="fig text-[12.5px] text-muted-foreground shrink-0">{a.code}</span> : null}
             <span className={cn('truncate', header && 'font-medium')}>{a.name}</span>
-            {pro && header ? <Pill>Header</Pill> : null}
+            {pro && header ? <Badge>Header</Badge> : null}
+            {pro && a.report_category ? <span className="max-md:hidden"><Badge>{CATEGORIES[a.account_type ?? 'expense'].find((c) => c.value === a.report_category)?.label ?? a.report_category}</Badge></span> : null}
             {pro && a.group ? <span className="text-[12px] text-muted-foreground truncate max-md:hidden">{a.group}</span> : null}
           </button>
           <span className={cn('fig text-[13px] shrink-0', (balanceOf.get(String(a.id)) ?? 0) < 0 && 'text-[var(--note)]')}>{balanceOf.has(String(a.id)) && !header ? figure(balanceOf.get(String(a.id))!, org.decimals) : ''}</span>
@@ -109,10 +111,8 @@ export function Accounts() {
     >
       <Toolbar>
         <Input aria-label="Search accounts" placeholder="Search accounts" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 max-w-sm" />
-        <div role="group" aria-label="Account type" className="flex p-0.5 rounded-[7px] border border-border bg-muted text-[13px] overflow-x-auto max-w-full">
-          {TYPES.map((t) => <button key={t.id} aria-pressed={!term && type === t.id} onClick={() => { setType(t.id); setSearch('') }} className={cn('h-7 px-2.5 rounded-[5px] whitespace-nowrap cursor-pointer', !term && type === t.id ? 'bg-card font-medium shadow-[0_0_0_1px_var(--border)]' : 'text-muted-foreground')}>{pro ? t.pro : t.simple} <span className="fig text-[12px] text-muted-foreground">{rows.filter((a) => a.account_type === t.id).length}</span></button>)}
-        </div>
-        {!pro ? <AskLink className="text-[13px] ml-auto" prompt="Look at my accounts and tell me if anything is missing or set up wrong for my business.">Ask the agent to check these</AskLink> : null}
+        <Chips label="Account type" value={term ? '' : type} onChange={(id) => { setType(id as AccountType); setSearch('') }} options={TYPES.map((t) => ({ id: t.id, label: pro ? t.pro : t.simple, count: rows.filter((a) => a.account_type === t.id).length }))} />
+        {!pro ? <span className="ml-auto"><AskChip prompt="Look at my accounts and tell me if anything is missing or set up wrong for my business.">Check these for me</AskChip></span> : null}
       </Toolbar>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No accounts yet" body="Add your first account, or import a chart of accounts." /> : null)}>
         {() => (

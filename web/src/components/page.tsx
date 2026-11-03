@@ -4,18 +4,23 @@ import type { UseQueryResult } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Printer } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
+import { PageIcons } from '@/components/page-icons'
 import { ApiError } from '@/lib/api'
+import { useApp } from '@/lib/boot'
 import { cn } from '@/lib/utils'
 
 export function Screen({ title, sub, actions, tabs, children }: { title: string; sub?: ReactNode; actions?: ReactNode; tabs?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-3.5">
-      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 lg:pr-[76px] print:pr-0">
+      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="min-w-0">
           <h1 className="text-[20px] leading-tight font-semibold tracking-[-0.018em] text-balance">{title}</h1>
           {sub ? <p className="text-[13px] text-muted-foreground">{sub}</p> : null}
         </div>
-        {actions ? <div className="flex flex-wrap gap-2 print:hidden">{actions}</div> : null}
+        <div className="flex flex-wrap items-center gap-2 print:hidden">
+          {actions}
+          <PageIcons className="hidden lg:flex" />
+        </div>
       </header>
       {tabs}
       {children}
@@ -31,6 +36,12 @@ export function Tabs({ items }: { items: { to: string; label: string }[] }) {
       ))}
     </nav>
   )
+}
+
+/** Connections use the agent's tools, so only roles with the agent see that tab. */
+export function SettingsTabs() {
+  const { canSeeBooks } = useApp()
+  return canSeeBooks ? <Tabs items={[{ to: '/settings', label: 'General' }, { to: '/settings/connections', label: 'Connections' }]} /> : null
 }
 
 /** One way to show loading, errors and empty lists on every screen. */
@@ -120,14 +131,6 @@ export function PrintButton() {
     if (dark) root.classList.add('dark')
   }
   return <button className={btn.plain} onClick={print}><Printer className="size-3.5 mr-1.5" />Print or save PDF</button>
-}
-
-export function Range({ value, options, onChange, label }: { value: string; options: { id: string; label: string }[]; onChange: (id: string) => void; label: string }) {
-  return (
-    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className={cn(btn.plain, 'pr-2')}>
-      {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-    </select>
-  )
 }
 
 export function Check({ ok, title, body, children }: { ok: boolean; title: string; body?: ReactNode; children?: ReactNode }) {

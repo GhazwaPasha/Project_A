@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AskLink } from '@/components/agent-panel'
-import { Cell, Head, Loaded, PrintButton, Range, Screen, Table, Tabs } from '@/components/page'
+import { AskChip, AskLink } from '@/components/agent-panel'
+import { Cell, Head, Loaded, PrintButton, Screen, Table, Tabs } from '@/components/page'
+import { Badge, Chips } from '@/components/chips'
 import { figure, shortDate, useApp } from '@/lib/boot'
 import { balanceSheet, incomeStatement, num, periodRange, today, type Money, type Period, type Section } from '@/lib/data'
 
@@ -26,7 +27,7 @@ export function ReportsIndex() {
       <div className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-3">
         <ReportRow to="/reports/income-statement" name={pro ? 'Income Statement' : 'Profit'} desc={pro ? 'Revenue, expenses and net income for a period.' : 'What you earned, what you spent, and what you kept.'} value={income.data ? money(num(income.data.netIncome)) : ''} label={pro ? 'Net income this month' : 'Profit this month'} />
         <ReportRow to="/reports/balance-sheet" name={pro ? 'Balance Sheet' : 'What you own and owe'} desc={pro ? 'Assets, liabilities and equity as of today.' : 'A snapshot of your business today.'} value={sheet.data ? money(num(sheet.data.totalAssets)) : ''} label={pro ? 'Total assets' : 'You own'} />
-        <ReportRow to="/trial-balance" name="Trial Balance" desc={pro ? 'Debits and credits by account, with book checks.' : 'A check that your books are right.'} value={sheet.data ? (sheet.data.isBalanced ? 'Balanced' : 'Out of balance') : ''} label="Books" />
+        <ReportRow to="/trial-balance" name="Trial Balance" desc={pro ? 'Debits and credits by account, with book checks.' : 'A check that your books are right.'} value={sheet.data ? <Badge tone={sheet.data.isBalanced ? 'good' : 'bad'} dot>{sheet.data.isBalanced ? 'Balanced' : 'Out of balance'}</Badge> : ''} label="Books" />
       </div>
       <div className="grid gap-3.5 lg:grid-cols-2 items-start">
         <Summary title={pro ? 'Income Statement, this month' : 'Profit, this month'} to="/reports/income-statement" rows={income.data ? [
@@ -45,11 +46,11 @@ export function ReportsIndex() {
           [pro ? 'Total equity' : "What's yours", sheet.data.totalEquity, true],
         ] : null} />
       </div>
-      <section className="sheet px-3.5 py-2.5 flex flex-wrap gap-x-5 gap-y-1 items-center text-[13.5px]" aria-label="Ask for a report">
-        <h2 className="font-semibold">Or ask me</h2>
-        <AskLink prompt="Compare my sales and costs this year against last year.">Compare this year with last year</AskLink>
-        <AskLink prompt="What were my top five costs this year?">Show my top five costs this year</AskLink>
-        <AskLink prompt="Which months were my most and least profitable this year, and why?">Which months were best and worst?</AskLink>
+      <section className="flex flex-wrap gap-1.5 items-center" aria-label="Ask for a report">
+        <h2 className="font-semibold text-[13.5px] mr-1">Or ask me</h2>
+        <AskChip prompt="Compare my sales and costs this year against last year.">Compare this year with last year</AskChip>
+        <AskChip prompt="What were my top five costs this year?">Show my top five costs this year</AskChip>
+        <AskChip prompt="Which months were my most and least profitable this year, and why?">Which months were best and worst?</AskChip>
       </section>
     </Screen>
   )
@@ -74,7 +75,7 @@ function Summary({ title, to, rows }: { title: string; to: '/reports/income-stat
   )
 }
 
-function ReportRow({ to, name, desc, value, label }: { to: string; name: string; desc: string; value: string; label: string }) {
+function ReportRow({ to, name, desc, value, label }: { to: string; name: string; desc: string; value: React.ReactNode; label: string }) {
   return (
     <Link to={to} {...(to === '/reports/income-statement' ? { search: { period: 'month' as const } } : {})} className="sheet flex flex-col gap-2 px-3.5 py-3 hover:bg-accent">
       <span><span className="block font-medium">{name}</span><span className="block text-[13px] text-muted-foreground">{desc}</span></span>
@@ -97,7 +98,7 @@ export function IncomeStatementPage() {
     <Screen
       title={pro ? 'Income Statement' : 'Profit'}
       sub={`${shortDate(from)} to ${shortDate(to)}, ${org.currency}`}
-      actions={<><Range label="Period" value={period} options={PERIODS} onChange={(p) => void navigate({ to: '/reports/income-statement', search: { period: p as Period } })} /><PrintButton /></>}
+      actions={<><Chips label="Period" value={period} options={PERIODS} onChange={(p) => void navigate({ to: '/reports/income-statement', search: { period: p as Period } })} /><PrintButton /></>}
       tabs={<Tabs items={tabs} />}
     >
       <Loaded query={q}>
@@ -124,7 +125,7 @@ export function IncomeStatementPage() {
               <dt className="text-muted-foreground">{pro ? 'Net margin' : 'Kept from each sale'}</dt><dd className="fig text-right">{revenue ? `${figure((net / revenue) * 100, 1)}%` : 'n/a'}</dd>
               <dt className="text-muted-foreground">{pro ? 'Operating expenses' : 'Running costs'}</dt><dd className="fig text-right">{figure(num(r.operatingExpenses.total), d)}</dd>
             </dl>
-            <AskLink className="text-[13.5px]" prompt={`Explain my profit from ${from} to ${to} in simple words. What changed and what should I do?`}>Explain this to me</AskLink>
+            <div><AskChip prompt={`Explain my profit from ${from} to ${to} in simple words. What changed and what should I do?`}>Explain this to me</AskChip></div>
           </aside>
           </div>
         )}
@@ -153,7 +154,7 @@ export function BalanceSheetPage() {
           <>
             {r.isBalanced ? null : <p className="font-medium text-[var(--note)]">This doesn't balance yet. <AskLink prompt="My balance sheet doesn't balance. Find out why and tell me how to fix it.">Find out why</AskLink></p>}
             {!pro ? (
-              <p className="flex flex-wrap items-baseline gap-x-3 font-medium print:hidden"><span>You own <span className="font-semibold">{money(num(r.totalAssets))}</span> and owe <span className="font-semibold">{money(num(r.totalLiabilities))}</span>, which leaves <span className="font-semibold">{money(num(r.totalAssets) - num(r.totalLiabilities))}</span> that is yours.</span> <AskLink className="text-[13.5px]" prompt="Explain my balance sheet in simple words. Is my business in a healthy position?">Explain this to me</AskLink></p>
+              <p className="flex flex-wrap items-baseline gap-x-3 font-medium print:hidden"><span>You own <span className="font-semibold">{money(num(r.totalAssets))}</span> and owe <span className="font-semibold">{money(num(r.totalLiabilities))}</span>, which leaves <span className="font-semibold">{money(num(r.totalAssets) - num(r.totalLiabilities))}</span> that is yours.</span> <AskChip prompt="Explain my balance sheet in simple words. Is my business in a healthy position?">Explain this to me</AskChip></p>
             ) : null}
             <div className="grid gap-3.5 lg:grid-cols-2 items-start print:block">
             <Table wrap min={300}>

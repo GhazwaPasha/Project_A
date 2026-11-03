@@ -109,17 +109,6 @@ export function Stats({ children, cols = 4 }: { children: ReactNode; cols?: 3 | 
   return <section className={cn('sheet grid grid-cols-2 overflow-hidden', cols === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3', '[&>*]:border-border [&>*:not(:last-child)]:border-r max-lg:[&>*:nth-child(2n)]:border-r-0 max-lg:[&>*:nth-child(-n+2)]:border-b')}>{children}</section>
 }
 
-export function Pill({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'good' | 'warn' | 'bad' }) {
-  return (
-    <span className={cn('inline-flex items-center h-5 px-1.5 rounded-[4px] text-[11.5px] font-medium whitespace-nowrap border', {
-      neutral: 'border-border text-muted-foreground',
-      good: 'border-[color-mix(in_srgb,var(--tick)_35%,transparent)] text-[var(--tick)]',
-      warn: 'border-[color-mix(in_srgb,var(--note)_40%,transparent)] text-[var(--note)]',
-      bad: 'border-[color-mix(in_srgb,var(--destructive)_40%,transparent)] text-destructive',
-    }[tone])}>{children}</span>
-  )
-}
-
 /** Downloads text as a file. */
 export function download(filename: string, content: string, type = 'text/csv') {
   const a = document.createElement('a')
