@@ -24,7 +24,8 @@ const gemini = { baseUrl: 'https://example.test', apiKey: 'k', model: 'm' }
 test('Google is used with its free model and server-only key', () => {
   const c = llmConfig({ GOOGLE_AI_KEY: 'g' })!
   assert.equal(c.baseUrl, 'https://generativelanguage.googleapis.com/v1beta/openai')
-  assert.equal(c.model, 'gemini-3.8-flash')
+  assert.equal(c.model, 'gemini-3.6-flash')
+  assert.deepEqual(c.fallbackModels, ['gemini-3.5-flash-lite', 'gemini-3.8-flash'])
   assert.equal(c.apiKey, 'g')
   assert.equal(llmConfig({ NEXT_PUBLIC_GOOGLE_AI_KEY: 'public' }), null, 'a key exposed to browsers is never used')
 })
@@ -72,6 +73,59 @@ test('a free-tier limit waits and retries once, then says it is busy', async () 
   assert.equal(sent.length, 2)
   fakeProvider([limited, limited])
   await assert.rejects(() => run(gemini), ProviderBusyError)
+})
+
+const answer = { chunks: [{ choices: [{ delta: { content: 'ok' } }] }] }
+const withBackups = { ...gemini, fallbackModels: ['b', 'c'] }
+
+test('an overloaded model moves on to the next, and a retired one too', async () => {
+  const sent = fakeProvider([{ status: 503 }, { status: 404 }, answer])
+  const out: string[] = []
+  await run(withBackups, out)
+  assert.deepEqual(sent.map((s) => s.body.model), ['m', 'b', 'c'])
+  assert.equal(out.join(''), 'ok')
+})
+
+test('the model that answered stays for the rest of the question', async () => {
+  const sent = fakeProvider([
+    { status: 503 },
+    { chunks: [{ choices: [{ delta: { tool_calls: [{ index: 0, id: 'c1', type: 'function', function: { name: 'get_stock', arguments: '{}' } }] } }] }] },
+    answer,
+  ])
+  await run(withBackups)
+  assert.deepEqual(sent.map((s) => s.body.model), ['m', 'b', 'b'])
+})
+
+test('when every model is busy it says so instead of failing oddly', async () => {
+  fakeProvider([{ status: 503 }, { status: 429 }, { status: 503 }])
+  await assert.rejects(() => run(withBackups), ProviderBusyError)
+})
+
+test('a model that says nothing is given up on, and the next one answers', async () => {
+  const seen: string[] = []
+  globalThis.fetch = (async (_url: string, init: RequestInit) => {
+    const model = JSON.parse(String(init.body)).model
+    seen.push(model)
+    if (model === 'm') return new Promise((_ok, fail) => init.signal?.addEventListener('abort', () => fail(new DOMException('aborted', 'AbortError'))))
+    return new Response(`data: ${JSON.stringify(answer.chunks[0])}\n\ndata: [DONE]\n\n`)
+  }) as typeof fetch
+  const out: string[] = []
+  await run({ ...withBackups, timeoutMs: 20 }, out)
+  assert.deepEqual(seen, ['m', 'b'])
+  assert.equal(out.join(''), 'ok')
+})
+
+test('a person cancelling is not treated as a busy model', async () => {
+  const seen: string[] = []
+  globalThis.fetch = (async (_url: string, init: RequestInit) => {
+    seen.push(JSON.parse(String(init.body)).model)
+    return new Promise((_ok, fail) => init.signal?.addEventListener('abort', () => fail(new DOMException('aborted', 'AbortError'))))
+  }) as typeof fetch
+  const stop = new AbortController()
+  const running = runAgent({ config: { ...withBackups, timeoutMs: 5000 }, system: 's', messages: [{ role: 'user', content: 'hi' }], tools: [tool as never], ctx: { userId: 'u', org: 'o', source: 'app', sourceName: null, canRecord: false }, onText: () => {}, signal: stop.signal })
+  setTimeout(() => stop.abort(), 10)
+  await assert.rejects(running, (e: Error) => !(e instanceof ProviderBusyError))
+  assert.deepEqual(seen, ['m'])
 })
 
 test('other provider errors fail straight away', async () => {

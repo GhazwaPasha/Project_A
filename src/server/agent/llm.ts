@@ -1,10 +1,10 @@
 import { runTool, toolParameters, type AgentTool, type ToolContext } from '@/server/agent/tools'
 
 /** Providers that speak the widely used OpenAI-compatible chat API. Any other can use AGENT_BASE_URL. */
-const PRESETS: Record<string, { baseUrl: string; model?: string; keyEnv?: string; extra?: Record<string, unknown> }> = {
+const PRESETS: Record<string, { baseUrl: string; model?: string; fallbackModels?: string[]; keyEnv?: string; extra?: Record<string, unknown> }> = {
   openai: { baseUrl: 'https://api.openai.com/v1' },
   anthropic: { baseUrl: 'https://api.anthropic.com/v1' },
-  google: { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-3.8-flash', keyEnv: 'GOOGLE_AI_KEY' },
+  google: { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-3.6-flash', fallbackModels: ['gemini-3.5-flash-lite', 'gemini-3.8-flash'], keyEnv: 'GOOGLE_AI_KEY' },
   // Accounting data shouldn't reach a provider that collects it, so AnyRouter is told to route around those.
   anyrouter: { baseUrl: 'https://anyrouter.dev/api/v1', model: 'anyrouter/free', keyEnv: 'ANYROUTER_API_KEY', extra: { provider: { data_collection: 'deny' } } },
   groq: { baseUrl: 'https://api.groq.com/openai/v1' },
@@ -12,9 +12,9 @@ const PRESETS: Record<string, { baseUrl: string; model?: string; keyEnv?: string
   ollama: { baseUrl: 'http://localhost:11434/v1' },
 }
 
-export type LlmConfig = { baseUrl: string; apiKey: string; model: string; extra?: Record<string, unknown> }
+export type LlmConfig = { baseUrl: string; apiKey: string; model: string; fallbackModels?: string[]; extra?: Record<string, unknown>; timeoutMs?: number }
 
-/** The provider's limit was hit and waiting didn't help, as free tiers do. */
+/** Every model was over its limit, overloaded or too slow, as free tiers often are. */
 export class ProviderBusyError extends Error {}
 
 /** Reads the provider from the environment. Returns null when nothing usable is set. */
@@ -26,7 +26,8 @@ export function llmConfig(env: Record<string, string | undefined> = process.env)
   const apiKey = env.AGENT_API_KEY?.trim() || (preset?.keyEnv ? env[preset.keyEnv]?.trim() : '') || ''
   if (!baseUrl || !model) return null
   if (!apiKey && provider !== 'ollama') return null
-  return { baseUrl: baseUrl.replace(/\/$/, ''), apiKey, model, ...(preset?.extra ? { extra: preset.extra } : {}) }
+  const fallbackModels = (preset?.fallbackModels ?? []).filter((m) => m !== model)
+  return { baseUrl: baseUrl.replace(/\/$/, ''), apiKey, model, ...(fallbackModels.length ? { fallbackModels } : {}), ...(preset?.extra ? { extra: preset.extra } : {}) }
 }
 
 // extra_content carries Gemini 3's thought signature, which has to go back with the call or the next turn is refused.
@@ -37,36 +38,80 @@ export type ChatMessage =
   | { role: 'tool'; tool_call_id: string; content: string }
 
 const MAX_WAIT_MS = 20_000
+// A model that says nothing for this long is treated as overloaded, so there's time to try the others.
+const STALL_MS = 15_000
+const TRY_NEXT = [404, 429, 500, 502, 503, 504]
 
-/** Asks the provider, waiting once if it says it's over its limit. A longer wait isn't worth holding someone's question for. */
-async function request(config: LlmConfig, messages: ChatMessage[], tools: AgentTool[], signal?: AbortSignal) {
-  const send = () => fetch(`${config.baseUrl}/chat/completions`, {
-    method: 'POST',
-    signal,
-    headers: { 'Content-Type': 'application/json', ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}) },
-    body: JSON.stringify({
-      ...config.extra,
-      model: config.model,
-      stream: true,
-      messages,
-      tools: tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: toolParameters(t) } })),
-    }),
-  })
-  const first = await send()
-  if (first.status !== 429) return first
-  const header = first.headers.get('Retry-After')
-  const waitMs = (header === null || Number.isNaN(Number(header)) ? 5 : Number(header)) * 1000
-  if (waitMs > MAX_WAIT_MS) throw new ProviderBusyError('Provider limit reached.')
-  await new Promise((r) => setTimeout(r, waitMs))
-  const second = await send()
-  if (second.status === 429) throw new ProviderBusyError('Provider limit reached.')
-  return second
+/** Stops a request when the caller gives up, or when nothing has arrived for a while. */
+function watchdog(ms: number, outer?: AbortSignal) {
+  const controller = new AbortController()
+  let stalled = false
+  let timer: ReturnType<typeof setTimeout>
+  const touch = () => {
+    clearTimeout(timer)
+    timer = setTimeout(() => { stalled = true; controller.abort() }, ms)
+  }
+  const onOuter = () => controller.abort()
+  outer?.addEventListener('abort', onOuter)
+  touch()
+  return { signal: controller.signal, touch, stalled: () => stalled, stop: () => { clearTimeout(timer); outer?.removeEventListener('abort', onOuter) } }
+}
+
+/**
+ * Asks each model in turn until one answers, and stays with it for the rest of the question by dropping those that
+ * failed. Only the last one left is waited for, since moving on is quicker than waiting out a limit.
+ */
+async function request(config: LlmConfig, models: string[], messages: ChatMessage[], tools: AgentTool[], signal?: AbortSignal) {
+  const stallMs = config.timeoutMs ?? STALL_MS
+  const send = async (model: string) => {
+    const dog = watchdog(stallMs, signal)
+    try {
+      const res = await fetch(`${config.baseUrl}/chat/completions`, {
+        method: 'POST',
+        signal: dog.signal,
+        headers: { 'Content-Type': 'application/json', ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}) },
+        body: JSON.stringify({
+          ...config.extra,
+          model,
+          stream: true,
+          messages,
+          tools: tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: toolParameters(t) } })),
+        }),
+      })
+      return { res, dog }
+    } catch (e) {
+      dog.stop()
+      if (dog.stalled()) return { res: null, dog }
+      throw e
+    }
+  }
+  for (;;) {
+    const model = models[0]
+    const last = models.length === 1
+    let { res, dog } = await send(model)
+    if (last && res?.status === 429) {
+      dog.stop()
+      const header = res.headers.get('Retry-After')
+      const waitMs = (header === null || Number.isNaN(Number(header)) ? 5 : Number(header)) * 1000
+      if (waitMs > MAX_WAIT_MS) throw new ProviderBusyError('Provider limit reached.')
+      await new Promise((r) => setTimeout(r, waitMs))
+      ;({ res, dog } = await send(model))
+    }
+    if (res && !TRY_NEXT.includes(res.status)) return { res, dog }
+    dog.stop()
+    console.warn('agent model unavailable', model, res?.status ?? 'no response')
+    // A model that's gone (404) with nothing left to try is a setup problem, not a busy one, so it falls through as an error.
+    if (last && res?.status !== 404) throw new ProviderBusyError('No model available.')
+    if (last && res) return { res, dog }
+    models.shift()
+  }
 }
 
 /** One streamed model turn: passes text along as it arrives and assembles any tool calls. */
-async function modelTurn(config: LlmConfig, messages: ChatMessage[], tools: AgentTool[], onText: (t: string) => void, signal?: AbortSignal) {
-  const res = await request(config, messages, tools, signal)
+async function modelTurn(config: LlmConfig, models: string[], messages: ChatMessage[], tools: AgentTool[], onText: (t: string) => void, signal?: AbortSignal) {
+  const { res, dog } = await request(config, models, messages, tools, signal)
   if (!res.ok || !res.body) {
+    dog.stop()
     const detail = (await res.text().catch(() => '')).slice(0, 300)
     throw new Error(`Provider returned ${res.status}: ${detail}`)
   }
@@ -76,8 +121,12 @@ async function modelTurn(config: LlmConfig, messages: ChatMessage[], tools: Agen
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
   let buffer = ''
   for (;;) {
-    const { value, done } = await reader.read()
+    const { value, done } = await reader.read().catch((e) => {
+      if (dog.stalled()) throw new ProviderBusyError('The model stopped responding.')
+      throw e
+    })
     if (done) break
+    dog.touch()
     buffer += value
     const lines = buffer.split('\n')
     buffer = lines.pop() ?? ''
@@ -103,6 +152,7 @@ async function modelTurn(config: LlmConfig, messages: ChatMessage[], tools: Agen
       })
     }
   }
+  dog.stop()
   return { text, calls: calls.filter(Boolean) }
 }
 
@@ -119,8 +169,9 @@ export async function runAgent(args: {
   signal?: AbortSignal
 }) {
   const history: ChatMessage[] = [{ role: 'system', content: args.system }, ...args.messages]
+  const models = [args.config.model, ...(args.config.fallbackModels ?? [])]
   for (let turn = 0; turn < MAX_TURNS; turn++) {
-    const { text, calls } = await modelTurn(args.config, history, args.tools, args.onText, args.signal)
+    const { text, calls } = await modelTurn(args.config, models, history, args.tools, args.onText, args.signal)
     if (calls.length === 0) return
     history.push({ role: 'assistant', content: text || null, tool_calls: calls })
     const results = await Promise.all(calls.map(async (call) => {
