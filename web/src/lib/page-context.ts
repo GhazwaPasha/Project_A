@@ -35,6 +35,8 @@ const BY_PAGE: [RegExp, string[]][] = [
   [/^\/accounts/, ['Is anything missing from these accounts?', 'Which accounts could I merge?']],
   [/^\/reports\/income-statement/, ['Explain this report', 'What is my biggest cost?', 'How can I improve my profit?']],
   [/^\/reports\/aged/, ['Who should I deal with first?', 'What is most overdue?']],
+  [/^\/reports\/cash-flow/, ['Where did my cash go?', 'Explain this report', 'Will I run short of cash?']],
+  [/^\/audit/, ['Summarize recent changes', 'Does anything here look unusual?']],
   [/^\/reports\/balance-sheet/, ['Explain this report', 'Is my business in a healthy position?']],
   [/^\/reports/, ['Summarize these reports', 'Compare this year with last year']],
   [/^\/inventory\/vouchers|^\/approvals/, ['What should I decide first?', 'Explain what is waiting here']],

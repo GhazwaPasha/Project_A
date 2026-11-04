@@ -302,7 +302,7 @@ function CategoryForm({ draft, onClose }: { draft: CatDraft | null; onClose: () 
   const chart = useQuery({ ...accounts(org.id), enabled: draft !== null })
   const [f, setF] = useState<CatDraft>(draft ?? { name: '', description: '', inventory_account_id: '', expense_account_id: '' })
   const set = (k: keyof CatDraft) => (v: string) => setF((x) => ({ ...x, [k]: v }))
-  const options = (chart.data ?? []).filter((a) => a.is_postable !== false).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))
+  const optionsOf = (type: string) => (chart.data ?? []).filter((a) => a.is_postable !== false && a.account_type === type).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))
   const save = useSave(() => {
     const fields = { name: f.name.trim(), description: f.description.trim() || null, inventory_account_id: Number(f.inventory_account_id), expense_account_id: Number(f.expense_account_id) }
     return f.id != null
@@ -314,8 +314,8 @@ function CategoryForm({ draft, onClose }: { draft: CatDraft | null; onClose: () 
     <Modal open={draft !== null} onClose={onClose} title={f.id != null ? 'Edit category' : 'New category'}>
       <FormBody onSubmit={() => save.mutate()} submit="Save category" pending={save.isPending} onCancel={onClose} disabled={!f.name.trim() || !f.inventory_account_id || !f.expense_account_id}>
         <Text label="Category name" required value={f.name} onChange={set('name')} />
-        <Choice label="Stock account" hint="Where the value of stock in this category is held." required placeholder="Select account" value={f.inventory_account_id} onChange={set('inventory_account_id')} options={options} />
-        <Choice label="Cost account" hint="Where the cost goes when stock is used or sold." required placeholder="Select account" value={f.expense_account_id} onChange={set('expense_account_id')} options={options} />
+        <Choice label="Stock account" hint="Where the value of stock in this category is held." required placeholder="Select account" value={f.inventory_account_id} onChange={set('inventory_account_id')} options={optionsOf('asset')} />
+        <Choice label="Cost account" hint="Where the cost goes when stock is used or sold." required placeholder="Select account" value={f.expense_account_id} onChange={set('expense_account_id')} options={optionsOf('expense')} />
         <Text label="Description" value={f.description} onChange={set('description')} />
         {f.id != null ? <ConfirmDelete label="Delete this category" pending={remove.isPending} onConfirm={() => remove.mutate()} /> : null}
       </FormBody>

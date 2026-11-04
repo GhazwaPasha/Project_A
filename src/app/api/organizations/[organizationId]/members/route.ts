@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+import { recordAudit } from '@/server/audit'
+import { createInvite } from '@/server/invites'
 import { randomUUID } from 'crypto'
 import { neonAuth } from '@/auth'
 import { getSql } from '@/server/pg'
@@ -101,13 +103,10 @@ export async function POST(
       SELECT id::text FROM public.user_profiles WHERE lower(email) = ${email} LIMIT 1
     `
     if (userRows.length === 0) {
-      return NextResponse.json(
-        {
-          error:
-            'No app profile found for that email. Ask them to sign up and complete profile first, then you can add them to this team.',
-        },
-        { status: 404 }
-      )
+      // No account yet, so they get a link to join with instead.
+      const invite = await createInvite(organizationId, email, role, actorId)
+      await recordAudit({ org: organizationId, userId: actorId, action: 'Invite team member', targetType: 'invite', targetId: invite.id, details: { email, role } })
+      return NextResponse.json({ ok: true, invite: { id: invite.id, token: invite.token, expires_at: invite.expires_at, email } })
     }
     const targetId = userRows[0]!.id
 
@@ -137,6 +136,7 @@ export async function POST(
       )
     `
 
+    await recordAudit({ org: organizationId, userId: actorId, action: 'Add team member', targetType: 'member', targetId: targetId, details: { email, role } })
     return NextResponse.json({ ok: true, member: { id: newId, user_id: targetId, role } })
   } catch (e) {
     console.error('org members POST', e)
@@ -208,6 +208,7 @@ export async function PATCH(
         AND is_active = true
     `
 
+    await recordAudit({ org: organizationId, userId: actorId, action: 'Change team member role', targetType: 'member', targetId: target.user_id, details: { from: target.role, to: role } })
     return NextResponse.json({ ok: true, member: { id: memberId, role } })
   } catch (e) {
     console.error('org members PATCH', e)

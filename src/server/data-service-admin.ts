@@ -1,5 +1,6 @@
 import type { JSONValue } from 'postgres'
 import { getSql } from '@/server/pg'
+import { getActingUserId } from '@/server/request-context'
 import {
   attachCategoryAccounts,
   attachItemCategory,
@@ -16,6 +17,7 @@ import {
   fetchAccountOpening,
 } from '@/server/data/ledger-sql'
 import { assertPeriodOpen } from '@/server/books/lock'
+import { isStillInUse } from '@/server/public-error'
 import { applySerials, applyToWarehouse, defaultWarehouse, lotAddedBy, restoreLots, serialsMovedBy } from '@/server/inventory/stock'
 import { addLayer, restoreLayers, takeLayers } from '@/server/inventory/costing'
 import { nextNumber } from '@/server/numbering'
@@ -50,6 +52,20 @@ function organizationRowWithParsedSettings<T extends { settings: unknown }>(row:
 }
 import { isValidHex6 } from '@/lib/org-accent-color'
 import { parseUserPreferences } from '@/lib/user-preferences'
+
+/** A category's stock account must hold assets and its cost account costs, both in this organization and able to take entries. */
+async function assertCategoryAccounts(sql: ReturnType<typeof getSql>, org: string, stockId: number, costId: number) {
+  const rows = await sql<{ id: number; account_type: string; is_postable: boolean }[]>`
+    SELECT id, account_type::text AS account_type, is_postable FROM public.accounts
+    WHERE organization_id = ${org}::uuid AND id = ANY(${[Number(stockId), Number(costId)]}::bigint[])
+  `
+  const find = (id: number) => rows.find((r) => Number(r.id) === Number(id))
+  const stock = find(stockId), cost = find(costId)
+  if (!stock || !cost) throw new Error('Account not found.')
+  if (!stock.is_postable || !cost.is_postable) throw new Error('Choose accounts that can be posted to.')
+  if (stock.account_type !== 'asset') throw new Error('The stock account must be an asset account.')
+  if (cost.account_type !== 'expense') throw new Error('The cost account must be an expense account.')
+}
 
 export class DataServiceAdmin {
   // ================================
@@ -383,7 +399,10 @@ export class DataServiceAdmin {
 
   static async deleteAccount(id: number): Promise<boolean> {
     const sql = getSql()
-    const r = await sql`DELETE FROM public.accounts WHERE id = ${id}`
+    const r = await sql`DELETE FROM public.accounts WHERE id = ${id}`.catch((e: unknown) => {
+      if (isStillInUse(e)) throw new Error("This account has entries or is used elsewhere, so it can't be deleted. Mark it inactive instead.")
+      throw e
+    })
     const c = (r as { count?: number })?.count
     return c === undefined ? true : c > 0
   }
@@ -1461,6 +1480,11 @@ export class DataServiceAdmin {
   ): Promise<InventoryCategory | null> {
     const sql = getSql()
     const c = category
+    await assertCategoryAccounts(sql, c.organization_id, c.inventory_account_id, c.expense_account_id)
+    if (c.parent_id != null) {
+      const [parent] = await sql`SELECT id FROM public.inventory_categories WHERE id = ${c.parent_id} AND organization_id = ${c.organization_id}::uuid`
+      if (!parent) throw new Error('Category not found.')
+    }
     const ins = (await sql<InventoryCategory[]>`
       INSERT INTO public.inventory_categories (
         organization_id, name, description, inventory_account_id, expense_account_id, parent_id, is_active, created_by
@@ -1473,7 +1497,7 @@ export class DataServiceAdmin {
         ${c.expense_account_id},
         ${c.parent_id},
         ${c.is_active},
-        ${c.created_by}::uuid
+        ${getActingUserId() ?? c.created_by}::uuid
       )
       RETURNING *
     `) as InventoryCategory[]
@@ -1489,14 +1513,26 @@ export class DataServiceAdmin {
   ): Promise<InventoryCategory | null> {
     const sql = getSql()
     const u = updates
+    const [current] = await sql<{ organization_id: string; inventory_account_id: number; expense_account_id: number }[]>`
+      SELECT organization_id::text AS organization_id, inventory_account_id, expense_account_id FROM public.inventory_categories WHERE id = ${categoryId}
+    `
+    if (!current) return null
+    // Accounts already in place stay valid, so an old category can still be renamed.
+    if (u.inventory_account_id != null || u.expense_account_id != null) {
+      await assertCategoryAccounts(sql, current.organization_id, u.inventory_account_id ?? current.inventory_account_id, u.expense_account_id ?? current.expense_account_id)
+    }
+    if (u.parent_id != null) {
+      const [parent] = await sql`SELECT id FROM public.inventory_categories WHERE id = ${u.parent_id} AND organization_id = ${current.organization_id}::uuid`
+      if (!parent) throw new Error('Category not found.')
+    }
     const rows = (await sql<InventoryCategory[]>`
       UPDATE public.inventory_categories
       SET
         name = COALESCE(${u.name ?? null}, name),
-        description = ${u.description === undefined ? null : u.description},
+        description = ${u.description === undefined ? sql`description` : u.description},
         inventory_account_id = COALESCE(${u.inventory_account_id ?? null}, inventory_account_id),
         expense_account_id = COALESCE(${u.expense_account_id ?? null}, expense_account_id),
-        parent_id = ${u.parent_id === undefined ? null : u.parent_id},
+        parent_id = ${u.parent_id === undefined ? sql`parent_id` : u.parent_id},
         is_active = COALESCE(${u.is_active ?? null}, is_active)
       WHERE id = ${categoryId}
       RETURNING *
@@ -1509,7 +1545,10 @@ export class DataServiceAdmin {
 
   static async deleteInventoryCategory(categoryId: number): Promise<boolean> {
     const sql = getSql()
-    const r = await sql`DELETE FROM public.inventory_categories WHERE id = ${categoryId}`
+    const r = await sql`DELETE FROM public.inventory_categories WHERE id = ${categoryId}`.catch((e: unknown) => {
+      if (isStillInUse(e)) throw new Error("This category still has items in it, so it can't be deleted.")
+      throw e
+    })
     return ((r as { count?: number }).count ?? 1) > 0
   }
 
@@ -1557,6 +1596,8 @@ export class DataServiceAdmin {
       `) as unknown as { sku: string; barcode: string | null; name: string }[]
       if (used) throw new Error(used.sku === sku ? `The SKU ${sku} is already on ${used.name}.` : `That barcode is already on ${used.name}.`)
       if (i.track_lots && i.track_serials) throw new Error('Track batches or serial numbers, not both.')
+      const [cat] = (await tx`SELECT id FROM public.inventory_categories WHERE id = ${i.category_id} AND organization_id = ${i.organization_id}::uuid`) as unknown as { id: number }[]
+      if (!cat) throw new Error('Category not found.')
       if (i.preferred_supplier_id) {
         const [s] = (await tx`SELECT id FROM public.suppliers WHERE id = ${i.preferred_supplier_id} AND organization_id = ${i.organization_id}::uuid`) as unknown as { id: number }[]
         if (!s) throw new Error('Supplier not found.')
@@ -1576,13 +1617,13 @@ export class DataServiceAdmin {
           ${i.name},
           ${i.description},
           ${i.unit_of_measure},
-          ${i.quantity_in},
-          ${i.quantity_out},
-          ${i.average_unit_cost},
+          0,
+          0,
+          0,
           ${i.reorder_point},
           ${i.reorder_quantity},
           ${i.is_active},
-          ${i.created_by}::uuid,
+          ${getActingUserId() ?? i.created_by}::uuid,
           ${barcode},
           ${i.selling_price ?? null},
           ${i.income_account_id ?? null},
@@ -1605,13 +1646,20 @@ export class DataServiceAdmin {
   ): Promise<InventoryItem | null> {
     const sql = getSql()
     const u = updates
+    if (u.category_id != null) {
+      const [cat] = await sql`
+        SELECT c.id FROM public.inventory_categories c JOIN public.inventory_items i ON i.organization_id = c.organization_id
+        WHERE c.id = ${u.category_id} AND i.id = ${itemId}
+      `
+      if (!cat) throw new Error('Category not found.')
+    }
     await sql`
       UPDATE public.inventory_items
       SET
         category_id = COALESCE(${u.category_id ?? null}, category_id),
         sku = COALESCE(${u.sku ?? null}, sku),
         name = COALESCE(${u.name ?? null}, name),
-        description = ${u.description === undefined ? null : u.description},
+        description = ${u.description === undefined ? sql`description` : u.description},
         unit_of_measure = COALESCE(${u.unit_of_measure ?? null}, unit_of_measure),
         reorder_point = COALESCE(${u.reorder_point ?? null}, reorder_point),
         reorder_quantity = COALESCE(${u.reorder_quantity ?? null}, reorder_quantity),
@@ -1625,8 +1673,8 @@ export class DataServiceAdmin {
     const sql = getSql()
     const [held] = await sql`SELECT quantity_available::float AS q FROM public.inventory_items WHERE id = ${itemId}`
     if (held && Number(held.q) !== 0) throw new Error("This item still has stock, so it can't be deleted.")
-    const r = await sql`DELETE FROM public.inventory_items WHERE id = ${itemId}`.catch((e: { code?: string }) => {
-      if (e.code === '23503') throw new Error("This item is on purchase orders, invoices or bills, so it can't be deleted.")
+    const r = await sql`DELETE FROM public.inventory_items WHERE id = ${itemId}`.catch((e: unknown) => {
+      if (isStillInUse(e)) throw new Error("This item is on purchase orders, invoices or bills, so it can't be deleted.")
       throw e
     })
     return ((r as { count?: number }).count ?? 1) > 0
@@ -1674,7 +1722,32 @@ export class DataServiceAdmin {
     transaction: Omit<InventoryTransaction, 'id' | 'created_at'>
   ): Promise<InventoryTransaction | null> {
     const sql = getSql()
-    const row = await sql.begin((tx) => this.applyInventoryTransaction(tx as unknown as ReturnType<typeof getSql>, transaction))
+    const t = transaction
+    // Browsers reach this call, so only what a person may decide comes through. The rest is set here.
+    if (t.transaction_type !== 'in' && t.transaction_type !== 'out' && t.transaction_type !== 'adjustment') {
+      throw new Error('Unknown kind of stock movement.')
+    }
+    const incoming = t.transaction_type === 'in'
+    const safe = {
+      organization_id: t.organization_id,
+      item_id: t.item_id,
+      transaction_type: t.transaction_type,
+      quantity: t.transaction_type === 'out' ? -Math.abs(Number(t.quantity)) : Number(t.quantity),
+      // Only stock coming in has a price of its own. Stock leaving is valued by the costing method.
+      unit_cost: incoming ? t.unit_cost ?? null : null,
+      total_cost: incoming ? t.total_cost ?? null : null,
+      journal_entry_id: null,
+      reference: t.reference ?? null,
+      description: t.description ?? null,
+      transaction_date: t.transaction_date,
+      created_by: getActingUserId() ?? t.created_by,
+      warehouse_id: t.warehouse_id ?? null,
+      lot_id: t.lot_id ?? null,
+      lot_number: t.lot_number ?? null,
+      expiry_date: t.expiry_date ?? null,
+      serial_numbers: t.serial_numbers ?? null,
+    } as Omit<InventoryTransaction, 'id' | 'created_at'>
+    const row = await sql.begin((tx) => this.applyInventoryTransaction(tx as unknown as ReturnType<typeof getSql>, safe))
 
     if (!row) return null
     const [enriched] = await attachTransactionItem(sql, [row])
@@ -1686,6 +1759,14 @@ export class DataServiceAdmin {
     tx: ReturnType<typeof getSql>,
     t: Omit<InventoryTransaction, 'id' | 'created_at'>
   ): Promise<InventoryTransaction | null> {
+    const signed = Number(t.quantity)
+    if (!Number.isFinite(signed) || signed === 0) throw new Error('Quantity must not be zero.')
+    if ((t.transaction_type === 'in' || t.transaction_type === 'transfer_in') && signed < 0) throw new Error('Stock coming in must have a positive quantity.')
+    if ((t.transaction_type === 'out' || t.transaction_type === 'transfer_out') && signed > 0) throw new Error('Stock going out must have a negative quantity.')
+    if (Number(t.unit_cost ?? 0) < 0 || Number(t.total_cost ?? 0) < 0) throw new Error("A cost can't be negative.")
+    if (!/^\d{4}-\d{2}-\d{2}/.test(String(t.transaction_date)) || Number.isNaN(Date.parse(String(t.transaction_date)))) throw new Error('Date must be a real date.')
+    // Stock is part of the books, so a closed period is closed to movements that have no entry too.
+    await assertPeriodOpen(tx, t.organization_id, String(t.transaction_date).slice(0, 10))
     // The item is locked first, so two movements of it can't both read the same balance.
     const locked = (await tx<InventoryItem[]>`
       SELECT * FROM public.inventory_items
@@ -1695,6 +1776,17 @@ export class DataServiceAdmin {
     const item = locked[0]
     if (!item) {
       throw new Error('Inventory item not found for this organization')
+    }
+
+    if (t.journal_entry_id) {
+      const [entry] = (await tx`SELECT id FROM public.journal_entries WHERE id = ${t.journal_entry_id} AND organization_id = ${t.organization_id}::uuid`) as unknown as { id: number }[]
+      if (!entry) throw new Error('Journal entry not found.')
+    }
+    // Undoing a movement can only undo one of this item's own.
+    if (t.from_transaction_ids?.length) {
+      const ids = t.from_transaction_ids.map(Number)
+      const [own] = (await tx`SELECT COUNT(*)::int AS n FROM public.inventory_transactions WHERE id = ANY(${ids}::bigint[]) AND organization_id = ${t.organization_id}::uuid AND item_id = ${t.item_id}`) as unknown as { n: number }[]
+      if (Number(own.n) !== ids.length) throw new Error('Stock movement not found.')
     }
 
     let warehouseId: number
@@ -1758,7 +1850,7 @@ export class DataServiceAdmin {
         await tx`UPDATE public.inventory_transactions SET unit_cost = ${avg}, total_cost = ${cents(addValue)} WHERE id = ${tr.id}`
         tr.total_cost = cents(addValue)
       }
-      if (fifo && !(from && (await restoreLayers(tx, from)))) await addLayer(tx, Number(item.id), Number(tr.id), String(t.layer_date ?? movedOn).slice(0, 10), addQty, cents(addValue))
+      if (fifo && !(from && (await restoreLayers(tx, from, addQty)))) await addLayer(tx, Number(item.id), Number(tr.id), String(t.layer_date ?? movedOn).slice(0, 10), addQty, cents(addValue))
       const newAvail = avail + addQty
       const newTotal = val + addValue
       const newAvg = newAvail > 0 ? newTotal / newAvail : 0
@@ -1842,7 +1934,7 @@ export class DataServiceAdmin {
     })
     if (restoring && from) tr.lots = await restoreLots(tx, Number(item.id), warehouseId, Number(tr.id), from, delta, (t.reference ?? '').trim() || `LOT-${movedOn}`)
     if (item.track_serials && delta) {
-      tr.serials = await applySerials(tx, { itemId: Number(item.id), itemName: item.name, sku: item.sku, warehouseId, transactionId: Number(tr.id), delta, serialNumbers: from ? await serialsMovedBy(tx, from) : t.serial_numbers ?? null })
+      tr.serials = await applySerials(tx, { itemId: Number(item.id), itemName: item.name, sku: item.sku, warehouseId, transactionId: Number(tr.id), delta, serialNumbers: t.serial_numbers ?? (from ? await serialsMovedBy(tx, from) : null) })
     }
     return tr
   }

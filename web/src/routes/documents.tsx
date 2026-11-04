@@ -15,8 +15,8 @@ import { items, unitsQuery, warehousesQuery } from '@/routes/inventory'
 
 export type Kind = 'invoice' | 'bill'
 type DocRow = { id: Id; kind: Kind; number: string; status: string; party_name: string; issue_date: string; due_date: string; subtotal: number; tax_total: number; total: number; amount_paid: number; balance: number }
-type DocLine = { id: Id; description: string; account_id: Id; quantity: number; unit_price: number; tax_rate_id: Id | null; tax_rate: number; amount: number; tax_amount: number; tax_name?: string | null; item_id?: Id | null; warehouse_id?: Id | null; sku?: string | null; unit_id?: Id | null; unit_name?: string | null; unit_factor?: number; serial_numbers?: string[] | null }
-export type Doc = DocRow & { customer_id: Id | null; supplier_id: Id | null; notes: string | null; void_reason: string | null; lines: DocLine[]; payments: { id: Id; payment_date: string; amount: number; reference: string | null }[] }
+type DocLine = { id: Id; description: string; account_id: Id; quantity: number; unit_price: number; tax_rate_id: Id | null; tax_rate: number; amount: number; tax_amount: number; tax_name?: string | null; item_id?: Id | null; warehouse_id?: Id | null; sku?: string | null; unit_id?: Id | null; unit_name?: string | null; unit_factor?: number; serial_numbers?: string[] | null; credited_quantity?: number; track_serials?: boolean }
+export type Doc = DocRow & { customer_id: Id | null; supplier_id: Id | null; notes: string | null; void_reason: string | null; lines: DocLine[]; payments: { id: Id; payment_date: string; amount: number; reference: string | null; credit_note_id?: Id | null }[]; credit_notes?: { id: Id; number: string; credit_date: string; reason: string; total: number; applied: number; refund: number }[] }
 type Customer = { id: Id; name: string; email: string | null; phone: string | null; address: string | null; tax_id: string | null; receivable_account_id: Id | null; balance: number }
 type Rate = { id: Id; name: string; rate: number; is_active: boolean }
 type Preview = { problems: string[]; suggested_control_account_id: number | null; lines: { account_id: number; code: string; name: string; debit: number; credit: number }[] }
@@ -232,6 +232,7 @@ function DocumentDetail({ id, kind, onClose, onEdit }: { id: Id; kind: Kind; onC
   const d = query.data
   const remove = useSave(() => call('BooksService', 'deleteDocument', [org.id, id]), { success: 'Draft deleted', refresh: REFRESH, onDone: onClose })
   const [voiding, setVoiding] = useState(false)
+  const [crediting, setCrediting] = useState(false)
   const [reason, setReason] = useState('')
   const voided = useSave(() => call('BooksService', 'voidDocument', [org.id, id, { reason: reason.trim() }]), { success: 'Voided. Its entry has been reversed.', refresh: REFRESH, onDone: () => { refreshBooks(); setVoiding(false) } })
   const badge = d ? statusBadge(d) : null
@@ -261,9 +262,16 @@ function DocumentDetail({ id, kind, onClose, onEdit }: { id: Id; kind: Kind; onC
           {d.payments.length ? (
             <section className="text-[13px]">
               <h3 className="font-semibold mb-1">Payments</h3>
-              <ul className="flex flex-col gap-0.5">{d.payments.map((p) => <li key={p.id} className="flex justify-between gap-3"><span className="text-muted-foreground">{shortDate(p.payment_date)}{p.reference ? `, ${p.reference}` : ''}</span><span className="fig">{figure(num(p.amount), org.decimals)}</span></li>)}</ul>
+              <ul className="flex flex-col gap-0.5">{d.payments.map((p) => <li key={p.id} className="flex justify-between gap-3"><span className="text-muted-foreground">{shortDate(p.payment_date)}{p.reference ? `, ${p.reference}` : ''}{p.credit_note_id ? ', credit' : ''}</span><span className="fig">{figure(num(p.amount), org.decimals)}</span></li>)}</ul>
             </section>
           ) : null}
+          {d.credit_notes?.length ? (
+            <section className="text-[13px]">
+              <h3 className="font-semibold mb-1">{kind === 'invoice' ? 'Credit notes' : 'Supplier credits'}</h3>
+              <ul className="flex flex-col gap-0.5">{d.credit_notes.map((n) => <li key={n.id} className="flex justify-between gap-3"><span className="text-muted-foreground min-w-0"><span className="fig">{n.number}</span>, {shortDate(n.credit_date)}, {n.reason}{num(n.refund) ? `, ${figure(num(n.refund), org.decimals)} refunded` : ''}</span><span className="fig shrink-0">{figure(num(n.total), org.decimals)}</span></li>)}</ul>
+            </section>
+          ) : null}
+          {crediting ? <CreditNoteForm doc={d} onClose={() => setCrediting(false)} /> : null}
           {d.status === 'draft' ? <PostDocument doc={d} /> : null}
           {d.status === 'posted' || d.status === 'partial' ? <RecordPayment doc={d} /> : null}
           {voiding ? (
@@ -276,11 +284,62 @@ function DocumentDetail({ id, kind, onClose, onEdit }: { id: Id; kind: Kind; onC
             <span className="mr-auto"><AskChip prompt={`Explain ${w.one} ${d.number} and what should happen next.`}>Explain this {w.one}</AskChip></span>
             {d.status === 'draft' ? <><ConfirmDelete label="Delete" pending={remove.isPending} onConfirm={() => remove.mutate()} /><button className={btn.plain} onClick={() => onEdit(d)}>Edit</button></> : null}
             {d.status === 'posted' && !voiding ? <button className={btn.plain} onClick={() => setVoiding(true)}>Void</button> : null}
+            {['posted', 'partial', 'paid'].includes(d.status) && !crediting && d.lines.some((l) => num(l.quantity) - num(l.credited_quantity) > 0) ? <button className={btn.plain} onClick={() => setCrediting(true)}>{kind === 'invoice' ? 'Credit note' : 'Supplier credit'}</button> : null}
             {d.status !== 'draft' || pro ? <Link to={`/print/document/${d.id}`} className={cn(btn.plain)}><Printer className="size-3.5 mr-1.5" />Print or export</Link> : null}
           </div>
         </div>
       )}
     </Modal>
+  )
+}
+
+/** Takes back all or part of a posted document. Comes off what's still owed first, and the rest is refunded. */
+function CreditNoteForm({ doc, onClose }: { doc: Doc; onClose: () => void }) {
+  const { org } = useApp()
+  const chart = useQuery(accounts(org.id))
+  const sale = doc.kind === 'invoice'
+  const open = doc.lines.filter((l) => num(l.quantity) - num(l.credited_quantity) > 0)
+  const [date, setDate] = useState(today())
+  const [reason, setReason] = useState('')
+  const [bank, setBank] = useState('')
+  const [rows, setRows] = useState<Record<string, { quantity: string; restock: boolean; serials: string }>>(Object.fromEntries(open.map((l) => [String(l.id), { quantity: String(num(l.quantity) - num(l.credited_quantity)), restock: true, serials: '' }])))
+  const update = (id: Id, patch: Partial<{ quantity: string; restock: boolean; serials: string }>) => setRows((r) => ({ ...r, [String(id)]: { ...r[String(id)], ...patch } }))
+  const worth = (l: DocLine) => {
+    const q = Number(rows[String(l.id)]?.quantity) || 0
+    return (q / num(l.quantity)) * (num(l.amount) + num(l.tax_amount))
+  }
+  const total = open.reduce((s, l) => s + worth(l), 0)
+  const refund = Math.max(total - num(doc.balance), 0)
+  const needsBank = refund > 0.004
+  const save = useSave(() => call('BooksService', 'createCreditNote', [org.id, doc.id, {
+    date, reason: reason.trim(), refund_account_id: needsBank && bank ? Number(bank) : null,
+    lines: open.filter((l) => Number(rows[String(l.id)].quantity) > 0).map((l) => ({ line_id: Number(l.id), quantity: Number(rows[String(l.id)].quantity), restock: rows[String(l.id)].restock, serial_numbers: rows[String(l.id)].serials.trim() || null })),
+  }]), { success: 'Credit recorded. Your books are updated.', refresh: [...REFRESH, 'accounts'], onDone: () => { refreshBooks(); onClose() } })
+  const tooMany = open.some((l) => (Number(rows[String(l.id)]?.quantity) || 0) > num(l.quantity) - num(l.credited_quantity))
+  return (
+    <section aria-label={sale ? 'Credit note' : 'Supplier credit'} className="border border-border rounded-[8px] p-3">
+      <FormBody onSubmit={() => save.mutate()} submit={`Credit ${figure(total, org.decimals)}`} pending={save.isPending} onCancel={onClose} disabled={!reason.trim() || !(total > 0) || tooMany || (needsBank && !bank)}>
+        <h3 className="font-semibold text-[13.5px]">{sale ? 'What are you taking back?' : 'What is the supplier crediting?'}</h3>
+        <div className="flex flex-col gap-2">
+          {open.map((l) => (
+            <div key={l.id} className="flex flex-col gap-1.5 text-[13px]">
+              <div className="grid grid-cols-[minmax(0,1fr)_88px] gap-2 items-center">
+                <span className="min-w-0 truncate">{l.description} <span className="text-muted-foreground">({figure(num(l.quantity) - num(l.credited_quantity), 0)} left{l.unit_name ? `, ${l.unit_name}` : ''})</span></span>
+                <Input aria-label={`Quantity of ${l.description}`} inputMode="decimal" value={rows[String(l.id)].quantity} onChange={(e) => update(l.id, { quantity: e.target.value })} className="h-8 text-right fig" />
+              </div>
+              {l.item_id && sale ? <label className="flex items-center gap-2 text-muted-foreground cursor-pointer"><input type="checkbox" className="size-3.5" checked={rows[String(l.id)].restock} onChange={(e) => update(l.id, { restock: e.target.checked })} />Put it back in stock</label> : null}
+              {l.item_id && !sale ? <p className="text-[12.5px] text-muted-foreground">Goes back to the supplier, so it leaves your stock.</p> : null}
+              {l.serial_numbers?.length ? <Input aria-label={`Serial numbers of ${l.description}`} placeholder="Serial numbers, if only some are coming back" value={rows[String(l.id)].serials} onChange={(e) => update(l.id, { serials: e.target.value })} className="h-8" /> : null}
+            </div>
+          ))}
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Text label="Why?" required value={reason} onChange={setReason} />
+          <Text label="Date" type="date" value={date} onChange={setDate} />
+          {needsBank ? <Choice label={sale ? 'Refund from' : 'Refund comes into'} required hint={`${figure(refund, org.decimals)} has already been paid.`} placeholder="Select account" value={bank} onChange={setBank} options={postable(chart.data, 'asset')} /> : null}
+        </div>
+      </FormBody>
+    </section>
   )
 }
 

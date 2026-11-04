@@ -3,10 +3,11 @@ import { getActingUserId } from '@/server/request-context'
 import { DataServiceAdmin } from '@/server/data-service-admin'
 import { netAmountForAccountType } from '@/server/data/ledger-sql'
 import {
-  agedReport, documentEntry, documentTotals, forecastSeries, matchCandidates, money, paymentEntry, reconciliation,
+  agedReport, cashFlowSummary, creditNoteEntry, documentEntry, documentTotals, forecastSeries, matchCandidates, money, paymentEntry, reconciliation,
   reversalLines, stockEntry, statementAmount, taxSummary, type EntryLine,
 } from '@/server/books/rules'
 import { nextNumber } from '@/server/numbering'
+import { listAuditLog } from '@/server/audit'
 import { costOfSalesEntry, parseSerials } from '@/server/inventory/rules'
 import { CostPlanner } from '@/server/inventory/costing'
 
@@ -70,6 +71,7 @@ export class BooksServiceAdmin {
       const [source] = (await tx`
         SELECT 'an invoice or bill' AS what FROM public.trade_documents WHERE journal_entry_id = ${entryId}
         UNION ALL SELECT 'a payment' FROM public.trade_payments WHERE journal_entry_id = ${entryId}
+        UNION ALL SELECT 'a credit note' FROM public.credit_notes WHERE journal_entry_id = ${entryId}
         UNION ALL SELECT 'a voucher' FROM public.inventory_vouchers WHERE journal_entry_id = ${entryId}
         UNION ALL SELECT 'a stock movement' FROM public.inventory_transactions WHERE journal_entry_id = ${entryId}
         UNION ALL SELECT 'a bank line' FROM public.bank_statement_lines b JOIN public.journal_entry_lines l ON l.id = b.matched_journal_line_id WHERE l.journal_entry_id = ${entryId}
@@ -276,8 +278,10 @@ export class BooksServiceAdmin {
       LEFT JOIN public.inventory_items i ON i.id = l.item_id LEFT JOIN public.warehouses w ON w.id = l.warehouse_id
       WHERE l.document_id = ${id} ORDER BY l.line_order
     `
-    const payments = await sql`SELECT id, payment_date::text AS payment_date, amount::float, reference, bank_account_id FROM public.trade_payments WHERE document_id = ${id} ORDER BY payment_date, id`
-    return { ...d, lines, payments }
+    const payments = await sql`SELECT id, payment_date::text AS payment_date, amount::float, reference, bank_account_id, credit_note_id FROM public.trade_payments WHERE document_id = ${id} ORDER BY payment_date, id`
+    const credit_notes = await sql`SELECT id, number, credit_date::text AS credit_date, reason, total::float, applied::float, refund::float FROM public.credit_notes WHERE document_id = ${id} ORDER BY credit_date, id`
+    const credited = await sql`SELECT c.document_line_id, SUM(c.quantity)::float AS quantity FROM public.credit_note_lines c JOIN public.trade_document_lines l ON l.id = c.document_line_id WHERE l.document_id = ${id} GROUP BY 1`
+    return { ...d, lines: (lines as Row[]).map((l) => ({ ...l, credited_quantity: Number((credited as Row[]).find((c) => Number(c.document_line_id) === Number(l.id))?.quantity ?? 0) })), payments, credit_notes }
   }
 
   private static async writeLines(tx: Pg, org: string, id: number, form: DocumentForm) {
@@ -546,6 +550,87 @@ export class BooksServiceAdmin {
     return this.getDocument(org, id)
   }
 
+  /**
+   * Takes back all or part of a posted invoice or bill, even one that's been paid. Reduces what's owed first and pays
+   * back the rest. A return on an invoice can put the stock back; a return on a bill always takes it out.
+   */
+  static async createCreditNote(org: string, documentId: number, form: { date: string; reason: string; refund_account_id?: number | null; lines: { line_id: number; quantity: number; restock?: boolean; serial_numbers?: string[] | string | null }[] }) {
+    const date = requireDate(form.date)
+    const reason = label(form.reason)
+    if (!reason) throw new Error('Say why this is being credited.')
+    const wanted = (form.lines ?? []).filter((l) => Number(l.quantity) > 0)
+    if (!wanted.length) throw new Error('Enter a quantity for at least one line.')
+    const user = acting()
+    const id = await getSql().begin(async (raw) => {
+      const tx = raw as unknown as Pg
+      const [d] = (await tx`SELECT * FROM public.trade_documents WHERE id = ${documentId} AND organization_id = ${org}::uuid FOR UPDATE`) as Row[]
+      if (!d) throw new Error('Document not found.')
+      if (!['posted', 'partial', 'paid'].includes(d.status)) throw new Error('Only a posted document can be credited.')
+      const lines = (await tx`
+        SELECT l.*, l.quantity::float AS quantity, l.amount::float AS amount, l.tax_amount::float AS tax_amount, l.cost_amount::float AS cost_amount, l.unit_factor::float AS unit_factor,
+               r.sales_account_id, r.purchase_account_id, c.inventory_account_id, c.expense_account_id, i.track_serials,
+               COALESCE((SELECT SUM(n.quantity) FROM public.credit_note_lines n WHERE n.document_line_id = l.id), 0)::float AS done_quantity,
+               COALESCE((SELECT SUM(n.amount) FROM public.credit_note_lines n WHERE n.document_line_id = l.id), 0)::float AS done_amount,
+               COALESCE((SELECT SUM(n.tax_amount) FROM public.credit_note_lines n WHERE n.document_line_id = l.id), 0)::float AS done_tax,
+               COALESCE((SELECT SUM(n.cost_amount) FROM public.credit_note_lines n WHERE n.document_line_id = l.id), 0)::float AS done_cost
+        FROM public.trade_document_lines l
+        LEFT JOIN public.tax_rates r ON r.id = l.tax_rate_id
+        LEFT JOIN public.inventory_items i ON i.id = l.item_id
+        LEFT JOIN public.inventory_categories c ON c.id = i.category_id
+        WHERE l.document_id = ${documentId} ORDER BY l.item_id NULLS LAST, l.id
+      `) as Row[]
+      const sale = d.kind === 'invoice'
+      const plan = wanted.map((w) => {
+        const l = lines.find((x) => Number(x.id) === Number(w.line_id))
+        if (!l) throw new Error('That line is not on this document.')
+        const left = Number(l.quantity) - Number(l.done_quantity)
+        const q = Number(w.quantity)
+        if (!Number.isFinite(q) || q > left + 1e-9) throw new Error(`Only ${left} of "${l.description}" can still be credited.`)
+        // The last of a line takes whatever is left, so rounding can never credit a cent too much or too little.
+        const all = q >= left - 1e-9
+        const share = (whole: number, done: number) => (all ? money(whole - done) : money((whole * q) / Number(l.quantity)))
+        const moves = Boolean(l.item_id) && (sale ? w.restock !== false : true)
+        if (moves && l.track_serials && !all && !w.serial_numbers) throw new Error(`Say which serial numbers of "${l.description}" are coming back.`)
+        return { l, q, amount: share(Number(l.amount), Number(l.done_amount)), tax: share(Number(l.tax_amount), Number(l.done_tax)), cost: moves ? share(Number(l.cost_amount ?? 0), Number(l.done_cost)) : 0, moves, serials: w.serial_numbers ?? null, firstAndWhole: all && Number(l.done_quantity) === 0 }
+      })
+      const subtotal = money(plan.reduce((s, p) => s + p.amount, 0))
+      const taxTotal = money(plan.reduce((s, p) => s + p.tax, 0))
+      const total = money(subtotal + taxTotal)
+      if (!(total > 0)) throw new Error('There is nothing to credit on these lines.')
+      const applied = money(Math.min(total, Math.max(Number(d.total) - Number(d.amount_paid), 0)))
+      const refund = money(total - applied)
+      if (refund > 0 && !form.refund_account_id) throw new Error(`${refund.toFixed(2)} has already been paid. Choose the account it's ${sale ? 'refunded from' : 'refunded to'}.`)
+      const number = await nextNumber(tx, org, sale ? 'CN' : 'DN', 'public.credit_notes', 'number')
+      const entryLines = creditNoteEntry(d.kind, Number(d.control_account_id), form.refund_account_id ? Number(form.refund_account_id) : null, plan.map((p) => ({ account_id: Number(p.l.account_id), amount: p.amount, tax_amount: p.tax, tax_account_id: (sale ? p.l.sales_account_id : p.l.purchase_account_id) ? Number(sale ? p.l.sales_account_id : p.l.purchase_account_id) : null })), applied, refund)
+      // Stock coming back on a sale goes back at what it left at, undoing that part of the cost of sales.
+      if (sale) entryLines.push(...plan.filter((p) => p.moves && p.cost > 0).flatMap((p): EntryLine[] => [{ account_id: Number(p.l.inventory_account_id), debit: p.cost, credit: 0, description: 'Stock returned' }, { account_id: Number(p.l.expense_account_id), debit: 0, credit: p.cost, description: 'Stock returned' }]))
+      const entry = await this.post(tx, org, { number: `JE-${number}`, date, description: `${sale ? 'Credit note' : 'Supplier credit'} ${number} for ${d.number}: ${reason}`, reference: number }, entryLines)
+      const [note] = (await tx`
+        INSERT INTO public.credit_notes (organization_id, document_id, number, credit_date, reason, subtotal, tax_total, total, applied, refund, refund_account_id, journal_entry_id, created_by)
+        VALUES (${org}::uuid, ${documentId}, ${number}, ${date}::date, ${reason}, ${subtotal}, ${taxTotal}, ${total}, ${applied}, ${refund}, ${refund > 0 ? form.refund_account_id ?? null : null}, ${entry}, ${user}::uuid) RETURNING id
+      `) as Row[]
+      const made = (await tx`SELECT id, item_id FROM public.inventory_transactions WHERE organization_id = ${org}::uuid AND source_type = 'document' AND source_id = ${documentId} AND transaction_type = ${sale ? 'out' : 'in'} ORDER BY item_id, id`) as Row[]
+      const itemLines = lines.filter((x) => x.item_id)
+      for (const p of plan.slice().sort((a, b) => Number(a.l.item_id ?? 0) - Number(b.l.item_id ?? 0))) {
+        await tx`INSERT INTO public.credit_note_lines (credit_note_id, document_line_id, quantity, amount, tax_amount, cost_amount, restocked) VALUES (${note.id}, ${p.l.id}, ${p.q}, ${p.amount}, ${p.tax}, ${p.cost}, ${p.moves})`
+        if (!p.moves) continue
+        const base = p.q * Number(p.l.unit_factor)
+        const original = made[itemLines.findIndex((x) => Number(x.id) === Number(p.l.id))]
+        await DataServiceAdmin.applyInventoryTransaction(tx, {
+          organization_id: org, item_id: Number(p.l.item_id), transaction_type: sale ? 'in' : 'out', quantity: sale ? base : -base,
+          unit_cost: null, total_cost: sale ? p.cost : p.amount, journal_entry_id: entry, reference: number, description: `${number}: ${reason}`,
+          transaction_date: date, created_by: user, warehouse_id: p.l.warehouse_id ? Number(p.l.warehouse_id) : null, source_type: 'credit_note', source_id: Number(note.id),
+          from_transaction_ids: original ? [Number(original.id)] : null, serial_numbers: p.serials, layer_date: null,
+        } as never)
+      }
+      if (applied > 0) await tx`INSERT INTO public.trade_payments (organization_id, document_id, payment_date, amount, bank_account_id, reference, journal_entry_id, created_by, credit_note_id) VALUES (${org}::uuid, ${documentId}, ${date}::date, ${applied}, NULL, ${number}, ${entry}, ${user}::uuid, ${note.id})`
+      const paid = money(Number(d.amount_paid) + applied)
+      await tx`UPDATE public.trade_documents SET amount_paid = ${paid}, status = ${paid >= Number(d.total) ? 'paid' : paid > 0 ? 'partial' : d.status}, updated_at = now() WHERE id = ${documentId}`
+      return Number(note.id)
+    })
+    return { id, document: await this.getDocument(org, documentId) }
+  }
+
   /** Age is measured from the due date. Payments dated after the as-of date still count as unpaid then. */
   static async getAgedReport(org: string, kind: 'invoice' | 'bill', asOf?: string) {
     const date = asOf ? requireDate(asOf) : today()
@@ -573,7 +658,17 @@ export class BooksServiceAdmin {
       LEFT JOIN public.tax_rates r ON r.id = l.tax_rate_id
       WHERE d.organization_id = ${org}::uuid AND d.status IN ('posted', 'partial', 'paid') AND d.issue_date BETWEEN ${from}::date AND ${to}::date
     `) as Row[]
-    return { from, to, ...taxSummary(rows.map((r) => ({ kind: r.kind, rate_name: r.rate_name, rate: Number(r.rate), amount: Number(r.amount), tax_amount: Number(r.tax_amount) }))) }
+    // Credit notes count in the period they're dated, as reductions.
+    const credits = (await sql`
+      SELECT d.kind, r.name AS rate_name, l.tax_rate::float AS rate, -c.amount::float AS amount, -c.tax_amount::float AS tax_amount
+      FROM public.credit_note_lines c
+      JOIN public.credit_notes n ON n.id = c.credit_note_id
+      JOIN public.trade_document_lines l ON l.id = c.document_line_id
+      JOIN public.trade_documents d ON d.id = l.document_id
+      LEFT JOIN public.tax_rates r ON r.id = l.tax_rate_id
+      WHERE n.organization_id = ${org}::uuid AND n.credit_date BETWEEN ${from}::date AND ${to}::date
+    `) as Row[]
+    return { from, to, ...taxSummary([...rows, ...credits].map((r) => ({ kind: r.kind, rate_name: r.rate_name, rate: Number(r.rate), amount: Number(r.amount), tax_amount: Number(r.tax_amount) }))) }
   }
 
   static listTaxReturns(org: string) {
@@ -722,6 +817,47 @@ export class BooksServiceAdmin {
     if (!r.summary?.balanced) throw new Error(r.summary?.difference ? `There's still a difference of ${r.summary.difference.toFixed(2)}.` : 'Some bank lines are still unmatched.')
     const rows = await getSql()`INSERT INTO public.bank_reconciliations (organization_id, account_id, as_of, statement_balance, book_balance, completed_by) VALUES (${org}::uuid, ${accountId}, ${form.as_of}::date, ${statement}, ${r.book_balance}, ${acting()}::uuid) RETURNING id`
     return rows[0]
+  }
+
+  // ---- Cash flow and the audit log ----
+
+  /** Cash accounts are recognised the way the forecast does: bank statement accounts, and assets named cash or bank. */
+  static async getCashFlow(org: string, from: string, to: string) {
+    requireDate(from); requireDate(to)
+    if (to < from) throw new Error("The end date can't be before the start.")
+    const sql = getSql()
+    const cash = (await sql`
+      SELECT id, code, name FROM public.accounts
+      WHERE organization_id = ${org}::uuid AND account_type = 'asset'
+        AND (name ~* '(cash|bank)' OR id IN (SELECT account_id FROM public.bank_statement_lines WHERE organization_id = ${org}::uuid))
+      ORDER BY code
+    `) as Row[]
+    const ids = cash.map((c) => Number(c.id))
+    const balanceAt = async (condition: 'before' | 'through') => {
+      const [b] = (await (condition === 'before'
+        ? sql`SELECT COALESCE(SUM(l.debit_amount - l.credit_amount), 0)::float AS b FROM public.journal_entry_lines l JOIN public.journal_entries e ON e.id = l.journal_entry_id WHERE e.organization_id = ${org}::uuid AND l.account_id = ANY(${ids}::bigint[]) AND e.entry_date < ${from}::date`
+        : sql`SELECT COALESCE(SUM(l.debit_amount - l.credit_amount), 0)::float AS b FROM public.journal_entry_lines l JOIN public.journal_entries e ON e.id = l.journal_entry_id WHERE e.organization_id = ${org}::uuid AND l.account_id = ANY(${ids}::bigint[]) AND e.entry_date <= ${to}::date`)) as Row[]
+      return money(Number(b.b))
+    }
+    const rows = (await sql`
+      SELECT l.journal_entry_id, l.account_id, a.code, a.name, a.account_type::text AS account_type, a.report_category::text AS report_category, l.debit_amount::float AS debit, l.credit_amount::float AS credit
+      FROM public.journal_entry_lines l
+      JOIN public.journal_entries e ON e.id = l.journal_entry_id
+      JOIN public.accounts a ON a.id = l.account_id
+      WHERE e.organization_id = ${org}::uuid AND e.entry_date BETWEEN ${from}::date AND ${to}::date
+        AND l.journal_entry_id IN (SELECT journal_entry_id FROM public.journal_entry_lines WHERE account_id = ANY(${ids}::bigint[]))
+      ORDER BY l.journal_entry_id, l.line_order
+    `) as Row[]
+    const byEntry: Record<string, Row[]> = {}
+    rows.forEach((r) => { (byEntry[r.journal_entry_id] ??= []).push(r) })
+    const flow = cashFlowSummary(Object.values(byEntry).map((lines) => lines.map((r) => ({ account_id: Number(r.account_id), code: r.code, name: r.name, account_type: r.account_type, report_category: r.report_category, is_cash: ids.includes(Number(r.account_id)), debit: Number(r.debit), credit: Number(r.credit) }))))
+    const opening = await balanceAt('before')
+    const closing = await balanceAt('through')
+    return { from, to, cash_accounts: cash.map((c) => ({ code: c.code, name: c.name })), opening, closing, ...flow, agrees: Math.abs(money(opening + flow.net) - closing) < 0.05 }
+  }
+
+  static listAuditLog(org: string, options: { limit?: number } = {}) {
+    return listAuditLog(org, options)
   }
 
   // ---- Budgets and forecasts ----

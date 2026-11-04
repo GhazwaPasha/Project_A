@@ -7,6 +7,7 @@ import { VoucherServiceAdmin } from '@/server/voucher-service-admin'
 import { BooksServiceAdmin } from '@/server/books/service'
 import { fetchAccountOpening } from '@/server/data/ledger-sql'
 import { InventoryServiceAdmin } from '@/server/inventory/service'
+import { recordAudit } from '@/server/audit'
 
 /** Everything a tool may know about who is calling. Permissions are rechecked on every call. */
 export type ToolContext = {
@@ -233,6 +234,11 @@ const TOOLS: AgentTool[] = [
     run: (_i, c) => books(c, 'listBudgets', [c.org], 'Looking at budgets', () => BooksServiceAdmin.listBudgets(c.org)),
   }),
   define({
+    name: 'get_cash_flow', title: 'Get cash flow', readOnly: true, schema: z.object({ from: DATE, to: DATE }),
+    description: 'Cash in and out for a period, split into operating, investing and financing, with opening and closing cash.',
+    run: (i, c) => books(c, 'getCashFlow', [c.org], 'Working out your cash flow', () => BooksServiceAdmin.getCashFlow(c.org, i.from, i.to)),
+  }),
+  define({
     name: 'get_budget_report', title: 'Get budget report', readOnly: true, schema: z.object({ budget_id: z.coerce.number().int().positive() }),
     description: 'Budget against actual for each account and month of a budget.',
     run: ({ budget_id }, c) => books(c, 'getBudgetReport', [c.org], 'Comparing to budget', () => BooksServiceAdmin.getBudgetReport(c.org, budget_id)),
@@ -302,6 +308,7 @@ export async function runTool(tool: AgentTool, rawInput: unknown, ctx: ToolConte
   if (!parsed.success) return { text: `Invalid input: ${z.prettifyError(parsed.error)}`, isError: true }
   try {
     const result = await (tool.run as (i: unknown, c: ToolContext) => Promise<unknown>)(parsed.data, ctx)
+    if (!tool.readOnly) await recordAudit({ org: ctx.org, userId: ctx.userId, source: ctx.source === 'mcp' ? `mcp${ctx.sourceName ? `: ${ctx.sourceName}` : ''}` : 'agent', action: tool.title, details: parsed.data })
     return { text: JSON.stringify(result), isError: false }
   } catch (e) {
     return { text: e instanceof Error ? e.message : 'The tool failed.', isError: true }

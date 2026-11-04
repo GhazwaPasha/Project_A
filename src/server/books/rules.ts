@@ -166,3 +166,71 @@ export function statementAmount(row: { amount?: string; debit?: string; credit?:
   if (out === null && inward === null) return null
   return money((inward ?? 0) - Math.abs(out ?? 0))
 }
+
+export type CreditLine = { account_id: number; amount: number; tax_amount: number; tax_account_id: number | null }
+
+/** The opposite of the original document, for what's being credited. What the document still owed comes off that; any more is paid back. */
+export function creditNoteEntry(kind: 'invoice' | 'bill', controlId: number, refundId: number | null, lines: CreditLine[], applied: number, refund: number): EntryLine[] {
+  const main = byAccount(lines.map((l) => ({ account_id: l.account_id, amount: l.amount })))
+  const taxes = byAccount(lines.flatMap((l) => (l.tax_amount && l.tax_account_id ? [{ account_id: l.tax_account_id, amount: l.tax_amount }] : [])))
+  const settle: { account_id: number; amount: number; description: string }[] = [
+    ...(applied > 0 ? [{ account_id: controlId, amount: money(applied), description: 'Credit applied' }] : []),
+    ...(refund > 0 && refundId ? [{ account_id: refundId, amount: money(refund), description: 'Refund' }] : []),
+  ]
+  if (kind === 'invoice') {
+    return [
+      ...main.map((a) => ({ account_id: a.account_id, debit: a.amount, credit: 0, description: 'Credit note' })),
+      ...taxes.map((a) => ({ account_id: a.account_id, debit: a.amount, credit: 0, description: 'Tax' })),
+      ...settle.map((a) => ({ account_id: a.account_id, debit: 0, credit: a.amount, description: a.description })),
+    ]
+  }
+  return [
+    ...settle.map((a) => ({ account_id: a.account_id, debit: a.amount, credit: 0, description: a.description })),
+    ...main.map((a) => ({ account_id: a.account_id, debit: 0, credit: a.amount, description: 'Credit note' })),
+    ...taxes.map((a) => ({ account_id: a.account_id, debit: 0, credit: a.amount, description: 'Tax' })),
+  ]
+}
+
+export type CashEntryLine = { account_id: number; code: string; name: string; account_type: string; report_category: string | null; is_cash: boolean; debit: number; credit: number }
+export type CashSection = 'operating' | 'investing' | 'financing'
+
+export const cashSection = (l: Pick<CashEntryLine, 'account_type' | 'report_category'>): CashSection => {
+  if (l.account_type === 'asset' && (l.report_category === 'fixed_asset' || l.report_category === 'other_asset')) return 'investing'
+  if (l.account_type === 'equity' || (l.account_type === 'liability' && l.report_category === 'long_term_liability')) return 'financing'
+  return 'operating'
+}
+
+/**
+ * Cash flow by the direct method: each entry that moved cash is split across what was on the other side of it.
+ * Moves between cash accounts cancel out and don't appear. Takes the entries' lines, grouped by entry.
+ */
+export function cashFlowSummary(entries: CashEntryLine[][]) {
+  type Row = { account_id: number; code: string; name: string; amount: number }
+  const sections: Record<CashSection, Row[]> = { operating: [], investing: [], financing: [] }
+  const add = (l: CashEntryLine, amount: number) => {
+    const rows = sections[cashSection(l)]
+    const row = rows.find((r) => r.account_id === l.account_id)
+    if (row) row.amount = money(row.amount + amount)
+    else rows.push({ account_id: l.account_id, code: l.code, name: l.name, amount: money(amount) })
+  }
+  for (const lines of entries) {
+    const net = money(lines.filter((l) => l.is_cash).reduce((s, l) => s + l.debit - l.credit, 0))
+    if (!net) continue
+    // Cash coming in is matched to what was credited, and cash going out to what was debited.
+    const others = lines.filter((l) => !l.is_cash).map((l) => ({ l, weight: net > 0 ? l.credit - l.debit : l.debit - l.credit })).filter((o) => o.weight > 0)
+    const whole = others.reduce((s, o) => s + o.weight, 0)
+    if (!whole) continue
+    let left = net
+    others.forEach((o, i) => {
+      const share = i === others.length - 1 ? left : money((net * o.weight) / whole)
+      left = money(left - share)
+      add(o.l, share)
+    })
+  }
+  const summary = (rows: Row[]) => {
+    const live = rows.filter((r) => r.amount !== 0).sort((a, b) => a.code.localeCompare(b.code))
+    return { lines: live, in: money(live.filter((r) => r.amount > 0).reduce((s, r) => s + r.amount, 0)), out: money(live.filter((r) => r.amount < 0).reduce((s, r) => s + r.amount, 0)), net: money(live.reduce((s, r) => s + r.amount, 0)) }
+  }
+  const operating = summary(sections.operating), investing = summary(sections.investing), financing = summary(sections.financing)
+  return { operating, investing, financing, net: money(operating.net + investing.net + financing.net) }
+}

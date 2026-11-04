@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
-import { BookOpen, Boxes, Building2, CheckSquare, ChevronsUpDown, Contact, FileBarChart, FileText, House, Landmark, Layers, ListTree, Lock, Menu, Percent, Plug, Receipt, Target, TrendingUp, Scale, Search, Settings, Shield, Truck, Users } from 'lucide-react'
+import { BookOpen, Boxes, Building2, CheckSquare, ChevronsUpDown, Contact, FileBarChart, FileText, House, Landmark, Layers, ListTree, Lock, Menu, Percent, Plug, Receipt, Target, TrendingUp, Scale, Search, Settings, Shield, Truck, Users, History } from 'lucide-react'
 import { Toaster } from 'sonner'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
@@ -48,6 +48,7 @@ export const NAV: { group: string; items: Item[] }[] = [
   ] },
   { group: 'Organization', items: [
     { label: 'Team Management', icon: Users, to: '/team', roles: ['owner', 'books', 'member'] },
+    { label: 'Audit log', icon: History, to: '/audit', roles: BOOKS },
     { label: 'Organization Settings', icon: Building2, to: '/organization', roles: ['owner'] },
     { label: 'Connections', icon: Plug, to: '/settings/connections', roles: BOOKS, notInSidebar: true },
     { label: 'Settings', icon: Settings, to: '/settings' },

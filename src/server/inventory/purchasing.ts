@@ -63,6 +63,9 @@ export class InventoryPurchasing extends InventoryItems {
       const ids = form.lines.map((l) => Number(l.item_id))
       const known = (await tx`SELECT id FROM public.inventory_items WHERE organization_id = ${org}::uuid AND id = ANY(${ids}::bigint[])`) as Row[]
       if (form.lines.some((l) => !known.some((k) => Number(k.id) === Number(l.item_id)))) throw new Error('Choose an item for every line.')
+      const rateIds = form.lines.map((l) => l.tax_rate_id).filter(Boolean).map(Number)
+      const rates = rateIds.length ? ((await tx`SELECT id FROM public.tax_rates WHERE organization_id = ${org}::uuid AND id = ANY(${rateIds}::bigint[])`) as Row[]) : []
+      if (rateIds.some((id) => !rates.some((r) => Number(r.id) === id))) throw new Error('That tax rate is not available.')
       form.lines.forEach((l) => {
         if (!(Number(l.quantity) > 0)) throw new Error('Quantities must be more than zero.')
         if (!(Number(l.unit_cost) >= 0)) throw new Error("A cost can't be negative.")

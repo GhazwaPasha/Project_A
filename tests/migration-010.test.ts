@@ -26,6 +26,8 @@ test('migrations 010 and 011 move existing stock into Main, change no totals, ke
   await db.exec(file('010_advanced_inventory'))
   await db.exec(file('011_inventory_depth'))
   await db.exec(file('011_inventory_depth'))
+  await db.exec(file('012_invites_audit_credit_notes'))
+  await db.exec(file('012_invites_audit_credit_notes'))
   assert.deepEqual(await totals(), before, 'item totals untouched')
   const warehouses = (await db.query<{ organization_id: string; name: string; is_default: boolean }>('SELECT organization_id, name, is_default FROM public.warehouses')).rows
   assert.deepEqual(warehouses, [{ organization_id: ORG, name: 'Main', is_default: true }], 'one Main, and none for an organization with no items')

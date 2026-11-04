@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { useQuery, queryOptions } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
+import { toast } from 'sonner'
+import { Input } from '@/components/ui/input'
 import { CreateOrganization } from '@/components/auth'
 import { Choice, FormBody, Modal, Stat, Stats, Text, useSave } from '@/components/form'
 import { Cell, Empty, Head, Loaded, Paged, Screen, SearchIcon, SettingsTabs, Table, Toolbar, btn } from '@/components/page'
 import { Badge, Chip, Chips } from '@/components/chips'
 import { call, rest } from '@/lib/api'
 import { shortDate, useApp } from '@/lib/boot'
+import type { Id } from '@/lib/data'
 import { useTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
@@ -18,6 +21,8 @@ const ASSIGNABLE = [
   { value: 'observer', label: 'Observer', hint: 'Can view inventory only.' },
 ]
 
+type Invite = { id: Id; email: string; role: string; expires_at: string }
+
 export function Team() {
   const { org, access, email } = useApp()
   const isOwner = access === 'owner'
@@ -27,7 +32,14 @@ export function Team() {
   const [adding, setAdding] = useState(false)
   const [newEmail, setNewEmail] = useState('')
   const [role, setRole] = useState('member')
-  const add = useSave(() => rest(`/api/organizations/${org.id}/members`, { body: { email: newEmail.trim(), role } }), { success: 'Team member added', refresh: ['members'], onDone: () => { setAdding(false); setNewEmail(''); setRole('member') } })
+  const invites = useQuery({ ...queryOptions<{ invites: Invite[] }>({ queryKey: ['invites', org.id], queryFn: () => rest<{ invites: Invite[] }>(`/api/organizations/${org.id}/invites`) }), enabled: isOwner })
+  const [link, setLink] = useState<{ email: string; url: string } | null>(null)
+  const revoke = useSave((id: Id) => rest(`/api/organizations/${org.id}/invites?id=${id}`, { method: 'DELETE' }), { success: 'Invite cancelled', refresh: ['invites'] })
+  const add = useSave(async () => {
+    const r = await rest<{ invite?: { token: string; email: string } }>(`/api/organizations/${org.id}/members`, { body: { email: newEmail.trim(), role } })
+    if (r.invite) setLink({ email: r.invite.email, url: `${location.origin}/invite/${r.invite.token}` })
+    return r
+  }, { refresh: ['members', 'invites'], onDone: () => { setAdding(false); setNewEmail(''); setRole('member') } })
   const change = useSave((v: { memberId: string; role: string }) => rest(`/api/organizations/${org.id}/members`, { method: 'PATCH', body: v }), { success: 'Role updated', refresh: ['members'] })
   const everyone = list.data ?? []
   const roles = [...new Set(everyone.map((m) => m.role))]
@@ -64,17 +76,34 @@ export function Team() {
           </Paged>
         )}
       </Loaded>
+      {invites.data?.invites.length ? (
+        <section aria-label="Open invites" className="flex flex-col gap-2">
+          <h2 className="font-semibold text-[14px]">Waiting to join</h2>
+          <Table min={520}>
+            <thead><tr><Head>Email</Head><Head>Role</Head><Head>Link expires</Head><Head /></tr></thead>
+            <tbody>{invites.data.invites.map((i) => <tr key={i.id}><Cell>{i.email}</Cell><Cell><Badge>{ROLE_LABEL[i.role] ?? i.role}</Badge></Cell><Cell className="text-muted-foreground">{shortDate(i.expires_at)}</Cell><Cell right><button className="text-[13px] font-medium underline underline-offset-[3px] cursor-pointer" disabled={revoke.isPending} onClick={() => revoke.mutate(i.id)}>Cancel</button></Cell></tr>)}</tbody>
+          </Table>
+        </section>
+      ) : null}
+      <Modal open={link !== null} onClose={() => setLink(null)} title="Send them this link">
+        <div className="flex flex-col gap-3 min-w-0">
+          <p className="text-[13.5px]">{link?.email} doesn't have an account yet. Send them this link to join. It only works with that email, lasts 14 days, and this is the only time you'll see it.</p>
+          <Input aria-label="Invite link" readOnly value={link?.url ?? ''} onFocus={(e) => e.target.select()} className="fig" />
+          <div className="flex justify-end gap-2">
+            <button className={btn.plain} onClick={() => void navigator.clipboard.writeText(link?.url ?? '').then(() => toast.success('Link copied'))}>Copy link</button>
+            <button className={btn.primary} onClick={() => setLink(null)}>Done</button>
+          </div>
+        </div>
+      </Modal>
       <Modal open={adding} onClose={() => setAdding(false)} title="Add team member">
         <FormBody onSubmit={() => add.mutate()} submit="Add" pending={add.isPending} onCancel={() => setAdding(false)} disabled={!newEmail.trim()}>
-          <Text label="Work email" hint="They need an Accountuitive account with this email." type="email" required value={newEmail} onChange={setNewEmail} />
+          <Text label="Work email" hint="If they don't have an account yet, you'll get a link to send them." type="email" required value={newEmail} onChange={setNewEmail} />
           <Choice label="Role" value={role} onChange={setRole} hint={ASSIGNABLE.find((r) => r.value === role)?.hint} options={ASSIGNABLE} />
         </FormBody>
       </Modal>
     </Screen>
   )
 }
-
-const MONTHS = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map((m, i) => ({ value: m, label: new Date(2000, i, 1).toLocaleDateString('en', { month: 'long' }) }))
 
 export function OrganizationSettings() {
   const { org, access } = useApp()
@@ -123,8 +152,6 @@ export function OrganizationSettings() {
         {Section({ title: 'Accounting', children: <>
           <Text label="Reporting currency" hint="Three-letter code, for example PKR or USD." maxLength={3} value={f.reportingCurrency} onChange={set('reportingCurrency')} />
           <Choice label="Decimal places" value={f.decimalPlaces} onChange={set('decimalPlaces')} options={['0', '2', '3'].map((v) => ({ value: v, label: v }))} />
-          <Choice label="Fiscal year starts" value={f.fiscalYearStart} onChange={set('fiscalYearStart')} options={MONTHS} />
-          <Text label="Low cash alert" hint="Warn when cash falls below this amount." inputMode="decimal" value={f.lowBalanceAlert} onChange={set('lowBalanceAlert')} />
         </> })}
       </FormBody>
     </Screen>

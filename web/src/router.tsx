@@ -52,6 +52,8 @@ const ledgerSearch = (s: Record<string, unknown>): LedgerSearch => {
 const periodSearch = (s: Record<string, unknown>): { period: Period } => ({
   period: s.period === 'quarter' || s.period === 'year' ? s.period : 'month',
 })
+const cashFlow = createRoute({ getParentRoute: () => root, path: '/reports/cash-flow', component: lazyRouteComponent(() => import('@/routes/reports'), 'CashFlowPage'), validateSearch: periodSearch })
+const cashFlowDoc = createRoute({ getParentRoute: () => root, path: '/print/cash-flow', component: lazyRouteComponent(() => import('@/routes/print'), 'CashFlowDoc'), validateSearch: periodSearch })
 const ledgerAccount = createRoute({ getParentRoute: () => root, path: '/ledger/$accountId', component: LedgerAccount, validateSearch: ledgerSearch })
 const ledgerDoc = createRoute({ getParentRoute: () => root, path: '/print/ledger/$accountId', component: lazyRouteComponent(() => import('@/routes/print'), 'LedgerDoc'), validateSearch: ledgerSearch })
 const incomeDoc = createRoute({ getParentRoute: () => root, path: '/print/income-statement', component: lazyRouteComponent(() => import('@/routes/print'), 'IncomeDoc'), validateSearch: periodSearch })
@@ -64,6 +66,12 @@ const tree = root.addChildren([
   ledgerAccount,
   ledgerDoc,
   incomeDoc,
+  cashFlow,
+  cashFlowDoc,
+  route('/audit', lazyRouteComponent(() => import('@/routes/audit'), 'AuditLog')),
+  // Handled before the app loads: BootProvider acts on these addresses.
+  route('/reset-password', () => null as never),
+  route('/invite/$token', () => null as never),
   route('/invoices', lazyRouteComponent(() => import('@/routes/documents'), 'Invoices')),
   route('/bills', lazyRouteComponent(() => import('@/routes/documents'), 'Bills')),
   route('/customers', lazyRouteComponent(() => import('@/routes/documents'), 'Customers')),

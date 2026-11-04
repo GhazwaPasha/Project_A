@@ -18,6 +18,7 @@ function useTabs() {
     { to: '/reports/balance-sheet', label: pro ? 'Balance Sheet' : 'What you own and owe' },
     { to: '/reports/aged-receivables', label: pro ? 'Aged Receivables' : 'Who owes you' },
     { to: '/reports/aged-payables', label: pro ? 'Aged Payables' : 'Who you owe' },
+    { to: '/reports/cash-flow', label: pro ? 'Cash Flow' : 'Where cash went' },
   ]
 }
 
@@ -26,6 +27,7 @@ export function ReportsIndex() {
   const { from, to } = periodRange('month')
   const income = useQuery(incomeStatement(org.id, from, to))
   const sheet = useQuery(balanceSheet(org.id, today()))
+  const cash = useQuery(query<CashFlow>(['cash-flow', org.id, from, to], 'BooksService', 'getCashFlow', [org.id, from, to]))
   const agedIn = useQuery({ ...query<Aged>(['aged', org.id, 'invoice', 'today'], 'BooksService', 'getAgedReport', [org.id, 'invoice']), retry: false })
   const agedOut = useQuery({ ...query<Aged>(['aged', org.id, 'bill', 'today'], 'BooksService', 'getAgedReport', [org.id, 'bill']), retry: false })
   return (
@@ -35,6 +37,7 @@ export function ReportsIndex() {
         <ReportRow to="/reports/balance-sheet" name={pro ? 'Balance Sheet' : 'What you own and owe'} desc={pro ? 'Assets, liabilities and equity as of today.' : 'A snapshot of your business today.'} value={sheet.data ? money(num(sheet.data.totalAssets)) : ''} label={pro ? 'Total assets' : 'You own'} />
         <ReportRow to="/reports/aged-receivables" name={pro ? 'Aged Receivables' : 'Who owes you'} desc="What customers owe, and how late it is." value={agedIn.data ? money(num(agedIn.data.totals.total)) : ''} label="Outstanding" />
         <ReportRow to="/reports/aged-payables" name={pro ? 'Aged Payables' : 'Who you owe'} desc="What you owe suppliers, and how late it is." value={agedOut.data ? money(num(agedOut.data.totals.total)) : ''} label="Outstanding" />
+        <ReportRow to="/reports/cash-flow" name={pro ? 'Cash Flow' : 'Where cash went'} desc={pro ? 'Operating, investing and financing cash movements.' : 'What brought cash in, and what took it out.'} value={cash.data ? money(num(cash.data.net)) : '…'} label={pro ? 'Net change, this month' : 'Change this month'} />
         <ReportRow to="/trial-balance" name="Trial Balance" desc={pro ? 'Debits and credits by account, with book checks.' : 'A check that your books are right.'} value={sheet.data ? <Badge tone={sheet.data.isBalanced ? 'good' : 'bad'} dot>{sheet.data.isBalanced ? 'Balanced' : 'Out of balance'}</Badge> : ''} label="Books" />
       </div>
       <div className="grid gap-3.5 lg:grid-cols-2 items-start">
@@ -85,7 +88,7 @@ function Summary({ title, to, rows }: { title: string; to: '/reports/income-stat
 
 function ReportRow({ to, name, desc, value, label }: { to: string; name: string; desc: string; value: React.ReactNode; label: string }) {
   return (
-    <Link to={to} {...(to === '/reports/income-statement' ? { search: { period: 'month' as const } } : {})} className="sheet flex flex-col gap-2 px-3.5 py-3 hover:bg-accent">
+    <Link to={to} {...(to === '/reports/income-statement' || to === '/reports/cash-flow' ? { search: { period: 'month' as const } } : {})} className="sheet flex flex-col gap-2 px-3.5 py-3 hover:bg-accent">
       <span><span className="block font-medium">{name}</span><span className="block text-[13px] text-muted-foreground">{desc}</span></span>
       <span className="mt-auto flex items-baseline justify-between gap-3"><span className="text-[12px] text-muted-foreground">{label}</span><span className="fig font-medium">{value || ' '}</span></span>
     </Link>
@@ -230,3 +233,49 @@ function AgedReport({ kind }: { kind: 'invoice' | 'bill' }) {
 }
 export const AgedReceivables = () => <AgedReport kind="invoice" />
 export const AgedPayables = () => <AgedReport kind="bill" />
+
+type CashPart = { in: number; out: number; net: number; lines: { account_id: number; code: string; name: string; amount: number }[] }
+type CashFlow = { cash_accounts: { code: string; name: string }[]; opening: number; closing: number; net: number; agrees: boolean; operating: CashPart; investing: CashPart; financing: CashPart }
+
+export function CashFlowPage() {
+  const { org, pro } = useApp()
+  const { period } = useSearch({ from: '/reports/cash-flow' })
+  const navigate = useNavigate()
+  const tabs = useTabs()
+  const { from, to } = periodRange(period)
+  const q = useQuery(query<CashFlow>(['cash-flow', org.id, from, to], 'BooksService', 'getCashFlow', [org.id, from, to]))
+  const d = org.decimals
+  const parts = (r: CashFlow) => [
+    { label: pro ? 'Operating activities' : 'Running the business', p: r.operating },
+    { label: pro ? 'Investing activities' : 'Buying and selling big things', p: r.investing },
+    { label: pro ? 'Financing activities' : 'Loans and owner money', p: r.financing },
+  ]
+  return (
+    <Screen
+      title={pro ? 'Cash Flow' : 'Where cash went'}
+      sub={`${shortDate(from)} to ${shortDate(to)}, ${org.currency}`}
+      actions={<><Chips label="Period" value={period} options={PERIODS} onChange={(p) => void navigate({ to: '/reports/cash-flow', search: { period: p as Period } })} /><PrintLink to="/print/cash-flow" search={{ period }} /></>}
+      tabs={<Tabs items={tabs} />}
+    >
+      <Loaded query={q}>
+        {(r) => (
+          <div className="flex flex-col gap-3.5">
+            <Table wrap min={340}>
+              <thead><tr><Head>{pro ? 'Account' : 'Item'}</Head><Head right>{org.currency}</Head></tr></thead>
+              <tbody>
+                <tr className="font-medium"><Cell>{pro ? 'Opening cash' : 'Cash at the start'}</Cell><Cell right>{figure(num(r.opening), d)}</Cell></tr>
+                {parts(r).map(({ label, p }) => [
+                  ...p.lines.map((l) => <tr key={`${label}-${l.account_id}`}><Cell className="text-muted-foreground">{l.name}</Cell><Cell right>{figure(num(l.amount), d)}</Cell></tr>),
+                  <tr key={label} className="font-medium bg-muted/30"><Cell>{label}</Cell><Cell right>{figure(num(p.net), d)}</Cell></tr>,
+                ])}
+                <tr className="font-semibold"><Cell>{pro ? 'Closing cash' : 'Cash at the end'}</Cell><Cell right>{figure(num(r.closing), d)}</Cell></tr>
+              </tbody>
+            </Table>
+            {r.agrees ? null : <p role="alert" className="text-[13px] text-destructive">This doesn't add up to your closing cash, usually because an entry moves cash with nothing recognisable on the other side.</p>}
+            <p className="text-[12.5px] text-muted-foreground">{r.cash_accounts.length ? `Counted as cash: ${r.cash_accounts.map((c) => c.name).join(', ')}. Accounts count as cash if their name includes cash or bank, or if you've imported a bank statement for them.` : 'No cash accounts found. An account counts as cash if its name includes cash or bank, or if you have imported a bank statement for it.'}</p>
+          </div>
+        )}
+      </Loaded>
+    </Screen>
+  )
+}

@@ -257,3 +257,31 @@ function AgedDoc({ kind }: { kind: 'invoice' | 'bill' }) {
 }
 export const AgedReceivablesDoc = () => <AgedDoc kind="invoice" />
 export const AgedPayablesDoc = () => <AgedDoc kind="bill" />
+
+type CashFlow = { opening: number; closing: number; net: number; agrees: boolean; operating: CashPart; investing: CashPart; financing: CashPart }
+type CashPart = { net: number; lines: { account_id: number; code: string; name: string; amount: number }[] }
+
+export function CashFlowDoc() {
+  const { org } = useApp()
+  const { period } = useSearch({ from: '/print/cash-flow' })
+  const { from, to } = periodRange(period)
+  const r = useQuery(q<CashFlow>(['cash-flow', org.id, from, to], 'BooksService', 'getCashFlow', [org.id, from, to])).data
+  const d = org.decimals
+  const parts = r ? ([['Operating', r.operating], ['Investing', r.investing], ['Financing', r.financing]] as const) : []
+  const csv: Csv | null = r ? [['Item', 'Amount'], ['Opening cash', r.opening], ...parts.flatMap(([label, p]): Csv => [...p.lines.map((l): (string | number)[] => [l.name, l.amount]), [`Net from ${label.toLowerCase()}`, p.net]]), ['Closing cash', r.closing]] : null
+  return (
+    <PrintDoc title="Cash flow statement" period={`${shortDate(from)} to ${shortDate(to)}`} file={`Cash Flow ${from} to ${to}`} back={{ to: '/reports/cash-flow', search: { period }, label: 'Cash flow' }} csv={csv}>
+      <table className="doc-table">
+        <thead><tr><th>Item</th><th className="num">{org.currency}</th></tr></thead>
+        <tbody>
+          {r ? <tr className="sub"><td>Opening cash</td><Num v={r.opening} d={d} /></tr> : null}
+          {parts.map(([label, p]) => [
+            ...p.lines.map((l) => <tr key={`${label}-${l.account_id}`}><td>{l.name}</td><Num v={l.amount} d={d} /></tr>),
+            <tr key={label} className="sub"><td>Net from {label.toLowerCase()}</td><Num v={p.net} d={d} /></tr>,
+          ])}
+          {r ? <tr className="total"><td>Closing cash</td><Num v={r.closing} d={d} /></tr> : null}
+        </tbody>
+      </table>
+    </PrintDoc>
+  )
+}

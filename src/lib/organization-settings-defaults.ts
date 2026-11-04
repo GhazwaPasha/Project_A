@@ -47,61 +47,26 @@ export type CompanyInfoSettings = {
 export type AccountingInfoSettings = {
   fiscalYearStart: string
   reportingCurrency: string
-  dateFormat: string
-  numberFormat: string
   decimalPlaces: number
-  autoBackup: boolean
-  backupFrequency: string
-  retentionPeriod: string
-  chartOfAccounts: string
-  inventoryMethod: string
-  depreciationMethod: string
 }
 
 export type PasswordPolicySettings = {
   minLength: number
-  requireUppercase: boolean
-  requireLowercase: boolean
-  requireNumbers: boolean
-  requireSymbols: boolean
-  expirationDays: number
 }
 
 export type SecurityInfoSettings = {
   passwordPolicy: PasswordPolicySettings
   sessionTimeout: number
-  twoFactorAuth: boolean
-  ipWhitelist: string[]
-  auditLogging: boolean
-  dataEncryption: boolean
-  apiAccess: boolean
 }
 
 export type NotificationInfoSettings = {
-  emailNotifications: boolean
-  smsNotifications: boolean
-  systemAlerts: boolean
-  reportDelivery: string
-  reminderFrequency: string
   lowBalanceAlert: number
-  overdueInvoiceAlert: boolean
-  monthlyReport: boolean
 }
 
 export type IntegrationsInfoSettings = {
-  bankFeeds: boolean
-  paymentGateway: string
-  taxSoftware: string
-  crmIntegration: string
-  emailProvider: string
-  cloudStorage: string
 }
 
 export type BackupInfoSettings = {
-  autoBackup: boolean
-  backupFrequency: string
-  retentionPeriod: string
-  lastBackupNote: string
 }
 
 export const DEFAULT_COMPANY: CompanyInfoSettings = {
@@ -118,61 +83,26 @@ export const DEFAULT_COMPANY: CompanyInfoSettings = {
 export const DEFAULT_ACCOUNTING: AccountingInfoSettings = {
   fiscalYearStart: 'January',
   reportingCurrency: 'USD',
-  dateFormat: 'MM/DD/YYYY',
-  numberFormat: 'US (1,234.56)',
   decimalPlaces: 2,
-  autoBackup: true,
-  backupFrequency: 'Daily',
-  retentionPeriod: '7 years',
-  chartOfAccounts: 'Standard',
-  inventoryMethod: 'FIFO',
-  depreciationMethod: 'Straight Line',
 }
 
 export const DEFAULT_PASSWORD_POLICY: PasswordPolicySettings = {
   minLength: 8,
-  requireUppercase: true,
-  requireLowercase: true,
-  requireNumbers: true,
-  requireSymbols: true,
-  expirationDays: 90,
 }
 
 export const DEFAULT_SECURITY: SecurityInfoSettings = {
   passwordPolicy: DEFAULT_PASSWORD_POLICY,
   sessionTimeout: 30,
-  twoFactorAuth: false,
-  ipWhitelist: [],
-  auditLogging: true,
-  dataEncryption: true,
-  apiAccess: false,
 }
 
 export const DEFAULT_NOTIFICATIONS: NotificationInfoSettings = {
-  emailNotifications: true,
-  smsNotifications: false,
-  systemAlerts: true,
-  reportDelivery: 'Email',
-  reminderFrequency: 'Daily',
   lowBalanceAlert: 1000,
-  overdueInvoiceAlert: true,
-  monthlyReport: true,
 }
 
 export const DEFAULT_INTEGRATIONS: IntegrationsInfoSettings = {
-  bankFeeds: false,
-  paymentGateway: 'Not configured',
-  taxSoftware: 'Not configured',
-  crmIntegration: 'Not configured',
-  emailProvider: 'Not configured',
-  cloudStorage: 'Not configured',
 }
 
 export const DEFAULT_BACKUP: BackupInfoSettings = {
-  autoBackup: true,
-  backupFrequency: 'Daily',
-  retentionPeriod: '7 years',
-  lastBackupNote: '',
 }
 
 function mergeAddress(

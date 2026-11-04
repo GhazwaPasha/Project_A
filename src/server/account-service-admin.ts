@@ -1,4 +1,5 @@
 import { getSql } from '@/server/pg'
+import { isStillInUse } from '@/server/public-error'
 import { fetchAccountNetBalance } from '@/server/data/ledger-sql'
 import { getActingUserId } from '@/server/request-context'
 import { assertReportCategoryCompatible } from '@/lib/account-report-category'
@@ -184,7 +185,10 @@ export class AccountServiceAdmin {
 
   static async deleteAccount(id: number): Promise<void> {
     const sql = getSql()
-    await sql`DELETE FROM public.accounts WHERE id = ${id}`
+    await sql`DELETE FROM public.accounts WHERE id = ${id}`.catch((e: unknown) => {
+      if (isStillInUse(e)) throw new Error("This account has entries or is used elsewhere, so it can't be deleted. Mark it inactive instead.")
+      throw e
+    })
   }
 
   static async getAccountHierarchy(organizationId: string): Promise<Account[]> {

@@ -28,10 +28,19 @@ export async function takeLayers(tx: Pg, itemId: number, transactionId: number, 
 }
 
 /** Undoes earlier issues by putting stock back in the layers it came from, so it keeps its place in the queue. False if there's nothing to put back. */
-export async function restoreLayers(tx: Pg, from: number[]) {
-  const takes = (await tx`SELECT layer_id, SUM(quantity)::float AS quantity, SUM(value)::float AS value FROM public.stock_cost_layer_takes WHERE transaction_id = ANY(${from}::bigint[]) GROUP BY 1`) as Row[]
-  for (const t of takes) await tx`UPDATE public.stock_cost_layers SET quantity = quantity + ${t.quantity}, value = value + ${t.value} WHERE id = ${t.layer_id}`
-  return takes.length > 0
+export async function restoreLayers(tx: Pg, from: number[], quantity: number) {
+  const takes = (await tx`SELECT transaction_id, layer_id, quantity::float AS quantity, value::float AS value FROM public.stock_cost_layer_takes WHERE transaction_id = ANY(${from}::bigint[]) AND quantity > 0 ORDER BY layer_id DESC`) as Row[]
+  let left = quantity
+  for (const t of takes) {
+    if (left <= 1e-9) break
+    const q = Math.min(Number(t.quantity), left)
+    const value = q >= Number(t.quantity) - 1e-9 ? Number(t.value) : money((q * Number(t.value)) / Number(t.quantity))
+    await tx`UPDATE public.stock_cost_layers SET quantity = quantity + ${q}, value = value + ${value} WHERE id = ${t.layer_id}`
+    // Each thing taken can only be put back once, so a second partial return can't restore it again.
+    await tx`UPDATE public.stock_cost_layer_takes SET quantity = quantity - ${q}, value = value - ${value} WHERE transaction_id = ${t.transaction_id} AND layer_id = ${t.layer_id}`
+    left -= q
+  }
+  return left <= 1e-9
 }
 
 /** Replaces an item's layers when its method changes. Value stays exactly the same either way. */

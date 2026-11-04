@@ -207,6 +207,19 @@ function formPatch(
   return out
 }
 
+/** A voucher shows its items' names and costs and its supplier's details, so they have to be this organization's own. */
+async function assertVoucherRefs(sql: ReturnType<typeof getSql>, org: string, form: Partial<VoucherFormData>) {
+  const ids = Array.from(new Set((form.lines ?? []).map((l) => Number(l.item_id))))
+  if (ids.length) {
+    const [known] = (await sql`SELECT COUNT(*)::int AS n FROM public.inventory_items WHERE organization_id = ${org}::uuid AND id = ANY(${ids}::bigint[])`) as unknown as { n: number }[]
+    if (Number(known.n) !== ids.length) throw new Error('Item not found.')
+  }
+  if (form.supplier_id) {
+    const [s] = await sql`SELECT id FROM public.suppliers WHERE id = ${form.supplier_id} AND organization_id = ${org}::uuid`
+    if (!s) throw new Error('Supplier not found.')
+  }
+}
+
 export class VoucherServiceAdmin {
   static async getVouchers(
     organizationId: string,
@@ -283,6 +296,7 @@ export class VoucherServiceAdmin {
     const userId = getActingUserId()
     if (!userId) throw new Error('User not authenticated')
     if (!organizationId) throw new Error('Organization ID is required')
+    await assertVoucherRefs(getSql(), organizationId, voucherData)
 
     if (voucherData.supplier_id) {
       try {
@@ -365,6 +379,8 @@ export class VoucherServiceAdmin {
   ): Promise<InventoryVoucher> {
     const sql = getSql()
     await this.requireStatus(sql, id, ['draft', 'rejected'], 'edited')
+    const [own] = (await sql`SELECT organization_id::text AS organization_id FROM public.inventory_vouchers WHERE id = ${id}`) as unknown as { organization_id: string }[]
+    await assertVoucherRefs(sql, own.organization_id, voucherData)
     const { lines } = voucherData
     const patch = formPatch(voucherData)
     const nextTotal =

@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ApiError, completeProfile, getBootstrap, type Org } from './api'
+import { ApiError, acceptInvite, completeProfile, getBootstrap, type Org } from './api'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AuthScreen, CreateOrganization } from '@/components/auth'
+import { AuthScreen, CreateOrganization, ResetPassword } from '@/components/auth'
 
 export type Access = 'owner' | 'books' | 'member' | 'observer'
 
@@ -42,6 +42,13 @@ function accessFor(role: string | null, superAdmin: boolean): Access {
   return 'observer'
 }
 
+/** A link like /invite/abc is kept through signing up or signing in, then used once. */
+function pendingInvite() {
+  const fromPath = location.pathname.match(/^\/invite\/([\w-]{20,200})$/)?.[1]
+  if (fromPath) write('pendingInvite', fromPath)
+  return read('pendingInvite') || null
+}
+
 export function BootProvider({ children }: { children: ReactNode }) {
   const boot = useQuery({ queryKey: ['bootstrap'], queryFn: getBootstrap, staleTime: 5 * 60_000 })
   const [orgId, setOrgId] = useState(() => read('selectedOrganizationId'))
@@ -65,6 +72,25 @@ export function BootProvider({ children }: { children: ReactNode }) {
     if (noProfile && user) void completeProfile(user.name?.trim() || user.email.split('@')[0] || 'User', '').then(() => refetch())
   }, [noProfile, user, refetch])
 
+  const [invite, setInvite] = useState(pendingInvite)
+  const [inviteError, setInviteError] = useState<string | null>(null)
+  const ready = Boolean(boot.data?.hasProfile)
+  useEffect(() => {
+    if (!invite || !ready) return
+    acceptInvite(invite)
+      .then((r) => {
+        const joined = r as { organization_id: string }
+        write('pendingInvite', '')
+        write('selectedOrganizationId', joined.organization_id)
+        location.replace('/home')
+      })
+      .catch((e: Error) => {
+        write('pendingInvite', '')
+        setInvite(null)
+        setInviteError(e.message)
+      })
+  }, [invite, ready])
+
   const orgs = boot.data?.organizations
   const org = orgs?.find((o) => o.id === orgId) ?? orgs?.[0]
   const value = useMemo<Ctx | null>(() => {
@@ -86,7 +112,10 @@ export function BootProvider({ children }: { children: ReactNode }) {
     }
   }, [boot.data, org, setOrg, pro, setPro])
 
-  if (unauthorized) return <AuthScreen />
+  if (location.pathname === '/reset-password') return <ResetPassword />
+  if (unauthorized) return <AuthScreen invited={Boolean(invite)} />
+  if (inviteError) return <Centered title="Couldn't accept this invite" body={inviteError} action={<button className="text-primary font-medium underline underline-offset-[3px] cursor-pointer" onClick={() => location.replace('/home')}>Continue</button>} />
+  if (invite && boot.data) return <Centered title="Joining your team" body="One moment." action={null} />
   if (boot.isError) {
     return <Centered title="Couldn't load your account" body="Check your connection and try again." action={<button className="text-primary font-medium underline underline-offset-[3px] cursor-pointer" onClick={() => boot.refetch()}>Try again</button>} />
   }

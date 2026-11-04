@@ -132,13 +132,20 @@ async function authCall(path: string, body: unknown, fallback: string) {
 export const signIn = (email: string, password: string) => authCall('sign-in/email', { email, password }, 'That email and password do not match.')
 export const signUp = (name: string, email: string, password: string) => authCall('sign-up/email', { name, email, password }, 'Could not create your account.')
 
+export const requestPasswordReset = (email: string) => authCall('request-password-reset', { email, redirectTo: `${location.origin}/reset-password` }, "Couldn't send the reset email. Try again.")
+export const resetPassword = (newPassword: string, token: string) => authCall('reset-password', { newPassword, token }, 'That reset link has expired. Ask for a new one.')
+
+export async function acceptInvite(token: string) {
+  return jsonOr(await fetch('/api/invites/accept', { method: 'POST', ...json({ token }) }), 'Could not accept this invite.')
+}
+
 export async function completeProfile(fullName: string, organizationName: string) {
   return jsonOr(await fetch('/api/auth/complete-profile', { method: 'POST', ...json({ fullName, organizationName, organizationType: 'business' }) }), 'Could not finish setting up your account')
 }
 
 /** Calls an app route, or the sample data when building screens locally. */
 export async function rest<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
-  if (import.meta.env.DEV && useDemo()) return (await import('./demo')).demoRest(path, init?.method ?? 'GET', init?.body) as T
+  if (import.meta.env.DEV && useDemo()) return (await import('./demo')).demoRest(path, init?.method ?? (init?.body !== undefined ? 'POST' : 'GET'), init?.body) as T
   const res = await fetch(path, init?.body !== undefined ? { method: init.method ?? 'POST', ...json(init.body) } : { method: init?.method ?? 'GET', credentials: 'include' })
   return jsonOr(res, 'Something went wrong')
 }

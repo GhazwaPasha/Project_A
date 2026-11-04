@@ -8,6 +8,8 @@ import { allowRequest, tooMany } from '@/server/rate-limit'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
+// Leaves time to finish a tool call and say what happened before the platform ends the request.
+const DEADLINE_MS = 50_000
 
 const Body = z.object({
   org: z.string().uuid(),
@@ -84,6 +86,7 @@ export async function POST(req: Request) {
           ctx,
           onText: (text) => send({ type: 'text', text }),
           signal: req.signal,
+          deadlineMs: DEADLINE_MS,
         })
         send({ type: 'done' })
       } catch (e) {

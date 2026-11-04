@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { recordAudit } from '@/server/audit'
 import { z } from 'zod/v4'
 import { authInApiRoute } from '@/auth'
 import { approveProposal, discardProposal, listProposals } from '@/server/agent/proposals'
@@ -35,9 +36,11 @@ export async function POST(req: Request) {
   try {
     if (action === 'discard') {
       await discardProposal(session.user.id, org, id)
+      await recordAudit({ org, userId: session.user.id, action: 'Discard proposed entry', targetType: 'proposal', targetId: id })
       return NextResponse.json({ status: 'discarded' })
     }
     const entry = await approveProposal(session.user.id, org, id)
+    await recordAudit({ org, userId: session.user.id, action: 'Approve proposed entry', targetType: 'proposal', targetId: id, details: { entry_number: entry.entry_number } })
     return NextResponse.json({ status: 'recorded', entry_number: entry.entry_number })
   } catch (e) {
     return failure(e)

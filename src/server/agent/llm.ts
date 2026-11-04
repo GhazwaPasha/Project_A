@@ -167,11 +167,31 @@ export async function runAgent(args: {
   ctx: ToolContext
   onText: (t: string) => void
   signal?: AbortSignal
+  /** Stop in time to tell the person, before the server is cut off without a word. */
+  deadlineMs?: number
 }) {
+  const stop = new AbortController()
+  let late = false
+  const timer = args.deadlineMs ? setTimeout(() => { late = true; stop.abort() }, args.deadlineMs) : null
+  const onCancel = () => stop.abort()
+  args.signal?.addEventListener('abort', onCancel)
+  try {
+    await agentLoop(args, stop.signal, () => late)
+  } catch (e) {
+    if (late) throw new ProviderBusyError('Took too long.')
+    throw e
+  } finally {
+    if (timer) clearTimeout(timer)
+    args.signal?.removeEventListener('abort', onCancel)
+  }
+}
+
+async function agentLoop(args: Parameters<typeof runAgent>[0], signal: AbortSignal, late: () => boolean) {
   const history: ChatMessage[] = [{ role: 'system', content: args.system }, ...args.messages]
   const models = [args.config.model, ...(args.config.fallbackModels ?? [])]
   for (let turn = 0; turn < MAX_TURNS; turn++) {
-    const { text, calls } = await modelTurn(args.config, models, history, args.tools, args.onText, args.signal)
+    if (late()) throw new ProviderBusyError('Took too long.')
+    const { text, calls } = await modelTurn(args.config, models, history, args.tools, args.onText, signal)
     if (calls.length === 0) return
     history.push({ role: 'assistant', content: text || null, tool_calls: calls })
     const results = await Promise.all(calls.map(async (call) => {

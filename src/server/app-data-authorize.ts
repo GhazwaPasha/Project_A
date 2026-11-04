@@ -7,12 +7,12 @@ const UUID_RE =
 
 const BOOKS_READ = new Set([
   'getBooksLock', 'getCloseChecklist', 'listUnpostedStock', 'listCustomers', 'listTaxRates', 'listDocuments', 'getDocument', 'previewDocument',
-  'getAgedReport', 'getTaxSummary', 'listTaxReturns', 'getReconciliation', 'listBudgets', 'getBudgetReport', 'getForecast', 'getWorkSummary',
+  'getAgedReport', 'getTaxSummary', 'listTaxReturns', 'getReconciliation', 'listBudgets', 'getBudgetReport', 'getForecast', 'getWorkSummary', 'getCashFlow', 'listAuditLog',
 ])
 const BOOKS_WRITE = new Set([
   'reverseEntry', 'closeBooks', 'postStockMovement', 'recordStockMovement', 'saveCustomer', 'archiveCustomer', 'saveTaxRate', 'saveDocument', 'deleteDocument',
   'postDocument', 'recordPayment', 'voidDocument', 'recordTaxReturn', 'importStatement', 'matchStatementLine', 'unmatchStatementLine', 'ignoreStatementLine',
-  'createEntryFromStatementLine', 'completeReconciliation', 'saveBudget', 'deleteBudget',
+  'createEntryFromStatementLine', 'completeReconciliation', 'saveBudget', 'deleteBudget', 'createCreditNote',
 ])
 
 const INVENTORY_PERMISSIONS: Record<OrgDataPermission & string, string[]> = {
@@ -171,6 +171,33 @@ async function orgFromSupplierContactId(id: number): Promise<string | null> {
   `
   if (!rows[0]?.supplier_id) return null
   return orgFromSupplierId(rows[0].supplier_id)
+}
+
+/**
+ * The organization a call belongs to, for the audit log. Runs after the call has been authorized. A call that names a
+ * record is traced through that record's own table, because ids repeat across tables. Calls about a person's own
+ * profile belong to no organization, and their first argument is a user id rather than an organization.
+ */
+export async function orgForCall(service: string, method: string, args: unknown[]): Promise<string | null> {
+  if (/User/.test(method)) return null
+  const id = typeof args[0] === 'number' ? args[0] : null
+  if (id !== null) {
+    if (service === 'VoucherService') return method === 'deleteAttachment' ? orgFromVoucherAttachmentId(id) : orgFromVoucherId(id)
+    if (service === 'SupplierService') return /Contact/.test(method) ? orgFromSupplierContactId(id) : orgFromSupplierId(id)
+    if (/InventoryItem/.test(method)) return orgFromInventoryItemId(id)
+    if (/InventoryCategory/.test(method)) return orgFromInventoryCategoryId(id)
+    if (/Account/.test(method)) return orgFromAccountId(id)
+    return null
+  }
+  if (method === 'addSupplierContact') {
+    const supplier = (args[0] as { supplier_id?: number } | null)?.supplier_id
+    return typeof supplier === 'number' ? orgFromSupplierId(supplier) : null
+  }
+  if (typeof args[0] === 'string' && UUID_RE.test(args[0])) return args[0]
+  const inRecord = orgFromRecord(args[0])
+  if (inRecord && UUID_RE.test(inRecord)) return inRecord
+  // Creating a voucher or supplier takes the form first and the organization second.
+  return typeof args[1] === 'string' && UUID_RE.test(args[1]) ? args[1] : null
 }
 
 /**

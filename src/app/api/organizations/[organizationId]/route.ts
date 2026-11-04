@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { recordAudit } from '@/server/audit'
 import { neonAuth } from '@/auth'
 import { getSql } from '@/server/pg'
 import { getOrgPermissionSnapshot } from '@/server/organization-access'
@@ -8,7 +9,7 @@ import type { Organization } from '@/types'
 const patchBody = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).nullable().optional(),
-  settings: z.record(z.unknown()).optional(),
+  settings: z.record(z.string(), z.unknown()).optional(),
 })
 
 function toSettingsObject(raw: unknown): Record<string, unknown> {
@@ -105,6 +106,7 @@ export async function PATCH(
     if (!out) {
       return NextResponse.json({ error: 'Update failed' }, { status: 500 })
     }
+    await recordAudit({ org: organizationId, userId, action: 'Update organization settings', targetType: 'organization', targetId: organizationId, details: parsed.data })
     return NextResponse.json({ organization: out })
   } catch (e) {
     console.error('org PATCH', e)

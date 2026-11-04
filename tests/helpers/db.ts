@@ -4,7 +4,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket'
 import { getSql } from './pg'
 
-const MIGRATIONS = ['003_core_multitenant_user_org', '004_ledger_core', '005_account_report_category', '005_inventory_vouchers', '006_supplier_tables', '002_voucher_attachments_file_data', '007_accounts_report_category', '008_agent_proposals_mcp_tokens', '009_accounting_modules', '010_advanced_inventory', '011_inventory_depth']
+const MIGRATIONS = ['003_core_multitenant_user_org', '004_ledger_core', '005_account_report_category', '005_inventory_vouchers', '006_supplier_tables', '002_voucher_attachments_file_data', '007_accounts_report_category', '008_agent_proposals_mcp_tokens', '009_accounting_modules', '010_advanced_inventory', '011_inventory_depth', '012_invites_audit_credit_notes']
 
 export const USER = '00000000-0000-4000-8000-000000000001'
 export const ORG = '00000000-0000-4000-8000-0000000000aa'

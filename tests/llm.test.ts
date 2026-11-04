@@ -128,6 +128,11 @@ test('a person cancelling is not treated as a busy model', async () => {
   assert.deepEqual(seen, ['m'])
 })
 
+test('a question that runs too long stops in time to say so', async () => {
+  globalThis.fetch = (async (_url: string, init: RequestInit) => new Promise((_ok, fail) => init.signal?.addEventListener('abort', () => fail(new DOMException('aborted', 'AbortError'))))) as typeof fetch
+  await assert.rejects(() => runAgent({ config: { ...gemini, timeoutMs: 5000 }, system: 's', messages: [{ role: 'user', content: 'hi' }], tools: [tool as never], ctx: { userId: 'u', org: 'o', source: 'app', sourceName: null, canRecord: false }, onText: () => {}, deadlineMs: 20 }), ProviderBusyError)
+})
+
 test('other provider errors fail straight away', async () => {
   const sent = fakeProvider([{ status: 400 }])
   await assert.rejects(() => run(gemini), /Provider returned 400/)

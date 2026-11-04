@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Placeholders so the build can load. Tests use an in-memory database and nothing here reaches a real service.
+    env:
+      DATABASE_URL: postgres://ci:ci@127.0.0.1:5432/ci
+      NEON_AUTH_BASE_URL: https://auth.example.invalid
+      NEON_AUTH_COOKIE_SECRET: ci-only-placeholder-not-a-real-secret-000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+      - run: npm ci --include=dev
+      - run: npm test
+      - run: npm run build

@@ -226,6 +226,16 @@ const handlers: Record<string, (args: unknown[]) => unknown> = {
   },
   getInventoryItems: () => stockItems,
   listWarehouses: () => demoWarehouses,
+  createCreditNote: () => ({ id: 1 }),
+  listAuditLog: () => [
+    { id: 3, source: 'agent', action: 'Draft purchase order', target_type: null, target_id: null, details: { supplier_name: 'Noor Packaging' }, created_at: '2026-11-03T09:12:00Z', email: 'owner@example.com', full_name: 'Sample Owner' },
+    { id: 2, source: 'app', action: 'Post document', target_type: 'books', target_id: '12', details: [{ control_account_id: 2 }], created_at: '2026-11-02T15:40:00Z', email: 'books@example.com', full_name: 'Sample Accountant' },
+    { id: 1, source: 'mcp: My laptop', action: 'Propose journal entry', target_type: null, target_id: null, details: { description: 'City Power bill' }, created_at: '2026-11-01T08:05:00Z', email: 'owner@example.com', full_name: 'Sample Owner' },
+  ],
+  getCashFlow: () => ({ from: '2026-11-01', to: '2026-11-30', cash_accounts: [{ code: '1010', name: 'Cash at bank' }], opening: 420000, closing: 512500, net: 92500, agrees: true,
+    operating: { in: 640000, out: -247500, net: 392500, lines: [{ account_id: 5, code: '4000', name: 'Sales', amount: 640000 }, { account_id: 3, code: '1300', name: 'Inventory', amount: -127500 }, { account_id: 8, code: '6000', name: 'Salaries', amount: -120000 }] },
+    investing: { in: 0, out: -350000, net: -350000, lines: [{ account_id: 11, code: '1500', name: 'Equipment', amount: -350000 }] },
+    financing: { in: 50000, out: 0, net: 50000, lines: [{ account_id: 12, code: '3000', name: 'Owner capital', amount: 50000 }] } }),
   getAllUnits: () => demoUnits,
   findSerial: () => [{ id: 1, serial_number: 'FOAM-S0001', in_stock: true, item_id: stockItems[2].id, sku: stockItems[2].sku, item_name: stockItems[2].name, warehouse_name: 'Main', history: [] }],
   listBoms: () => [{ id: 1, item_id: stockItems[0].id, output_quantity: 1, notes: null, sku: stockItems[0].sku, name: stockItems[0].name, unit_of_measure: stockItems[0].unit_of_measure, on_hand: stockItems[0].quantity_available, cost_each: 610, can_build: 6, lines: stockItems.slice(1, 3).map((i, n) => ({ id: n + 1, item_id: i.id, quantity: n + 1, sku: i.sku, name: i.name, unit_of_measure: i.unit_of_measure, on_hand: i.quantity_available, cost: i.average_unit_cost })) }, { id: 2, item_id: stockItems[3].id, output_quantity: 10, notes: null, sku: stockItems[3].sku, name: stockItems[3].name, unit_of_measure: stockItems[3].unit_of_measure, on_hand: stockItems[3].quantity_available, cost_each: 42, can_build: 0, lines: [{ id: 3, item_id: stockItems[1].id, quantity: 20, sku: stockItems[1].sku, name: stockItems[1].name, unit_of_measure: stockItems[1].unit_of_measure, on_hand: stockItems[1].quantity_available, cost: stockItems[1].average_unit_cost }] }],
@@ -286,8 +296,9 @@ export async function respond(method: string, args: unknown[]) {
 /** Sample answers for the app's REST routes. Saves succeed without changing anything. */
 export async function demoRest(path: string, method: string, _body: unknown) {
   await new Promise((r) => setTimeout(r, 120))
-  if (method !== 'GET') return { id: 'o1' }
+  if (method !== 'GET') return path.endsWith('/members') ? { ok: true, invite: { id: 1, token: 'sample-invite-token-for-demo-only', email: 'new.person@example.com' } } : { id: 'o1' }
   if (path.endsWith('/members')) return { members }
+  if (path.endsWith('/invites')) return { invites: [{ id: 1, email: 'waiting@example.com', role: 'member', expires_at: '2026-11-17' }] }
   if (path.startsWith('/api/oauth/client')) return { name: 'Claude Desktop' }
   if (path === '/api/super-admin/overview') {
     return {
@@ -304,6 +315,11 @@ const pause = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** Scripted replies, so the agent's screens can be built without calling the model. */
 export async function streamDemo(body: AgentRequest, onEvent: (e: AgentEvent) => void) {
+  await demoReply(body, onEvent)
+  onEvent({ type: 'done' })
+}
+
+async function demoReply(body: AgentRequest, onEvent: (e: AgentEvent) => void) {
   const last = body.messages.at(-1)?.text.toLowerCase() ?? ''
   onEvent({ type: 'status', text: 'Looking at your accounts' })
   await pause(500)

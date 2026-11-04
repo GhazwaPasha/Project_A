@@ -51,7 +51,9 @@ export function AgentProvider({ children }: { children: ReactNode }) {
 
     const patch = (fn: (t: Extract<Turn, { role: 'agent' }>) => Extract<Turn, { role: 'agent' }>) =>
       setTurns((ts) => ts.map((t) => (t.id === agentId && t.role === 'agent' ? fn(t) : t)))
+    let finished = false
     const onEvent = (e: AgentEvent) => {
+      if (e.type === 'done') finished = true
       if (e.type === 'text') patch((t) => ({ ...t, text: t.text + e.text, status: null }))
       if (e.type === 'status') patch((t) => ({ ...t, status: e.text }))
       if (e.type === 'proposal') {
@@ -71,7 +73,13 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     }, onEvent)
       .catch((e: Error) => patch((t) => ({ ...t, error: e.message })))
       .finally(() => {
-        patch((t) => ({ ...t, status: null, done: true }))
+        // A reply that stops early, or comes back empty, says so rather than leaving a blank.
+        patch((t) => ({
+          ...t,
+          status: null,
+          done: true,
+          error: t.error ?? (!finished ? 'This reply was cut off. Try asking again.' : !t.text && !t.proposals.length ? "I didn't get an answer from the AI service. Try asking again." : null),
+        }))
         setBusy(false)
       })
   }, [busy, org.id, org.currency, path, pro])

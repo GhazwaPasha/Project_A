@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+import { recordAudit } from '@/server/audit'
+import { getSql } from '@/server/pg'
 import { z } from 'zod/v4'
 import { authInApiRoute } from '@/auth'
 import { authorizeAppDataCall } from '@/server/app-data-authorize'
@@ -34,7 +36,9 @@ export async function POST(req: Request) {
     await authorizeAppDataCall('DataService', 'getAccounts', [org, false], session.user.id)
     // A connection can only be allowed to record if the person creating it can.
     if (canRecord) await authorizeAppDataCall('DataService', 'createJournalEntry', [{ organization_id: org }], session.user.id)
-    return NextResponse.json(await createToken(session.user.id, org, name, canRecord))
+    const made = await createToken(session.user.id, org, name, canRecord)
+    await recordAudit({ org, userId: session.user.id, action: 'Add AI connection', targetType: 'connection', details: { name, can_record: canRecord } })
+    return NextResponse.json(made)
   } catch (e) {
     return failure(e)
   }
@@ -46,7 +50,10 @@ export async function DELETE(req: Request) {
   const id = z.string().uuid().safeParse(new URL(req.url).searchParams.get('id'))
   if (!id.success) return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
   try {
+    // Looked up first, because a revoked connection is no longer listed.
+    const [owner] = await getSql()`SELECT organization_id::text AS org, name FROM public.mcp_tokens WHERE id = ${id.data}::uuid AND user_id = ${session.user.id}::uuid`
     const ok = await revokeToken(session.user.id, id.data)
+    if (ok && owner) await recordAudit({ org: owner.org, userId: session.user.id, action: 'Remove AI connection', targetType: 'connection', targetId: id.data, details: { name: owner.name } })
     return ok ? NextResponse.json({ status: 'revoked' }) : NextResponse.json({ error: 'Connection not found' }, { status: 404 })
   } catch (e) {
     return failure(e)
