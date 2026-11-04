@@ -1,4 +1,4 @@
-import { createNeonAuth } from '@neondatabase/auth/next/server'
+import { createNeonAuth } from '@neon/auth/next/server'
 
 function neonAuthConfig() {
   const baseUrl = process.env.NEON_AUTH_BASE_URL?.trim()
