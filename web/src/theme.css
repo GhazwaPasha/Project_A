@@ -1,5 +1,6 @@
-/* Professional finance look: neutral slate surfaces, one black accent (white in dark), crisp borders, exact figures.
-   Colour carries meaning only: black or white for actions, green for good, amber for warnings, red for errors. */
+/* Finance look with colour on the elements. Surfaces and text stay neutral in both themes; the difference is how far the elements go.
+   Dark: flat colour on small things (icons, chart bars). Light: the same flat colour, also on menu icons and table headers, with faded icon props on stat cards.
+   Status keeps its own meaning: green for good, amber for warnings, red for errors. */
 :root {
   --background: #f7f8fa;
   --foreground: #0f172a;
@@ -18,11 +19,26 @@
   --destructive: #b42318;
   --border: #e3e6eb;
   --input: #d3d8e0;
-  --ring: #0a0a0a;
+  --ring: oklch(0.5 0.2 277);
   --radius: 0.5rem;
   --note: #92620a;
   --tick: #15803d;
-  --sidebar-bg: #ffffff;
+  --sidebar-bg: #eef0f4;
+  --c-indigo: oklch(0.5 0.2 277);
+  --c-blue: oklch(0.54 0.18 252);
+  --c-emerald: oklch(0.56 0.14 160);
+  --c-violet: oklch(0.52 0.21 298);
+  --c-amber: oklch(0.63 0.15 62);
+  --c-rose: oklch(0.57 0.2 15);
+  --chart-in: oklch(0.56 0.22 285);
+  --chart-out: oklch(0.72 0.16 45);
+  --cta: var(--primary);
+  --cta-fg: var(--primary-foreground);
+  --hue: var(--c-indigo);
+  --sidebar-w: 236px;
+  --agent-w: 400px;
+  /* If the window shrinks, the agent gives way so the page keeps room beside it. */
+  --agent-w-live: clamp(320px, var(--agent-w), max(320px, calc(100vw - var(--sidebar-w) - 420px)));
   color-scheme: light;
 }
 .dark {
@@ -47,6 +63,16 @@
   --note: #d9a93f;
   --tick: #4ac07d;
   --sidebar-bg: #000000;
+  --c-indigo: oklch(0.72 0.13 277);
+  --c-blue: oklch(0.74 0.12 245);
+  --c-emerald: oklch(0.76 0.13 162);
+  --c-violet: oklch(0.73 0.14 300);
+  --c-amber: oklch(0.8 0.13 75);
+  --c-rose: oklch(0.73 0.15 15);
+  --chart-in: oklch(0.7 0.15 277);
+  --chart-out: oklch(0.76 0.14 40);
+  --cta: var(--primary);
+  --cta-fg: var(--primary-foreground);
   color-scheme: dark;
 }
 html {
@@ -71,7 +97,119 @@ select option { background: var(--popover); color: var(--foreground); }
 .rule-total td { font-weight: 600; border-top: 1px solid var(--foreground); }
 .rule-total td:last-child { border-bottom: 3px double var(--foreground); }
 .agent-panel { transition: transform 240ms cubic-bezier(0.32, 0.72, 0, 1); }
-@media (prefers-reduced-motion: reduce) { .press, .agent-panel { transition: none; } }
+
+/* ---- Colour ---- */
+[data-hue="indigo"] { --hue: var(--c-indigo); }
+[data-hue="blue"] { --hue: var(--c-blue); }
+[data-hue="emerald"] { --hue: var(--c-emerald); }
+[data-hue="violet"] { --hue: var(--c-violet); }
+[data-hue="amber"] { --hue: var(--c-amber); }
+[data-hue="rose"] { --hue: var(--c-rose); }
+
+/* The main action: black in light, white in dark. */
+.fill-cta { background: var(--cta); color: var(--cta-fg); }
+.on-cta { color: var(--cta-fg); }
+.fill-cta:hover { opacity: 0.88; }
+[data-slot="switch"][data-checked] { background: var(--cta); }
+
+.tile { display: inline-grid; place-items: center; flex-shrink: 0; color: var(--hue); transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1); }
+.nav-ico { display: grid; place-items: center; flex-shrink: 0; width: 20px; height: 20px; border-radius: 6px; color: inherit; }
+.nav-pill { background: var(--accent); }
+/* Sidebar parts that fade with its width. .fold fades out as it narrows, .unfold fades in. The phone menu never folds. */
+.unfold { opacity: 0; }
+.sidebar-fold .fold { opacity: var(--sidebar-label, 1); }
+.sidebar-fold .unfold { opacity: calc(1 - var(--sidebar-label, 1)); }
+.tab-mark { background: var(--hue); }
+.trend-bar { transform-box: fill-box; transform-origin: bottom; animation: bar-grow 560ms cubic-bezier(0.23, 1, 0.32, 1) backwards; animation-delay: calc(var(--i, 0) * 24ms + 120ms); transition: opacity 140ms ease; }
+.trend:hover .trend-col:not(:hover) .trend-bar { opacity: 0.45; }
+.meter { background: var(--hue); transform-origin: left; animation: meter-grow 620ms cubic-bezier(0.23, 1, 0.32, 1) backwards; animation-delay: calc(var(--i, 0) * 45ms + 160ms); transition: width 420ms cubic-bezier(0.23, 1, 0.32, 1); }
+.stat-card { transition: background-color 120ms ease; }
+a.stat-card:hover { background: color-mix(in srgb, var(--hue) 7%, transparent); }
+a.stat-card:hover .stat-tile { transform: scale(1.08); }
+.stat-prop { display: none; }
+.sheet tbody tr td { transition: background-color 100ms ease; }
+.sheet tbody tr:hover td { background: color-mix(in srgb, var(--hue) 5%, transparent); }
+.composer { transition: border-color 120ms ease, box-shadow 120ms ease; }
+.composer:focus-within { border-color: var(--c-violet); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-violet) 18%, transparent); }
+.agent-glyph { color: var(--c-violet); transition: transform 240ms cubic-bezier(0.23, 1, 0.32, 1); }
+.agent-btn:hover .agent-glyph { transform: rotate(14deg) scale(1.1); }
+.empty-prop { display: flex; margin-bottom: 10px; }
+.empty-prop i { width: 22px; height: 22px; border-radius: 50%; margin-left: -7px; border: 2px solid var(--card); animation: pop-in 320ms cubic-bezier(0.23, 1, 0.32, 1) backwards; }
+.empty-prop i:nth-child(1) { background: var(--c-indigo); margin-left: 0; }
+.empty-prop i:nth-child(2) { background: var(--c-amber); animation-delay: 60ms; }
+.empty-prop i:nth-child(3) { background: var(--c-rose); animation-delay: 120ms; }
+
+/* Light goes further: same elements, more material. */
+:root:not(.dark) .text-primary { color: var(--c-indigo); }
+h2 > .tile { margin-left: -4px; margin-right: -2px; }
+:root:not(.dark) .nav-ico { color: var(--hue); }
+:root:not(.dark) .sheet thead th { background: color-mix(in srgb, var(--hue) 7%, var(--card)); color: color-mix(in srgb, var(--hue) 62%, var(--foreground)); }
+:root:not(.dark) .msg-user { background: color-mix(in srgb, var(--c-indigo) 11%, var(--card)); }
+:root:not(.dark) main h1::before { content: ""; display: inline-block; width: 6px; height: 0.82em; margin-right: 0.45em; border-radius: 3px; vertical-align: -0.03em; background: var(--hue); }
+:root:not(.dark) .stat-prop { display: block; position: absolute; right: -10px; bottom: -14px; width: 66px; height: 66px; stroke-width: 1.4; color: var(--hue); opacity: 0.13; transform: rotate(-10deg); transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1), opacity 200ms ease; pointer-events: none; }
+:root:not(.dark) a.stat-card:hover .stat-prop { transform: rotate(-2deg) scale(1.12); opacity: 0.2; }
+
+/* ---- Dropdowns ---- One look everywhere; where the browser allows it, the open list is ours too. */
+.select-pick {
+  appearance: none; border: 1px solid var(--input); border-radius: 6px; background-color: transparent; cursor: pointer;
+  padding: 0 26px 0 9px; line-height: 1; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%238a919c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 7px center;
+  transition: border-color 100ms ease, box-shadow 100ms ease, background-color 100ms ease;
+}
+.select-pick:hover:not(:disabled) { background-color: var(--accent); }
+.select-pick:focus-visible { outline: none; border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 25%, transparent); }
+.select-pick:disabled { opacity: 0.5; cursor: not-allowed; }
+@supports (appearance: base-select) {
+  .select-pick, .select-pick::picker(select) { appearance: base-select; }
+  .select-pick { display: inline-flex; align-items: center; }
+  .select-pick::picker-icon { display: none; }
+  .select-pick::picker(select) {
+    margin-block: 4px; padding: 4px; max-height: min(320px, 50dvh); min-width: anchor-size(width); max-width: 420px;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--popover); color: var(--popover-foreground);
+    box-shadow: 0 12px 32px -10px rgb(0 0 0 / 0.28); transform-origin: top;
+    opacity: 0; transform: translateY(-4px) scale(0.98);
+    transition: opacity 120ms ease-out, transform 160ms cubic-bezier(0.23, 1, 0.32, 1), display 160ms allow-discrete, overlay 160ms allow-discrete;
+  }
+  .select-pick:open::picker(select) { opacity: 1; transform: none; }
+  @starting-style { .select-pick:open::picker(select) { opacity: 0; transform: translateY(-4px) scale(0.98); } }
+  .select-pick option { display: flex; align-items: center; min-height: 30px; padding: 0 8px; border-radius: 5px; font-size: 13px; background: transparent; cursor: pointer; }
+  .select-pick option:hover, .select-pick option:focus { background: var(--accent); outline: none; }
+  .select-pick option:checked { font-weight: 500; }
+  .select-pick option::checkmark { order: 1; margin-left: auto; padding-left: 12px; color: var(--hue); }
+}
+
+/* ---- Motion ----
+   Entrances ease out fast and only move a little: this is a tool people open all day. transform and opacity only, and no fill
+   afterwards, so nothing keeps a stacking context once it has landed. */
+@keyframes rise { from { opacity: 0; transform: translateY(7px); } }
+@keyframes bar-grow { from { transform: scaleY(0); } }
+@keyframes meter-grow { from { transform: scaleX(0); } }
+@keyframes pop-in { from { opacity: 0; transform: scale(0.6); } }
+@keyframes row-in { from { opacity: 0; } }
+@keyframes sweep { to { transform: translateX(100%); } }
+@keyframes think { to { background-position: -200% 0; } }
+.page-in > :not(nav) { animation: rise 340ms cubic-bezier(0.23, 1, 0.32, 1) backwards; }
+.page-in > :nth-child(2) { animation-delay: 40ms; }
+.page-in > :nth-child(3) { animation-delay: 80ms; }
+.page-in > :nth-child(4) { animation-delay: 120ms; }
+.page-in > :nth-child(5) { animation-delay: 160ms; }
+.page-in > :nth-child(n + 6) { animation-delay: 200ms; }
+.sheet tbody tr { animation: row-in 240ms ease-out backwards; }
+.sheet tbody tr:nth-child(2) { animation-delay: 18ms; } .sheet tbody tr:nth-child(3) { animation-delay: 36ms; } .sheet tbody tr:nth-child(4) { animation-delay: 54ms; }
+.sheet tbody tr:nth-child(5) { animation-delay: 72ms; } .sheet tbody tr:nth-child(6) { animation-delay: 90ms; } .sheet tbody tr:nth-child(7) { animation-delay: 108ms; }
+.sheet tbody tr:nth-child(n + 8) { animation-delay: 126ms; }
+.rise-in { animation: rise 220ms cubic-bezier(0.23, 1, 0.32, 1) backwards; }
+.msg-in { animation: rise 260ms cubic-bezier(0.23, 1, 0.32, 1) backwards; }
+.pop-in { animation: pop-in 240ms cubic-bezier(0.23, 1, 0.32, 1) backwards; }
+.skeleton { position: relative; overflow: hidden; }
+.skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--foreground) 7%, transparent), transparent); animation: sweep 1.4s ease-in-out infinite; }
+.thinking { color: transparent; background: linear-gradient(90deg, var(--muted-foreground) 35%, var(--foreground) 50%, var(--muted-foreground) 65%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; animation: think 1.8s linear infinite; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 240ms; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+  .thinking { color: var(--muted-foreground); background: none; }
+}
 .doc { background: #fff; color: #0f172a; font-size: 11.5px; line-height: 1.4; }
 .doc-muted { color: #4b5563; }
 .doc-table { width: 100%; border-collapse: collapse; }
@@ -87,8 +225,12 @@ select option { background: var(--popover); color: var(--foreground); }
     --background: #fff; --foreground: #000; --card: #fff; --card-foreground: #000;
     --muted: #f3f4f6; --muted-foreground: #4b5563; --accent: #fff; --border: #c8ccd2;
     --primary: #000; --primary-foreground: #fff; --note: #000; --tick: #000; --destructive: #000;
+    --cta: #000; --cta-fg: #fff; --hue: #000; --chart-in: #000; --chart-out: #777;
     color-scheme: light;
   }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  :root:not(.dark) main h1::before, .stat-prop, .empty-prop, .tile { display: none !important; }
+  :root:not(.dark) .sheet thead th { background: #f3f4f6; color: #000; }
   html, body { background: #fff; font-size: 11px; }
   * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .sheet { border-radius: 0; }

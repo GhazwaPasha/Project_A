@@ -1,3 +1,5 @@
+import { ResizeHandle } from '@/components/resize-handle'
+import { AGENT } from '@/lib/panels'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useRouterState } from '@tanstack/react-router'
@@ -23,9 +25,9 @@ export function Composer({ placeholder, large, id = 'agent-input' }: { placehold
     setText('')
   }
   return (
-    <form onSubmit={submit} className={cn('flex items-center gap-2 bg-card border border-input focus-within:border-primary', large ? 'pl-4 pr-2 h-12 rounded-[10px]' : 'pl-3.5 pr-1.5 h-11 rounded-[10px]')}>
+    <form onSubmit={submit} className={cn('composer flex items-center gap-2 bg-card border border-input', large ? 'pl-4 pr-2 h-12 rounded-[10px]' : 'pl-3.5 pr-1.5 h-11 rounded-[10px]')}>
       <input id={id} aria-label={placeholder} autoComplete="off" value={text} onChange={(e) => setText(e.target.value)} placeholder={placeholder} className="flex-1 min-w-0 bg-transparent outline-none text-[16px] sm:text-[14.5px] placeholder:text-muted-foreground" />
-      <button type="submit" aria-label="Send" disabled={!text.trim() || busy} className={cn('press bg-primary text-primary-foreground shrink-0 grid place-items-center cursor-pointer font-semibold disabled:opacity-40 disabled:pointer-events-none', large ? 'h-8 px-3.5 rounded-[6px]' : 'size-8 rounded-[6px]')}>
+      <button type="submit" aria-label="Send" disabled={!text.trim() || busy} className={cn('press fill-cta shrink-0 grid place-items-center cursor-pointer font-semibold disabled:opacity-40 disabled:pointer-events-none', large ? 'h-8 px-3.5 rounded-[6px]' : 'size-8 rounded-[6px]')}>
         {large ? 'Send' : <ArrowUp className="size-4" />}
       </button>
     </form>
@@ -46,7 +48,7 @@ export function AskChip({ prompt, children }: { prompt: string; children: React.
   if (!canSeeBooks) return null
   return (
     <button type="button" disabled={busy} onClick={() => ask(prompt)} className="press inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border border-input bg-card text-[12.5px] font-medium whitespace-nowrap max-w-full cursor-pointer hover:bg-accent disabled:opacity-50">
-      <Sparkles aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+      <Sparkles aria-hidden className="size-3 shrink-0 text-[var(--c-violet)]" />
       <span className="truncate">{children}</span>
     </button>
   )
@@ -138,8 +140,9 @@ export function AgentPanel() {
   }, [open, setOpen])
 
   return (
-    <aside aria-label="Agent" inert={!open} className={cn('agent-panel print:hidden fixed top-0 right-0 bottom-0 z-20 w-full sm:w-[400px] bg-background border-l border-border flex flex-col', open ? 'translate-x-0' : 'translate-x-full')}>
-      <div className="flex items-center justify-between h-12 px-4 shrink-0 border-b border-border">
+    <aside aria-label="Agent" inert={!open} className={cn('agent-panel print:hidden fixed top-0 right-0 bottom-0 z-20 w-full sm:w-[var(--agent-w-live)] bg-background border-l border-border flex flex-col', open ? 'translate-x-0' : 'translate-x-full')}>
+      <ResizeHandle panel={AGENT} label="Resize agent panel" grows="left" className="hidden sm:grid -left-1 w-2" />
+      <div className="flex items-center justify-between h-12 lg:h-[54px] lg:box-content px-4 shrink-0 border-b border-border">
         <div className="flex items-center gap-2 min-w-0">
           <h2 className="font-semibold text-[14px]">Agent</h2>
           {title ? <span title={`The agent can see this page: ${title}`} className="inline-flex items-center gap-1 min-w-0 h-5 px-2 rounded-full bg-muted text-muted-foreground text-[11.5px] font-medium"><Eye aria-hidden className="size-3 shrink-0" /><span className="sr-only">The agent can see </span><span className="truncate">{title}</span></span> : null}
@@ -152,11 +155,11 @@ export function AgentPanel() {
             <p className="text-muted-foreground">I can see the page you're on, so ask about it, or tell me what happened in your business. I'll prepare the entries, and nothing is recorded until you approve it.</p>
           </div>
         ) : turns.map((t) => t.role === 'user' ? (
-          <p key={t.id} className="self-end max-w-[85%] rounded-[8px] bg-accent px-3.5 py-2">{t.text}</p>
+          <p key={t.id} className="msg-in msg-user self-end max-w-[85%] rounded-[8px] bg-accent px-3.5 py-2">{t.text}</p>
         ) : (
-          <div key={t.id} className="flex flex-col gap-2.5">
+          <div key={t.id} className="msg-in flex flex-col gap-2.5">
             {t.text ? <p className="whitespace-pre-wrap">{t.text}</p> : null}
-            {t.status ? <p className="text-[13px] text-muted-foreground animate-pulse">{t.status}…</p> : null}
+            {t.status ? <p className="text-[13px] thinking">{t.status}…</p> : null}
             {t.proposals.map((p) => <ProposalCard key={p.id} proposal={p} />)}
             {t.error ? <p className="text-[13.5px] text-destructive">{t.error}</p> : null}
           </div>

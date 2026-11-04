@@ -5,7 +5,7 @@ import { Plus, Printer, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { AskChip } from '@/components/agent-panel'
 import { Badge, Chips, type Tone } from '@/components/chips'
-import { Choice, ConfirmDelete, FormBody, Modal, Stat, Stats, Text, useSave } from '@/components/form'
+import { Choice, ConfirmDelete, FormBody, Modal, Stat, Stats, Text, selectClass, useSave } from '@/components/form'
 import { Cell, Empty, Head, Loaded, Paged, Screen, SearchIcon, Table, Toolbar, btn } from '@/components/page'
 import { call } from '@/lib/api'
 import { figure, shortDate, useApp } from '@/lib/boot'
@@ -183,20 +183,20 @@ function DocumentForm({ kind, doc, onClose, onSaved }: { kind: Kind; doc: Doc | 
           <div className="hidden md:grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_56px_84px_minmax(0,0.7fr)_24px] gap-1.5 text-[12px] text-muted-foreground"><span>Stock item</span><span>Description</span><span>{kind === 'invoice' ? 'Income account' : 'Cost account'}</span><span className="text-right">Qty</span><span className="text-right">Price</span><span>Tax</span><span /></div>
           {lines.map((l) => (
             <div key={l.key} className="grid grid-cols-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_56px_84px_minmax(0,0.7fr)_24px] gap-1.5 items-center max-md:border-b max-md:border-border max-md:pb-2">
-              <select aria-label="Stock item" value={l.item_id} onChange={(e) => pick(l.key, e.target.value)} className="h-8 min-w-0 w-full rounded-[6px] border border-input bg-transparent px-2 text-[13px] max-md:col-span-2">
+              <select aria-label="Stock item" value={l.item_id} onChange={(e) => pick(l.key, e.target.value)} className={cn(selectClass, 'max-md:col-span-2')}>
                 <option value="">Not a stock item</option>
                 {(stock.data ?? []).map((i) => <option key={i.id} value={String(i.id)}>{i.sku} · {i.name}</option>)}
               </select>
               <Input aria-label="Description" placeholder="Description" value={l.description} onChange={(e) => update(l.key, { description: e.target.value })} className="h-8 max-md:col-span-2" />
               {stockAccount(l) ? <span className="h-8 flex items-center px-2 text-[13px] text-muted-foreground max-md:col-span-2">Stock account</span> : (
-              <select aria-label="Account" value={l.account_id} onChange={(e) => update(l.key, { account_id: e.target.value })} className="h-8 min-w-0 w-full rounded-[6px] border border-input bg-transparent px-2 text-[13px] max-md:col-span-2">
+              <select aria-label="Account" value={l.account_id} onChange={(e) => update(l.key, { account_id: e.target.value })} className={cn(selectClass, 'max-md:col-span-2')}>
                 <option value="">Choose account</option>
                 {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
               )}
               <Input aria-label="Quantity" inputMode="decimal" value={l.quantity} onChange={(e) => update(l.key, { quantity: e.target.value })} className="h-8 text-right fig" />
               <Input aria-label="Price" inputMode="decimal" placeholder="0.00" value={l.unit_price} onChange={(e) => update(l.key, { unit_price: e.target.value })} className="h-8 text-right fig" />
-              <select aria-label="Tax" value={l.tax_rate_id} onChange={(e) => update(l.key, { tax_rate_id: e.target.value })} className="h-8 min-w-0 w-full rounded-[6px] border border-input bg-transparent px-2 text-[13px]">
+              <select aria-label="Tax" value={l.tax_rate_id} onChange={(e) => update(l.key, { tax_rate_id: e.target.value })} className={selectClass}>
                 <option value="">No tax</option>
                 {active.map((r) => <option key={r.id} value={String(r.id)}>{r.name} {r.rate}%</option>)}
               </select>
@@ -204,7 +204,7 @@ function DocumentForm({ kind, doc, onClose, onSaved }: { kind: Kind; doc: Doc | 
               {unitsOf(l).length || itemOf(l)?.track_serials ? (
                 <div className="col-span-full grid sm:grid-cols-[140px_minmax(0,1fr)] gap-1.5 mb-1">
                   {unitsOf(l).length ? (
-                    <select aria-label="Unit" value={l.unit_id} onChange={(e) => pickUnit(l, e.target.value)} className="h-8 min-w-0 w-full rounded-[6px] border border-input bg-transparent px-2 text-[13px]">
+                    <select aria-label="Unit" value={l.unit_id} onChange={(e) => pickUnit(l, e.target.value)} className={selectClass}>
                       <option value="">{itemOf(l)?.unit_of_measure}</option>
                       {unitsOf(l).map((u) => <option key={u.id} value={String(u.id)}>{u.name} ({u.factor})</option>)}
                     </select>

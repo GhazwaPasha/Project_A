@@ -5,7 +5,8 @@ import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { AskChip } from '@/components/agent-panel'
 import { Badge, Chips } from '@/components/chips'
-import { Choice, FormBody, Modal, Stat, Stats, Text, parseCsv, useSave } from '@/components/form'
+import { Choice, FormBody, Modal, Stat, Stats, Text, parseCsv, selectClass, useSave } from '@/components/form'
+import { cn } from '@/lib/utils'
 import { Cell, Empty, Head, Loaded, Paged, Screen, Table, Toolbar, btn } from '@/components/page'
 import { call } from '@/lib/api'
 import { figure, shortDate, useApp } from '@/lib/boot'
@@ -71,7 +72,7 @@ export function Banking() {
     >
       <Toolbar>
         <label className="flex items-center gap-2 text-[13px]"><span className="text-muted-foreground">Account</span>
-          <select value={account} onChange={(e) => setPicked(e.target.value)} className="h-8 rounded-[6px] border border-input bg-card px-2 text-[13px]">{banks.map((a) => <option key={a.id} value={String(a.id)}>{a.code} {a.name}</option>)}</select>
+          <select value={account} onChange={(e) => setPicked(e.target.value)} className={cn(selectClass, 'w-auto')}>{banks.map((a) => <option key={a.id} value={String(a.id)}>{a.code} {a.name}</option>)}</select>
         </label>
         <label className="flex items-center gap-2 text-[13px]"><span className="text-muted-foreground">Statement date</span><Input aria-label="Statement date" type="date" value={asOf} onChange={(e) => setAsOf(e.target.value || today())} className="h-8 w-[150px]" /></label>
         <label className="flex items-center gap-2 text-[13px]"><span className="text-muted-foreground">Statement balance</span><Input aria-label="Statement balance" inputMode="decimal" placeholder="From your statement" value={statement} onChange={(e) => setStatement(e.target.value)} className="h-8 w-[170px] text-right fig" /></label>

@@ -4,7 +4,7 @@ import { Paperclip, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { AskChip } from '@/components/agent-panel'
-import { Choice, ConfirmDelete, FormBody, Modal, Stat, Stats, Text, useSave } from '@/components/form'
+import { Choice, ConfirmDelete, FormBody, Modal, Stat, Stats, Text, selectClass, useSave } from '@/components/form'
 import { Cell, Empty, Head, Loaded, Paged, Screen, SearchIcon, Table, Tabs, Toolbar, btn } from '@/components/page'
 import { Badge, Chips } from '@/components/chips'
 import { call, uploadAttachment } from '@/lib/api'
@@ -66,7 +66,7 @@ function useSearchable() {
 }
 
 export function Vouchers() {
-  const { org, pro } = useApp()
+  const { org } = useApp()
   const canWrite = useCanWriteStock()
   const { search, setSearch, type, setType } = useSearchable()
   const [status, setStatus] = useState('all')
@@ -76,7 +76,7 @@ export function Vouchers() {
   return (
     <Screen search={<SearchIcon label="Search vouchers" placeholder="Search vouchers" value={search} onChange={setSearch} />}
       title="Inventory"
-      sub={pro ? 'Purchase and issuance vouchers.' : 'Requests to buy stock or take it out, and where each one stands.'}
+     
       actions={canWrite ? <button className={btn.primary} onClick={() => setCreating(true)}><Plus className="size-3.5 mr-1.5" />New voucher</button> : undefined}
       tabs={<Tabs items={INVENTORY_TABS} />}
     >
@@ -94,14 +94,14 @@ export function Vouchers() {
 }
 
 export function Approvals() {
-  const { org, pro } = useApp()
+  const { org } = useApp()
   const { search, setSearch, type, setType } = useSearchable()
   const [status, setStatus] = useState('pending_finance')
   const stats = useQuery(statsQuery(org.id))
   const list = useQuery(vouchersQuery(org.id, status, type, search.trim()))
   const [opened, setOpened] = useState<Id | null>(null)
   return (
-    <Screen search={<SearchIcon label="Search vouchers" placeholder="Search vouchers" value={search} onChange={setSearch} />} title="Approvals" sub={pro ? 'Vouchers awaiting a finance decision.' : 'Spending and stock requests waiting on a decision.'}>
+    <Screen search={<SearchIcon label="Search vouchers" placeholder="Search vouchers" value={search} onChange={setSearch} />} title="Approvals">
       <Stats>
         <Stat label="Waiting" value={num(stats.data?.pending_approval)} tone={num(stats.data?.pending_approval) ? 'warn' : undefined} />
         <Stat label="Approved" value={num(stats.data?.approved)} />
@@ -322,7 +322,7 @@ function VoucherForm({ onClose }: { onClose: () => void }) {
           <div className="grid grid-cols-[minmax(0,1fr)_84px_96px_24px] gap-1.5 text-[12px] text-muted-foreground"><span>Item</span><span className="text-right">Quantity</span><span className="text-right">Unit cost</span><span /></div>
           {lines.map((l) => (
             <div key={l.key} className="grid grid-cols-[minmax(0,1fr)_84px_96px_24px] gap-1.5 items-center">
-              <select aria-label="Item" value={l.item_id} onChange={(e) => setLines((ls) => ls.map((x) => x.key === l.key ? { ...x, item_id: e.target.value, cost: x.cost || String(num(itemList.data?.find((i) => String(i.id) === e.target.value)?.average_unit_cost) || '') } : x))} className="h-8 min-w-0 w-full rounded-[6px] border border-input bg-transparent px-2 text-[13.5px]">
+              <select aria-label="Item" value={l.item_id} onChange={(e) => setLines((ls) => ls.map((x) => x.key === l.key ? { ...x, item_id: e.target.value, cost: x.cost || String(num(itemList.data?.find((i) => String(i.id) === e.target.value)?.average_unit_cost) || '') } : x))} className={selectClass}>
                 <option value="">Select item</option>
                 {(itemList.data ?? []).map((i) => <option key={i.id} value={String(i.id)}>{i.name}</option>)}
               </select>

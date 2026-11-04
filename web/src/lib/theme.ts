@@ -26,7 +26,9 @@ export function useTheme() {
   const dark = useSyncExternalStore(subscribe, isDark)
   const toggle = useCallback(() => {
     try { localStorage.setItem('theme', isDark() ? 'light' : 'dark') } catch { /* keep the system setting */ }
-    apply()
+    // A cross-fade, so the whole screen doesn't flash. Browsers without it just switch.
+    if ('startViewTransition' in document && !matchMedia('(prefers-reduced-motion: reduce)').matches) document.startViewTransition(apply)
+    else apply()
   }, [])
   return { dark, toggle }
 }

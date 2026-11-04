@@ -22,7 +22,9 @@ export function Text({ label, hint, value, onChange, className, ...rest }: { lab
   return <Field label={label} hint={hint} className={className}><Input value={value ?? ''} onChange={(e) => onChange(e.target.value)} {...rest} /></Field>
 }
 
-export const selectClass = 'h-8 w-full min-w-0 rounded-[6px] border border-input bg-transparent px-2 text-[13.5px]'
+/** Every dropdown in the app: same height, radius, type and chevron. `selectInline` sits inside a table row. */
+export const selectClass = 'select-pick h-8 w-full min-w-0 text-[13.5px]'
+export const selectInline = 'select-pick h-7 text-[13px]'
 
 export function Choice({ label, hint, value, onChange, options, placeholder, required, className }: { label: string; hint?: string; value: string | number | null | undefined; onChange: (v: string) => void; options: { value: string | number; label: string }[]; placeholder?: string; required?: boolean; className?: string }) {
   return (
@@ -98,7 +100,7 @@ export function useSave<T, V = void>(fn: (v: V) => Promise<T>, opts: { success?:
 
 export function Stat({ label, value, tone }: { label: string; value: ReactNode; tone?: 'warn' }) {
   return (
-    <div className="px-3.5 py-2.5 min-w-0">
+    <div className="stat-card relative px-3.5 py-2.5 min-w-0">
       <p className="text-[12.5px] text-muted-foreground truncate">{label}</p>
       <p className={cn('text-[18px] print:text-[13px] leading-tight font-semibold tracking-[-0.02em] truncate', tone === 'warn' && 'text-[var(--note)]')}>{value}</p>
     </div>

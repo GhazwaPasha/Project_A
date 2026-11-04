@@ -4,6 +4,7 @@ import { Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { selectClass } from '@/components/form'
 import { btn } from '@/components/page'
 import { call } from '@/lib/api'
 import { figure, useApp } from '@/lib/boot'
@@ -77,14 +78,14 @@ export function NewEntry({ open, onOpenChange, draft, onRecorded }: { open: bool
           <div className="flex flex-col gap-1.5">
             <div className={cn(grid, 'text-[12px] text-muted-foreground')}><span>Account</span><span className="text-right">Debit</span><span className="text-right">Credit</span><span /></div>
             {rows.map((r) => (
-              <div key={r.key} className={grid}>
-                <select aria-label="Account" value={r.account} onChange={(e) => update(r.key, { account: e.target.value })} className="h-8 min-w-0 w-full rounded-[var(--radius)] border border-input bg-transparent px-2 text-[13.5px]">
+              <div key={r.key} className={cn(grid, 'rise-in')}>
+                <select aria-label="Account" value={r.account} onChange={(e) => update(r.key, { account: e.target.value })} className={selectClass}>
                   <option value="">Choose account</option>
                   {postable.map((a) => <option key={a.id} value={String(a.id)}>{a.code} {a.name}</option>)}
                 </select>
                 <Input aria-label="Debit" inputMode="decimal" value={r.debit} onChange={(e) => update(r.key, { debit: e.target.value })} className="fig text-right h-8" />
                 <Input aria-label="Credit" inputMode="decimal" value={r.credit} onChange={(e) => update(r.key, { credit: e.target.value })} className="fig text-right h-8" />
-                <button type="button" aria-label="Remove line" disabled={rows.length <= 2} onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))} className="grid place-items-center text-muted-foreground cursor-pointer disabled:opacity-30"><X className="size-3.5" /></button>
+                <button type="button" aria-label="Remove line" disabled={rows.length <= 2} onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))} className="size-6 grid place-items-center rounded-[6px] text-muted-foreground cursor-pointer hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:pointer-events-none"><X className="size-3.5" /></button>
               </div>
             ))}
             <button type="button" onClick={() => { setRows((rs) => [...rs, { key: nextKey, account: '', debit: '', credit: '' }]); setNextKey((k) => k + 1) }} className="self-start inline-flex items-center gap-1 text-[13.5px] text-primary font-medium cursor-pointer mt-1"><Plus className="size-3.5" />Add line</button>

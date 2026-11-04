@@ -88,7 +88,7 @@ export function Inventory() {
   return (
     <Screen search={<span onKeyDown={onScan}><SearchIcon label="Search items" placeholder="SKU, barcode, serial or name" value={search} onChange={setSearch} /></span>}
       title="Inventory"
-      sub={pro ? 'Items, quantities, cost and margin.' : 'What you have in stock and what it is worth.'}
+     
       actions={<>
         {canWrite ? <>
           <input ref={file} aria-label="Items CSV" type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void f.text().then((t) => imported.mutate(parseCsv(t))); e.target.value = '' }} />
@@ -340,7 +340,7 @@ export function Movements() {
   const matches = (m: Movement) => kind === 'all' || (kind === 'transfer' ? isTransfer(m.transaction_type) : m.transaction_type === kind)
   const rows = all.filter((m) => matches(m) && (!search.trim() || `${m.item?.sku} ${m.item?.name} ${m.reference} ${m.description}`.toLowerCase().includes(search.trim().toLowerCase())))
   return (
-    <Screen search={<SearchIcon label="Search stock movements" placeholder="Search" value={search} onChange={setSearch} />} title="Inventory" sub="Every time stock came in, went out or was corrected." tabs={<Tabs items={INVENTORY_TABS} />}>
+    <Screen search={<SearchIcon label="Search stock movements" placeholder="Search" value={search} onChange={setSearch} />} title="Inventory" tabs={<Tabs items={INVENTORY_TABS} />}>
       <Toolbar>
         <Chips label="Type" value={kind} onChange={setKind} options={[{ id: 'all', label: 'All', count: all.length }, ...(['in', 'out', 'adjustment'] as const).map((k) => ({ id: k, label: MOVE_LABEL[k], count: all.filter((m) => m.transaction_type === k).length })), { id: 'transfer', label: 'Transfers', count: all.filter((m) => isTransfer(m.transaction_type)).length }]} />
       </Toolbar>

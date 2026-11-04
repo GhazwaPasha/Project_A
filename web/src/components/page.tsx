@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
+import { motion } from 'motion/react'
 import type { UseQueryResult } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Printer, Search, X } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
-import { PageIcons } from '@/components/page-icons'
 import { ApiError } from '@/lib/api'
 import { useApp } from '@/lib/boot'
-import { cn } from '@/lib/utils'
+import { cn, scrollPageToTop } from '@/lib/utils'
 
 export function Screen({ title, sub, search, actions, tabs, children }: { title: string; sub?: ReactNode; search?: ReactNode; actions?: ReactNode; tabs?: ReactNode; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-3.5">
+    <div className="page-in flex flex-col gap-3.5">
       <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="min-w-0">
           <h1 className="text-[20px] leading-tight font-semibold tracking-[-0.018em] text-balance">{title}</h1>
@@ -20,7 +20,6 @@ export function Screen({ title, sub, search, actions, tabs, children }: { title:
         <div className="flex flex-wrap items-center gap-2 print:hidden">
           {search}
           {actions}
-          <PageIcons className="hidden lg:flex" />
         </div>
       </header>
       {tabs}
@@ -61,7 +60,9 @@ export function Tabs({ items }: { items: { to: string; label: string }[] }) {
   return (
     <nav className="flex gap-5 border-b border-border overflow-x-auto overflow-y-hidden print:hidden" aria-label="Sections">
       {items.map((i) => (
-        <Link key={i.to} to={i.to} activeOptions={{ exact: true, includeSearch: false }} className="pb-2 -mb-px border-b-2 border-transparent text-[13.5px] text-muted-foreground whitespace-nowrap hover:text-foreground" activeProps={{ className: 'border-primary! text-foreground! font-medium' }}>{i.label}</Link>
+        <Link key={i.to} to={i.to} activeOptions={{ exact: true, includeSearch: false }} className="relative pb-2 text-[13.5px] text-muted-foreground whitespace-nowrap transition-colors duration-100 hover:text-foreground" activeProps={{ className: 'text-foreground! font-medium' }}>
+          {({ isActive }) => <>{i.label}{isActive ? <motion.span aria-hidden layoutId="page-tab" transition={{ type: 'spring', bounce: 0, duration: 0.35 }} className="tab-mark absolute inset-x-0 -bottom-px h-0.5 rounded-full" /> : null}</>}
+        </Link>
       ))}
     </nav>
   )
@@ -95,9 +96,10 @@ export function Loaded<T>({ query, empty, skeleton, children }: { query: UseQuer
 export function Empty({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
   return (
     <div className="sheet px-6 py-8 flex flex-col items-center gap-1 text-center">
+      <span aria-hidden className="empty-prop"><i /><i /><i /></span>
       <p className="font-medium">{title}</p>
       <p className="text-[13.5px] text-muted-foreground max-w-[44ch]">{body}</p>
-      {action}
+      {action ? <div className="mt-2.5">{action}</div> : null}
     </div>
   )
 }
@@ -127,7 +129,7 @@ export function Paged<T>({ rows, size = 25, children }: { rows: T[]; size?: numb
   }
   const pages = Math.max(1, Math.ceil(rows.length / size))
   const current = Math.min(at, pages - 1)
-  const go = (n: number) => { setAt(n); window.scrollTo(0, 0) }
+  const go = (n: number) => { setAt(n); scrollPageToTop() }
   const arrow = 'size-7 grid place-items-center rounded-[6px] border border-input bg-card cursor-pointer hover:bg-accent disabled:opacity-40 disabled:pointer-events-none'
   const pager = rows.length > size ? (
     <nav aria-label="Pages" className="print:hidden flex items-center justify-between gap-3 px-3.5 py-1.5 border-t border-border text-[12.5px] text-muted-foreground">
@@ -147,12 +149,12 @@ export function Toolbar({ children }: { children: ReactNode }) {
   return <div className="print:hidden flex flex-wrap items-center gap-2">{children}</div>
 }
 
-const BTN = 'press inline-flex items-center justify-center h-8 px-3 rounded-[6px] text-[13px] font-medium whitespace-nowrap cursor-pointer disabled:opacity-50 disabled:pointer-events-none'
-export const btn = { primary: `${BTN} bg-primary text-primary-foreground hover:opacity-90`, plain: `${BTN} border border-input bg-card hover:bg-accent` }
+const BTN = 'press inline-flex gap-1.5 items-center justify-center h-8 px-3 rounded-[6px] text-[13px] font-medium whitespace-nowrap cursor-pointer disabled:opacity-50 disabled:pointer-events-none'
+export const btn = { primary: `${BTN} fill-cta`, plain: `${BTN} border border-input bg-card hover:bg-accent` }
 
 /** Opens a report's document page, where it can be printed or exported. */
 export function PrintLink({ to, search }: { to: string; search?: Record<string, unknown> }) {
-  return <Link to={to} search={search as never} className={btn.plain}><Printer className="size-3.5 mr-1.5" />Print or export</Link>
+  return <Link to={to} search={search as never} className={btn.plain}><Printer className="size-3.5" />Print or export</Link>
 }
 
 export function Check({ ok, title, body, children }: { ok: boolean; title: string; body?: ReactNode; children?: ReactNode }) {

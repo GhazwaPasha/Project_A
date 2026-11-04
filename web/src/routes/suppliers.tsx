@@ -37,7 +37,7 @@ export function Suppliers() {
   return (
     <Screen search={<SearchIcon label="Search suppliers" placeholder="Search suppliers" value={search} onChange={setSearch} />}
       title="Suppliers"
-      sub={pro ? 'Vendor records, terms and account mappings.' : 'The businesses you buy from.'}
+     
       actions={canWrite ? <button className={btn.primary} onClick={() => setDraft({ ...blank, currency: org.currency })}><Plus className="size-3.5 mr-1.5" />New supplier</button> : undefined}
     >
       <Stats cols={3}>

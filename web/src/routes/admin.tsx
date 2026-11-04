@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { CreateOrganization } from '@/components/auth'
-import { Choice, FormBody, Modal, Stat, Stats, Text, useSave } from '@/components/form'
+import { Choice, FormBody, Modal, Stat, Stats, Text, selectInline, useSave } from '@/components/form'
 import { Cell, Empty, Head, Loaded, Paged, Screen, SearchIcon, SettingsTabs, Table, Toolbar, btn } from '@/components/page'
 import { Badge, Chip, Chips } from '@/components/chips'
 import { call, rest } from '@/lib/api'
@@ -47,7 +47,7 @@ export function Team() {
   return (
     <Screen search={<SearchIcon label="Search team" placeholder="Search team" value={search} onChange={setSearch} />}
       title="Team Management"
-      sub={`People who can access ${org.name}.`}
+     
       actions={isOwner ? <button className={btn.primary} onClick={() => setAdding(true)}><Plus className="size-3.5 mr-1.5" />Add team member</button> : undefined}
     >
       <Toolbar>
@@ -65,7 +65,7 @@ export function Team() {
                   <Cell>{m.full_name || m.email}{m.email === email ? <span className="ml-2"><Badge>You</Badge></span> : null}</Cell>
                   <Cell className="text-muted-foreground">{m.email}</Cell>
                   <Cell>{isOwner && m.role !== 'organization_owner'
-                    ? <select aria-label={`Role for ${m.email}`} value={m.role} disabled={change.isPending} onChange={(e) => change.mutate({ memberId: m.id, role: e.target.value })} className="h-7 rounded-[6px] border border-input bg-transparent px-1.5 text-[13px]">{ASSIGNABLE.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>
+                    ? <select aria-label={`Role for ${m.email}`} value={m.role} disabled={change.isPending} onChange={(e) => change.mutate({ memberId: m.id, role: e.target.value })} className={selectInline}>{ASSIGNABLE.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>
                     : <Badge tone={m.role === 'organization_owner' ? 'solid' : 'neutral'}>{ROLE_LABEL[m.role] ?? m.role}</Badge>}</Cell>
                   <Cell className="text-muted-foreground whitespace-nowrap">{m.joined_at ? shortDate(m.joined_at) : ''}</Cell>
                 </tr>
@@ -81,7 +81,7 @@ export function Team() {
           <h2 className="font-semibold text-[14px]">Waiting to join</h2>
           <Table min={520}>
             <thead><tr><Head>Email</Head><Head>Role</Head><Head>Link expires</Head><Head /></tr></thead>
-            <tbody>{invites.data.invites.map((i) => <tr key={i.id}><Cell>{i.email}</Cell><Cell><Badge>{ROLE_LABEL[i.role] ?? i.role}</Badge></Cell><Cell className="text-muted-foreground">{shortDate(i.expires_at)}</Cell><Cell right><button className="text-[13px] font-medium underline underline-offset-[3px] cursor-pointer" disabled={revoke.isPending} onClick={() => revoke.mutate(i.id)}>Cancel</button></Cell></tr>)}</tbody>
+            <tbody>{invites.data.invites.map((i) => <tr key={i.id}><Cell>{i.email}</Cell><Cell><Badge>{ROLE_LABEL[i.role] ?? i.role}</Badge></Cell><Cell className="text-muted-foreground">{shortDate(i.expires_at)}</Cell><Cell right className="[font-family:inherit] tracking-normal"><button className="text-[13px] font-medium underline underline-offset-[3px] cursor-pointer" disabled={revoke.isPending} onClick={() => revoke.mutate(i.id)}>Cancel</button></Cell></tr>)}</tbody>
           </Table>
         </section>
       ) : null}
@@ -257,7 +257,7 @@ export function SuperAdmin() {
                 <thead><tr><Head>Person</Head><Head>Organization</Head><Head>Role</Head></tr></thead>
                 <tbody>{page.map((m) => (
                   <tr key={m.id}><Cell>{m.email}</Cell><Cell className="text-muted-foreground">{m.organization_name}</Cell>
-                  <Cell>{m.role === 'organization_owner' ? <Badge tone="solid">Owner</Badge> : <select aria-label={`Role for ${m.email} in ${m.organization_name}`} value={m.role} disabled={setRole.isPending} onChange={(e) => setRole.mutate({ membershipId: m.id, role: e.target.value })} className="h-7 rounded-[6px] border border-input bg-transparent px-1.5 text-[13px]">{ASSIGNABLE.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>}</Cell></tr>
+                  <Cell>{m.role === 'organization_owner' ? <Badge tone="solid">Owner</Badge> : <select aria-label={`Role for ${m.email} in ${m.organization_name}`} value={m.role} disabled={setRole.isPending} onChange={(e) => setRole.mutate({ membershipId: m.id, role: e.target.value })} className={selectInline}>{ASSIGNABLE.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>}</Cell></tr>
                 ))}</tbody>
               </Table>
               )}</Paged>

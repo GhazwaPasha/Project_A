@@ -1,4 +1,4 @@
-import { Switch as SwitchPrimitive } from "@base-ui/react/switch"
+import { Switch as SwitchPrimitive } from "@animate-ui/react/primitives/base-ui/switch"
 import { cn } from "cn"
 
 function Switch({
