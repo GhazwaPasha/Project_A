@@ -15,6 +15,12 @@ type Ctx = {
   setOpen: (v: boolean) => void
   busy: boolean
   ask: (text: string) => void
+  /** True while the New entry section is open, so the agent's entries go into it. */
+  entryOpen: boolean
+  registerEntryForm: (fill: (p: Proposal) => void) => () => void
+  /** The proposal currently in the New entry form. Its card can't also approve it, or it would be recorded twice. */
+  entryProposal: string | null
+  setEntryProposal: (id: string | null) => void
 }
 const AgentContext = createContext<Ctx | null>(null)
 
@@ -35,6 +41,19 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   const nextId = useRef(1)
   const latest = useRef<Turn[]>([])
   latest.current = turns
+  const fillEntry = useRef<((p: Proposal) => void) | null>(null)
+  const [entryOpen, setEntryOpen] = useState(false)
+  const [entryProposal, setEntryProposal] = useState<string | null>(null)
+  const registerEntryForm = useCallback((fill: (p: Proposal) => void) => {
+    fillEntry.current = fill
+    setEntryOpen(true)
+    return () => {
+      if (fillEntry.current !== fill) return
+      fillEntry.current = null
+      setEntryOpen(false)
+      setEntryProposal(null)
+    }
+  }, [])
 
   const ask = useCallback((text: string) => {
     if (!text.trim() || busy) return
@@ -58,6 +77,10 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       if (e.type === 'status') patch((t) => ({ ...t, status: e.text }))
       if (e.type === 'proposal') {
         patch((t) => ({ ...t, status: null, proposals: [...t.proposals, e.proposal] }))
+        if (fillEntry.current) {
+          fillEntry.current(e.proposal)
+          setEntryProposal(e.proposal.id)
+        }
         void queryClient.invalidateQueries({ queryKey: ['proposals'] })
       }
       if (e.type === 'error') patch((t) => ({ ...t, status: null, error: e.message }))
@@ -84,6 +107,6 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       })
   }, [busy, org.id, org.currency, path, pro])
 
-  const value = useMemo(() => ({ turns, open, setOpen, busy, ask }), [turns, open, busy, ask])
+  const value = useMemo(() => ({ turns, open, setOpen, busy, ask, entryOpen, registerEntryForm, entryProposal, setEntryProposal }), [turns, open, busy, ask, entryOpen, registerEntryForm, entryProposal])
   return <AgentContext.Provider value={value}>{children}</AgentContext.Provider>
 }

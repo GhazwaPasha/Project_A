@@ -1,23 +1,28 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Plus, X } from 'lucide-react'
+import { ArrowUp, Plus, Sparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { selectClass } from '@/components/form'
 import { btn } from '@/components/page'
-import { call } from '@/lib/api'
+import { useAgent } from '@/lib/agent'
+import { call, decideProposal, type Proposal } from '@/lib/api'
 import { figure, useApp } from '@/lib/boot'
-import { accounts, refreshBooks, today } from '@/lib/data'
-import { cn } from '@/lib/utils'
+import { accounts, queryClient, refreshBooks, today } from '@/lib/data'
+import { cn, PAGE_SIDE } from '@/lib/utils'
 
 type Row = { key: number; account: string; debit: string; credit: string }
 export type Draft = { date: string; description: string; lines: { account: string; debit: string; credit: string }[] }
 const cents = (s: string) => Math.round((Number(s) || 0) * 100)
 
-/** Direct entry for accountants, and where a person corrects an agent proposal. Debits must equal credits. */
+/** Direct entry for accountants, and where a person corrects an agent proposal. Debits must equal credits. A section of the main box, not a popup. */
 export function NewEntry({ open, onOpenChange, draft, onRecorded }: { open: boolean; onOpenChange: (v: boolean) => void; draft?: Draft; onRecorded?: () => void }) {
-  const { org, userId } = useApp()
+  const { org, userId, canSeeBooks } = useApp()
+  const { ask, busy, registerEntryForm } = useAgent()
+  const [request, setRequest] = useState('')
+  // The agent's proposal behind what's in the form, closed once the entry is recorded so it doesn't stay on the to-do list.
+  const [fromProposal, setFromProposal] = useState<string | null>(null)
   const chart = useQuery({ ...accounts(org.id), enabled: open })
   const [date, setDate] = useState(today())
   const [description, setDescription] = useState('')
@@ -31,7 +36,22 @@ export function NewEntry({ open, onOpenChange, draft, onRecorded }: { open: bool
     setDescription(draft?.description ?? '')
     setRows(lines.map((l, i) => ({ key: i + 1, ...l })))
     setNextKey(lines.length + 1)
+    setRequest('')
+    setFromProposal(null)
   }, [open, draft])
+
+  // While this is open, an entry from the agent lands here. Nothing is recorded until the person presses Record entry.
+  useEffect(() => {
+    if (!open) return
+    return registerEntryForm((p: Proposal) => {
+      setDate(p.date)
+      setDescription(p.description)
+      setRows(p.lines.map((l, i) => ({ key: i + 1, account: String(l.account_id), debit: l.debit ? String(l.debit) : '', credit: l.credit ? String(l.credit) : '' })))
+      setNextKey(p.lines.length + 1)
+      setFromProposal(p.id)
+      toast.success('Filled in by the agent. Check it, then record it.')
+    })
+  }, [open, registerEntryForm])
 
   const dr = rows.reduce((s, r) => s + cents(r.debit), 0)
   const cr = rows.reduce((s, r) => s + cents(r.credit), 0)
@@ -54,6 +74,7 @@ export function NewEntry({ open, onOpenChange, draft, onRecorded }: { open: bool
     onSuccess: () => {
       refreshBooks()
       toast.success('Entry recorded')
+      if (fromProposal) void decideProposal(org.id, fromProposal, 'discard').catch(() => null).finally(() => void queryClient.invalidateQueries({ queryKey: ['proposals'] }))
       onRecorded?.()
       onOpenChange(false)
     },
@@ -66,14 +87,39 @@ export function NewEntry({ open, onOpenChange, draft, onRecorded }: { open: bool
   }
   const grid = 'grid grid-cols-[minmax(0,1fr)_96px_96px_24px] gap-1.5 items-center'
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[640px] max-h-[90dvh] overflow-y-auto">
-        <DialogHeader><DialogTitle>{draft ? 'Change this entry' : 'New entry'}</DialogTitle></DialogHeader>
-        <form onSubmit={submit} className="flex flex-col gap-3">
+  // Esc closes this section only, not the agent behind it. An open dropdown handles its own Esc first.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.target instanceof HTMLSelectElement || document.querySelector('[data-search-panel]')) return
+      e.stopImmediatePropagation()
+      onOpenChange(false)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [open, onOpenChange])
+
+  const slot = open ? document.getElementById(PAGE_SIDE) : null
+  if (!slot) return null
+
+  return createPortal(
+      <section aria-label={draft ? 'Change this entry' : 'New entry'} className="side-section absolute inset-0 flex flex-col bg-background">
+        <header className="shrink-0 flex items-center justify-between gap-3 h-[61px] px-4 border-b border-border">
+          <h2 className="text-[20px] leading-tight font-semibold tracking-[-0.018em]">{draft ? 'Change this entry' : 'New entry'}</h2>
+          <button type="button" aria-label="Close" onClick={() => onOpenChange(false)} className="press size-8 -mr-1.5 grid place-items-center rounded-[6px] text-muted-foreground cursor-pointer hover:bg-accent hover:text-foreground"><X className="size-4" /></button>
+        </header>
+        {canSeeBooks ? (
+          <form onSubmit={(e) => { e.preventDefault(); if (request.trim() && !busy) { ask(request.trim()); setRequest('') } }} className="composer shrink-0 flex items-center gap-2 h-10 mx-4 mt-3 pl-3 pr-1 rounded-[8px] border border-input bg-card">
+            <Sparkles aria-hidden className="size-3.5 shrink-0 text-[var(--c-violet)]" />
+            <input aria-label="Describe this entry for the agent" placeholder="Describe it and the agent fills this in" value={request} onChange={(e) => setRequest(e.target.value)} className="flex-1 min-w-0 bg-transparent outline-none text-[16px] sm:text-[13.5px] placeholder:text-muted-foreground" />
+            <button type="submit" aria-label="Fill in with the agent" disabled={!request.trim() || busy} className="press fill-cta size-8 shrink-0 grid place-items-center rounded-[6px] cursor-pointer disabled:opacity-40 disabled:pointer-events-none"><ArrowUp className="size-4" /></button>
+          </form>
+        ) : null}
+        <form data-agent-fields onSubmit={submit} className="flex flex-1 min-h-0 flex-col">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 flex flex-col gap-3">
           <div className="grid sm:grid-cols-[150px_minmax(0,1fr)] gap-2">
             <Input aria-label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="fig" />
-            <Input aria-label="Description" placeholder="What happened?" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <Input autoFocus={!draft} aria-label="Description" placeholder="What happened?" value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
           <div className="flex flex-col gap-1.5">
             <div className={cn(grid, 'text-[12px] text-muted-foreground')}><span>Account</span><span className="text-right">Debit</span><span className="text-right">Credit</span><span /></div>
@@ -90,12 +136,13 @@ export function NewEntry({ open, onOpenChange, draft, onRecorded }: { open: bool
             ))}
             <button type="button" onClick={() => { setRows((rs) => [...rs, { key: nextKey, account: '', debit: '', credit: '' }]); setNextKey((k) => k + 1) }} className="self-start inline-flex items-center gap-1 text-[13.5px] text-primary font-medium cursor-pointer mt-1"><Plus className="size-3.5" />Add line</button>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+          </div>
+          <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-t border-border p-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
             <p className={cn('text-[13.5px]', problem ? 'text-muted-foreground' : 'text-[var(--tick)] font-medium')}>{problem ?? `✓ Balanced at ${figure(dr / 100, org.decimals)}`}</p>
             <button type="submit" disabled={Boolean(problem) || post.isPending} className={btn.primary}>{post.isPending ? 'Recording…' : 'Record entry'}</button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
+      </section>,
+    slot,
   )
 }

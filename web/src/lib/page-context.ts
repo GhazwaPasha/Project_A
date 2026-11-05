@@ -14,15 +14,22 @@ export function readPage(): PageContext {
   const page = main ? clean(hide(main.innerText, main)) : ''
   const dialog = [...document.querySelectorAll('[role=dialog]')].at(-1) as HTMLElement | undefined
   const open = dialog ? clean(hide(dialog.innerText, dialog)).slice(0, 2500) : ''
+  // The New entry section docks outside <main>, and typed values aren't part of innerText.
+  const section = document.querySelector<HTMLElement>('.side-section')
+  const sectionTitle = section?.querySelector('h2')?.textContent ?? ''
+  const entered = section ? [...section.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-agent-fields] input, [data-agent-fields] select')].map((f) => {
+    const value = f instanceof HTMLSelectElement ? (f.value ? f.selectedOptions[0]?.text : '') : f.value
+    return `${f.getAttribute('aria-label')}: ${value || '(empty)'}`
+  }).join('\n').slice(0, 2500) : ''
   const chips = [...document.querySelectorAll<HTMLElement>('main button[aria-pressed=true]')].map((b) => clean(b.innerText))
   const fields = [...document.querySelectorAll<HTMLInputElement>('main input[aria-label^="Search"], main input[type=date]')]
     .filter((i) => i.value)
     .map((i) => `${i.getAttribute('aria-label')}: ${i.value}`)
   return {
-    title: clean(dialog?.querySelector('h2')?.textContent ?? main?.querySelector('h1')?.textContent ?? '').slice(0, 200),
+    title: clean(dialog?.querySelector('h2')?.textContent ?? (sectionTitle || main?.querySelector('h1')?.textContent) ?? '').slice(0, 200),
     url: `${location.pathname}${location.search}`.slice(0, 300),
     filters: [...chips, ...fields].slice(0, 20).map((f) => f.slice(0, 100)),
-    text: `${open ? `Open dialog:\n${open}\n\nPage behind it:\n` : ''}${page}`.slice(0, 8000),
+    text: `${open ? `Open dialog:\n${open}\n\nPage behind it:\n` : ''}${section ? `Open section: ${sectionTitle} form, filled in so far:\n${entered}\n\nPage beside it:\n` : ''}${page}`.slice(0, 8000),
   }
 }
 

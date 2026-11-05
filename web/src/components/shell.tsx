@@ -16,7 +16,7 @@ import { useApp, type Access } from '@/lib/boot'
 import { lowStock, num, proposals, q, voucherStats } from '@/lib/data'
 import { SIDEBAR } from '@/lib/panels'
 import { useTheme } from '@/lib/theme'
-import { cn, PAGE_SCROLLER, scrollPageToTop } from '@/lib/utils'
+import { cn, PAGE_SCROLLER, PAGE_SIDE, scrollPageToTop } from '@/lib/utils'
 
 const CommandMenu = lazy(() => import('@/components/command-menu').then((m) => ({ default: m.CommandMenu })))
 
@@ -62,6 +62,8 @@ export const NAV: { group: string; hue: string; items: Item[] }[] = [
 
 export const canOpen = (i: Item, access: Access, isSuperAdmin: boolean) => (i.superOnly ? isSuperAdmin : !i.roles || i.roles.includes(access))
 
+const SEARCH_KEY = /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘ K' : 'Ctrl K'
+
 const DOT: Record<Tone, string> = { solid: 'bg-primary', warn: 'bg-[var(--note)]', neutral: 'bg-muted-foreground', bad: 'bg-destructive', good: 'bg-[var(--tick)]' }
 
 // The sidebar has one layout at every width. Its side padding keeps each icon centred in the 64px folded width,
@@ -99,8 +101,8 @@ function Sidebar({ onNavigate, onSearch, pill = 'nav-pill' }: { onNavigate?: () 
 
       <div className="sheet flex-1 min-h-0 flex flex-col overflow-hidden">
         <div className="px-1 py-2">
-          <button onClick={onSearch} title="Search (Ctrl K)" className="flex w-full items-center gap-2 h-8 px-[9px] overflow-hidden whitespace-nowrap rounded-[6px] border border-border bg-background text-[13px] text-muted-foreground cursor-pointer hover:border-input">
-            <Search className="size-3.5 shrink-0" /><span className="fold flex-1 min-w-0 truncate text-left">Search</span><kbd className="fold shrink-0 text-[11px] font-medium">Ctrl K</kbd>
+          <button data-sidebar-search onClick={onSearch} title={`Search (${SEARCH_KEY})`} className="flex w-full items-center gap-2 h-8 px-[9px] overflow-hidden whitespace-nowrap rounded-[6px] border border-border bg-background text-[13px] text-muted-foreground cursor-pointer hover:border-input">
+            <Search className="size-3.5 shrink-0" /><span className="fold flex-1 min-w-0 truncate text-left">Search</span><span className="fold shrink-0 max-lg:hidden"><kbd className="key-cap">{SEARCH_KEY}</kbd></span>
           </button>
         </div>
 
@@ -150,7 +152,6 @@ function Sidebar({ onNavigate, onSearch, pill = 'nav-pill' }: { onNavigate?: () 
 
 export function Shell() {
   const [search, setSearch] = useState(false)
-  const [searchLoaded, setSearchLoaded] = useState(false)
   const [menu, setMenu] = useState(false)
   const { org, access, isSuperAdmin } = useApp()
   const navigate = useNavigate()
@@ -158,7 +159,6 @@ export function Shell() {
   const { dark } = useTheme()
   const path = useRouterState({ select: (s) => s.location.pathname })
 
-  useEffect(() => { if (search) setSearchLoaded(true) }, [search])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -199,15 +199,19 @@ export function Shell() {
         {/* Sits level with the organization switcher, so the panel below starts level with the sidebar card. */}
         <div className="hidden lg:flex print:hidden shrink-0 justify-end my-2.5 pr-4 overflow-hidden [scrollbar-width:thin] [scrollbar-gutter:stable]"><PageIcons /></div>
         {/* From lg up the page is a panel that scrolls on its own, rounded at the top left and flush with the window's right and bottom edges. */}
-        <motion.div layoutScroll id={PAGE_SCROLLER} className="bg-background lg:flex-1 lg:min-h-0 lg:overflow-y-auto [scrollbar-width:thin] lg:[scrollbar-gutter:stable_both-edges] lg:rounded-tl-[14px] lg:border-t lg:border-l lg:border-border print:h-auto print:overflow-visible print:rounded-none print:border-0">
+        <div className="relative bg-background lg:@container lg:flex lg:flex-1 lg:min-h-0 lg:overflow-hidden lg:rounded-tl-[14px] lg:border-t lg:border-l lg:border-border print:block print:h-auto print:overflow-visible print:rounded-none print:border-0">
+        <motion.div layoutScroll id={PAGE_SCROLLER} className="lg:flex-1 lg:min-w-0 lg:overflow-y-auto [scrollbar-width:thin] print:h-auto print:overflow-visible">
           <main data-hue={hue} className="relative isolate px-4 pt-4 pb-6 print:p-0">
             <Outlet />
           </main>
         </motion.div>
+        {/* Sits beside the page when the main box has room, and fills the box when it doesn't. */}
+        <div id={PAGE_SIDE} className="empty:hidden print:hidden max-lg:fixed max-lg:inset-x-0 max-lg:top-11 max-lg:bottom-0 max-lg:z-[4] lg:absolute lg:inset-0 lg:z-[4] lg:@4xl:relative lg:@4xl:inset-auto lg:@4xl:shrink-0 lg:@4xl:w-[clamp(420px,42cqw,560px)] lg:@4xl:border-l lg:@4xl:border-border" />
+        </div>
       </div>
 
       <AgentPanel />
-      {searchLoaded ? <Suspense fallback={null}><CommandMenu open={search} onOpenChange={setSearch} /></Suspense> : null}
+      <Suspense fallback={null}><CommandMenu open={search} onOpenChange={setSearch} /></Suspense>
       <Toaster position="top-center" theme={dark ? 'dark' : 'light'} />
     </>
   )

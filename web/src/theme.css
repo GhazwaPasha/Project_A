@@ -17,13 +17,13 @@
   --accent: #eef0f4;
   --accent-foreground: #0f172a;
   --destructive: #b42318;
-  --border: #e3e6eb;
-  --input: #d3d8e0;
+  --border: #cdd2da;
+  --input: #b9c0cb;
   --ring: oklch(0.5 0.2 277);
   --radius: 0.5rem;
   --note: #92620a;
   --tick: #15803d;
-  --sidebar-bg: #eef0f4;
+  --sidebar-bg: #f7f8fa;
   --c-indigo: oklch(0.5 0.2 277);
   --c-blue: oklch(0.54 0.18 252);
   --c-emerald: oklch(0.56 0.14 160);
@@ -120,6 +120,8 @@ select option { background: var(--popover); color: var(--foreground); }
 .sidebar-fold .fold { opacity: var(--sidebar-label, 1); }
 .sidebar-fold .unfold { opacity: calc(1 - var(--sidebar-label, 1)); }
 .tab-mark { background: var(--hue); }
+/* A keyboard key, as in the search field's shortcut. */
+.key-cap { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border: 1px solid var(--border); border-radius: 5px; background: var(--card); color: var(--muted-foreground); font-family: inherit; font-size: 11px; font-weight: 500; line-height: 1; }
 .trend-bar { transform-box: fill-box; transform-origin: bottom; animation: bar-grow 560ms cubic-bezier(0.23, 1, 0.32, 1) backwards; animation-delay: calc(var(--i, 0) * 24ms + 120ms); transition: opacity 140ms ease; }
 .trend:hover .trend-col:not(:hover) .trend-bar { opacity: 0.45; }
 .meter { background: var(--hue); transform-origin: left; animation: meter-grow 620ms cubic-bezier(0.23, 1, 0.32, 1) backwards; animation-delay: calc(var(--i, 0) * 45ms + 160ms); transition: width 420ms cubic-bezier(0.23, 1, 0.32, 1); }
@@ -187,6 +189,7 @@ h2 > .tile { margin-left: -4px; margin-right: -2px; }
 @keyframes meter-grow { from { transform: scaleX(0); } }
 @keyframes pop-in { from { opacity: 0; transform: scale(0.6); } }
 @keyframes row-in { from { opacity: 0; } }
+@keyframes section-in { from { opacity: 0; transform: translateX(10px); } }
 @keyframes sweep { to { transform: translateX(100%); } }
 @keyframes think { to { background-position: -200% 0; } }
 .page-in > :not(nav) { animation: rise 340ms cubic-bezier(0.23, 1, 0.32, 1) backwards; }
@@ -199,6 +202,7 @@ h2 > .tile { margin-left: -4px; margin-right: -2px; }
 .sheet tbody tr:nth-child(2) { animation-delay: 18ms; } .sheet tbody tr:nth-child(3) { animation-delay: 36ms; } .sheet tbody tr:nth-child(4) { animation-delay: 54ms; }
 .sheet tbody tr:nth-child(5) { animation-delay: 72ms; } .sheet tbody tr:nth-child(6) { animation-delay: 90ms; } .sheet tbody tr:nth-child(7) { animation-delay: 108ms; }
 .sheet tbody tr:nth-child(n + 8) { animation-delay: 126ms; }
+.side-section { animation: section-in 200ms cubic-bezier(0.23, 1, 0.32, 1) backwards; }
 .rise-in { animation: rise 220ms cubic-bezier(0.23, 1, 0.32, 1) backwards; }
 .msg-in { animation: rise 260ms cubic-bezier(0.23, 1, 0.32, 1) backwards; }
 .pop-in { animation: pop-in 240ms cubic-bezier(0.23, 1, 0.32, 1) backwards; }

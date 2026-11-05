@@ -45,7 +45,7 @@ export function Home() {
 
   return (
     <div className="page-in flex flex-col gap-3.5">
-      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 -mx-4 px-4 pb-3 border-b border-border print:mx-0 print:px-0">
         <h1 className="text-[20px] leading-tight font-semibold tracking-[-0.018em]">Home</h1>
         <div className="flex flex-wrap items-center gap-2">
           <Chips label="Period" value={period} options={PERIODS} onChange={(p) => setPeriod(p as Period)} />
