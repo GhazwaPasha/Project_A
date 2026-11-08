@@ -46,10 +46,10 @@ export function BulkEntry({ open, onClose }: { open: boolean; onClose: () => voi
   const post = useSave(async () => {
     const failed: string[] = []
     let done = 0
-    for (const [i, r] of rows.entries()) {
+    for (const r of rows) {
       try {
         await call('DataService', 'createJournalEntry', [
-          { organization_id: org.id, entry_number: `JE-${Date.now()}-${i + 1}`, entry_date: r.date, description: r.description, reference: null, total_amount: r.amount, is_posted: true, created_by: userId, posted_by: userId, posted_at: new Date().toISOString() },
+          { organization_id: org.id, entry_number: '', entry_date: r.date, description: r.description, reference: null, total_amount: r.amount, is_posted: true, created_by: userId, posted_by: userId, posted_at: new Date().toISOString() },
           [
             { account_id: Number(r.debit), description: null, debit_amount: r.amount, credit_amount: 0, line_order: 1 },
             { account_id: Number(r.credit), description: null, debit_amount: 0, credit_amount: r.amount, line_order: 2 },

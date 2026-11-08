@@ -241,6 +241,26 @@ test('bill from receipts clears received-not-billed into what is owed, once; voi
   assert.ok(await I.createBillFromReceipts(ORG, id), 'can be billed again')
   await invariant(); await booksAgree()
 }))
+test('a bill priced differently from what was received clears received-not-billed and books the difference', () => as(async () => {
+  const before = await grni()
+  const item = await newItem()
+  const id = await draftOrder(item, 10, 5)
+  await I.approvePurchaseOrder(ORG, id)
+  const line = (await I.getPurchaseOrder(ORG, id) as Doc).lines[0]
+  await I.receivePurchaseOrder(ORG, id, { date: DAY, lines: [{ line_id: line.id, quantity: 10 }] })
+  const bill = await I.createBillFromReceipts(ORG, id)
+  const draft = await B.getDocument(ORG, bill.id) as Doc
+  // The supplier charged 6 a unit, not 5.
+  await B.saveDocument(ORG, { id: bill.id, kind: 'bill', party_name: 'Acme', issue_date: DAY, due_date: DAY, lines: draft.lines.map((l: Doc) => ({ description: l.description, account_id: l.account_id, quantity: l.quantity, unit_price: 6 })) })
+  const preview = await B.previewDocument(ORG, bill.id, { control_account_id: a.ap })
+  assert.ok(preview.lines.some((l) => l.debit === 10 && /Purchase price differences/.test(l.name)))
+  await B.postDocument(ORG, bill.id, { control_account_id: a.ap })
+  assert.equal(await grni(), before, 'cleared at the received price')
+  const [v] = await db.sql`SELECT COALESCE(SUM(l.debit_amount - l.credit_amount), 0)::float AS b FROM public.journal_entry_lines l JOIN public.accounts c ON c.id = l.account_id WHERE c.system_role = 'price_variance' AND c.organization_id = ${ORG}::uuid`
+  assert.equal(Number(v.b), 10)
+  await invariant(); await booksAgree()
+}))
+
 async function grni() {
   const [r] = await db.sql`SELECT COALESCE(SUM(credit_amount - debit_amount), 0)::float AS b FROM public.journal_entry_lines WHERE account_id = ${a.grni}`
   return Number(r.b)

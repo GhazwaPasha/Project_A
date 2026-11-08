@@ -28,14 +28,15 @@ export const num = (v: Money | null | undefined) => Number(v ?? 0) || 0
 export type AccountType = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense'
 export type AccountBalance = { id: Id; code: string; name: string; account_type: AccountType; balance: Money; transaction_count: Money; last_transaction_date: string | null; is_postable: boolean }
 export type DashboardBundle = { financialMetrics: { totalRevenue: Money; totalExpenses: Money }; accountBalances: AccountBalance[] }
-export type Section = { name: string; total: Money; accounts: { id: Id; code: string; name: string; balance: Money }[] }
-export type BalanceSheet = { assetSections: Section[]; liabilitySections: Section[]; equitySections: Section[]; totalAssets: Money; totalLiabilities: Money; totalEquity: Money; isBalanced: boolean }
+export type Section = { name: string; total: Money; accounts: { id: Id; code: string; name: string; balance: Money; depth?: number; is_computed?: boolean }[] }
+export type BalanceSheet = { assetSections: Section[]; liabilitySections: Section[]; equitySections: Section[]; totalAssets: Money; totalLiabilities: Money; totalEquity: Money; difference?: Money; isBalanced: boolean }
 type Breakdown = { total: Money; breakdown: { account: string; amount: Money }[] }
-export type IncomeStatement = { revenue: Breakdown; costOfSales: Breakdown; operatingExpenses: Breakdown; otherExpenses: Breakdown; grossProfit: Money; netIncome: Money }
+/** Every amount is signed in its account's natural direction: a sales return is a negative revenue line, a gain booked to an expense a negative cost. */
+export type IncomeStatement = { revenue: Breakdown; costOfSales: Breakdown; operatingExpenses: Breakdown; otherRevenue?: Breakdown; otherExpenses: Breakdown; financeIncome?: Breakdown; financeCosts?: Breakdown; incomeTax?: Breakdown; grossProfit: Money; operatingIncome?: Money; profitBeforeTax?: Money; netIncome: Money }
 export type TrialRow = { account_id: Id; account_code: string; account_name: string; account_type: string; debit_balance: Money; credit_balance: Money }
 export type Line = { id: Id; account_id: Id; description: string | null; debit_amount: Money; credit_amount: Money }
 export type Entry = { reverses_entry_id?: Id | null; id: Id; entry_number: string; entry_date: string; description: string; reference: string | null; total_amount: Money; is_posted: boolean; lines: Line[] }
-export type Account = { id: Id; code: string; name: string; account_type?: AccountType; parent_id?: Id | null; description?: string | null; group?: string | null; report_category?: string | null; is_postable?: boolean; is_active?: boolean }
+export type Account = { id: Id; code: string; name: string; account_type?: AccountType; parent_id?: Id | null; description?: string | null; group?: string | null; report_category?: string | null; is_postable?: boolean; is_active?: boolean; system_role?: string | null; is_control?: boolean; cash_flow_category?: string | null; pl_category?: string | null; is_contra?: boolean }
 export type AccountTxn = { id: Id; entry_number: string; entry_date: string; description: string; reference?: string | null; debit_amount: Money; credit_amount: Money; balance: Money }
 export type StockItem = { id: Id; sku: string; name: string; unit_of_measure: string; quantity_available: Money; average_unit_cost: Money; total_value: Money; reorder_point: Money }
 export type VoucherStats = { pending_approval: Money }

@@ -4,6 +4,8 @@ import { getActingUserId } from '@/server/request-context'
 import { DataServiceAdmin } from '@/server/data-service-admin'
 import { CostPlanner } from '@/server/inventory/costing'
 import { planVoucherPosting, type PostingLine } from '@/server/voucher-posting'
+import { nextNumber } from '@/server/numbering'
+import { sumMoney } from '@/lib/money'
 import type {
   Account,
   InventoryItem,
@@ -464,7 +466,7 @@ export class VoucherServiceAdmin {
       }
       if (patch.deposit_amount !== undefined) {
         const d = (patch as { deposit_amount?: number | null }).deposit_amount ?? 0
-        sets.push(sql` deposit_amount = ${d}::double precision `)
+        sets.push(sql` deposit_amount = ${d}::numeric `)
       }
       if (patch.payment_reference !== undefined) {
         sets.push(
@@ -474,7 +476,7 @@ export class VoucherServiceAdmin {
         )
       }
       if (nextTotal !== undefined) {
-        sets.push(sql` total_estimated_cost = ${nextTotal}::double precision `)
+        sets.push(sql` total_estimated_cost = ${nextTotal}::numeric `)
       }
       await sql`UPDATE public.inventory_vouchers SET ${sqlJoin(sets, ', ')} WHERE id = ${id}`
     }
@@ -875,6 +877,8 @@ export class VoucherServiceAdmin {
           created_by: acting,
           posted_by: acting,
           posted_at: new Date().toISOString(),
+          source: 'voucher',
+          source_id: String(id),
         } as unknown as Parameters<typeof DataServiceAdmin.insertJournalEntry>[1],
         plan.lines.map((l, i) => ({ account_id: l.account_id, description: l.description, debit_amount: l.debit, credit_amount: l.credit, line_order: i + 1 })) as unknown as Parameters<typeof DataServiceAdmin.insertJournalEntry>[2]
       )
@@ -908,6 +912,26 @@ export class VoucherServiceAdmin {
         SET status = 'posted', journal_entry_id = ${entry.id}, total_actual_cost = ${plan.total}, updated_at = now()
         WHERE id = ${id}
       `
+      // What's still owed to the supplier gets a bill, posted with the voucher's own entry, so it can be paid and aged
+      // like any other bill and what you owe always has a bill behind it.
+      const owed = plan.lines.find((l) => l.description === 'Owed to supplier')
+      if (owed && owed.credit > 0) {
+        const stock = plan.lines.find((l) => l.debit > 0)
+        const [supplier] = (await tx`SELECT id FROM public.suppliers WHERE organization_id = ${v.organization_id}::uuid AND lower(name) = lower(${v.vendor_name ?? ''}) LIMIT 2`) as { id: number }[]
+        const number = await nextNumber(tx, v.organization_id, 'BILL', 'public.trade_documents', 'number')
+        const due = new Date(`${date}T00:00:00Z`)
+        due.setUTCDate(due.getUTCDate() + 30)
+        const [bill] = (await tx`
+          INSERT INTO public.trade_documents (organization_id, kind, number, status, supplier_id, party_name, issue_date, due_date, control_account_id, subtotal, tax_total, total, journal_entry_id, notes, created_by, voucher_id)
+          VALUES (${v.organization_id}::uuid, 'bill', ${number}, 'posted', ${supplier ? Number(supplier.id) : null}, ${v.vendor_name ?? 'Supplier'}, ${date}::date, ${due.toISOString().slice(0, 10)}::date, ${owed.account_id},
+                  ${owed.credit}, 0, ${owed.credit}, ${entry.id}, ${`From voucher ${v.voucher_number}`}, ${acting}::uuid, ${id})
+          RETURNING id
+        `) as { id: number }[]
+        await tx`
+          INSERT INTO public.trade_document_lines (document_id, line_order, description, account_id, quantity, unit_price, tax_rate, amount, tax_amount)
+          VALUES (${bill.id}, 1, ${`Goods on voucher ${v.voucher_number}`}, ${stock?.account_id ?? owed.account_id}, 1, ${owed.credit}, 0, ${owed.credit}, 0)
+        `
+      }
     })
     const _v = await this.getVoucher(id)
     if (!_v) throw new Error('Failed to load voucher')
@@ -963,7 +987,7 @@ export class VoucherServiceAdmin {
       rejected: data.filter((v) => v.status === 'rejected').length,
       expired: data.filter((v) => v.status === 'expired').length,
       completed: data.filter((v) => v.status === 'completed').length,
-      total_value: data.reduce((s, v) => s + (v.total_estimated_cost || 0), 0),
+      total_value: sumMoney(data.map((v) => v.total_estimated_cost ?? 0)),
       average_approval_time_hours: 0,
       approval_rate_percent: 0
     }
@@ -1012,7 +1036,7 @@ export class VoucherServiceAdmin {
         AND v.organization_id = ${organizationId}::uuid
     `) as { action: string; created_at: string; total_estimated_cost: number | null }[]
 
-    const voucherCost = (row: (typeof data)[0]) => row.total_estimated_cost ?? 0
+    const voucherCost = (row: (typeof data)[0]) => Number(row.total_estimated_cost ?? 0)
 
     const approved = data.filter((a) => a.action === 'approved')
     const rejected = data.filter((a) => a.action === 'rejected')
@@ -1022,7 +1046,7 @@ export class VoucherServiceAdmin {
       total_approved: approved.length,
       total_rejected: rejected.length,
       average_time_hours: 0,
-      total_value: approved.reduce((s, a) => s + voucherCost(a), 0),
+      total_value: sumMoney(approved.map(voucherCost)),
       pending: 0,
       fastest_approval_minutes: 0,
       large_amounts_count: largeAmounts.length,

@@ -77,7 +77,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       if (e.type === 'status') patch((t) => ({ ...t, status: e.text }))
       if (e.type === 'proposal') {
         patch((t) => ({ ...t, status: null, proposals: [...t.proposals, e.proposal] }))
-        if (fillEntry.current) {
+        if (fillEntry.current && (e.proposal.kind ?? 'journal') === 'journal') {
           fillEntry.current(e.proposal)
           setEntryProposal(e.proposal.id)
         }

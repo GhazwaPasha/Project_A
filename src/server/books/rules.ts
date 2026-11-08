@@ -1,6 +1,9 @@
 /** The accounting rules for invoices, bills, stock, tax, banking and forecasts. No database here, so they can be tested alone. */
 
-export const money = (n: number) => Math.round((n + (n >= 0 ? Number.EPSILON : -Number.EPSILON)) * 100) / 100
+import { roundMoney, sumMoney } from '@/lib/money'
+
+/** Rounds to the cent, half away from zero. Sums go through sumMoney, in whole cents. */
+export const money = (n: number) => roundMoney(n)
 
 export type EntryLine = { account_id: number; debit: number; credit: number; description: string | null }
 
@@ -22,8 +25,8 @@ export function documentTotals(lines: { quantity: number; unit_price: number; ta
     const amount = money(l.quantity * l.unit_price)
     return { amount, tax_amount: money((amount * l.tax_rate) / 100) }
   })
-  const subtotal = money(priced.reduce((s, l) => s + l.amount, 0))
-  const tax_total = money(priced.reduce((s, l) => s + l.tax_amount, 0))
+  const subtotal = sumMoney(priced.map((l) => l.amount))
+  const tax_total = sumMoney(priced.map((l) => l.tax_amount))
   return { lines: priced, subtotal, tax_total, total: money(subtotal + tax_total) }
 }
 
@@ -191,12 +194,21 @@ export function creditNoteEntry(kind: 'invoice' | 'bill', controlId: number, ref
   ]
 }
 
-export type CashEntryLine = { account_id: number; code: string; name: string; account_type: string; report_category: string | null; is_cash: boolean; debit: number; credit: number }
+export type CashEntryLine = { account_id: number; code: string; name: string; account_type: string; report_category: string | null; cash_flow_category?: string | null; pl_category?: string | null; is_cash: boolean; debit: number; credit: number }
 export type CashSection = 'operating' | 'investing' | 'financing'
 
-export const cashSection = (l: Pick<CashEntryLine, 'account_type' | 'report_category'>): CashSection => {
+/**
+ * Where a cash movement belongs, from what was on the other side of it (IAS 7). The account's cash flow category
+ * decides when set. Otherwise: long-term assets are investing; equity and borrowings, short-term ones included,
+ * are financing; the rest is operating. Interest follows the account's income statement category.
+ */
+export const cashSection = (l: Pick<CashEntryLine, 'account_type' | 'report_category' | 'cash_flow_category' | 'pl_category'> & { name?: string }): CashSection => {
+  const set = l.cash_flow_category
+  if (set === 'operating' || set === 'investing' || set === 'financing') return set
+  if ((l.account_type === 'revenue' || l.account_type === 'expense') && (l.pl_category === 'financing' || l.pl_category === 'investing')) return l.pl_category
   if (l.account_type === 'asset' && (l.report_category === 'fixed_asset' || l.report_category === 'other_asset')) return 'investing'
-  if (l.account_type === 'equity' || (l.account_type === 'liability' && l.report_category === 'long_term_liability')) return 'financing'
+  if (l.account_type === 'equity') return 'financing'
+  if (l.account_type === 'liability' && (l.report_category === 'long_term_liability' || /\b(loan|borrow|mortgage|debenture|overdraft)/i.test(l.name ?? ''))) return 'financing'
   return 'operating'
 }
 

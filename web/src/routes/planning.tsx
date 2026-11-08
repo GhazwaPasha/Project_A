@@ -252,7 +252,8 @@ function RateForm({ rate, onClose }: { rate: RateDraft; onClose: () => void }) {
 // ---- Closing the books ----
 
 type Lock = { closed_through: string | null; history: { id: Id; through_date: string; notes: string | null; closed_at: string; reopened_at: string | null; reopen_reason: string | null }[] }
-type Checklist = { balanced: boolean; draft_documents: number; unmatched_bank_lines: number; pending_proposals: number; unposted_stock: number; unposted_vouchers: number }
+type ControlRow = { account_id: number; code: string; name: string; against: string; ledger: number; subledger: number; difference: number }
+type Checklist = { balanced: boolean; draft_documents: number; unmatched_bank_lines: number; pending_proposals: number; unposted_stock: number; unposted_vouchers: number; control_differences?: number; control?: { rows: ControlRow[] } }
 
 const lastMonthEnd = () => { const d = new Date(); return iso(new Date(d.getFullYear(), d.getMonth(), 0)) }
 
@@ -290,9 +291,17 @@ export function CloseBooks() {
             {warn(c.pending_proposals, 'agent proposal waiting', 'agent proposals waiting')}
             {warn(c.unposted_stock, 'stock movement not in the books', 'stock movements outside the books')}
             {warn(c.unposted_vouchers, 'voucher waiting to be posted', 'vouchers waiting to be posted')}
+            {warn(c.control_differences ?? 0, 'control account out of step with its records', 'control accounts out of step with their records')}
           </div>
         ) : null}
-        <p className="text-[12.5px] text-muted-foreground">Amber items are worth sorting first, but they won't stop you. After closing, no entry can be dated on or before this date. Reversals and corrections then go in an open period. This locks dates; it doesn't move profit into retained earnings, so check that with your accountant at year end.</p>
+        {c?.control?.rows.some((r) => r.difference !== 0) ? (
+          <ul className="text-[13px] flex flex-col gap-1">
+            {c.control.rows.filter((r) => r.difference !== 0).map((r) => (
+              <li key={r.account_id}><span className="fig">{r.code}</span> {r.name}: the books show <span className="fig">{figure(r.ledger, org.decimals)}</span>, {r.against} come to <span className="fig">{figure(r.subledger, org.decimals)}</span>, a difference of <span className="fig font-medium">{figure(r.difference, org.decimals)}</span>.</li>
+            ))}
+          </ul>
+        ) : null}
+        <p className="text-[12.5px] text-muted-foreground">Amber items are worth sorting first, but they won't stop you. After closing, no entry can be dated on or before this date. Reversals and corrections then go in an open period. This locks dates. Profit moves into retained earnings on the balance sheet by itself at each year end, so no closing entry is needed.</p>
         <div><button className={cn(btn.primary)} disabled={!c?.balanced || close.isPending} onClick={() => close.mutate()}>{close.isPending ? 'Closing…' : `Close through ${shortDate(through)}`}</button></div>
       </section>
       {closed ? (

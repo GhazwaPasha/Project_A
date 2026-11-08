@@ -7,12 +7,12 @@ const UUID_RE =
 
 const BOOKS_READ = new Set([
   'getBooksLock', 'getCloseChecklist', 'listUnpostedStock', 'listCustomers', 'listTaxRates', 'listDocuments', 'getDocument', 'previewDocument',
-  'getAgedReport', 'getTaxSummary', 'listTaxReturns', 'getReconciliation', 'listBudgets', 'getBudgetReport', 'getForecast', 'getWorkSummary', 'getCashFlow', 'listAuditLog',
+  'getAgedReport', 'getTaxSummary', 'listTaxReturns', 'getReconciliation', 'listBudgets', 'getBudgetReport', 'getForecast', 'getWorkSummary', 'getCashFlow', 'listAuditLog', 'getControlCheck', 'findOpenDocuments',
 ])
 const BOOKS_WRITE = new Set([
   'reverseEntry', 'closeBooks', 'postStockMovement', 'recordStockMovement', 'saveCustomer', 'archiveCustomer', 'saveTaxRate', 'saveDocument', 'deleteDocument',
   'postDocument', 'recordPayment', 'voidDocument', 'recordTaxReturn', 'importStatement', 'matchStatementLine', 'unmatchStatementLine', 'ignoreStatementLine',
-  'createEntryFromStatementLine', 'completeReconciliation', 'saveBudget', 'deleteBudget', 'createCreditNote',
+  'createEntryFromStatementLine', 'completeReconciliation', 'saveBudget', 'deleteBudget', 'createCreditNote', 'applyStarterChart',
 ])
 
 const INVENTORY_PERMISSIONS: Record<OrgDataPermission & string, string[]> = {
@@ -268,8 +268,6 @@ export async function authorizeAppDataCall(
     'DataService.generateBalanceSheet',
     'DataService.generateIncomeStatement',
     'DataService.generateTrialBalance',
-    'DataService.generateAgedReceivables',
-    'DataService.generateAgedPayables',
     'DataService.getAccountBalances',
   ])
   if (dataFinancial.has(key)) {

@@ -28,6 +28,7 @@ export function NewEntry({ open, onOpenChange, draft, onRecorded }: { open: bool
   const [description, setDescription] = useState('')
   const [rows, setRows] = useState<Row[]>([])
   const [nextKey, setNextKey] = useState(1)
+  const [controlReason, setControlReason] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -38,6 +39,7 @@ export function NewEntry({ open, onOpenChange, draft, onRecorded }: { open: bool
     setNextKey(lines.length + 1)
     setRequest('')
     setFromProposal(null)
+    setControlReason('')
   }, [open, draft])
 
   // While this is open, an entry from the agent lands here. Nothing is recorded until the person presses Record entry.
@@ -56,11 +58,14 @@ export function NewEntry({ open, onOpenChange, draft, onRecorded }: { open: bool
   const dr = rows.reduce((s, r) => s + cents(r.debit), 0)
   const cr = rows.reduce((s, r) => s + cents(r.credit), 0)
   const filled = rows.filter((r) => r.account && (cents(r.debit) > 0 || cents(r.credit) > 0))
+  // Receivables, payables and stock are kept by invoices, bills and stock. Posting to them here needs a reason.
+  const controlAccounts = (chart.data ?? []).filter((a) => a.is_control && filled.some((r) => r.account === String(a.id)))
   const problem = !description.trim() ? 'Add a description.'
     : rows.some((r) => !r.account && (cents(r.debit) > 0 || cents(r.credit) > 0)) ? 'Choose an account for every amount.'
     : rows.some((r) => cents(r.debit) > 0 && cents(r.credit) > 0) ? 'A line can be a debit or a credit, not both.'
     : filled.length < 2 ? 'Add at least two lines.'
     : dr !== cr ? `Out of balance by ${figure(Math.abs(dr - cr) / 100, org.decimals)}.`
+    : controlAccounts.length && !controlReason.trim() ? 'Say why this goes straight to a control account.'
     : null
 
   const postable = useMemo(() => (chart.data ?? []).filter((a) => a.is_postable !== false), [chart.data])
@@ -68,7 +73,7 @@ export function NewEntry({ open, onOpenChange, draft, onRecorded }: { open: bool
 
   const post = useMutation({
     mutationFn: () => call('DataService', 'createJournalEntry', [
-      { organization_id: org.id, entry_number: `JE-${Date.now()}`, entry_date: date, description: description.trim(), reference: null, total_amount: dr / 100, is_posted: true, created_by: userId, posted_by: userId, posted_at: new Date().toISOString() },
+      { organization_id: org.id, entry_number: '', entry_date: date, description: description.trim(), reference: null, total_amount: dr / 100, is_posted: true, created_by: userId, posted_by: userId, posted_at: new Date().toISOString(), control_reason: controlAccounts.length ? controlReason.trim() : null },
       filled.map((r, i) => ({ account_id: Number(r.account), description: null, debit_amount: cents(r.debit) / 100, credit_amount: cents(r.credit) / 100, line_order: i + 1 })),
     ]),
     onSuccess: () => {
@@ -136,6 +141,12 @@ export function NewEntry({ open, onOpenChange, draft, onRecorded }: { open: bool
             ))}
             <button type="button" onClick={() => { setRows((rs) => [...rs, { key: nextKey, account: '', debit: '', credit: '' }]); setNextKey((k) => k + 1) }} className="self-start inline-flex items-center gap-1 text-[13.5px] text-primary font-medium cursor-pointer mt-1"><Plus className="size-3.5" />Add line</button>
           </div>
+          {controlAccounts.length ? (
+            <div className="flex flex-col gap-1.5 rise-in">
+              <p className="text-[13px] text-muted-foreground">{controlAccounts.map((a) => a.name).join(', ')} {controlAccounts.length > 1 ? 'are' : 'is'} kept by invoices, bills or stock. Use those for everyday work. For a write-off or an opening balance, say why.</p>
+              <Input aria-label="Reason for posting to a control account" placeholder="For example, bad debt written off" value={controlReason} onChange={(e) => setControlReason(e.target.value)} />
+            </div>
+          ) : null}
           </div>
           <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-t border-border p-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
             <p className={cn('text-[13.5px]', problem ? 'text-muted-foreground' : 'text-[var(--tick)] font-medium')}>{problem ?? `✓ Balanced at ${figure(dr / 100, org.decimals)}`}</p>

@@ -1,4 +1,5 @@
 import { getSql } from '@/server/pg'
+import { sumMoney } from '@/lib/money'
 import { getActingUserId } from '@/server/request-context'
 import {
   Account,
@@ -617,8 +618,8 @@ export class SupplierServiceAdmin {
       active_suppliers: data.filter((s) => s.status === 'active').length,
       inactive_suppliers: data.filter((s) => s.status === 'inactive').length,
       preferred_suppliers: data.filter((s) => s.is_preferred).length,
-      total_credit_limit: data.reduce((sum, s) => sum + (s.credit_limit || 0), 0),
-      total_current_balance: data.reduce((sum, s) => sum + (s.current_balance || 0), 0)
+      total_credit_limit: sumMoney(data.map((s) => s.credit_limit ?? 0)),
+      total_current_balance: sumMoney(data.map((s) => s.current_balance ?? 0))
     }
   }
 

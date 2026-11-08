@@ -38,6 +38,8 @@ npm run dev:web
 
 SQL artifacts live in [database/](database/). Node helpers that share `DATABASE_URL` with the app live in [scripts/js/](scripts/js/) (for example `npm run db:apply-inventory`).
 
+Migrations 013 to 017 add ledger rules, account classification, typed agent proposals, bills for credit vouchers, and exact decimals for the last money columns that used floating point. Apply them in number order before deploying this version: the reports read the new columns safely before they exist, but posting and agent proposals need them.
+
 ## Development
 
 **Web app**
@@ -63,7 +65,15 @@ SQL artifacts live in [database/](database/). Node helpers that share `DATABASE_
 - **Invites aren't emailed:** the app has no email service, so an owner sends the invite link themselves.
 - **Password reset:** Neon sends the email. A live reset email hasn't been confirmed yet, and the site's domain may need adding to Neon's allowed list.
 - **Credit notes can't be undone:** re-invoice instead. A credit on a bill made from goods received reduces the "received, not billed" account and leaves stock as it is.
-- **Cash flow finds cash accounts by name:** an asset counts as cash if its name includes cash or bank, or if it has an imported statement. The report lists the accounts it used.
+- **Cash flow finds cash by classification:** an account marked as cash, or with the bank or cash role, counts as cash. Only when none is marked does the report fall back to names containing cash or bank, and it says so.
+- **Control accounts:** receivable, payable, stock and received-not-billed accounts are kept by invoices, bills and stock. A manual entry to one needs a reason, and an AI can't post to one at all. The close checklist compares each with the records behind it.
+- **The ledger can't be edited:** posted entries are corrected by reversing them. The database refuses edits, deletes, negative amounts and entries that don't balance. Manual entries are numbered JNL-0001 and on by the server.
+- **Document numbers:** a draft invoice or bill is numbered DRAFT-<id>. Its INV or BILL number comes when it's posted, so deleted drafts leave no gaps.
+- **Purchase price differences:** a bill made from goods receipts clears "received, not billed" at the received price. Any difference goes to a purchase price differences account, created the first time it's needed. The whole difference is expensed, even for goods still in stock.
+- **Credit vouchers raise a bill:** a purchase voucher bought on credit creates a posted bill for what's owed, so it can be paid and aged. That bill shares the voucher's entry and can't be voided or credited separately.
+- **Second approver:** an owner can require someone other than the person who asked to approve agent entries. Connected AI apps then can only propose.
+- **Starter chart:** new organizations start with a classified small-business chart of accounts. An organization with no accounts can add it from the Accounts page.
+- **No year-end closing entries:** the balance sheet carries this year's profit and earlier years' profit into equity itself. Fiscal years other than the calendar year aren't supported yet.
 - **Audit log:** it records successful changes made through the app, the agent and connected AI. It doesn't record failed attempts or direct database changes, and a failure to write an entry is logged on the server but doesn't undo the change.
 - **FIFO:** cost layers are per item, not per warehouse, and a backdated purchase doesn't recalculate costs already issued. A FIFO bill can't be voided once any of its stock has been used.
 - **Stock counts on serial items:** a shortage removes the oldest units. Use a stock movement to write off specific ones.

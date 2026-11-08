@@ -52,12 +52,13 @@ test('invoice: draft stays out of the books; posting records it; numbers run in 
   const { id } = await B.saveDocument(ORG, invoice())
   assert.equal(await entries(), start)
   const doc = await B.getDocument(ORG, id) as Doc
-  assert.equal(doc.number, 'INV-0001'); assert.equal(doc.status, 'draft'); assert.equal(doc.total, 1000)
+  assert.equal(doc.number, `DRAFT-${id}`); assert.equal(doc.status, 'draft'); assert.equal(doc.total, 1000)
   const preview = await B.previewDocument(ORG, id)
   assert.ok(preview.problems.length, 'asks for the receivable account')
   assert.equal(await entries(), start)
   await assert.rejects(() => B.postDocument(ORG, id), /Choose the account/)
-  assert.equal((await B.postDocument(ORG, id, { control_account_id: a.ar }) as Doc).status, 'posted')
+  const posted = await B.postDocument(ORG, id, { control_account_id: a.ar }) as Doc
+  assert.equal(posted.status, 'posted'); assert.equal(posted.number, 'INV-0001')
   assert.equal(await entries(), start + 1)
   assert.equal((await balances())['1200'], 1000)
   await assert.rejects(() => B.postDocument(ORG, id, { control_account_id: a.ar }), /already been posted/)

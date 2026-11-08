@@ -1,10 +1,10 @@
 import type { JournalEntryLine } from '@/types'
 
-/** Rounding tolerance for debits = credits (half-cent). */
-const MONEY_EPS = 0.005
+
+import { roundMoney as exactRound, toCents, fromCents } from '@/lib/money'
 
 export function roundMoney(n: number): number {
-  return Math.round(n * 100) / 100
+  return exactRound(n)
 }
 
 export function parseMoneyInput(s: string): number {
@@ -33,8 +33,16 @@ export function validateJournalLinesForSave(
 
   const nonEmpty: NormalizedLine[] = []
   for (const l of lines) {
-    const debit_amount = roundMoney(Number(l.debit_amount) || 0)
-    const credit_amount = roundMoney(Number(l.credit_amount) || 0)
+    const rawDebit = Number(l.debit_amount ?? 0)
+    const rawCredit = Number(l.credit_amount ?? 0)
+    if (!Number.isFinite(rawDebit) || !Number.isFinite(rawCredit)) {
+      throw new Error('Every amount must be a number.')
+    }
+    if (rawDebit < 0 || rawCredit < 0) {
+      throw new Error("Amounts can't be negative. Put the amount on the other side instead.")
+    }
+    const debit_amount = roundMoney(rawDebit)
+    const credit_amount = roundMoney(rawCredit)
     if (debit_amount === 0 && credit_amount === 0) {
       continue
     }
@@ -45,8 +53,8 @@ export function validateJournalLinesForSave(
     throw new Error('Add at least two lines with amounts that balance (total debits = total credits).')
   }
 
-  let tDr = 0
-  let tCr = 0
+  let drCents = 0
+  let crCents = 0
   for (const line of nonEmpty) {
     if (!line.account_id || line.account_id <= 0) {
       throw new Error('Each line with an amount must have a valid account.')
@@ -56,11 +64,14 @@ export function validateJournalLinesForSave(
         'Each line must be only a debit or only a credit, not both. Split mixed amounts into two lines.'
       )
     }
-    tDr = roundMoney(tDr + line.debit_amount)
-    tCr = roundMoney(tCr + line.credit_amount)
+    drCents += toCents(line.debit_amount)
+    crCents += toCents(line.credit_amount)
   }
 
-  if (Math.abs(tDr - tCr) > MONEY_EPS) {
+  const tDr = fromCents(drCents)
+  const tCr = fromCents(crCents)
+  // Exact, in whole cents.
+  if (drCents !== crCents) {
     throw new Error(
       `Debits (${tDr.toFixed(2)}) and credits (${tCr.toFixed(2)}) must be equal.`
     )

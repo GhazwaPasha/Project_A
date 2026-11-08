@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { CreateOrganization } from '@/components/auth'
-import { Choice, FormBody, Modal, Stat, Stats, Text, selectInline, useSave } from '@/components/form'
+import { Choice, FormBody, Modal, Stat, Stats, Text, selectInline, useSave, Toggle } from '@/components/form'
 import { Cell, Empty, Head, Loaded, Paged, Screen, SearchIcon, SettingsTabs, Table, Toolbar, btn } from '@/components/page'
 import { Badge, Chip, Chips } from '@/components/chips'
 import { call, rest } from '@/lib/api'
@@ -114,14 +114,15 @@ export function OrganizationSettings() {
     street: s?.companyInfo.address.street ?? '', city: s?.companyInfo.address.city ?? '', state: s?.companyInfo.address.state ?? '', zipCode: s?.companyInfo.address.zipCode ?? '', country: s?.companyInfo.address.country ?? '',
     reportingCurrency: org.currency, decimalPlaces: String(org.decimals), fiscalYearStart: String(s?.accountingSettings.fiscalYearStart ?? '01').slice(0, 2),
     lowBalanceAlert: String(s?.notificationSettings.lowBalanceAlert ?? ''), sessionTimeout: String(s?.securitySettings.sessionTimeout ?? ''),
+    requireSecondApprover: (s?.accountingSettings as { requireSecondApprover?: boolean } | undefined)?.requireSecondApprover === true,
   })
-  const set = (k: keyof typeof f) => (v: string) => setF((x) => ({ ...x, [k]: v }))
+  const set = (k: Exclude<keyof typeof f, 'requireSecondApprover'>) => (v: string) => setF((x) => ({ ...x, [k]: v }))
   const save = useSave(() => rest(`/api/organizations/${org.id}`, { method: 'PATCH', body: {
     name: f.name.trim(),
     description: f.description.trim() || null,
     settings: {
       companyInfo: { legalName: f.legalName, taxId: f.taxId, registrationNumber: f.registrationNumber, industry: f.industry, website: f.website, email: f.email, phone: f.phone, address: { street: f.street, city: f.city, state: f.state, zipCode: f.zipCode, country: f.country } },
-      accountingSettings: { ...s?.accountingSettings, reportingCurrency: f.reportingCurrency.trim().toUpperCase(), decimalPlaces: Number(f.decimalPlaces) || 0, fiscalYearStart: f.fiscalYearStart },
+      accountingSettings: { ...s?.accountingSettings, reportingCurrency: f.reportingCurrency.trim().toUpperCase(), decimalPlaces: Number(f.decimalPlaces) || 0, fiscalYearStart: f.fiscalYearStart, requireSecondApprover: f.requireSecondApprover },
       notificationSettings: { ...s?.notificationSettings, lowBalanceAlert: Number(f.lowBalanceAlert) || 0 },
       securitySettings: { ...s?.securitySettings, sessionTimeout: Number(f.sessionTimeout) || 0 },
     },
@@ -152,6 +153,7 @@ export function OrganizationSettings() {
         {Section({ title: 'Accounting', children: <>
           <Text label="Reporting currency" hint="Three-letter code, for example PKR or USD." maxLength={3} value={f.reportingCurrency} onChange={set('reportingCurrency')} />
           <Choice label="Decimal places" value={f.decimalPlaces} onChange={set('decimalPlaces')} options={['0', '2', '3'].map((v) => ({ value: v, label: v }))} />
+          <div className="sm:col-span-2"><Toggle label="A second person approves agent entries" hint="Whoever asked the agent for an entry can't approve it themselves, and connected AI apps can only propose." checked={f.requireSecondApprover} onChange={(v) => setF((x) => ({ ...x, requireSecondApprover: v }))} /></div>
         </> })}
       </FormBody>
     </Screen>

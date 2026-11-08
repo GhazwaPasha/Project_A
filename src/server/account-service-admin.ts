@@ -1,4 +1,5 @@
 import { getSql } from '@/server/pg'
+import { assertAccountChangeAllowed, classificationFields, saveClassification } from '@/server/books/guards'
 import { isStillInUse } from '@/server/public-error'
 import { fetchAccountNetBalance } from '@/server/data/ledger-sql'
 import { getActingUserId } from '@/server/request-context'
@@ -64,6 +65,7 @@ export class AccountServiceAdmin {
       report_category: accountData.report_category ?? null,
     }
     assertReportCategoryCompatible(a.account_type, a.report_category)
+    const classification = classificationFields(accountData as Record<string, unknown>, a.account_type)
     if (a.parent_id != null) {
       const parents = await sql<{ account_type: string; organization_id: string }[]>`
         SELECT account_type::text AS account_type, organization_id::text AS organization_id
@@ -108,7 +110,8 @@ export class AccountServiceAdmin {
         if (!rows[0]) {
           throw new Error('Failed to create account')
         }
-        return rows[0] as Account
+        await saveClassification(sql, Number(rows[0].id), classification)
+        return { ...rows[0], ...classification } as Account
       } catch (e) {
         const pgCode =
           e && typeof e === 'object' && 'code' in e ? String((e as { code: unknown }).code) : ''
@@ -147,6 +150,8 @@ export class AccountServiceAdmin {
       u.report_category !== undefined ? u.report_category : existing.report_category
 
     assertReportCategoryCompatible(mergedType, mergedReport ?? null)
+    await assertAccountChangeAllowed(sql, existing, u)
+    const classification = classificationFields(u as Record<string, unknown>, mergedType)
 
     if (mergedParent != null) {
       const parents = await sql<{ account_type: string; organization_id: string }[]>`
@@ -180,7 +185,8 @@ export class AccountServiceAdmin {
     if (!rows[0]) {
       throw new Error('Failed to update account')
     }
-    return rows[0] as Account
+    await saveClassification(sql, id, classification)
+    return { ...rows[0], ...classification } as Account
   }
 
   static async deleteAccount(id: number): Promise<void> {

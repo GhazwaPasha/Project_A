@@ -86,6 +86,15 @@ export interface Account {
   /** Structured FS/P&L classification; must match account_type when set. */
   report_category: AccountReportCategory | null
   is_postable: boolean
+  /** What the account is for (migration 014). A control account is kept by a subledger, so manual entries can't post to it. */
+  system_role?: string | null
+  is_control?: boolean
+  /** cash, operating, investing or financing. */
+  cash_flow_category?: string | null
+  /** IFRS 18 income statement category: operating, investing, financing or income_tax. */
+  pl_category?: string | null
+  /** Reduces its section, like sales returns or accumulated depreciation. */
+  is_contra?: boolean
   created_at: string
   updated_at: string
   created_by: string | null

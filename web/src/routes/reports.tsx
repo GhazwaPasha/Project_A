@@ -123,7 +123,14 @@ export function IncomeStatementPage() {
               <Lines rows={r.costOfSales.breakdown} decimals={d} negative />
               <Sub label={pro ? 'Gross profit' : 'Left after the cost of what you sold'} value={r.grossProfit} decimals={d} />
               <Lines rows={r.operatingExpenses.breakdown} decimals={d} negative />
+              <Lines rows={r.otherRevenue?.breakdown ?? []} decimals={d} />
               <Lines rows={r.otherExpenses.breakdown} decimals={d} negative />
+              {r.operatingIncome !== undefined && (r.financeIncome?.breakdown.length || r.financeCosts?.breakdown.length || r.incomeTax?.breakdown.length) ? <>
+                <Sub label={pro ? 'Operating profit' : 'Profit from running the business'} value={r.operatingIncome} decimals={d} />
+                <Lines rows={r.financeIncome?.breakdown ?? []} decimals={d} />
+                <Lines rows={r.financeCosts?.breakdown ?? []} decimals={d} negative />
+                {r.incomeTax?.breakdown.length ? <><Sub label={pro ? 'Profit before tax' : 'Profit before tax'} value={r.profitBeforeTax ?? 0} decimals={d} /><Lines rows={r.incomeTax.breakdown} decimals={d} negative /></> : null}
+              </> : null}
               <tr className="rule-total"><Cell className="border-b-0">{pro ? 'Net income' : 'Profit'}</Cell><Cell right>{figure(num(r.netIncome), d)}</Cell></tr>
             </tbody>
           </Table>
@@ -145,8 +152,9 @@ export function IncomeStatementPage() {
   )
 }
 
+/** Costs show as deductions. A cost line that is already negative, such as a gain, shows as an addition. */
 function Lines({ rows, decimals, negative }: { rows: { account: string; amount: Money }[]; decimals: number; negative?: boolean }) {
-  return rows.map((l) => <tr key={l.account}><Cell>{l.account}</Cell><Cell right>{figure(negative ? -Math.abs(num(l.amount)) : num(l.amount), decimals)}</Cell></tr>)
+  return rows.map((l) => <tr key={l.account}><Cell>{l.account}</Cell><Cell right>{figure(negative ? -num(l.amount) : num(l.amount), decimals)}</Cell></tr>)
 }
 function Sub({ label, value, decimals }: { label: string; value: Money; decimals: number }) {
   return <tr className="font-medium bg-muted/50"><Cell>{label}</Cell><Cell right>{figure(num(value), decimals)}</Cell></tr>
@@ -194,8 +202,21 @@ function Group({ title, sections, total, decimals }: { title: string; sections: 
   return (
     <>
       <tr><td colSpan={2} className="px-3.5 py-1.5 text-[12.5px] font-semibold border-b border-border">{title}</td></tr>
-      {sections.flatMap((s) => s.accounts).map((a) => <tr key={a.id}><Cell>{a.name}</Cell><Cell right>{figure(num(a.balance), decimals)}</Cell></tr>)}
+      {sections.map((s) => (
+        <SectionRows key={s.name} section={s} single={sections.length === 1} decimals={decimals} />
+      ))}
       <Sub label={`Total ${title.toLowerCase()}`} value={total} decimals={decimals} />
+    </>
+  )
+}
+
+/** A subsection's heading and subtotal show only when there's more than one, and child accounts sit indented under their parent. */
+function SectionRows({ section, single, decimals }: { section: Section; single: boolean; decimals: number }) {
+  return (
+    <>
+      {single ? null : <tr><td colSpan={2} className="px-3.5 py-1 text-[12.5px] text-muted-foreground border-b border-border">{section.name}</td></tr>}
+      {section.accounts.map((a) => <tr key={a.id}><Cell><span style={{ paddingLeft: `${(a.depth ?? 0) * 14}px` }} className={a.is_computed ? 'italic' : undefined}>{a.name}</span></Cell><Cell right>{figure(num(a.balance), decimals)}</Cell></tr>)}
+      {single ? null : <tr><Cell className="text-muted-foreground">Total {section.name.toLowerCase()}</Cell><Cell right>{figure(num(section.total), decimals)}</Cell></tr>}
     </>
   )
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { seedStarterChart } from '@/server/books/starter-chart'
 import { randomUUID } from 'crypto'
 import { neonAuth } from '@/auth'
 import { getSql } from '@/server/pg'
@@ -82,6 +83,8 @@ export async function POST(req: Request) {
               NOW()
             )
           `
+          // A classified starter chart. If it can't be added (an older database), the organization is still created.
+          await tx.savepoint((sp) => seedStarterChart(sp, String(orgId), userId)).catch((e: unknown) => console.error('starter chart not added', e))
         }
       })
       return NextResponse.json({ ok: true, relinked: true })
@@ -126,6 +129,8 @@ export async function POST(req: Request) {
             NOW()
           )
         `
+        // A classified starter chart. If it can't be added (an older database), the organization is still created.
+        await tx.savepoint((sp) => seedStarterChart(sp, String(orgId), userId)).catch((e: unknown) => console.error('starter chart not added', e))
       }
     })
 

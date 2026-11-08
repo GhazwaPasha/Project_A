@@ -1,6 +1,6 @@
 import { z } from 'zod/v4'
 import { authorizeAppDataCall } from '@/server/app-data-authorize'
-import { createProposal, listProposals, recordDirectly, type Proposal } from '@/server/agent/proposals'
+import { createPaymentProposal, createPostDocumentProposal, createProposal, listProposals, recordDirectly, type Proposal } from '@/server/agent/proposals'
 import { DataServiceAdmin } from '@/server/data-service-admin'
 import { actingUserStore } from '@/server/request-context'
 import { VoucherServiceAdmin } from '@/server/voucher-service-admin'
@@ -42,6 +42,11 @@ const ENTRY = {
     debit: z.number().min(0),
     credit: z.number().min(0),
   })).min(2).max(30),
+  not_a_duplicate: z.boolean().optional().describe('Only after the person confirms this is separate from a similar recent entry the tool pointed out.'),
+}
+const WHY = {
+  explanation: z.string().min(1).max(600).describe('One or two plain sentences for a business owner: what this does and why.'),
+  confidence: z.enum(['high', 'medium', 'low']),
 }
 
 async function read(ctx: ToolContext, service: 'DataService' | 'VoucherService' | 'BooksService' | 'InventoryService', method: string, args: unknown[], status: string, fn: () => Promise<unknown>) {
@@ -80,9 +85,9 @@ const TOOLS: AgentTool[] = [
     run: ({ as_of }, c) => read(c, 'DataService', 'generateBalanceSheet', [c.org, as_of], 'Reading your balance sheet', () => DataServiceAdmin.generateBalanceSheet(c.org, as_of)),
   }),
   define({
-    name: 'get_trial_balance', title: 'Get trial balance', readOnly: true, schema: z.object({}),
-    description: 'Debit and credit balance of every account today.',
-    run: (_i, c) => read(c, 'DataService', 'getTrialBalance', [c.org], 'Checking your trial balance', () => DataServiceAdmin.getTrialBalance(c.org)),
+    name: 'get_trial_balance', title: 'Get trial balance', readOnly: true, schema: z.object({ as_of: DATE.optional().describe('Defaults to today') }),
+    description: 'Debit and credit balance of every account as of a date.',
+    run: ({ as_of }, c) => read(c, 'DataService', 'getTrialBalance', [c.org, as_of], 'Checking your trial balance', () => DataServiceAdmin.getTrialBalance(c.org, as_of)),
   }),
   define({
     name: 'search_journal', title: 'Search journal', readOnly: true, schema: z.object({ query: z.string().optional() }),
@@ -182,6 +187,17 @@ const TOOLS: AgentTool[] = [
     name: 'get_aged_report', title: 'Get aged report', readOnly: true, schema: z.object({ kind: z.enum(['invoice', 'bill']).describe('invoice for what customers owe, bill for what you owe suppliers'), as_of: DATE.optional() }),
     description: 'Who owes what and how overdue it is, grouped into current, 1-30, 31-60, 61-90 and over 90 days.',
     run: ({ kind, as_of }, c) => books(c, 'getAgedReport', [c.org, kind, as_of], 'Checking what is overdue', () => BooksServiceAdmin.getAgedReport(c.org, kind, as_of)),
+  }),
+  define({
+    name: 'find_open_documents', title: 'Find open invoices or bills', readOnly: true,
+    schema: z.object({ kind: z.enum(['invoice', 'bill']).optional(), party: z.string().max(200).optional().describe('Customer or supplier name, or a document number'), amount: z.number().positive().optional().describe('Closest balances first') }),
+    description: 'Posted invoices or bills that still have money owing, with ids and balances. Call this when someone says they were paid or paid someone, before propose_payment.',
+    run: (i, c) => books(c, 'findOpenDocuments', [c.org], 'Looking for what this pays', () => BooksServiceAdmin.findOpenDocuments(c.org, i)),
+  }),
+  define({
+    name: 'get_control_check', title: 'Check control accounts', readOnly: true, schema: z.object({ as_of: DATE.optional() }),
+    description: 'Whether receivables, payables, stock and goods received not billed in the books agree with the invoices, bills, stock and receipts behind them, and any difference.',
+    run: ({ as_of }, c) => books(c, 'getControlCheck', [c.org], 'Checking the control accounts', () => BooksServiceAdmin.getControlCheck(c.org, as_of)),
   }),
   define({
     name: 'list_customers', title: 'List customers', readOnly: true, schema: z.object({}),
@@ -285,11 +301,44 @@ const TOOLS: AgentTool[] = [
     },
   }),
   define({
+    name: 'propose_payment', title: 'Propose payment', readOnly: false,
+    schema: z.object({
+      document_id: z.coerce.number().int().positive().describe('From find_open_documents'),
+      date: DATE,
+      amount: z.number().positive(),
+      bank_account_id: z.coerce.number().int().positive().describe('The bank or cash account the money went through, from list_accounts'),
+      reference: z.string().max(200).optional(),
+      ...WHY,
+    }),
+    description: 'Propose recording money received for an invoice or paid for a bill. Approving it records the payment on the document, so it shows as paid. This does NOT record anything yet.',
+    run: async (input, c) => {
+      c.onStatus?.('Preparing the payment')
+      const proposal = await createPaymentProposal(c.userId, c.org, c.source, c.sourceName, input)
+      c.onProposal?.(proposal)
+      return { proposal_id: proposal.id, status: 'waiting_for_approval', warnings: proposal.warnings, note: 'NOT recorded. A person must approve it. Do not say it was recorded.' }
+    },
+  }),
+  define({
+    name: 'propose_post_document', title: 'Propose posting a document', readOnly: false,
+    schema: z.object({
+      document_id: z.coerce.number().int().positive().describe('A draft invoice or bill'),
+      control_account_id: z.coerce.number().int().positive().optional().describe('Only when the document has no customer or supplier account set'),
+      ...WHY,
+    }),
+    description: 'Propose posting a draft invoice or bill to the books, with its stock and cost of sales. Approving it posts the document. This does NOT post anything yet.',
+    run: async (input, c) => {
+      c.onStatus?.('Preparing to post the document')
+      const proposal = await createPostDocumentProposal(c.userId, c.org, c.source, c.sourceName, input)
+      c.onProposal?.(proposal)
+      return { proposal_id: proposal.id, status: 'waiting_for_approval', note: 'NOT posted. A person must approve it. Do not say it was posted.' }
+    },
+  }),
+  define({
     name: 'record_journal_entry', title: 'Record journal entry', readOnly: false, schema: z.object(ENTRY),
     description: 'Record a balanced journal entry in the books immediately. Available only when the user allowed this connection to record. Confirm with the user first.',
     run: async (input, c) => {
       if (!c.canRecord) throw new Error('This connection can only propose entries.')
-      const entry = await recordDirectly(c.userId, c.org, input)
+      const entry = await recordDirectly(c.userId, c.org, input, c.sourceName)
       return { entry_id: entry.id, entry_number: entry.entry_number, status: 'recorded' }
     },
   }),
@@ -323,14 +372,23 @@ People you work with:
 
 How you work:
 - Figures must come from your tools. Never estimate, recall or calculate a balance yourself when a tool can give it. If the data isn't there, say so.
-- When someone says something happened, turn it into a journal entry: call list_accounts, then propose_journal_entry. If you are missing something that changes the accounting, such as whether it was paid or is still owed, or whether it was for the business or personal, ask one short question first.
+- When someone says something happened, record it the way the business's own records keep it, so invoices, bills and stock stay in step with the books:
+  - Money received from a customer, or paid to a supplier, for an invoice or bill: find_open_documents, then propose_payment. Never a journal entry, or the invoice would still show as unpaid.
+  - A sale or purchase to bill: draft_document. To put a draft into the books: propose_post_document.
+  - Stock bought, sold, used or counted: say it's done from the stock screens, or draft a purchase order. Never move the stock account with a journal entry.
+  - Anything else, such as rent paid, a bank fee, an owner's contribution or a loan: list_accounts, then propose_journal_entry.
+  If you are missing something that changes the accounting, such as whether it was paid or is still owed, or whether it was for the business or personal, ask one short question first.
+- Receivable, payable, stock and goods-received-not-billed accounts are control accounts. A journal entry to one is refused; use the document or stock route above. Only a person can override that, from the New entry form.
+- If a tool says an entry looks like a duplicate, ask the person. Only if they confirm it is separate, propose it again with not_a_duplicate.
+- If a tool returns warnings, tell the person in a short sentence before they approve.
 - If the screen shows the New entry form open, the person wants that form filled in. Use the same two tools: your proposal fills the form automatically. Then tell them to check it and press Record entry. Don't say it's recorded.
 - A proposal waits for a person to approve it. Never say an entry was recorded unless a tool says it was.
 - When someone wants to bill a customer or enter a supplier's bill, use draft_document rather than a journal entry. A draft waits for a person to post it, so never say it's in the books.
 - If a tool says the books are closed for a date, tell the person and suggest a later date. Never work around a closed period.
 - A forecast is an estimate. Always say so, and how much history it rests on.
 - A tax summary is a figure to check, not filing advice. You can't file anything with a tax authority.
-- You cannot send money, file taxes, send invoices, post documents, reverse entries, close periods, or delete records. A person does those in Accountuitive. Say so plainly if asked.
+- You cannot send money, file taxes, send invoices, reverse entries, close periods, or delete records, and you never post a document or record a payment yourself: you propose it and a person approves. Say so plainly if asked.
+- Reports: the balance sheet carries this year's profit and earlier years' profit into equity, so it balances without closing entries. If someone asks why the books don't agree with invoices or stock, use get_control_check.
 - For tax or legal questions, give general guidance and suggest confirming with their accountant.
 - Keep answers short: lead with the answer, then the one or two facts behind it. Use the organization's currency.
 - Stock: refer to items by name and SKU. Use get_reorder_plan before advising what to order and get_inventory_analysis for where money is tied up. draft_purchase_order only saves a draft; it never places an order. Each item is costed by moving average or first-in, first-out; its costing_method says which.

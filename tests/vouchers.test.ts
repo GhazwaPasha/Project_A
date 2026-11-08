@@ -4,6 +4,7 @@ import { account, ORG, OTHER_ORG, startDatabase, USER } from './helpers/db'
 import { actingUserStore } from '../src/server/request-context'
 import { VoucherServiceAdmin as V } from '../src/server/voucher-service-admin'
 import { DataServiceAdmin as D } from '../src/server/data-service-admin'
+import { BooksServiceAdmin as B } from '../src/server/books/service'
 
 let db: Awaited<ReturnType<typeof startDatabase>>
 const a: Record<string, number> = {}
@@ -25,6 +26,7 @@ const as = <T>(fn: () => Promise<T>) => actingUserStore.run(USER, fn)
 before(async () => {
   db = await startDatabase()
   a.inv = await account('1300', 'Inventory', 'asset')
+  a.bank = await account('1010', 'Bank', 'asset')
   a.ap = await account('2000', 'Payable', 'liability')
   a.ap2 = await account('2010', 'Other payable', 'liability')
   a.header = await account('2999', 'Header', 'liability', { postable: false })
@@ -54,6 +56,13 @@ test('a purchase moves stock and records one linked entry, once', () => as(async
   assert.equal((await balances())['2000'], 880)
   await assert.rejects(() => V.postVoucher(id, { payable_account_id: a.ap }), /can't be posted/)
   await assert.rejects(() => V.deleteVoucher(id), /can't be deleted/)
+  // What's owed has a bill behind it, sharing the voucher's entry, so payables agree with open bills.
+  const [bill] = await db.sql`SELECT id, number, status, total::float AS total, journal_entry_id FROM public.trade_documents WHERE voucher_id = ${id}`
+  assert.deepEqual([bill.status, bill.total], ['posted', 880])
+  assert.ok((await B.getControlCheck(ORG, '2026-10-31')).in_step)
+  await assert.rejects(() => B.voidDocument(ORG, Number(bill.id), { reason: 'x' }), /stock voucher/)
+  await B.recordPayment(ORG, Number(bill.id), { date: '2026-10-20', amount: 880, bank_account_id: a.bank })
+  assert.equal((await B.getDocument(ORG, Number(bill.id)) as { status: string }).status, 'paid')
 }))
 test('supplier payable is found by name, and average cost blends', () => as(async () => {
   const [s] = await db.sql`INSERT INTO public.suppliers (organization_id, supplier_code, name) VALUES (${ORG}::uuid, 'S1', 'Noor') RETURNING id`

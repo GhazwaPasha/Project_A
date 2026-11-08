@@ -10,6 +10,8 @@ import { nextNumber } from '@/server/numbering'
 import { listAuditLog } from '@/server/audit'
 import { costOfSalesEntry, parseSerials } from '@/server/inventory/rules'
 import { CostPlanner } from '@/server/inventory/costing'
+import { seedStarterChart } from '@/server/books/starter-chart'
+import { allocateStructuredAccountCode } from '@/server/account-code'
 
 type Pg = ReturnType<typeof getSql>
 type Row = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -31,6 +33,13 @@ function acting() {
   return id
 }
 
+/** Money moves through an asset account that isn't a control account: a bank, cash, or a card clearing account. */
+async function assertMoneyAccount(tx: Pg, org: string, id: number) {
+  const [a] = (await tx`SELECT account_type::text AS type, COALESCE((to_jsonb(a) ->> 'is_control')::boolean, false) AS control FROM public.accounts a WHERE id = ${id} AND organization_id = ${org}::uuid`) as Row[]
+  if (!a) throw new Error('Account not found.')
+  if (a.type !== 'asset' || a.control) throw new Error('Choose a bank or cash account for the money.')
+}
+
 export type DocumentForm = {
   kind: 'invoice' | 'bill'
   customer_id?: number | null
@@ -46,15 +55,15 @@ export type DocumentForm = {
 export class BooksServiceAdmin {
   // ---- Entries ----
 
-  private static async post(tx: Pg, org: string, e: { number: string; date: string; description: string; reference?: string | null; reverses?: number | null }, lines: EntryLine[]) {
+  /** Writes an entry, recording where it came from (source and source_id) so the ledger can be traced back. */
+  private static async post(tx: Pg, org: string, e: { number: string; date: string; description: string; reference?: string | null; reverses?: number | null; source: string; source_id?: number | string | null }, lines: EntryLine[]) {
     const user = acting()
     const entry = await DataServiceAdmin.insertJournalEntry(
       tx,
-      { organization_id: org, entry_number: e.number, entry_date: e.date, description: e.description, reference: e.reference ?? null, total_amount: 0, is_posted: true, created_by: user, posted_by: user, posted_at: new Date().toISOString() } as never,
+      { organization_id: org, entry_number: e.number, entry_date: e.date, description: e.description, reference: e.reference ?? null, total_amount: 0, is_posted: true, created_by: user, posted_by: user, posted_at: new Date().toISOString(), source: e.source, source_id: e.source_id == null ? null : String(e.source_id), reverses_entry_id: e.reverses ?? null } as never,
       lines.map((l, i) => ({ account_id: l.account_id, description: l.description, debit_amount: l.debit, credit_amount: l.credit, line_order: i + 1 })) as never
     )
     if (!entry) throw new Error('Could not record the entry.')
-    if (e.reverses) await tx`UPDATE public.journal_entries SET reverses_entry_id = ${e.reverses} WHERE id = ${entry.id}`
     return Number(entry.id)
   }
 
@@ -85,9 +94,19 @@ export class BooksServiceAdmin {
         description: `Reversal of ${e.entry_number}${label(options.reason) ? `: ${label(options.reason)}` : ''}`,
         reference: e.entry_number,
         reverses: entryId,
+        source: 'reversal',
+        source_id: entryId,
       }, reversalLines(lines.map((l) => ({ account_id: Number(l.account_id), description: l.description, debit: Number(l.debit_amount), credit: Number(l.credit_amount) }))))
       return { entry_id: id }
     })
+  }
+
+  /** Adds the starter chart of accounts, only while the organization has none. */
+  static async applyStarterChart(org: string) {
+    const user = acting()
+    const added = await getSql().begin((raw) => seedStarterChart(raw, org, user))
+    if (!added) throw new Error('This organization already has accounts, so the starter chart was not added.')
+    return { added }
   }
 
   // ---- Period closing ----
@@ -119,7 +138,85 @@ export class BooksServiceAdmin {
         (SELECT COUNT(*)::int FROM public.inventory_transactions WHERE organization_id = ${org}::uuid AND journal_entry_id IS NULL AND COALESCE(total_cost, 0) <> 0 AND transaction_date <= ${through}::date) AS unposted_stock,
         (SELECT COUNT(*)::int FROM public.inventory_vouchers WHERE organization_id = ${org}::uuid AND status IN ('receiving', 'issuing')) AS unposted_vouchers
     `) as Row[]
-    return { balanced: Math.abs(Number(books.dr) - Number(books.cr)) < 0.005, ...counts }
+    const control = await this.getControlCheck(org, through)
+    return { balanced: Math.abs(Number(books.dr) - Number(books.cr)) < 0.005, ...counts, control_differences: control.rows.filter((r) => r.difference !== 0).length, control }
+  }
+
+  /**
+   * Each control account against the records behind it, as of a date: receivables against open invoices, payables
+   * against open bills, received-not-billed against receipts not yet billed, and stock against stock value (stock
+   * is checked at today's value only). A difference means something reached the account without its record, such
+   * as an entry posted to it by hand, or a record that never reached the books.
+   */
+  static async getControlCheck(org: string, asOf?: string) {
+    const date = asOf ? requireDate(asOf) : today()
+    const sql = getSql()
+    const ledger = (await sql`
+      SELECT a.id, a.code, a.name, to_jsonb(a) ->> 'system_role' AS role,
+             COALESCE(SUM(l.debit_amount - l.credit_amount) FILTER (WHERE e.entry_date <= ${date}::date AND e.is_posted), 0)::float AS dr_net
+      FROM public.accounts a
+      LEFT JOIN public.journal_entry_lines l ON l.account_id = a.id
+      LEFT JOIN public.journal_entries e ON e.id = l.journal_entry_id
+      WHERE a.organization_id = ${org}::uuid AND to_jsonb(a) ->> 'system_role' IN ('receivable', 'payable', 'grni', 'inventory')
+      GROUP BY a.id ORDER BY a.code
+    `) as Row[]
+    // What each document still owed on the date. Payments and applied credits both sit in trade_payments.
+    const docs = (await sql`
+      SELECT d.control_account_id AS account_id,
+             SUM(d.total - COALESCE((SELECT SUM(p.amount) FROM public.trade_payments p WHERE p.document_id = d.id AND p.payment_date <= ${date}::date), 0))::float AS open
+      FROM public.trade_documents d
+      WHERE d.organization_id = ${org}::uuid AND d.control_account_id IS NOT NULL AND d.issue_date <= ${date}::date
+        AND (d.status IN ('posted', 'partial', 'paid')
+             OR (d.status = 'void' AND EXISTS (SELECT 1 FROM public.journal_entries r WHERE r.reverses_entry_id = d.journal_entry_id AND r.entry_date > ${date}::date)))
+      GROUP BY d.control_account_id
+    `) as Row[]
+    const [grni] = (await sql`
+      SELECT COALESCE(SUM(g.total), 0)::float AS open FROM public.goods_receipts g
+      LEFT JOIN public.trade_documents b ON b.id = g.bill_id
+      WHERE g.organization_id = ${org}::uuid AND g.receipt_date <= ${date}::date
+        AND (g.bill_id IS NULL OR b.status = 'draft' OR b.issue_date > ${date}::date)
+    `) as Row[]
+    const stock = (await sql`
+      SELECT c.inventory_account_id AS account_id, COALESCE(SUM(i.total_value), 0)::float AS value
+      FROM public.inventory_items i JOIN public.inventory_categories c ON c.id = i.category_id
+      WHERE i.organization_id = ${org}::uuid GROUP BY c.inventory_account_id
+    `) as Row[]
+    const rows = ledger.flatMap((a) => {
+      const id = Number(a.id)
+      const natural = a.role === 'receivable' || a.role === 'inventory' ? Number(a.dr_net) : -Number(a.dr_net)
+      let subledger: number
+      let against: string
+      if (a.role === 'inventory') {
+        if (date !== today()) return []
+        subledger = Number(stock.find((s) => Number(s.account_id) === id)?.value ?? 0)
+        against = 'stock value'
+      } else if (a.role === 'grni') {
+        subledger = Number(grni?.open ?? 0)
+        against = 'goods received, not yet billed'
+      } else {
+        subledger = Number(docs.find((d) => Number(d.account_id) === id)?.open ?? 0)
+        against = a.role === 'receivable' ? 'open invoices' : 'open bills'
+      }
+      return [{ account_id: id, code: String(a.code), name: String(a.name), role: String(a.role), against, ledger: money(natural), subledger: money(subledger), difference: money(natural - subledger) }]
+    })
+    return { as_of: date, rows, in_step: rows.every((r) => r.difference === 0) }
+  }
+
+  /** Open invoices or bills, optionally for one party or one amount, for matching a payment to what it settles. */
+  static async findOpenDocuments(org: string, options: { kind?: 'invoice' | 'bill'; party?: string; amount?: number } = {}) {
+    const party = label(options.party)
+    const kind = options.kind === 'invoice' || options.kind === 'bill' ? options.kind : null
+    const found = (await getSql()`
+      SELECT id, kind, number, party_name, issue_date::text AS issue_date, due_date::text AS due_date, total::float, amount_paid::float, (total - amount_paid)::float AS balance, status
+      FROM public.trade_documents
+      WHERE organization_id = ${org}::uuid AND status IN ('posted', 'partial')
+        AND (${kind}::text IS NULL OR kind = ${kind})
+        AND (${party}::text IS NULL OR party_name ILIKE ${`%${party ?? ''}%`} OR number ILIKE ${party ?? ''})
+      ORDER BY due_date, id LIMIT 50
+    `) as Row[]
+    const rows: Row[] = found.map((d) => ({ ...d, id: Number(d.id) }))
+    const amount = Number(options.amount)
+    return Number.isFinite(amount) && amount > 0 ? rows.sort((x, y) => Math.abs(Number(x.balance) - amount) - Math.abs(Number(y.balance) - amount)) : rows
   }
 
   static async closeBooks(org: string, form: { through: string; notes?: string }) {
@@ -171,7 +268,7 @@ export class BooksServiceAdmin {
     const plan = stockEntry({ type: t.transaction_type, quantity: Number(t.quantity), total_cost: Number(t.total_cost ?? 0), inventory_account_id: Number(t.inventory_account_id), expense_account_id: Number(t.expense_account_id), offset_account_id: offset ? Number(offset) : null })
     if (plan.problem) throw new Error(plan.problem)
     if (!plan.lines) return null
-    const entry = await this.post(tx, org, { number: `JE-STK-${id}`, date: t.txn_date, description: `Stock ${t.transaction_type === 'adjustment' ? 'correction' : t.transaction_type}: ${t.item_name}`, reference: t.reference }, plan.lines)
+    const entry = await this.post(tx, org, { number: `JE-STK-${id}`, date: t.txn_date, description: `Stock ${t.transaction_type === 'adjustment' ? 'correction' : t.transaction_type}: ${t.item_name}`, reference: t.reference, source: 'stock', source_id: id }, plan.lines)
     await tx`UPDATE public.inventory_transactions SET journal_entry_id = ${entry} WHERE id = ${id}`
     return entry
   }
@@ -379,13 +476,14 @@ export class BooksServiceAdmin {
       if (d.status !== 'draft') throw new Error('Only a draft can be edited.')
       await tx`UPDATE public.trade_documents SET customer_id = ${customer}, supplier_id = ${supplier}, party_name = ${party}, issue_date = ${issue}::date, due_date = ${due}::date, notes = ${label(form.notes)}, updated_at = now() WHERE id = ${id}`
     } else {
-      const number = await nextNumber(tx, org, form.kind === 'invoice' ? 'INV' : 'BILL', 'public.trade_documents', 'number')
+      // A draft is numbered DRAFT-<id>. Its real number comes when it's posted, so deleted drafts leave no gaps.
       const [row] = (await tx`
         INSERT INTO public.trade_documents (organization_id, kind, number, customer_id, supplier_id, party_name, issue_date, due_date, notes, created_by)
-        VALUES (${org}::uuid, ${form.kind}, ${number}, ${customer}, ${supplier}, ${party}, ${issue}::date, ${due}::date, ${label(form.notes)}, ${acting()}::uuid)
+        VALUES (${org}::uuid, ${form.kind}, ${`DRAFT-${crypto.randomUUID()}`}, ${customer}, ${supplier}, ${party}, ${issue}::date, ${due}::date, ${label(form.notes)}, ${acting()}::uuid)
         RETURNING id
       `) as Row[]
       id = Number(row.id)
+      await tx`UPDATE public.trade_documents SET number = ${`DRAFT-${id}`} WHERE id = ${id}`
     }
     await this.writeLines(tx, org, id, form)
     return { id }
@@ -406,6 +504,39 @@ export class BooksServiceAdmin {
       account_id: Number(l.account_id), quantity: Number(l.quantity), unit_price: Number(l.unit_price), tax_rate: Number(l.tax_rate),
       tax_account_id: (doc.kind === 'invoice' ? l.sales_account_id : l.purchase_account_id) ? Number(doc.kind === 'invoice' ? l.sales_account_id : l.purchase_account_id) : null,
     })))
+  }
+
+  /**
+   * A bill made from goods receipts clears "received, not billed" at what the goods were received at. If the
+   * supplier charged a different price, the difference goes to the purchase price differences account, so nothing
+   * is left stuck in "received, not billed". The account is created the first time it's needed.
+   */
+  private static async withPriceVariance(tx: Pg, org: string, doc: Row, lines: EntryLine[], create: boolean) {
+    if (doc.kind !== 'bill') return lines
+    const [r] = (await tx`SELECT COALESCE(SUM(total), 0)::numeric::text AS received FROM public.goods_receipts WHERE bill_id = ${doc.id} AND organization_id = ${org}::uuid`) as Row[]
+    const received = money(Number(r?.received ?? 0))
+    if (!received) return lines
+    const [s] = (await tx`SELECT grni_account_id FROM public.inventory_settings WHERE organization_id = ${org}::uuid`) as Row[]
+    const grni = Number(s?.grni_account_id ?? 0)
+    const at = lines.findIndex((l) => l.account_id === grni && l.debit > 0)
+    if (!grni || at < 0) return lines
+    const difference = money(lines[at].debit - received)
+    if (!difference) return lines
+    let [v] = (await tx`SELECT id FROM public.accounts a WHERE organization_id = ${org}::uuid AND to_jsonb(a) ->> 'system_role' = 'price_variance' LIMIT 1`) as Row[]
+    if (!v && create) {
+      const code = await allocateStructuredAccountCode(tx as never, org, 'expense', null)
+      ;[v] = (await tx`
+        INSERT INTO public.accounts (organization_id, code, name, account_type, report_category, description, is_postable, is_active, system_role)
+        VALUES (${org}::uuid, ${code}, 'Purchase price differences', 'expense', 'cost_of_sales', 'Where a supplier''s bill differs from the price the goods were received at.', true, true, 'price_variance')
+        RETURNING id
+      `) as Row[]
+    }
+    const variance = v ? Number(v.id) : -1
+    const out = lines.map((l, i) => (i === at ? { ...l, debit: received } : l))
+    out.push(difference > 0
+      ? { account_id: variance, debit: difference, credit: 0, description: 'Price differs from goods received' }
+      : { account_id: variance, debit: 0, credit: -difference, description: 'Price differs from goods received' })
+    return out
   }
 
   /** Item lines of a document, with what each sold line costs. Selling everything takes the item's whole value, so no cents get left behind. */
@@ -433,7 +564,7 @@ export class BooksServiceAdmin {
     if (!control) problems.push(doc.kind === 'invoice' ? 'Choose the account that tracks what customers owe you.' : 'Choose the account that tracks what you owe suppliers.')
     if (!(Number(doc.total) > 0)) problems.push('This document has no amount.')
     const stock = await this.stockLines(sql as unknown as Pg, id)
-    const lines = await this.entryForDocument(sql as unknown as Pg, doc, control || -1)
+    const lines = await this.withPriceVariance(sql as unknown as Pg, org, doc, await this.entryForDocument(sql as unknown as Pg, doc, control || -1), false)
     if (doc.kind === 'invoice' && stock.length) {
       lines.push(...costOfSalesEntry(stock.map((s) => ({ expense_account_id: Number(s.expense_account_id), inventory_account_id: Number(s.inventory_account_id), amount: s.cost }))))
       const levels = (await sql`
@@ -453,9 +584,10 @@ export class BooksServiceAdmin {
     return {
       problems,
       suggested_control_account_id: doc.suggested_control_account_id ? Number(doc.suggested_control_account_id) : null,
-      lines: lines.filter((l) => l.account_id > 0).map((l) => {
+      lines: lines.filter((l) => l.account_id > 0 || l.description === 'Price differs from goods received').map((l) => {
         const a = names.find((x) => Number(x.id) === l.account_id)
-        return { ...l, code: a?.code ?? '', name: a?.name ?? `Account ${l.account_id}` }
+        // The price differences account is created on posting, the first time it's needed.
+        return { ...l, code: a?.code ?? '', name: a?.name ?? (l.account_id > 0 ? `Account ${l.account_id}` : 'Purchase price differences (added when posted)') }
       }),
     }
   }
@@ -475,13 +607,18 @@ export class BooksServiceAdmin {
       if (!(Number(d.total) > 0)) throw new Error('This document has no amount.')
       const control = Number(options.control_account_id ?? d.suggested ?? 0)
       if (!control) throw new Error('Choose the account this goes to.')
-      const lines = await this.entryForDocument(tx, d, control)
+      // The document's real number, in order with no gaps, is given now. Older drafts already have theirs.
+      if (String(d.number).startsWith('DRAFT-')) {
+        d.number = await nextNumber(tx, org, d.kind === 'invoice' ? 'INV' : 'BILL', 'public.trade_documents', 'number')
+        await tx`UPDATE public.trade_documents SET number = ${d.number} WHERE id = ${id}`
+      }
+      const lines = await this.withPriceVariance(tx, org, d, await this.entryForDocument(tx, d, control), true)
       await tx`SELECT id FROM public.inventory_items WHERE id IN (SELECT item_id FROM public.trade_document_lines WHERE document_id = ${id}) ORDER BY id FOR UPDATE`
       const stock = await this.stockLines(tx, id)
       const sale = d.kind === 'invoice'
       if (sale) lines.push(...costOfSalesEntry(stock.map((s) => ({ expense_account_id: Number(s.expense_account_id), inventory_account_id: Number(s.inventory_account_id), amount: s.cost }))))
       const what = sale ? 'Invoice' : 'Bill'
-      const entry = await this.post(tx, org, { number: `JE-${d.number}`, date: d.issue_text, description: `${what} ${d.number}, ${d.party_name}`, reference: d.number }, lines)
+      const entry = await this.post(tx, org, { number: `JE-${d.number}`, date: d.issue_text, description: `${what} ${d.number}, ${d.party_name}`, reference: d.number, source: d.kind, source_id: id }, lines)
       for (const s of stock) {
         const moved = (await DataServiceAdmin.applyInventoryTransaction(tx, {
           organization_id: org, item_id: Number(s.item_id), transaction_type: sale ? 'out' : 'in', quantity: sale ? -Number(s.quantity) : Number(s.quantity),
@@ -501,13 +638,15 @@ export class BooksServiceAdmin {
     if (!form.bank_account_id) throw new Error('Choose the bank or cash account.')
     await getSql().begin(async (raw) => {
       const tx = raw as unknown as Pg
-      const [d] = (await tx`SELECT * FROM public.trade_documents WHERE id = ${documentId} AND organization_id = ${org}::uuid FOR UPDATE`) as Row[]
+      const [d] = (await tx`SELECT *, issue_date::text AS issue_text FROM public.trade_documents WHERE id = ${documentId} AND organization_id = ${org}::uuid FOR UPDATE`) as Row[]
       if (!d) throw new Error('Document not found.')
+      if (date < d.issue_text) throw new Error(`A payment can't be dated before the ${d.kind === 'invoice' ? 'invoice' : 'bill'} it pays (${d.issue_text}).`)
+      await assertMoneyAccount(tx, org, Number(form.bank_account_id))
       if (d.status !== 'posted' && d.status !== 'partial') throw new Error(d.status === 'paid' ? 'This is already fully paid.' : 'Post this before recording a payment.')
       const balance = money(Number(d.total) - Number(d.amount_paid))
       if (amount > balance) throw new Error(`That's more than the ${balance.toFixed(2)} still open.`)
       const [{ n }] = (await tx`SELECT COUNT(*)::int + 1 AS n FROM public.trade_payments WHERE document_id = ${documentId}`) as Row[]
-      const entry = await this.post(tx, org, { number: `JE-${d.number}-P${n}`, date, description: `Payment ${d.kind === 'invoice' ? 'from' : 'to'} ${d.party_name}, ${d.number}`, reference: label(form.reference) ?? d.number }, paymentEntry(d.kind, Number(d.control_account_id), Number(form.bank_account_id), amount))
+      const entry = await this.post(tx, org, { number: `JE-${d.number}-P${n}`, date, description: `Payment ${d.kind === 'invoice' ? 'from' : 'to'} ${d.party_name}, ${d.number}`, reference: label(form.reference) ?? d.number, source: 'payment', source_id: documentId }, paymentEntry(d.kind, Number(d.control_account_id), Number(form.bank_account_id), amount))
       await tx`INSERT INTO public.trade_payments (organization_id, document_id, payment_date, amount, bank_account_id, reference, journal_entry_id, created_by) VALUES (${org}::uuid, ${documentId}, ${date}::date, ${amount}, ${form.bank_account_id}, ${label(form.reference)}, ${entry}, ${acting()}::uuid)`
       const paid = money(Number(d.amount_paid) + amount)
       await tx`UPDATE public.trade_documents SET amount_paid = ${paid}, status = ${paid >= Number(d.total) ? 'paid' : 'partial'}, updated_at = now() WHERE id = ${documentId}`
@@ -524,10 +663,11 @@ export class BooksServiceAdmin {
       const tx = raw as unknown as Pg
       const [d] = (await tx`SELECT *, issue_date::text AS issue_text FROM public.trade_documents WHERE id = ${id} AND organization_id = ${org}::uuid FOR UPDATE`) as Row[]
       if (!d) throw new Error('Document not found.')
+      if (d.voucher_id) throw new Error('This bill came from a stock voucher and shares its entry, so it can only be undone with the voucher.')
       if (d.status !== 'posted') throw new Error(d.status === 'draft' ? 'Delete a draft instead of voiding it.' : d.status === 'void' ? 'This is already void.' : 'This has payments against it, so it cannot be voided.')
       const [e] = (await tx`SELECT entry_number FROM public.journal_entries WHERE id = ${d.journal_entry_id}`) as Row[]
       const lines = (await tx`SELECT account_id, description, debit_amount, credit_amount FROM public.journal_entry_lines WHERE journal_entry_id = ${d.journal_entry_id} ORDER BY line_order`) as Row[]
-      const reversal = await this.post(tx, org, { number: `REV-${e.entry_number}`, date, description: `Void ${d.number}: ${reason}`, reference: d.number, reverses: Number(d.journal_entry_id) }, reversalLines(lines.map((l) => ({ account_id: Number(l.account_id), description: l.description, debit: Number(l.debit_amount), credit: Number(l.credit_amount) }))))
+      const reversal = await this.post(tx, org, { number: `REV-${e.entry_number}`, date, description: `Void ${d.number}: ${reason}`, reference: d.number, reverses: Number(d.journal_entry_id), source: 'void', source_id: id }, reversalLines(lines.map((l) => ({ account_id: Number(l.account_id), description: l.description, debit: Number(l.debit_amount), credit: Number(l.credit_amount) }))))
       // Stock goes back the way it came, at the value it left or arrived at, which is what the reversal puts back in the books.
       const sale = d.kind === 'invoice'
       const stock = (await tx`SELECT item_id, warehouse_id, quantity::float * unit_factor::float AS quantity, cost_amount::float FROM public.trade_document_lines WHERE document_id = ${id} AND item_id IS NOT NULL ORDER BY item_id, id`) as Row[]
@@ -566,6 +706,7 @@ export class BooksServiceAdmin {
       const [d] = (await tx`SELECT * FROM public.trade_documents WHERE id = ${documentId} AND organization_id = ${org}::uuid FOR UPDATE`) as Row[]
       if (!d) throw new Error('Document not found.')
       if (!['posted', 'partial', 'paid'].includes(d.status)) throw new Error('Only a posted document can be credited.')
+      if (d.voucher_id) throw new Error('This bill came from a stock voucher. Return the goods with a stock movement and record what the supplier credits as a payment adjustment instead.')
       const lines = (await tx`
         SELECT l.*, l.quantity::float AS quantity, l.amount::float AS amount, l.tax_amount::float AS tax_amount, l.cost_amount::float AS cost_amount, l.unit_factor::float AS unit_factor,
                r.sales_account_id, r.purchase_account_id, c.inventory_account_id, c.expense_account_id, i.track_serials,
@@ -600,11 +741,12 @@ export class BooksServiceAdmin {
       const applied = money(Math.min(total, Math.max(Number(d.total) - Number(d.amount_paid), 0)))
       const refund = money(total - applied)
       if (refund > 0 && !form.refund_account_id) throw new Error(`${refund.toFixed(2)} has already been paid. Choose the account it's ${sale ? 'refunded from' : 'refunded to'}.`)
+      if (refund > 0) await assertMoneyAccount(tx, org, Number(form.refund_account_id))
       const number = await nextNumber(tx, org, sale ? 'CN' : 'DN', 'public.credit_notes', 'number')
       const entryLines = creditNoteEntry(d.kind, Number(d.control_account_id), form.refund_account_id ? Number(form.refund_account_id) : null, plan.map((p) => ({ account_id: Number(p.l.account_id), amount: p.amount, tax_amount: p.tax, tax_account_id: (sale ? p.l.sales_account_id : p.l.purchase_account_id) ? Number(sale ? p.l.sales_account_id : p.l.purchase_account_id) : null })), applied, refund)
       // Stock coming back on a sale goes back at what it left at, undoing that part of the cost of sales.
       if (sale) entryLines.push(...plan.filter((p) => p.moves && p.cost > 0).flatMap((p): EntryLine[] => [{ account_id: Number(p.l.inventory_account_id), debit: p.cost, credit: 0, description: 'Stock returned' }, { account_id: Number(p.l.expense_account_id), debit: 0, credit: p.cost, description: 'Stock returned' }]))
-      const entry = await this.post(tx, org, { number: `JE-${number}`, date, description: `${sale ? 'Credit note' : 'Supplier credit'} ${number} for ${d.number}: ${reason}`, reference: number }, entryLines)
+      const entry = await this.post(tx, org, { number: `JE-${number}`, date, description: `${sale ? 'Credit note' : 'Supplier credit'} ${number} for ${d.number}: ${reason}`, reference: number, source: 'credit_note', source_id: documentId }, entryLines)
       const [note] = (await tx`
         INSERT INTO public.credit_notes (organization_id, document_id, number, credit_date, reason, subtotal, tax_total, total, applied, refund, refund_account_id, journal_entry_id, created_by)
         VALUES (${org}::uuid, ${documentId}, ${number}, ${date}::date, ${reason}, ${subtotal}, ${taxTotal}, ${total}, ${applied}, ${refund}, ${refund > 0 ? form.refund_account_id ?? null : null}, ${entry}, ${user}::uuid) RETURNING id
@@ -803,7 +945,7 @@ export class BooksServiceAdmin {
       const lines: EntryLine[] = Number(b.amount) > 0
         ? [{ account_id: bank, debit: amount, credit: 0, description: null }, { account_id: offset, debit: 0, credit: amount, description: null }]
         : [{ account_id: offset, debit: amount, credit: 0, description: null }, { account_id: bank, debit: 0, credit: amount, description: null }]
-      const entry = await this.post(tx, org, { number: `JE-BANK-${lineId}`, date: b.date_text, description: label(form.description) ?? b.description, reference: b.reference }, lines)
+      const entry = await this.post(tx, org, { number: `JE-BANK-${lineId}`, date: b.date_text, description: label(form.description) ?? b.description, reference: b.reference, source: 'bank', source_id: lineId }, lines)
       const [own] = (await tx`SELECT id FROM public.journal_entry_lines WHERE journal_entry_id = ${entry} AND account_id = ${bank} LIMIT 1`) as Row[]
       await tx`UPDATE public.bank_statement_lines SET status = 'matched', matched_journal_line_id = ${own.id} WHERE id = ${lineId}`
       return { entry_id: entry }
@@ -821,17 +963,34 @@ export class BooksServiceAdmin {
 
   // ---- Cash flow and the audit log ----
 
-  /** Cash accounts are recognised the way the forecast does: bank statement accounts, and assets named cash or bank. */
-  static async getCashFlow(org: string, from: string, to: string) {
-    requireDate(from); requireDate(to)
-    if (to < from) throw new Error("The end date can't be before the start.")
+  /**
+   * The accounts that are cash: those classified as cash, or with the bank or cash role. Only when none are
+   * classified does it fall back to bank statement accounts and assets named cash or bank, and it says so.
+   */
+  static async cashAccounts(org: string) {
     const sql = getSql()
-    const cash = (await sql`
+    const classified = (await sql`
+      SELECT id, code, name FROM public.accounts a
+      WHERE organization_id = ${org}::uuid AND account_type = 'asset'
+        AND (to_jsonb(a) ->> 'cash_flow_category' = 'cash' OR to_jsonb(a) ->> 'system_role' IN ('bank', 'cash'))
+      ORDER BY code
+    `) as Row[]
+    if (classified.length) return { accounts: classified, guessed: false }
+    const guessed = (await sql`
       SELECT id, code, name FROM public.accounts
       WHERE organization_id = ${org}::uuid AND account_type = 'asset'
         AND (name ~* '(cash|bank)' OR id IN (SELECT account_id FROM public.bank_statement_lines WHERE organization_id = ${org}::uuid))
       ORDER BY code
     `) as Row[]
+    return { accounts: guessed, guessed: true }
+  }
+
+  static async getCashFlow(org: string, from: string, to: string) {
+    requireDate(from); requireDate(to)
+    if (to < from) throw new Error("The end date can't be before the start.")
+    const sql = getSql()
+    const found = await this.cashAccounts(org)
+    const cash = found.accounts
     const ids = cash.map((c) => Number(c.id))
     const balanceAt = async (condition: 'before' | 'through') => {
       const [b] = (await (condition === 'before'
@@ -840,7 +999,8 @@ export class BooksServiceAdmin {
       return money(Number(b.b))
     }
     const rows = (await sql`
-      SELECT l.journal_entry_id, l.account_id, a.code, a.name, a.account_type::text AS account_type, a.report_category::text AS report_category, l.debit_amount::float AS debit, l.credit_amount::float AS credit
+      SELECT l.journal_entry_id, l.account_id, a.code, a.name, a.account_type::text AS account_type, a.report_category::text AS report_category,
+             to_jsonb(a) ->> 'cash_flow_category' AS cash_flow_category, to_jsonb(a) ->> 'pl_category' AS pl_category, l.debit_amount::float AS debit, l.credit_amount::float AS credit
       FROM public.journal_entry_lines l
       JOIN public.journal_entries e ON e.id = l.journal_entry_id
       JOIN public.accounts a ON a.id = l.account_id
@@ -850,10 +1010,10 @@ export class BooksServiceAdmin {
     `) as Row[]
     const byEntry: Record<string, Row[]> = {}
     rows.forEach((r) => { (byEntry[r.journal_entry_id] ??= []).push(r) })
-    const flow = cashFlowSummary(Object.values(byEntry).map((lines) => lines.map((r) => ({ account_id: Number(r.account_id), code: r.code, name: r.name, account_type: r.account_type, report_category: r.report_category, is_cash: ids.includes(Number(r.account_id)), debit: Number(r.debit), credit: Number(r.credit) }))))
+    const flow = cashFlowSummary(Object.values(byEntry).map((lines) => lines.map((r) => ({ account_id: Number(r.account_id), code: r.code, name: r.name, account_type: r.account_type, report_category: r.report_category, cash_flow_category: r.cash_flow_category, pl_category: r.pl_category, is_cash: ids.includes(Number(r.account_id)), debit: Number(r.debit), credit: Number(r.credit) }))))
     const opening = await balanceAt('before')
     const closing = await balanceAt('through')
-    return { from, to, cash_accounts: cash.map((c) => ({ code: c.code, name: c.name })), opening, closing, ...flow, agrees: Math.abs(money(opening + flow.net) - closing) < 0.05 }
+    return { from, to, cash_accounts: cash.map((c) => ({ code: c.code, name: c.name })), cash_accounts_guessed: found.guessed, opening, closing, ...flow, agrees: Math.abs(money(opening + flow.net) - closing) < 0.005 }
   }
 
   static listAuditLog(org: string, options: { limit?: number } = {}) {
@@ -963,11 +1123,11 @@ export class BooksServiceAdmin {
     const months_of_history = history.filter((h) => Number(h.revenue) || Number(h.expenses)).length
     const revenue = forecastSeries(history.map((h) => Number(h.revenue)), n)
     const expenses = forecastSeries(history.map((h) => Number(h.expenses)), n)
+    const cashIds = (await this.cashAccounts(org)).accounts.map((c) => Number(c.id))
     const [cash] = (await sql`
       SELECT COALESCE(SUM(l.debit_amount - l.credit_amount), 0)::float AS balance
-      FROM public.journal_entry_lines l JOIN public.accounts a ON a.id = l.account_id
-      WHERE a.organization_id = ${org}::uuid AND a.account_type = 'asset'
-        AND (a.name ~* '(cash|bank)' OR a.id IN (SELECT account_id FROM public.bank_statement_lines WHERE organization_id = ${org}::uuid))
+      FROM public.journal_entry_lines l JOIN public.journal_entries e ON e.id = l.journal_entry_id
+      WHERE e.organization_id = ${org}::uuid AND l.account_id = ANY(${cashIds}::bigint[]) AND e.entry_date <= CURRENT_DATE
     `) as Row[]
     const open = (await sql`
       SELECT kind, to_char(GREATEST(due_date, CURRENT_DATE), 'YYYY-MM') AS month, SUM(total - amount_paid)::float AS amount

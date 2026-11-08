@@ -82,8 +82,10 @@ export function ProposalCard({ proposal: p }: { proposal: Proposal }) {
         <span className="font-semibold shrink-0 whitespace-nowrap">{org.currency} {figure(total, org.decimals)}</span>
       </div>
       <p className="text-[13px] text-muted-foreground">{p.explanation}</p>
+      {p.warnings?.length ? <ul className="text-[12.5px] flex flex-col gap-1">{p.warnings.map((w) => <li key={w} className="flex gap-1.5"><Badge tone="warn" dot>Check</Badge><span className="min-w-0">{w}</span></li>)}</ul> : null}
       <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-muted-foreground">
         <span className="mr-0.5">{shortDate(p.date)}</span>
+        {p.kind === 'payment' ? <Badge>Payment on {p.payload?.number ?? 'a document'}</Badge> : p.kind === 'post_document' ? <Badge>Posts {p.payload?.number ?? 'a document'}</Badge> : null}
         {p.source === 'mcp' ? <Badge>From {p.source_name ?? 'a connected app'}</Badge> : null}
         {p.confidence === 'medium' ? <Badge tone="warn" dot>Please check this one</Badge> : p.confidence === 'low' ? <Badge tone="bad" dot>The agent is unsure</Badge> : null}
       </div>
@@ -103,7 +105,7 @@ export function ProposalCard({ proposal: p }: { proposal: Proposal }) {
       {open && entryProposal === p.id ? <div><Badge dot>In the New entry form</Badge></div> : open ? (
         <div className="flex flex-wrap gap-2 pt-1">
           <button className={btn.primary} disabled={decide.isPending} onClick={() => decide.mutate('approve')}>{decide.isPending ? 'Working…' : 'Approve and record'}</button>
-          <button className={btn.plain} disabled={decide.isPending} onClick={() => { setEntryProposal(p.id); setEditing({ date: p.date, description: p.description, lines: p.lines.map((l) => ({ account: String(l.account_id), debit: l.debit ? String(l.debit) : '', credit: l.credit ? String(l.credit) : '' })) }) }}>Change</button>
+          {(p.kind ?? 'journal') === 'journal' ? <button className={btn.plain} disabled={decide.isPending} onClick={() => { setEntryProposal(p.id); setEditing({ date: p.date, description: p.description, lines: p.lines.map((l) => ({ account: String(l.account_id), debit: l.debit ? String(l.debit) : '', credit: l.credit ? String(l.credit) : '' })) }) }}>Change</button> : null}
           <button className={btn.plain} disabled={decide.isPending} onClick={() => decide.mutate('discard')}>Discard</button>
         </div>
       ) : <div><Badge tone={status === 'recorded' ? 'good' : 'neutral'} dot>{status === 'recorded' ? 'Recorded' : status === 'discarded' ? 'Discarded' : 'Already decided'}</Badge></div>}

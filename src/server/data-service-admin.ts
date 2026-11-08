@@ -17,6 +17,8 @@ import {
   fetchAccountOpening,
 } from '@/server/data/ledger-sql'
 import { assertPeriodOpen } from '@/server/books/lock'
+import { assertAccountChangeAllowed, assertNoControlAccounts, classificationFields, saveClassification } from '@/server/books/guards'
+import { balanceSheet, financialMetrics, financialRatios, incomeStatement } from '@/server/books/statements'
 import { isStillInUse } from '@/server/public-error'
 import { applySerials, applyToWarehouse, defaultWarehouse, lotAddedBy, restoreLots, serialsMovedBy } from '@/server/inventory/stock'
 import { addLayer, restoreLayers, takeLayers } from '@/server/inventory/costing'
@@ -287,6 +289,7 @@ export class DataServiceAdmin {
 
   static async createAccount(account: AccountCreatePayload): Promise<Account | null> {
     assertReportCategoryCompatible(account.account_type, account.report_category ?? null)
+    const classification = classificationFields(account as unknown as Record<string, unknown>, account.account_type)
     const sql = getSql()
     if (account.parent_id != null) {
       const parents = await sql<{ account_type: string; organization_id: string }[]>`
@@ -329,7 +332,8 @@ export class DataServiceAdmin {
           )
           RETURNING *
         `
-        return (rows[0] as Account) ?? null
+        if (rows[0]) await saveClassification(sql, Number(rows[0].id), classification)
+        return rows[0] ? ({ ...rows[0], ...classification } as Account) : null
       } catch (e) {
         const code =
           e && typeof e === 'object' && 'code' in e ? String((e as { code: unknown }).code) : ''
@@ -363,6 +367,8 @@ export class DataServiceAdmin {
       updates.report_category !== undefined ? updates.report_category : existing.report_category
 
     assertReportCategoryCompatible(mergedType, mergedReport ?? null)
+    await assertAccountChangeAllowed(sql, existing, updates)
+    const classification = classificationFields(updates as Record<string, unknown>, mergedType)
 
     if (mergedParent != null) {
       const parents = await sql<{ account_type: string; organization_id: string }[]>`
@@ -386,7 +392,7 @@ export class DataServiceAdmin {
         name = COALESCE(${u.name ?? null}, name),
         account_type = COALESCE(${u.account_type ?? null}::public.account_type, account_type),
         parent_id = ${mergedParent},
-        description = ${u.description === undefined ? null : u.description},
+        description = ${u.description === undefined ? existing.description ?? null : u.description},
         is_active = COALESCE(${u.is_active ?? null}, is_active),
         "group" = COALESCE(${u.group ?? null}, "group"),
         report_category = ${mergedReport}::public.account_report_category,
@@ -394,7 +400,8 @@ export class DataServiceAdmin {
       WHERE id = ${id}
       RETURNING *
     `
-    return (rows[0] as Account) ?? null
+    if (rows[0]) await saveClassification(sql, id, classification)
+    return rows[0] ? ({ ...rows[0], ...classification } as Account) : null
   }
 
   static async deleteAccount(id: number): Promise<boolean> {
@@ -501,44 +508,70 @@ export class DataServiceAdmin {
     }
   }
 
+  /**
+   * A manual entry, from the New entry form, bulk entry or an approved proposal. The server numbers it (JNL-0001
+   * and on), whatever number the caller sent, so numbers are sequential and can't collide.
+   */
   static async createJournalEntry(
-    entry: Omit<JournalEntry, 'id' | 'created_at' | 'updated_at'>,
+    entry: Omit<JournalEntry, 'id' | 'created_at' | 'updated_at'> & { source?: string | null; source_id?: string | null; control_reason?: string | null },
     lines: Omit<JournalEntryLine, 'id' | 'journal_entry_id'>[]
   ): Promise<JournalEntry | null> {
     const sql = getSql()
-    return await sql.begin((tx) => this.insertJournalEntry(tx as unknown as ReturnType<typeof getSql>, entry, lines))
+    const source = entry.source ?? 'manual'
+    // A person can post to a control account, for a write-off or an opening balance, by giving a reason. An AI never can.
+    const reason = source === 'manual' && typeof entry.control_reason === 'string' ? entry.control_reason.trim() : ''
+    return await sql.begin(async (raw) => {
+      const tx = raw as unknown as ReturnType<typeof getSql>
+      if (!reason) await assertNoControlAccounts(tx, entry.organization_id, lines.map((l) => Number(l.account_id)))
+      const entry_number = await nextNumber(tx, entry.organization_id, 'JNL', 'public.journal_entries', 'entry_number')
+      const { control_reason: _ignored, ...rest } = entry
+      return this.insertJournalEntry(tx, { ...rest, entry_number, source: reason ? 'manual_control' : source, reference: reason ? `Control account: ${reason}`.slice(0, 300) : entry.reference ?? null }, lines)
+    })
   }
 
   /** Validates and writes an entry with its lines, inside the caller's transaction. */
+  /**
+   * Validates and writes an entry with its lines, inside the caller's transaction. Every entry is posted when
+   * written, by the person acting, whatever the caller claims. Entries are never edited afterwards.
+   */
   static async insertJournalEntry(
     tx: ReturnType<typeof getSql>,
-    entry: Omit<JournalEntry, 'id' | 'created_at' | 'updated_at'>,
+    entry: Omit<JournalEntry, 'id' | 'created_at' | 'updated_at'> & { source?: string | null; source_id?: string | null; reverses_entry_id?: number | null },
     lines: Omit<JournalEntryLine, 'id' | 'journal_entry_id'>[]
   ): Promise<JournalEntry | null> {
     const { totalDebits, normalized } = validateJournalLinesForSave(lines)
-    await assertPeriodOpen(tx, entry.organization_id, String(entry.entry_date))
+    const date = String(entry.entry_date ?? '').slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) {
+      throw new Error('The entry needs a real date.')
+    }
+    await assertPeriodOpen(tx, entry.organization_id, date)
     await this.assertJournalLineAccountsPostable(
       tx,
       entry.organization_id,
       normalized
     )
-    const e = { ...entry, total_amount: totalDebits }
+    const user = getActingUserId() ?? entry.created_by ?? null
+    const entryNumber = String(entry.entry_number ?? '').trim() || (await nextNumber(tx, entry.organization_id, 'JNL', 'public.journal_entries', 'entry_number'))
+    const e = { ...entry, entry_number: entryNumber, total_amount: totalDebits }
     const inserted = (await tx<JournalEntry[]>`
       INSERT INTO public.journal_entries (
         organization_id, entry_number, entry_date, description, reference,
-        total_amount, is_posted, created_by, posted_by, posted_at
+        total_amount, is_posted, created_by, posted_by, posted_at, source, source_id, reverses_entry_id
       )
       VALUES (
         ${e.organization_id}::uuid,
         ${e.entry_number},
-        ${e.entry_date}::date,
-        ${e.description},
-        ${e.reference},
+        ${date}::date,
+        ${e.description ?? ''},
+        ${e.reference ?? null},
         ${e.total_amount},
-        ${e.is_posted},
-        ${e.created_by}::uuid,
-        ${e.posted_by}::uuid,
-        ${e.posted_at}
+        true,
+        ${user}::uuid,
+        ${user}::uuid,
+        now(),
+        ${e.source ?? null},
+        ${e.source_id ?? null},
+        ${e.reverses_entry_id ?? null}
       )
       RETURNING *
     `) as JournalEntry[]
@@ -597,495 +630,26 @@ export class DataServiceAdmin {
       )
   }
 
-  static async getFinancialMetrics(
-    organizationId: string,
-    fromDate?: string | null,
-    toDate?: string | null
-  ): Promise<{
-    totalRevenue: number
-    totalExpenses: number
-    netIncome: number
-    totalAssets: number
-    totalLiabilities: number
-    totalEquity: number
-  }> {
-    const fd = typeof fromDate === 'string' && fromDate.trim() !== '' ? fromDate : undefined
-    const td = typeof toDate === 'string' && toDate.trim() !== '' ? toDate : undefined
-    const rows = await fetchTrialBalanceSums(organizationId, { fromDate: fd, toDate: td })
-    let totalRevenue = 0
-    let totalExpenses = 0
-    let totalAssets = 0
-    let totalLiabilities = 0
-    let totalEquity = 0
-    for (const row of rows) {
-      const dr = row.dr != null ? Number(row.dr) : 0
-      const cr = row.cr != null ? Number(row.cr) : 0
-      const net = netAmountForAccountType(dr, cr, String(row.account_type))
-      const t = String(row.account_type).toLowerCase()
-      if (t === 'revenue') totalRevenue += net
-      else if (t === 'expense') totalExpenses += net
-      else if (t === 'asset') totalAssets += net
-      else if (t === 'liability') totalLiabilities += net
-      else if (t === 'equity') totalEquity += net
-    }
-    return {
-      totalRevenue: Math.abs(totalRevenue) || 0,
-      totalExpenses: Math.abs(totalExpenses) || 0,
-      netIncome: (Math.abs(totalRevenue) - Math.abs(totalExpenses)) || 0,
-      totalAssets: Math.max(0, totalAssets),
-      totalLiabilities: Math.max(0, totalLiabilities),
-      totalEquity: Math.max(0, totalEquity),
-    }
+  static async getFinancialMetrics(organizationId: string, fromDate?: string | null, toDate?: string | null) {
+    return financialMetrics(organizationId, fromDate, toDate)
   }
 
-  static async getFinancialRatios(
-    organizationId: string,
-    _fromDate?: string,
-    _toDate?: string
-  ): Promise<{
-    liquidity: {
-      current_ratio: number
-      quick_ratio: number
-      working_capital: number
-    }
-    profitability: {
-      gross_profit_margin: number
-      net_profit_margin: number
-      roa: number
-    }
-  }> {
-    const m = await this.getFinancialMetrics(organizationId, _fromDate, _toDate)
-    const working_capital = m.totalAssets - m.totalLiabilities
-    const roa = m.totalAssets > 0 ? m.netIncome / m.totalAssets : 0
-    return {
-      liquidity: {
-        current_ratio: 0,
-        quick_ratio: 0,
-        working_capital: Math.max(0, working_capital),
-      },
-      profitability: {
-        gross_profit_margin: 0,
-        net_profit_margin: m.netIncome !== 0 && m.totalRevenue ? m.netIncome / m.totalRevenue : 0,
-        roa,
-      },
-    }
+  static async getFinancialRatios(organizationId: string, fromDate?: string, toDate?: string) {
+    return financialRatios(organizationId, fromDate, toDate)
   }
 
   // ================================
   // REPORTS GENERATION
   // ================================
 
-  static async generateBalanceSheet(organizationId: string, asOfDate?: string): Promise<{
-    isGroupBased: boolean
-    assetSections: Array<{
-      name: string
-      group: string
-      accounts: Array<{
-        id: number
-        code: string
-        name: string
-        account_type: string
-        balance: number
-        parent_id: number | null
-      }>
-      total: number
-    }>
-    liabilitySections: Array<{
-      name: string
-      group: string
-      accounts: Array<{
-        id: number
-        code: string
-        name: string
-        account_type: string
-        balance: number
-        parent_id: number | null
-      }>
-      total: number
-    }>
-    equitySections: Array<{
-      name: string
-      group: string
-      accounts: Array<{
-        id: number
-        code: string
-        name: string
-        account_type: string
-        balance: number
-        parent_id: number | null
-      }>
-      total: number
-    }>
-    totalAssets: number
-    totalLiabilities: number
-    totalEquity: number
-    isBalanced: boolean
-    generatedAt: string
-  }> {
-    const currentDate = asOfDate || new Date().toISOString().split('T')[0]
-
-    try {
-      const sql = getSql()
-      const accounts = (await sql<
-        {
-          id: number
-          code: string
-          name: string
-          account_type: string
-          group: string | null
-          report_category: AccountReportCategory | null
-          parent_id: number | null
-          is_active: boolean
-        }[]
-      >`
-        SELECT id, code, name, account_type::text AS account_type, "group" AS "group",
-               report_category::text AS report_category, parent_id, is_active
-        FROM public.accounts
-        WHERE organization_id = ${organizationId}::uuid AND is_active = true
-      `) as {
-        id: number
-        code: string
-        name: string
-        account_type: AccountType
-        group: string | null
-        report_category: AccountReportCategory | null
-        parent_id: number | null
-        is_active: boolean
-      }[]
-
-      if (!accounts || accounts.length === 0) {
-        return {
-          isGroupBased: true,
-          assetSections: [],
-          liabilitySections: [],
-          equitySections: [],
-          totalAssets: 0,
-          totalLiabilities: 0,
-          totalEquity: 0,
-          isBalanced: false,
-          generatedAt: new Date().toISOString()
-        }
-      }
-
-      const accountIds = accounts.map((acc) => acc.id)
-      const balances = (await sql<
-        { account_id: number; debit_amount: string; credit_amount: string }[]
-      >`
-        SELECT
-          jel.account_id,
-          jel.debit_amount::text AS debit_amount,
-          jel.credit_amount::text AS credit_amount
-        FROM public.journal_entry_lines jel
-        INNER JOIN public.journal_entries je ON je.id = jel.journal_entry_id
-        WHERE je.organization_id = ${organizationId}::uuid
-          AND jel.account_id = ANY(${accountIds}::bigint[])
-          AND je.entry_date <= ${currentDate}::date
-      `) as { account_id: number; debit_amount: string; credit_amount: string }[]
-
-      const accountBalances = new Map<number, number>()
-      for (const b of balances) {
-        const dr = parseFloat(b.debit_amount) || 0
-        const cr = parseFloat(b.credit_amount) || 0
-        const currentBalance = accountBalances.get(b.account_id) || 0
-        accountBalances.set(b.account_id, currentBalance + (dr - cr))
-      }
-
-      // Add balances to accounts
-      const accountsWithBalances = accounts.map(account => ({
-        ...account,
-        balance: accountBalances.get(account.id) || 0
-      }))
-
-      const assetAccounts = accountsWithBalances.filter((acc) => acc.account_type === 'asset')
-      const liabilityAccounts = accountsWithBalances.filter((acc) => acc.account_type === 'liability')
-      const equityAccounts = accountsWithBalances.filter((acc) => acc.account_type === 'equity')
-
-      // Create sections
-      const assetSections = this.createAccountSections(assetAccounts, 'Assets')
-      const liabilitySections = this.createAccountSections(liabilityAccounts, 'Liabilities')
-      const equitySections = this.createAccountSections(equityAccounts, 'Equity')
-
-      // Calculate totals
-      const totalAssets = assetSections.reduce((sum, section) => sum + section.total, 0)
-      const totalLiabilities = liabilitySections.reduce((sum, section) => sum + section.total, 0)
-      const totalEquity = equitySections.reduce((sum, section) => sum + section.total, 0)
-      const isBalanced = totalAssets === (totalLiabilities + totalEquity)
-
-      return {
-        isGroupBased: true,
-        assetSections,
-        liabilitySections,
-        equitySections,
-        totalAssets,
-        totalLiabilities,
-        totalEquity,
-        isBalanced,
-        generatedAt: new Date().toISOString()
-      }
-
-    } catch (error) {
-      console.error('Error generating balance sheet:', error)
-      return {
-        isGroupBased: true,
-        assetSections: [],
-        liabilitySections: [],
-        equitySections: [],
-        totalAssets: 0,
-        totalLiabilities: 0,
-        totalEquity: 0,
-        isBalanced: false,
-        generatedAt: new Date().toISOString()
-      }
-    }
+  /** Assets, liabilities and equity, with profit to date carried into equity. See books/statements.ts. */
+  static async generateBalanceSheet(organizationId: string, asOfDate?: string) {
+    return balanceSheet(organizationId, asOfDate)
   }
 
-  private static createAccountSections(
-    accounts: Array<{
-      id: number
-      code: string
-      name: string
-      account_type: AccountType
-      group: string | null
-      report_category: AccountReportCategory | null
-      parent_id: number | null
-      balance: number
-    }>,
-    categoryName: string
-  ) {
-    const sections = new Map<string, typeof accounts>()
-
-    accounts.forEach((account) => {
-      const key = resolveBalanceSheetSubsectionKey({
-        account_type: account.account_type,
-        group: account.group,
-        report_category: account.report_category,
-      })
-      if (!sections.has(key)) {
-        sections.set(key, [])
-      }
-      sections.get(key)!.push(account)
-    })
-
-    const sorted = Array.from(sections.entries()).sort(
-      ([a], [b]) => balanceSheetSubsectionSortOrder(a) - balanceSheetSubsectionSortOrder(b)
-    )
-
-    return sorted.map(([group, sectionAccounts]) => {
-      const treeAccounts = this.buildAccountTree(sectionAccounts)
-
-      const total = sectionAccounts.reduce((sum, acc) => {
-        if (categoryName === 'Liabilities') {
-          return sum + Math.abs(acc.balance)
-        }
-        return sum + acc.balance
-      }, 0)
-
-      return {
-        name: formatReportCategoryLabel(group),
-        group,
-        accounts: treeAccounts,
-        total,
-      }
-    })
-  }
-
-  private static buildAccountTree(accounts: any[]): any[] {
-    // Create a map for quick lookup
-    const accountMap = new Map<number, any>()
-    const rootAccounts: any[] = []
-
-    // First pass: create account objects with children arrays
-    accounts.forEach(account => {
-      accountMap.set(account.id, {
-        id: account.id,
-        code: account.code,
-        name: account.name,
-        account_type: account.account_type,
-        balance: account.balance,
-        parent_id: account.parent_id,
-        children: []
-      })
-    })
-
-    // Second pass: build the tree structure
-    accounts.forEach(account => {
-      const accountObj = accountMap.get(account.id)!
-      
-      if (account.parent_id && accountMap.has(account.parent_id)) {
-        // This account has a parent, add it to parent's children
-        const parent = accountMap.get(account.parent_id)!
-        parent.children.push(accountObj)
-      } else {
-        // This is a root account
-        rootAccounts.push(accountObj)
-      }
-    })
-
-    // Sort accounts by code
-    const sortAccounts = (accs: any[]) => {
-      accs.sort((a, b) => a.code.localeCompare(b.code))
-      accs.forEach(acc => {
-        if (acc.children.length > 0) {
-          sortAccounts(acc.children)
-        }
-      })
-    }
-
-    sortAccounts(rootAccounts)
-    return rootAccounts
-  }
-
-  static async generateIncomeStatement(organizationId: string, fromDate?: string, toDate?: string): Promise<{
-    revenue: { total: number; breakdown: Array<{ account: string; amount: number }> }
-    costOfSales: { total: number; breakdown: Array<{ account: string; amount: number }> }
-    operatingExpenses: { total: number; breakdown: Array<{ account: string; amount: number }> }
-    otherExpenses: { total: number; breakdown: Array<{ account: string; amount: number }> }
-    expenses: { total: number; breakdown: Array<{ account: string; amount: number }> }
-    netIncome: number
-    grossProfit: number
-    operatingIncome: number
-    generatedAt: string
-  }> {
-    const currentDate = new Date().toISOString().split('T')[0]
-    const startDate = fromDate || currentDate
-    const endDate = toDate || currentDate
-
-    try {
-      const sql = getSql()
-      const accounts = (await sql<
-        {
-          id: number
-          code: string
-          name: string
-          account_type: string
-          report_category: AccountReportCategory | null
-          is_active: boolean
-        }[]
-      >`
-        SELECT id, code, name, account_type::text AS account_type,
-               report_category::text AS report_category, is_active
-        FROM public.accounts
-        WHERE organization_id = ${organizationId}::uuid AND is_active = true
-      `) as {
-        id: number
-        code: string
-        name: string
-        account_type: AccountType
-        report_category: AccountReportCategory | null
-        is_active: boolean
-      }[]
-
-      const emptyIs = () => ({
-        revenue: { total: 0, breakdown: [] as Array<{ account: string; amount: number }> },
-        costOfSales: { total: 0, breakdown: [] as Array<{ account: string; amount: number }> },
-        operatingExpenses: { total: 0, breakdown: [] as Array<{ account: string; amount: number }> },
-        otherExpenses: { total: 0, breakdown: [] as Array<{ account: string; amount: number }> },
-        expenses: { total: 0, breakdown: [] as Array<{ account: string; amount: number }> },
-        netIncome: 0,
-        grossProfit: 0,
-        operatingIncome: 0,
-        generatedAt: new Date().toISOString(),
-      })
-
-      if (!accounts || accounts.length === 0) {
-        return emptyIs()
-      }
-
-      const journalRows = (await sql<
-        { account_id: number; debit_amount: string; credit_amount: string }[]
-      >`
-        SELECT
-          jel.account_id,
-          jel.debit_amount::text,
-          jel.credit_amount::text
-        FROM public.journal_entry_lines jel
-        INNER JOIN public.journal_entries je ON je.id = jel.journal_entry_id
-        WHERE je.organization_id = ${organizationId}::uuid
-          AND je.entry_date >= ${startDate}::date
-          AND je.entry_date <= ${endDate}::date
-      `) as { account_id: number; debit_amount: string; credit_amount: string }[]
-
-      const accountBalances = new Map<number, number>()
-      for (const entry of journalRows) {
-        const currentBalance = accountBalances.get(entry.account_id) || 0
-        const dr = parseFloat(entry.debit_amount) || 0
-        const cr = parseFloat(entry.credit_amount) || 0
-        accountBalances.set(entry.account_id, currentBalance + (dr - cr))
-      }
-
-      const revenueAccounts = accounts.filter((acc) => acc.account_type === 'revenue')
-      const expenseAccounts = accounts.filter((acc) => acc.account_type === 'expense')
-
-      const lineAmount = (accountId: number) => Math.abs(accountBalances.get(accountId) || 0)
-
-      const revenueBreakdown = revenueAccounts
-        .map((account) => ({
-          account: account.name,
-          amount: lineAmount(account.id),
-        }))
-        .filter((item) => item.amount > 0)
-        .sort((a, b) => b.amount - a.amount)
-
-      const totalRevenue = revenueBreakdown.reduce((sum, item) => sum + item.amount, 0)
-
-      const cogsBreakdown = expenseAccounts
-        .filter((acc) => resolveExpenseBucket(acc.report_category) === 'cost_of_sales')
-        .map((account) => ({ account: account.name, amount: lineAmount(account.id) }))
-        .filter((item) => item.amount > 0)
-        .sort((a, b) => b.amount - a.amount)
-
-      const operatingBreakdown = expenseAccounts
-        .filter((acc) => resolveExpenseBucket(acc.report_category) === 'operating_expense')
-        .map((account) => ({ account: account.name, amount: lineAmount(account.id) }))
-        .filter((item) => item.amount > 0)
-        .sort((a, b) => b.amount - a.amount)
-
-      const otherExpenseBreakdown = expenseAccounts
-        .filter((acc) => resolveExpenseBucket(acc.report_category) === 'other_expense')
-        .map((account) => ({ account: account.name, amount: lineAmount(account.id) }))
-        .filter((item) => item.amount > 0)
-        .sort((a, b) => b.amount - a.amount)
-
-      const totalCogs = cogsBreakdown.reduce((s, i) => s + i.amount, 0)
-      const totalOperatingExp = operatingBreakdown.reduce((s, i) => s + i.amount, 0)
-      const totalOtherExp = otherExpenseBreakdown.reduce((s, i) => s + i.amount, 0)
-
-      const combinedExpenseBreakdown = [...cogsBreakdown, ...operatingBreakdown, ...otherExpenseBreakdown]
-      const totalExpenses = totalCogs + totalOperatingExp + totalOtherExp
-
-      const grossProfit = totalRevenue - totalCogs
-      const operatingIncome = grossProfit - totalOperatingExp
-      const netIncome = operatingIncome - totalOtherExp
-
-      return {
-        revenue: {
-          total: totalRevenue,
-          breakdown: revenueBreakdown.map(({ account, amount }) => ({ account, amount })),
-        },
-        costOfSales: { total: totalCogs, breakdown: cogsBreakdown },
-        operatingExpenses: { total: totalOperatingExp, breakdown: operatingBreakdown },
-        otherExpenses: { total: totalOtherExp, breakdown: otherExpenseBreakdown },
-        expenses: { total: totalExpenses, breakdown: combinedExpenseBreakdown },
-        netIncome,
-        grossProfit,
-        operatingIncome,
-        generatedAt: new Date().toISOString(),
-      }
-
-    } catch (error) {
-      console.error('Error generating income statement:', error)
-      return {
-        revenue: { total: 0, breakdown: [] },
-        costOfSales: { total: 0, breakdown: [] },
-        operatingExpenses: { total: 0, breakdown: [] },
-        otherExpenses: { total: 0, breakdown: [] },
-        expenses: { total: 0, breakdown: [] },
-        netIncome: 0,
-        grossProfit: 0,
-        operatingIncome: 0,
-        generatedAt: new Date().toISOString(),
-      }
-    }
+  /** Revenue through net income for a range, every line signed in its natural direction. See books/statements.ts. */
+  static async generateIncomeStatement(organizationId: string, fromDate?: string, toDate?: string) {
+    return incomeStatement(organizationId, fromDate, toDate)
   }
 
   static async generateTrialBalance(organizationId: string, asOfDate?: string): Promise<{
@@ -1119,60 +683,6 @@ export class DataServiceAdmin {
       totalDebits,
       totalCredits,
       isBalanced: Math.abs(totalDebits - totalCredits) < 0.02,
-      generatedAt: new Date().toISOString(),
-    }
-  }
-
-  static async generateAgedReceivables(organizationId: string, asOfDate?: string): Promise<{
-    receivables: Array<{
-      customerName: string
-      current: number
-      days30: number
-      days60: number
-      days90: number
-      total: number
-    }>
-    totals: {
-      current: number
-      days30: number
-      days60: number
-      days90: number
-      total: number
-    }
-    generatedAt: string
-  }> {
-    void organizationId
-    void asOfDate
-    return {
-      receivables: [],
-      totals: { current: 0, days30: 0, days60: 0, days90: 0, total: 0 },
-      generatedAt: new Date().toISOString(),
-    }
-  }
-
-  static async generateAgedPayables(organizationId: string, asOfDate?: string): Promise<{
-    payables: Array<{
-      vendorName: string
-      current: number
-      days30: number
-      days60: number
-      days90: number
-      total: number
-    }>
-    totals: {
-      current: number
-      days30: number
-      days60: number
-      days90: number
-      total: number
-    }
-    generatedAt: string
-  }> {
-    void organizationId
-    void asOfDate
-    return {
-      payables: [],
-      totals: { current: 0, days30: 0, days60: 0, days90: 0, total: 0 },
       generatedAt: new Date().toISOString(),
     }
   }

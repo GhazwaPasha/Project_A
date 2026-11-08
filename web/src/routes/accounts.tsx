@@ -27,8 +27,19 @@ const CATEGORIES: Record<AccountType, { value: string; label: string }[]> = {
 }
 const chart = (org: string) => q<Account[]>(['accounts', org, 'all'], 'AccountService', 'getAccounts', [org])
 
-type Draft = { id?: Id; name: string; account_type: AccountType; parent_id: string; description: string; group: string; report_category: string; is_postable: boolean }
-const blank: Draft = { name: '', account_type: 'expense', parent_id: '', description: '', group: '', report_category: '', is_postable: true }
+type Draft = { id?: Id; name: string; account_type: AccountType; parent_id: string; description: string; group: string; report_category: string; is_postable: boolean; system_role: string; cash_flow_category: string; pl_category: string; is_contra: boolean }
+const blank: Draft = { name: '', account_type: 'expense', parent_id: '', description: '', group: '', report_category: '', is_postable: true, system_role: '', cash_flow_category: '', pl_category: '', is_contra: false }
+
+/** What an account is for. Receivable, payable, stock and received-not-billed accounts are control accounts: invoices, bills and stock keep them. */
+const ROLES: Record<AccountType, { value: string; label: string }[]> = {
+  asset: [{ value: 'bank', label: 'Bank account' }, { value: 'cash', label: 'Cash' }, { value: 'receivable', label: 'Money customers owe (control)' }, { value: 'inventory', label: 'Stock (control)' }, { value: 'input_tax', label: 'Tax paid on purchases' }],
+  liability: [{ value: 'payable', label: 'Money owed to suppliers (control)' }, { value: 'grni', label: 'Received, not billed (control)' }, { value: 'output_tax', label: 'Tax collected on sales' }],
+  equity: [{ value: 'retained_earnings', label: 'Retained earnings' }, { value: 'opening_balance', label: 'Opening balances' }],
+  revenue: [],
+  expense: [{ value: 'price_variance', label: 'Purchase price differences' }],
+}
+const CASH_FLOW = [{ value: 'cash', label: 'This is cash' }, { value: 'operating', label: 'Operating' }, { value: 'investing', label: 'Investing' }, { value: 'financing', label: 'Financing' }]
+const PL = [{ value: 'operating', label: 'Operating' }, { value: 'investing', label: 'Investing' }, { value: 'financing', label: 'Financing (interest and similar)' }, { value: 'income_tax', label: 'Income tax' }]
 
 export function Accounts() {
   const { org, pro, access } = useApp()
@@ -54,6 +65,7 @@ export function Accounts() {
   }, [rows])
 
   const remove = useSave((a: Account) => call('AccountService', 'deleteAccount', [a.id]), { success: 'Account deleted', refresh: ['accounts', 'balances'], onDone: () => setDraft(null) })
+  const starter = useSave(() => call('BooksService', 'applyStarterChart', [org.id]), { success: 'Standard chart added', refresh: ['accounts', 'balances'] })
 
   const exportCsv = () => {
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
@@ -78,7 +90,7 @@ export function Accounts() {
     const kids = childrenOf.get(String(a.id)) ?? []
     const isClosed = closed.has(String(a.id))
     const header = a.is_postable === false
-    const open = () => setDraft({ id: a.id, name: a.name, account_type: a.account_type ?? 'expense', parent_id: a.parent_id == null ? '' : String(a.parent_id), description: a.description ?? '', group: a.group ?? '', report_category: a.report_category ?? '', is_postable: a.is_postable !== false })
+    const open = () => setDraft({ id: a.id, name: a.name, account_type: a.account_type ?? 'expense', parent_id: a.parent_id == null ? '' : String(a.parent_id), description: a.description ?? '', group: a.group ?? '', report_category: a.report_category ?? '', is_postable: a.is_postable !== false, system_role: a.system_role ?? '', cash_flow_category: a.cash_flow_category ?? '', pl_category: a.pl_category ?? '', is_contra: a.is_contra === true })
     return (
       <>
         <div className="flex items-center gap-1.5 pr-4 border-t border-border hover:bg-accent/50" style={{ paddingLeft: 12 + depth * 18 }}>
@@ -112,7 +124,7 @@ export function Accounts() {
         <Chips label="Account type" value={term ? '' : type} onChange={(id) => { setType(id as AccountType); setSearch('') }} options={TYPES.map((t) => ({ id: t.id, label: pro ? t.pro : t.simple, count: rows.filter((a) => a.account_type === t.id).length }))} />
         {!pro ? <span className="ml-auto"><AskChip prompt="Look at my accounts and tell me if anything is missing or set up wrong for my business.">Check these for me</AskChip></span> : null}
       </Toolbar>
-      <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No accounts yet" body="Add your first account, or import a chart of accounts." /> : null)}>
+      <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No accounts yet" body="Start with a standard small-business chart, already set up for your reports, or add or import your own." action={<button className={btn.primary} disabled={starter.isPending} onClick={() => starter.mutate(undefined)}>{starter.isPending ? 'Adding…' : 'Start with the standard chart'}</button>} /> : null)}>
         {() => (
           <Paged rows={visible}>
             {(page, pager) => (
@@ -132,17 +144,18 @@ export function Accounts() {
 }
 
 function AccountForm({ draft, accounts, onClose, onDelete }: { draft: Draft | null; accounts: Account[]; onClose: () => void; onDelete: (a: Account) => void }) {
-  const { org, userId } = useApp()
+  const { org, userId, pro } = useApp()
   const [form, setForm] = useState<Draft>(draft ?? blank)
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setForm((f) => ({ ...f, [k]: v }))
   const parents = accounts.filter((a) => a.account_type === form.account_type && String(a.id) !== String(form.id))
   const save = useSave(() => {
-    const fields = { name: form.name.trim(), account_type: form.account_type, parent_id: form.parent_id ? Number(form.parent_id) : null, description: form.description.trim() || null, group: form.group.trim() || null, report_category: form.report_category || null, is_postable: form.is_postable }
+    const fields = { name: form.name.trim(), account_type: form.account_type, parent_id: form.parent_id ? Number(form.parent_id) : null, description: form.description.trim() || null, group: form.group.trim() || null, report_category: form.report_category || null, is_postable: form.is_postable, ...(pro ? { system_role: form.system_role || null, cash_flow_category: balanceSheet ? form.cash_flow_category || null : null, pl_category: balanceSheet ? null : form.pl_category || null, is_contra: form.is_contra } : {}) }
     return form.id != null
       ? call('AccountService', 'updateAccount', [form.id, fields])
       : call('AccountService', 'createAccount', [{ ...fields, organization_id: org.id, is_active: true, created_by: userId }])
   }, { success: form.id != null ? 'Account saved' : 'Account created', refresh: ['accounts', 'balances'], onDone: onClose })
   const existing = accounts.find((a) => String(a.id) === String(form.id))
+  const balanceSheet = ['asset', 'liability', 'equity'].includes(form.account_type)
 
   return (
     <Modal open={draft !== null} onClose={onClose} title={form.id != null ? 'Edit account' : 'New account'}>
@@ -150,10 +163,19 @@ function AccountForm({ draft, accounts, onClose, onDelete }: { draft: Draft | nu
         <Text label="Name" required placeholder="For example, Shop rent" value={form.name} onChange={(v) => set('name', v)} />
         {form.id != null ? <p className="text-[12.5px] text-muted-foreground">Code <span className="fig">{existing?.code}</span> is assigned automatically.</p> : null}
         <div className="grid sm:grid-cols-2 gap-3">
-          <Choice label="Type" value={form.account_type} onChange={(v) => setForm((f) => ({ ...f, account_type: v as AccountType, parent_id: '', report_category: '' }))} options={TYPES.map((t) => ({ value: t.id, label: t.pro }))} />
+          <Choice label="Type" value={form.account_type} onChange={(v) => setForm((f) => ({ ...f, account_type: v as AccountType, parent_id: '', report_category: '', system_role: '', cash_flow_category: '', pl_category: '' }))} options={TYPES.map((t) => ({ value: t.id, label: t.pro }))} />
           <Choice label="Report category" placeholder="Not set" value={form.report_category} onChange={(v) => set('report_category', v)} options={CATEGORIES[form.account_type]} />
         </div>
         <Choice label="Parent account" placeholder="None" value={form.parent_id} onChange={(v) => set('parent_id', v)} options={parents.map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))} />
+        {pro ? (
+          <div className="grid sm:grid-cols-2 gap-3">
+            {ROLES[form.account_type].length ? <Choice label="Role" placeholder="None" value={form.system_role} onChange={(v) => set('system_role', v)} options={ROLES[form.account_type]} /> : null}
+            {balanceSheet
+              ? <Choice label="Cash flow" placeholder="Worked out from the type" value={form.cash_flow_category} onChange={(v) => set('cash_flow_category', v)} options={form.account_type === 'asset' ? CASH_FLOW : CASH_FLOW.filter((c) => c.value !== 'cash')} />
+              : <Choice label="Income statement category" placeholder="Operating" value={form.pl_category} onChange={(v) => set('pl_category', v)} options={form.account_type === 'expense' ? PL : PL.filter((c) => c.value !== 'income_tax')} />}
+          </div>
+        ) : null}
+        {pro ? <Toggle label="Contra account" hint="Reduces its section, like sales returns or accumulated depreciation." checked={form.is_contra} onChange={(v) => set('is_contra', v)} /> : null}
         <Text label="Group" value={form.group} onChange={(v) => set('group', v)} />
         <Text label="Description" value={form.description} onChange={(v) => set('description', v)} />
         <Toggle label="Entries can be posted here" hint="Turn off for a header account that only groups other accounts." checked={form.is_postable} onChange={(v) => set('is_postable', v)} />

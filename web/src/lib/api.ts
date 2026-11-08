@@ -47,6 +47,10 @@ export async function getMonthly<T>(org: string): Promise<T> {
 
 export type Proposal = {
   id: string
+  /** A journal entry, a payment against an invoice or bill, or posting a draft document. Only a journal entry can be changed in the New entry form. */
+  kind?: 'journal' | 'payment' | 'post_document'
+  warnings?: string[]
+  payload?: { number?: string } | null
   source: 'app' | 'mcp'
   source_name: string | null
   status: 'pending' | 'recorded' | 'discarded'

@@ -48,6 +48,8 @@ export type AccountingInfoSettings = {
   fiscalYearStart: string
   reportingCurrency: string
   decimalPlaces: number
+  /** When on, whoever asked the agent for an entry can't approve it themselves, and AI apps can't record directly. */
+  requireSecondApprover: boolean
 }
 
 export type PasswordPolicySettings = {
@@ -84,6 +86,7 @@ export const DEFAULT_ACCOUNTING: AccountingInfoSettings = {
   fiscalYearStart: 'January',
   reportingCurrency: 'USD',
   decimalPlaces: 2,
+  requireSecondApprover: false,
 }
 
 export const DEFAULT_PASSWORD_POLICY: PasswordPolicySettings = {

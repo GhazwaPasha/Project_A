@@ -165,12 +165,22 @@ const bookSamples: Record<string, (args: unknown[]) => unknown> = {
 
 const handlers: Record<string, (args: unknown[]) => unknown> = {
   getDashboardBundle: () => ({ financialMetrics: { totalRevenue: 640000, totalExpenses: 572000 }, accountBalances }),
-  generateBalanceSheet: () => ({
-    assetSections: [sect('asset', 'Assets')], liabilitySections: [sect('liability', 'Liabilities')], equitySections: [sect('equity', 'Equity')],
-    totalAssets: 636060, totalLiabilities: 94500, totalEquity: 541560, isBalanced: true,
-  }),
+  generateBalanceSheet: () => {
+    // Shaped like the server's: subsections, children indented under their parent, and profit carried into equity.
+    const assets = sect('asset', 'Assets').accounts
+    const current = { name: 'Current Assets', total: 0, accounts: [{ id: 'h1', code: '1000', name: 'Cash and bank', balance: 0, depth: 0 }, ...assets.slice(0, 2).map((a) => ({ ...a, depth: 1 })), ...assets.slice(2, -1).map((a) => ({ ...a, depth: 0 }))] }
+    current.total = current.accounts.reduce((s, a) => s + a.balance, 0)
+    const fixed = { name: 'Fixed Assets', total: 0, accounts: assets.slice(-1).map((a) => ({ ...a, depth: 0 })) }
+    fixed.total = fixed.accounts.reduce((s, a) => s + a.balance, 0)
+    const liabilities = sect('liability', 'Current Liabilities')
+    const equity = sect('equity', "Owner's Equity")
+    const totalAssets = current.total + fixed.total
+    const earnings = totalAssets - liabilities.total - equity.total
+    const retained = { name: 'Retained Earnings', total: earnings, accounts: [{ id: 'retained_earnings_prior', code: '', name: 'Retained earnings, prior years', balance: earnings - 68000, depth: 0, is_computed: true }, { id: 'current_year_earnings', code: '', name: 'Current year earnings', balance: 68000, depth: 0, is_computed: true }] }
+    return { assetSections: [current, fixed], liabilitySections: [liabilities], equitySections: [equity, retained], totalAssets, totalLiabilities: liabilities.total, totalEquity: equity.total + earnings, difference: 0, isBalanced: true }
+  },
   generateIncomeStatement: () => ({
-    revenue: { total: 640000, breakdown: [{ account: 'Sales', amount: 640000 }] },
+    revenue: { total: 640000, breakdown: [{ account: 'Sales', amount: 652000 }, { account: 'Sales returns', amount: -12000 }] },
     costOfSales: { total: 352000, breakdown: [{ account: 'Cost of goods sold', amount: 352000 }] },
     operatingExpenses: { total: 220000, breakdown: [{ account: 'Salaries', amount: 120000 }, { account: 'Rent', amount: 65000 }, { account: 'Utilities', amount: 20400 }, { account: 'Fuel and transport', amount: 14600 }] },
     otherExpenses: { total: 0, breakdown: [] },

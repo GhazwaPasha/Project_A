@@ -134,16 +134,18 @@ export function IncomeDoc() {
   const groups = r ? [
     { lines: r.revenue.breakdown, sign: 1, sub: [pro ? 'Total revenue' : 'Total sales', r.revenue.total] as const },
     { lines: r.costOfSales.breakdown, sign: -1, sub: [pro ? 'Gross profit' : 'Left after the cost of what you sold', r.grossProfit] as const },
-    { lines: [...r.operatingExpenses.breakdown, ...r.otherExpenses.breakdown], sign: -1, sub: null },
+    { lines: r.operatingExpenses.breakdown, sign: -1, sub: null },
+    { lines: [...(r.otherRevenue?.breakdown ?? []), ...(r.financeIncome?.breakdown ?? [])], sign: 1, sub: null },
+    { lines: [...r.otherExpenses.breakdown, ...(r.financeCosts?.breakdown ?? []), ...(r.incomeTax?.breakdown ?? [])], sign: -1, sub: null },
   ] : []
-  const csv: Csv | null = r ? [['Item', 'Amount'], ...groups.flatMap((g) => [...g.lines.map((l): (string | number)[] => [l.account, (g.sign * Math.abs(num(l.amount))).toFixed(d)]), ...(g.sub ? [[g.sub[0], num(g.sub[1]).toFixed(d)]] : [])]), [pro ? 'Net income' : 'Profit', num(r.netIncome).toFixed(d)]] : null
+  const csv: Csv | null = r ? [['Item', 'Amount'], ...groups.flatMap((g) => [...g.lines.map((l): (string | number)[] => [l.account, (g.sign * num(l.amount)).toFixed(d)]), ...(g.sub ? [[g.sub[0], num(g.sub[1]).toFixed(d)]] : [])]), [pro ? 'Net income' : 'Profit', num(r.netIncome).toFixed(d)]] : null
   return (
     <PrintDoc title={pro ? 'Income Statement' : 'Profit'} period={`${shortDate(from)} to ${shortDate(to)}`} file={`Income Statement ${from} to ${to}`} back={{ to: '/reports/income-statement', search: { period }, label: 'Back to report' }} csv={csv}>
       <table className="doc-table">
         <thead><tr><th>{pro ? 'Account' : 'Item'}</th><th className="num">{org.currency}</th></tr></thead>
         <tbody>
           {groups.map((g, i) => [
-            ...g.lines.map((l) => <tr key={`${i}-${l.account}`}><td>{l.account}</td><td className="num">{figure(g.sign * Math.abs(num(l.amount)), d)}</td></tr>),
+            ...g.lines.map((l) => <tr key={`${i}-${l.account}`}><td>{l.account}</td><td className="num">{figure(g.sign * num(l.amount), d)}</td></tr>),
             g.sub ? <tr key={`sub-${i}`} className="sub"><td>{g.sub[0]}</td><Num v={g.sub[1]} d={d} /></tr> : null,
           ])}
           {r ? <tr className="total"><td>{pro ? 'Net income' : 'Profit'}</td><Num v={r.netIncome} d={d} /></tr> : null}
@@ -173,7 +175,7 @@ export function BalanceDoc() {
         <tbody>
           {groups.map(([title, sections, total]) => [
             <tr key={title} className="group"><td colSpan={2}>{title}</td></tr>,
-            ...sections.flatMap((s) => s.accounts).map((a) => <tr key={a.id}><td>{a.name}</td><Num v={a.balance} d={d} /></tr>),
+            ...sections.flatMap((s) => s.accounts).map((a) => <tr key={a.id}><td style={{ paddingLeft: `${(a.depth ?? 0) * 14}px` }}>{a.name}</td><Num v={a.balance} d={d} /></tr>),
             <tr key={`${title}-total`} className="sub"><td>Total {title.toLowerCase()}</td><Num v={total} d={d} /></tr>,
           ])}
           {r ? <tr className="total"><td>{bothLabel}</td><Num v={both} d={d} /></tr> : null}
