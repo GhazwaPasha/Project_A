@@ -69,6 +69,8 @@ export function stockEntry(m: StockMovement): { lines: EntryLine[] | null; probl
   const up = m.type === 'in' || (m.type === 'adjustment' && m.quantity > 0)
   const offset = m.offset_account_id ?? (m.type === 'in' ? null : m.expense_account_id)
   if (!offset) return { lines: null, problem: 'Choose where this stock came from, such as what you owe or the bank.' }
+  // Stock against its own account would record nothing while looking like an entry.
+  if (Number(offset) === Number(m.inventory_account_id)) return { lines: null, problem: "The other side can't be the stock account itself. Choose where it came from or where the cost goes." }
   return {
     problem: null,
     lines: up

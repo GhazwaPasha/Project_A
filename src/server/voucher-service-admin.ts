@@ -83,7 +83,7 @@ async function enrichVouchers(
     ORDER BY voucher_id, line_number
   `) as InventoryVoucherLine[]
 
-  const itemIds = Array.from(new Set(allLines.map((l) => l.item_id).filter((x) => x > 0)))
+  const itemIds = Array.from(new Set(allLines.map((l) => Number(l.item_id)).filter((x) => x > 0)))
   const items = itemIds.length
     ? ((await sql<InventoryItem[]>`
         SELECT * FROM public.inventory_items
@@ -91,7 +91,8 @@ async function enrichVouchers(
       `) as InventoryItem[])
     : []
   const withCat = await attachItemsCategories(sql, items)
-  const byItem = new Map(withCat.map((i) => [i.id, i]))
+  // bigint ids come back as strings and integer ids as numbers, so both sides are keyed as numbers.
+  const byItem = new Map(withCat.map((i) => [Number(i.id), i]))
 
   const atts = (await sql<VoucherAttachment[]>`
     SELECT * FROM public.voucher_attachments
@@ -129,7 +130,7 @@ async function enrichVouchers(
   for (const l of allLines) {
     const v = l.voucher_id
     const arr = linesByV.get(v) ?? []
-    const item = l.item_id ? byItem.get(l.item_id) : undefined
+    const item = l.item_id ? byItem.get(Number(l.item_id)) : undefined
     arr.push({ ...l, item: item } as InventoryVoucherLine)
     linesByV.set(v, arr)
   }

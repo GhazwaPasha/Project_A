@@ -37,7 +37,16 @@ export type TrialRow = { account_id: Id; account_code: string; account_name: str
 export type Line = { id: Id; account_id: Id; description: string | null; debit_amount: Money; credit_amount: Money }
 export type Entry = { reverses_entry_id?: Id | null; id: Id; entry_number: string; entry_date: string; description: string; reference: string | null; total_amount: Money; is_posted: boolean; lines: Line[] }
 export type Account = { id: Id; code: string; name: string; account_type?: AccountType; parent_id?: Id | null; description?: string | null; group?: string | null; report_category?: string | null; is_postable?: boolean; is_active?: boolean; system_role?: string | null; is_control?: boolean; cash_flow_category?: string | null; pl_category?: string | null; is_contra?: boolean }
-export type AccountTxn = { id: Id; entry_number: string; entry_date: string; description: string; reference?: string | null; debit_amount: Money; credit_amount: Money; balance: Money }
+/**
+ * The accounts money moves through: those marked cash or bank. A business that hasn't marked any yet gets every
+ * asset account that isn't kept by invoices, bills or stock. The server checks the same rule.
+ */
+export const moneyAccounts = (rows: Account[] | undefined) => {
+  const open = (rows ?? []).filter((a) => a.is_postable !== false && a.account_type === 'asset' && !a.is_control)
+  const marked = open.filter((a) => a.system_role === 'cash' || a.system_role === 'bank' || a.cash_flow_category === 'cash')
+  return marked.length ? marked : open
+}
+export type AccountTxn ={ id: Id; entry_number: string; entry_date: string; description: string; reference?: string | null; debit_amount: Money; credit_amount: Money; balance: Money }
 export type StockItem = { id: Id; sku: string; name: string; unit_of_measure: string; quantity_available: Money; average_unit_cost: Money; total_value: Money; reorder_point: Money }
 export type VoucherStats = { pending_approval: Money }
 export type MonthRow = { month: string; revenue: Money; expenses: Money }

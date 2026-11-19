@@ -451,11 +451,23 @@ export async function authorizeAppDataCall(
     return
   }
 
+  // Approving is the finance check on a request, so it takes someone who keeps the books, and not the person who
+  // asked. An owner may approve their own, since in a one-person business there is nobody else to.
+  if (key === 'VoucherService.approveVoucher' || key === 'VoucherService.rejectVoucher') {
+    const orgId = await orgFromVoucherId(Number(args[0]))
+    await requireDataPermission(userId, orgId, 'ledger.write')
+    const sql = getSql()
+    const [v] = await sql<{ requested_by: string | null }[]>`SELECT requested_by::text AS requested_by FROM public.inventory_vouchers WHERE id = ${Number(args[0])}`
+    if (v?.requested_by === userId) {
+      const snap = await getOrgPermissionSnapshot(userId, orgId as string)
+      if (!snap?.isSuperAdmin && snap?.memberRole !== 'organization_owner') throw new Error('Someone other than the person who asked has to approve or reject this voucher.')
+    }
+    return
+  }
+
   const voucherByIdWrite = new Set([
     'VoucherService.updateVoucher',
     'VoucherService.deleteVoucher',
-    'VoucherService.approveVoucher',
-    'VoucherService.rejectVoucher',
     'VoucherService.renewExpiredVoucher',
     'VoucherService.executeVoucher',
     'VoucherService.completeVoucher',

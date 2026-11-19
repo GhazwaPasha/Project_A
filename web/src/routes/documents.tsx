@@ -9,7 +9,7 @@ import { Choice, ConfirmDelete, FormBody, Modal, Stat, Stats, Text, selectClass,
 import { Cell, Empty, Head, Loaded, Paged, Screen, SearchIcon, Table, Toolbar, btn } from '@/components/page'
 import { call } from '@/lib/api'
 import { figure, shortDate, useApp } from '@/lib/boot'
-import { accounts, iso, num, q, refreshBooks, today, type Account, type Id } from '@/lib/data'
+import { accounts, iso, moneyAccounts, num, q, refreshBooks, today, type Account, type Id } from '@/lib/data'
 import { cn } from '@/lib/utils'
 import { items, unitsQuery, warehousesQuery } from '@/routes/inventory'
 
@@ -26,6 +26,17 @@ const docs = (org: string, kind: Kind) => q<DocRow[]>(['documents', org, kind], 
 export const customersQuery = (org: string) => q<Customer[]>(['customers', org], 'BooksService', 'listCustomers', [org])
 export const ratesQuery = (org: string) => q<Rate[]>(['tax', org, 'rates'], 'BooksService', 'listTaxRates', [org])
 const postable = (rows: Account[] | undefined, ...types: string[]) => (rows ?? []).filter((a) => a.is_postable !== false && types.includes(a.account_type ?? '')).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))
+/**
+ * Accounts that can track what a customer owes (invoice) or what's owed to a supplier (bill). Money accounts and
+ * accounts with another job, like stock or tax, are left out. An account already marked for this job comes first.
+ */
+const controlAccounts = (rows: Account[] | undefined, kind: 'invoice' | 'bill') => {
+  const role = kind === 'invoice' ? 'receivable' : 'payable'
+  const money = new Set(moneyAccounts(rows).map((a) => a.id))
+  return (rows ?? [])
+    .filter((a) => a.is_postable !== false && a.account_type === (kind === 'invoice' ? 'asset' : 'liability') && !money.has(a.id) && (!a.system_role || a.system_role === role))
+    .sort((a, b) => Number(b.system_role === role) - Number(a.system_role === role))
+}
 
 const overdue = (d: DocRow) => (d.status === 'posted' || d.status === 'partial') && d.due_date.slice(0, 10) < today()
 export function statusBadge(d: Pick<DocRow, 'status' | 'due_date'>) {
@@ -273,7 +284,7 @@ function DocumentDetail({ id, kind, onClose, onEdit }: { id: Id; kind: Kind; onC
           ) : null}
           {crediting ? <CreditNoteForm doc={d} onClose={() => setCrediting(false)} /> : null}
           {d.status === 'draft' ? <PostDocument doc={d} /> : null}
-          {d.status === 'posted' || d.status === 'partial' ? <RecordPayment doc={d} /> : null}
+          {d.status === 'posted' || d.status === 'partial' ? <RecordPayment key={`${d.id}-${num(d.balance)}`} doc={d} /> : null}
           {voiding ? (
             <FormBody onSubmit={() => voided.mutate()} submit={`Void ${w.one}`} pending={voided.isPending} onCancel={() => setVoiding(false)} disabled={!reason.trim()}>
               <Text label="Why is this being voided?" required value={reason} onChange={setReason} />
@@ -336,7 +347,7 @@ function CreditNoteForm({ doc, onClose }: { doc: Doc; onClose: () => void }) {
         <div className="grid sm:grid-cols-2 gap-3">
           <Text label="Why?" required value={reason} onChange={setReason} />
           <Text label="Date" type="date" value={date} onChange={setDate} />
-          {needsBank ? <Choice label={sale ? 'Refund from' : 'Refund comes into'} required hint={`${figure(refund, org.decimals)} has already been paid.`} placeholder="Select account" value={bank} onChange={setBank} options={postable(chart.data, 'asset')} /> : null}
+          {needsBank ? <Choice label={sale ? 'Refund from' : 'Refund comes into'} required hint={`${figure(refund, org.decimals)} has already been paid.`} placeholder="Select account" value={bank} onChange={setBank} options={moneyAccounts(chart.data).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))} /> : null}
         </div>
       </FormBody>
     </section>
@@ -363,7 +374,7 @@ function PostDocument({ doc }: { doc: Doc }) {
       {p?.problems.length ? <ul role="alert" className="text-[13px] text-destructive">{p.problems.map((x) => <li key={x}>{x}</li>)}</ul> : null}
       {preview.isError ? <p role="alert" className="text-[13px] text-destructive">{preview.error.message}</p> : null}
       <div className="flex flex-wrap items-end gap-3">
-        <Choice className="flex-1 min-w-[220px]" label={WORDS[doc.kind].control} placeholder={p?.suggested_control_account_id ? "Use this customer's or supplier's account" : 'Select account'} value={control} onChange={setControl} options={postable(chart.data, doc.kind === 'invoice' ? 'asset' : 'liability')} />
+        <Choice className="flex-1 min-w-[220px]" label={WORDS[doc.kind].control} placeholder={p?.suggested_control_account_id ? "Use this customer's or supplier's account" : 'Select account'} value={control} onChange={setControl} options={controlAccounts(chart.data, doc.kind).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))} />
         <button className={btn.primary} disabled={!p || p.problems.length > 0 || post.isPending} onClick={() => post.mutate()}>{post.isPending ? 'Posting…' : `Post ${figure(num(doc.total), org.decimals)}`}</button>
       </div>
     </section>
@@ -385,7 +396,7 @@ function RecordPayment({ doc }: { doc: Doc }) {
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <Text label="Amount" inputMode="decimal" value={amount} onChange={setAmount} />
           <Text label="Date" type="date" value={date} onChange={setDate} />
-          <Choice label={doc.kind === 'invoice' ? 'Paid into' : 'Paid from'} placeholder="Select account" value={bank} onChange={setBank} options={postable(chart.data, 'asset')} />
+          <Choice label={doc.kind === 'invoice' ? 'Paid into' : 'Paid from'} placeholder="Select account" value={bank} onChange={setBank} options={moneyAccounts(chart.data).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))} />
           <Text label="Reference" value={reference} onChange={setReference} />
         </div>
       </FormBody>
@@ -434,7 +445,7 @@ function CustomerForm({ customer, onClose }: { customer: Partial<Customer>; onCl
           <Text label="Email" type="email" value={f.email} onChange={set('email')} />
           <Text label="Phone" value={f.phone} onChange={set('phone')} />
           <Text label="Tax ID" value={f.tax_id} onChange={set('tax_id')} />
-          <Choice label="Account for what they owe" placeholder="Choose when posting" value={f.receivable} onChange={set('receivable')} options={postable(chart.data, 'asset')} />
+          <Choice label="Account for what they owe" placeholder="Choose when posting" value={f.receivable} onChange={set('receivable')} options={moneyAccounts(chart.data).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))} />
         </div>
         <Text label="Address" value={f.address} onChange={set('address')} />
         {customer.id ? <ConfirmDelete label="Remove this customer" pending={archive.isPending} onConfirm={() => archive.mutate()} /> : null}

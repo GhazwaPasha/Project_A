@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { Cell, Empty, Head, Loaded, Paged, Screen, Table, Toolbar, btn } from '@/components/page'
 import { call } from '@/lib/api'
 import { figure, shortDate, useApp } from '@/lib/boot'
-import { accounts, num, q, refreshBooks, today, type Id } from '@/lib/data'
+import { accounts, moneyAccounts, num, q, refreshBooks, today, type Id } from '@/lib/data'
 
 type Ledger = { id: number; date: string; entry_number: string; description: string; amount: number }
 type Line = { id: number; date: string; description: string; reference: string | null; amount: number; status: 'unmatched' | 'matched' | 'ignored'; candidates: Ledger[] }
@@ -37,7 +37,7 @@ export function statementRows(text: string) {
 export function Banking() {
   const { org, pro } = useApp()
   const chart = useQuery(accounts(org.id))
-  const banks = (chart.data ?? []).filter((a) => a.is_postable !== false && a.account_type === 'asset').sort((a, b) => Number(/bank|cash/i.test(b.name)) - Number(/bank|cash/i.test(a.name)))
+  const banks = moneyAccounts(chart.data).sort((a, b) => Number(/bank|cash/i.test(b.name)) - Number(/bank|cash/i.test(a.name)))
   const [picked, setPicked] = useState('')
   const account = picked || (banks[0] ? String(banks[0].id) : '')
   const [asOf, setAsOf] = useState(today())

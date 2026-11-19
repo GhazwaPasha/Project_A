@@ -9,13 +9,13 @@ import { Cell, Empty, Head, Loaded, Paged, Screen, SearchIcon, Table, Tabs, Tool
 import { Badge, Chips } from '@/components/chips'
 import { call, uploadAttachment } from '@/lib/api'
 import { figure, shortDate, useApp } from '@/lib/boot'
-import { accounts, num, q, refreshBooks, today, type Id, type Money } from '@/lib/data'
+import { accounts, moneyAccounts, num, q, refreshBooks, today, type Id, type Money } from '@/lib/data'
 import { INVENTORY_TABS, items, useCanWriteStock, warehousesQuery } from '@/routes/inventory'
 
 type Status = 'draft' | 'pending_finance' | 'approved' | 'receiving' | 'issuing' | 'posted' | 'completed' | 'rejected' | 'expired' | 'cancelled'
 type Line = { id: Id; item_id: Id; line_number: number; quantity_requested: Money; quantity_actual?: Money | null; unit_cost_estimated?: Money | null; unit_cost_actual?: Money | null; total_cost: Money; item?: { name: string; sku: string } }
 type Attachment = { id: Id; file_name: string; file_size?: number }
-export type Voucher = { id: Id; voucher_number: string; voucher_type: 'purchase' | 'issuance'; status: Status; requested_date: string; vendor_name?: string | null; purpose?: string | null; destination?: string | null; description?: string | null; notes?: string | null; payment_type: string; total_estimated_cost: Money; total_actual_cost?: Money | null; approval_deadline?: string | null; renewal_count?: number; rejection_reason?: string | null; lines?: Line[]; attachments?: Attachment[] }
+export type Voucher = { id: Id; requested_by?: string | null; voucher_number: string; voucher_type: 'purchase' | 'issuance'; status: Status; requested_date: string; vendor_name?: string | null; purpose?: string | null; destination?: string | null; description?: string | null; notes?: string | null; payment_type: string; total_estimated_cost: Money; total_actual_cost?: Money | null; approval_deadline?: string | null; renewal_count?: number; rejection_reason?: string | null; lines?: Line[]; attachments?: Attachment[] }
 type StatsRow = { total_vouchers: Money; pending_approval: Money; approved: Money; rejected: Money; expired: Money; completed: Money; total_value: Money }
 
 const STATUS: Record<Status, { label: string; tone: 'neutral' | 'good' | 'warn' | 'bad' }> = {
@@ -30,6 +30,8 @@ const STATUS: Record<Status, { label: string; tone: 'neutral' | 'good' | 'warn' 
   expired: { label: 'Expired', tone: 'bad' },
   cancelled: { label: 'Cancelled', tone: 'neutral' },
 }
+/** What a line costs: its posted cost, else what arrived at its actual price, else the estimate. Matches what posting records. */
+const lineCost = (l: Line) => num(l.total_cost) || (l.quantity_actual != null ? num(l.quantity_actual) : num(l.quantity_requested)) * (l.unit_cost_actual != null ? num(l.unit_cost_actual) : num(l.unit_cost_estimated))
 const REFRESH = ['vouchers', 'voucher', 'voucher-stats', 'stock', 'low-stock', 'movements']
 const vouchersQuery = (org: string, status: string, type: string, search: string) => q<Voucher[]>(['vouchers', org, status, type, search], 'VoucherService', 'getVouchers', [org, { ...(status !== 'all' ? { status: [status] } : {}), ...(type !== 'all' ? { voucher_type: [type] } : {}), ...(search ? { search } : {}) }])
 const statsQuery = (org: string) => q<StatsRow>(['voucher-stats', org, 'full'], 'VoucherService', 'getVoucherStats', [org])
@@ -49,7 +51,7 @@ function VoucherTable({ rows, onOpen }: { rows: Voucher[]; onOpen: (v: Voucher) 
             <Cell className="max-w-0 w-full truncate">{v.vendor_name || v.purpose || v.description || ''}</Cell>
             <Cell><Badge dot tone={STATUS[v.status]?.tone}>{STATUS[v.status]?.label ?? v.status}</Badge></Cell>
             <Cell className="text-muted-foreground whitespace-nowrap">{shortDate(v.requested_date)}</Cell>
-            <Cell right>{figure(num(v.total_estimated_cost), org.decimals)}</Cell>
+            <Cell right>{figure(num(v.total_actual_cost ?? v.total_estimated_cost), org.decimals)}</Cell>
           </tr>
         ))}
       </tbody>
@@ -87,7 +89,7 @@ export function Vouchers() {
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No vouchers found" body={canWrite ? 'Create one when you need to buy stock or take it out.' : 'Nothing matches right now.'} /> : null)}>
         {(rows) => <VoucherTable rows={rows} onOpen={(v) => setOpened(v.id)} />}
       </Loaded>
-      <VoucherDetail id={opened} onClose={() => setOpened(null)} />
+      <VoucherDetail key={String(opened)} id={opened} onClose={() => setOpened(null)} />
       {creating ? <VoucherForm onClose={() => setCreating(false)} /> : null}
     </Screen>
   )
@@ -115,17 +117,19 @@ export function Approvals() {
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title={status === 'pending_finance' ? "You're all caught up" : 'No vouchers found'} body={status === 'pending_finance' ? 'Nothing is waiting for a decision.' : 'Nothing matches right now.'} /> : null)}>
         {(rows) => <VoucherTable rows={rows} onOpen={(v) => setOpened(v.id)} />}
       </Loaded>
-      <VoucherDetail id={opened} onClose={() => setOpened(null)} />
+      <VoucherDetail key={String(opened)} id={opened} onClose={() => setOpened(null)} />
     </Screen>
   )
 }
 
 function VoucherDetail({ id, onClose }: { id: Id | null; onClose: () => void }) {
-  const { org, access } = useApp()
+  const { org, access, userId } = useApp()
   const detail = useQuery({ ...q<Voucher | null>(['voucher', id], 'VoucherService', 'getVoucher', [id]), enabled: id !== null })
   const v = detail.data
   const canAct = access !== 'observer'
-  const canDecide = canAct
+  // Approving is the finance check: someone who keeps the books, and not the person who asked unless they own the business.
+  const ownRequest = v?.requested_by != null && v.requested_by === userId
+  const canDecide = (access === 'owner' || access === 'books') && (!ownRequest || access === 'owner')
   const [reason, setReason] = useState('')
   const [actual, setActual] = useState<Record<string, string>>({})
   const [costs, setCosts] = useState<Record<string, string>>({})
@@ -172,10 +176,11 @@ function VoucherDetail({ id, onClose }: { id: Id | null; onClose: () => void }) 
                       ? <Input aria-label={`Actual quantity of ${l.item?.name ?? l.item_id}`} inputMode="decimal" value={actual[String(l.id)] ?? String(num(l.quantity_requested))} onChange={(e) => setActual((a) => ({ ...a, [String(l.id)]: e.target.value }))} className="h-7 w-20 ml-auto text-right fig" />
                       : l.quantity_actual != null ? figure(num(l.quantity_actual), 0) : ''}</Cell>
                     {v.status === 'approved' && v.voucher_type === 'purchase' && canAct ? <Cell right><Input aria-label={`Actual unit cost of ${l.item?.name ?? l.item_id}`} inputMode="decimal" value={costs[String(l.id)] ?? String(num(l.unit_cost_estimated) || '')} onChange={(e) => setCosts((c) => ({ ...c, [String(l.id)]: e.target.value }))} className="h-7 w-24 ml-auto text-right fig" /></Cell> : null}
-                    <Cell right>{figure(num(l.total_cost), org.decimals)}</Cell>
+                    {/* The line's own cost is set when it posts. Until then it's the estimate. */}
+                    <Cell right>{figure(lineCost(l), org.decimals)}</Cell>
                   </tr>
                 ))}
-                <tr className="font-medium"><Cell className="border-b-0">Total</Cell><Cell className="border-b-0">{' '}</Cell><Cell className="border-b-0">{' '}</Cell>{v.status === 'approved' && v.voucher_type === 'purchase' && canAct ? <Cell className="border-b-0">{' '}</Cell> : null}<Cell right className="border-b-0">{figure(num(v.total_actual_cost ?? v.total_estimated_cost), org.decimals)}</Cell></tr>
+                <tr className="font-medium"><Cell className="border-b-0">Total</Cell><Cell className="border-b-0">{' '}</Cell><Cell className="border-b-0">{' '}</Cell>{v.status === 'approved' && v.voucher_type === 'purchase' && canAct ? <Cell className="border-b-0">{' '}</Cell> : null}<Cell right className="border-b-0">{figure((v.lines ?? []).length ? (v.lines ?? []).reduce((s, l) => s + lineCost(l), 0) : num(v.total_actual_cost ?? v.total_estimated_cost), org.decimals)}</Cell></tr>
               </tbody>
             </table>
           </div>
@@ -190,6 +195,7 @@ function VoucherDetail({ id, onClose }: { id: Id | null; onClose: () => void }) 
 
           {v.status === 'pending_finance' && canDecide ? <Text label="Note" hint="Required to reject. Optional to approve." value={reason} onChange={setReason} /> : null}
           {v.status === 'expired' && canAct ? <Text label="Why renew it?" required value={reason} onChange={setReason} /> : null}
+          {v.status === 'pending_finance' && !canDecide ? <p className="text-[13px] text-muted-foreground">{ownRequest && access === 'books' ? 'You asked for this one, so someone else approves it.' : 'Waiting for an owner or accountant to approve it.'}</p> : null}
           {v.status === 'receiving' || v.status === 'issuing' ? (access === 'owner' || access === 'books' ? <PostPanel voucher={v} /> : <p className="text-[13px] text-muted-foreground">Waiting for an accountant to post this to the books.</p>) : null}
           {v.status === 'posted' ? <p className="text-[13px] text-muted-foreground">Stock is updated and the entry is in your books. Completing just closes this voucher.</p> : null}
 
@@ -304,7 +310,7 @@ function VoucherForm({ onClose }: { onClose: () => void }) {
             <Text label="Expected delivery" type="date" min={today()} value={f.expected_delivery_date} onChange={set('expected_delivery_date')} />
             <Choice label="Payment" value={f.payment_type} onChange={set('payment_type')} options={[['credit', 'On credit'], ['cash', 'Cash'], ['check', 'Check'], ['card', 'Card'], ['bank_transfer', 'Bank transfer'], ['partial', 'Partial payment']].map(([value, label]) => ({ value, label }))} />
             {f.payment_type !== 'credit' ? <>
-              <Choice label="Paid from" placeholder="Select account" value={f.payment_account_id} onChange={set('payment_account_id')} options={postable} />
+              <Choice label="Paid from" placeholder="Select account" value={f.payment_account_id} onChange={set('payment_account_id')} options={moneyAccounts(chart.data).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))} />
               <Text label="Payment reference" value={f.payment_reference} onChange={set('payment_reference')} />
             </> : null}
             {f.payment_type === 'partial' ? <Text label="Deposit amount" inputMode="decimal" value={f.deposit_amount} onChange={set('deposit_amount')} /> : null}

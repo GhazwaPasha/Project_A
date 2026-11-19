@@ -35,9 +35,15 @@ function acting() {
 
 /** Money moves through an asset account that isn't a control account: a bank, cash, or a card clearing account. */
 async function assertMoneyAccount(tx: Pg, org: string, id: number) {
-  const [a] = (await tx`SELECT account_type::text AS type, COALESCE((to_jsonb(a) ->> 'is_control')::boolean, false) AS control FROM public.accounts a WHERE id = ${id} AND organization_id = ${org}::uuid`) as Row[]
+  const [a] = (await tx`SELECT account_type::text AS type, COALESCE((to_jsonb(a) ->> 'is_control')::boolean, false) AS control,
+    (to_jsonb(a) ->> 'system_role') IN ('cash', 'bank') OR (to_jsonb(a) ->> 'cash_flow_category') = 'cash' AS money
+    FROM public.accounts a WHERE id = ${id} AND organization_id = ${org}::uuid`) as Row[]
   if (!a) throw new Error('Account not found.')
   if (a.type !== 'asset' || a.control) throw new Error('Choose a bank or cash account for the money.')
+  if (a.money) return
+  // Once any account is marked as cash or bank, money only moves through those. Equipment or a receivable isn't money.
+  const [marked] = (await tx`SELECT 1 FROM public.accounts a WHERE organization_id = ${org}::uuid AND ((to_jsonb(a) ->> 'system_role') IN ('cash', 'bank') OR (to_jsonb(a) ->> 'cash_flow_category') = 'cash') LIMIT 1`) as Row[]
+  if (marked) throw new Error('Choose a bank or cash account for the money.')
 }
 
 export type DocumentForm = {

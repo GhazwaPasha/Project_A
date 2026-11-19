@@ -206,7 +206,7 @@ export function Shell() {
           </main>
         </motion.div>
         {/* Sits beside the page when the main box has room, and fills the box when it doesn't. */}
-        <div id={PAGE_SIDE} className="empty:hidden print:hidden max-lg:fixed max-lg:inset-x-0 max-lg:top-11 max-lg:bottom-0 max-lg:z-[4] lg:absolute lg:inset-0 lg:z-[4] lg:@4xl:relative lg:@4xl:inset-auto lg:@4xl:shrink-0 lg:@4xl:w-[clamp(420px,42cqw,560px)] lg:@4xl:border-l lg:@4xl:border-border" />
+        <div id={PAGE_SIDE} className="empty:hidden print:hidden max-lg:fixed max-lg:inset-x-0 max-lg:top-11 max-lg:bottom-0 max-lg:z-[4] lg:absolute lg:inset-0 lg:z-[4] lg:@4xl:relative lg:@4xl:inset-auto lg:@4xl:shrink-0 lg:@4xl:w-[clamp(420px,42cqw,560px)] lg:@4xl:data-[wide]:w-[clamp(520px,52cqw,760px)] lg:@4xl:border-l lg:@4xl:border-border" />
         </div>
       </div>
 

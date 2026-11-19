@@ -51,6 +51,9 @@ test('stock entries follow the direction of the stock', () => {
   assert.equal(stockEntry({ ...base, type: 'adjustment', quantity: -2 }).lines?.find((l) => l.account_id === INV)?.credit, 500)
   assert.equal(stockEntry({ ...base, type: 'adjustment', quantity: 2 }).lines?.find((l) => l.account_id === INV)?.debit, 500)
   assert.equal(stockEntry({ ...base, type: 'out', total_cost: 0 }).lines, null)
+  // Stock can't be posted against its own account.
+  assert.equal(stockEntry({ ...base, type: 'in', offset_account_id: INV }).lines, null)
+  assert.match(stockEntry({ ...base, type: 'out', offset_account_id: INV }).problem ?? '', /stock account itself/)
 })
 test('aging buckets fall on the right day', () => {
   const asOf = '2026-06-30'

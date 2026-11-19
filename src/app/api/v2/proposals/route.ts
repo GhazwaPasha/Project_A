@@ -5,9 +5,10 @@ import { authInApiRoute } from '@/auth'
 import { approveProposal, discardProposal, listProposals } from '@/server/agent/proposals'
 import { authorizeAppDataCall } from '@/server/app-data-authorize'
 
-const NOT_MIGRATED = '42P01'
+// A missing table (42P01) or column (42703) means a migration hasn't run yet.
+const NOT_MIGRATED = new Set(['42P01', '42703'])
 const failure = (e: unknown) => {
-  if ((e as { code?: string })?.code === NOT_MIGRATED) return NextResponse.json({ error: 'Proposals are not set up on this database yet.', code: 'SCHEMA_NOT_READY' }, { status: 503 })
+  if (NOT_MIGRATED.has((e as { code?: string })?.code ?? '')) return NextResponse.json({ error: 'Proposals are not set up on this database yet.', code: 'SCHEMA_NOT_READY' }, { status: 503 })
   const message = e instanceof Error ? e.message : 'Something went wrong'
   return NextResponse.json({ error: message }, { status: message === 'Forbidden' ? 403 : 400 })
 }

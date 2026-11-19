@@ -1,12 +1,14 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useMutation } from '@tanstack/react-query'
+import { X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { btn } from '@/components/page'
 import { queryClient } from '@/lib/data'
-import { cn } from '@/lib/utils'
+import { cn, PAGE_SIDE } from '@/lib/utils'
 
 export function Field({ label, hint, children, className }: { label: string; hint?: string; children: ReactNode; className?: string }) {
   return (
@@ -46,26 +48,81 @@ export function Toggle({ label, hint, checked, onChange }: { label: string; hint
   )
 }
 
+/** True inside a side section, so a form keeps its buttons in view at the bottom. */
+const InSide = createContext(false)
+
+/**
+ * A form or detail that opens beside the page, in the same place as New entry, so the page stays in view.
+ * The page beside it keeps working. Where the screen is too narrow for both, it covers the page instead.
+ * Esc or the close button closes it. Without the page's side slot (outside the app shell) it falls back to a dialog.
+ */
 export function Modal({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title: string; children: ReactNode; wide?: boolean }) {
-  return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-      <DialogContent className={cn('max-h-[90dvh] overflow-y-auto', wide ? 'sm:max-w-[760px]' : 'sm:max-w-[520px]')}>
-        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
-        {children}
-      </DialogContent>
-    </Dialog>
+  const body = useRef<HTMLDivElement>(null)
+  const close = useRef(onClose)
+  close.current = onClose
+  // Esc closes this section only. An open dropdown handles its own Esc first.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.target instanceof HTMLSelectElement || document.querySelector('[data-search-panel]')) return
+      e.stopImmediatePropagation()
+      close.current()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [open])
+  // A wide form, like an invoice with its line table, gets a wider side section.
+  useEffect(() => {
+    const slot = open && wide ? document.getElementById(PAGE_SIDE) : null
+    if (!slot) return
+    slot.dataset.wide = ''
+    return () => { delete slot.dataset.wide }
+  }, [open, wide])
+  // Start typing straight away, in the first field, unless something inside already took focus.
+  useEffect(() => {
+    if (!open || !body.current || body.current.contains(document.activeElement)) return
+    body.current.querySelector<HTMLElement>('input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])')?.focus({ preventScroll: true })
+  }, [open])
+  if (!open) return null
+  const slot = document.getElementById(PAGE_SIDE)
+  if (!slot) {
+    return (
+      <Dialog open onOpenChange={(v) => { if (!v) onClose() }}>
+        <DialogContent className={cn('max-h-[90dvh] overflow-y-auto', wide ? 'sm:max-w-[760px]' : 'sm:max-w-[520px]')}>
+          <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
+          {children}
+        </DialogContent>
+      </Dialog>
+    )
+  }
+  return createPortal(
+    <section aria-label={title} className="side-section absolute inset-0 flex flex-col bg-background">
+      <header className="shrink-0 flex items-center justify-between gap-3 h-[61px] px-4 border-b border-border">
+        <h2 className="text-[20px] leading-tight font-semibold tracking-[-0.018em] truncate">{title}</h2>
+        <button type="button" aria-label="Close" onClick={onClose} className="press size-8 -mr-1.5 grid place-items-center rounded-[6px] text-muted-foreground cursor-pointer hover:bg-accent hover:text-foreground"><X className="size-4" /></button>
+      </header>
+      <div ref={body} data-side-body className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pt-4 flex flex-col gap-3.5 [&>*:last-child:not(form)]:mb-4">
+        <InSide.Provider value>{children}</InSide.Provider>
+      </div>
+    </section>,
+    slot,
   )
 }
 
 export function FormBody({ onSubmit, children, submit, pending, onCancel, disabled }: { onSubmit: () => void; children: ReactNode; submit: string; pending?: boolean; onCancel?: () => void; disabled?: boolean }) {
+  // Only the section's own form pins its buttons to the bottom. A smaller form inside it, like a payment box, keeps them in place.
+  const inSide = useContext(InSide)
+  const ref = useRef<HTMLFormElement>(null)
+  const [side, setSide] = useState(false)
+  useLayoutEffect(() => { setSide(inSide && ref.current?.parentElement?.hasAttribute('data-side-body') === true) }, [inSide])
   const handle = (e: FormEvent) => {
     e.preventDefault()
     if (!pending && !disabled) onSubmit()
   }
   return (
-    <form onSubmit={handle} className="flex flex-col gap-3.5">
+    <form ref={ref} onSubmit={handle} className={cn('flex flex-col gap-3.5', side && 'flex-1')}>
       {children}
-      <div className="flex justify-end gap-2 pt-1">
+      <div className={cn('flex justify-end gap-2 pt-1', side && 'sticky bottom-0 -mx-4 mt-auto px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))] border-t border-border bg-background')}>
         {onCancel ? <button type="button" className={btn.plain} onClick={onCancel}>Cancel</button> : null}
         <button type="submit" disabled={pending || disabled} className={btn.primary}>{pending ? 'Saving…' : submit}</button>
       </div>
@@ -89,9 +146,11 @@ export function ConfirmDelete({ label, onConfirm, pending }: { label: string; on
 export function useSave<T, V = void>(fn: (v: V) => Promise<T>, opts: { success?: string; refresh: string[]; onDone?: (r: T) => void }) {
   return useMutation({
     mutationFn: fn,
-    onSuccess: (r) => {
-      opts.refresh.forEach((key) => void queryClient.invalidateQueries({ queryKey: [key] }))
+    // The save stays pending until the screens it changed have their new figures, so nobody sees the old
+    // state after "Saved", or clicks the same action twice while it catches up.
+    onSuccess: async (r) => {
       if (opts.success) toast.success(opts.success)
+      await Promise.all(opts.refresh.map((key) => queryClient.invalidateQueries({ queryKey: [key] }).catch(() => null)))
       opts.onDone?.(r)
     },
     onError: (e: Error) => toast.error(e.message),

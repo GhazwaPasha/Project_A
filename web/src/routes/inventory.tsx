@@ -2,13 +2,14 @@ import { useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { Download, Plus, Upload } from 'lucide-react'
+import { toast } from 'sonner'
 import { AskChip } from '@/components/agent-panel'
 import { Choice, ConfirmDelete, FormBody, Modal, Stat, Stats, Text, Toggle, download, parseCsv, useSave } from '@/components/form'
 import { Cell, Empty, Head, Loaded, Paged, Screen, SearchIcon, Table, Tabs, Toolbar, btn } from '@/components/page'
 import { Badge, Chip, Chips, type Tone } from '@/components/chips'
 import { call } from '@/lib/api'
 import { figure, shortDate, useApp } from '@/lib/boot'
-import { accounts, num, q, refreshBooks, today, type Id, type Money, type StockItem } from '@/lib/data'
+import { accounts, num, q, queryClient, refreshBooks, today, type Id, type Money, type StockItem } from '@/lib/data'
 import { cn } from '@/lib/utils'
 
 export const INVENTORY_TABS = [
@@ -44,7 +45,7 @@ export function useCanWriteStock() {
 }
 
 /** Percent of the selling price left after cost. */
-export const marginOf = (i: Pick<Item, 'selling_price' | 'average_unit_cost'>) => (num(i.selling_price) > 0 ? ((num(i.selling_price) - num(i.average_unit_cost)) / num(i.selling_price)) * 100 : null)
+export const marginOf = (i: Pick<Item, 'selling_price' | 'average_unit_cost'>) => (num(i.selling_price) > 0 && num(i.average_unit_cost) > 0 ?((num(i.selling_price) - num(i.average_unit_cost)) / num(i.selling_price)) * 100 : null)
 
 export type ItemDraft = { id?: Id; category_id: string; sku: string; name: string; description: string; unit_of_measure: string; reorder_point: string; reorder_quantity: string; barcode: string; selling_price: string; income_account_id: string; preferred_supplier_id: string; lead_time_days: string; track_lots: boolean; track_serials: boolean; costing_method: string }
 const blankItem = (): ItemDraft => ({ category_id: '', sku: '', name: '', description: '', unit_of_measure: 'Each', reorder_point: '', reorder_quantity: '', barcode: '', selling_price: '', income_account_id: '', preferred_supplier_id: '', lead_time_days: '14', track_lots: false, track_serials: false, costing_method: '' })
@@ -52,11 +53,19 @@ const CSV_COLUMNS = ['sku', 'name', 'category', 'unit', 'barcode', 'selling_pric
 const cell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
 
 export function Inventory() {
-  const { org, pro } = useApp()
+  const { org, pro, canSeeBooks } = useApp()
   const canWrite = useCanWriteStock()
   const navigate = useNavigate()
   const list = useQuery(items(org.id))
   const cats = useQuery(categories(org.id))
+  // Every item belongs to a category, which decides its accounts. With none yet, New item makes one first.
+  const [catFirst, setCatFirst] = useState(false)
+  const noCats = cats.isSuccess && cats.data.length === 0
+  const newItem = () => {
+    if (!noCats) return setDraft(blankItem())
+    if (canSeeBooks) return setCatFirst(true)
+    toast.error('Items go in a category, and there are none yet. Ask an owner or accountant to add one under Categories.')
+  }
   const [search, setSearch] = useState('')
   const [lowOnly, setLowOnly] = useState(false)
   const [category, setCategory] = useState('all')
@@ -97,7 +106,7 @@ export function Inventory() {
         <button className={btn.plain} disabled={!all.length} onClick={exportCsv}><Download className="size-3.5 mr-1.5" />Export</button>
         {canWrite ? <>
           <button className={btn.plain} onClick={() => setMoving({ itemId: '' })}>Record movement</button>
-          <button className={btn.primary} disabled={!cats.data?.length} onClick={() => setDraft(blankItem())}><Plus className="size-3.5 mr-1.5" />New item</button>
+          <button className={btn.primary} disabled={cats.isPending} onClick={newItem}><Plus className="size-3.5 mr-1.5" />New item</button>
         </> : null}
       </>}
       tabs={<Tabs items={INVENTORY_TABS} />}
@@ -113,7 +122,7 @@ export function Inventory() {
         {(cats.data?.length ?? 0) > 1 ? <Chips label="Category" value={category} onChange={setCategory} options={[{ id: 'all', label: 'All' }, ...(cats.data ?? []).map((c) => ({ id: String(c.id), label: c.name, count: all.filter((i) => String(i.category_id) === String(c.id)).length }))]} /> : null}
         <span className="ml-auto"><AskChip prompt="Look at my stock. What is running low, and what should I reorder first?">What should I reorder?</AskChip></span>
       </Toolbar>
-      <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No items yet" body={cats.data?.length ? 'Add your first stock item, or import a list.' : 'Create a category first, then add items to it.'} /> : null)}>
+      <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No items yet" body={cats.data?.length ? 'Add your first stock item, or import a list.' : canSeeBooks ? 'Click New item to set up your first category and item.' : 'An owner or accountant adds a category first, then items go in it.'} /> : null)}>
         {() => rows.length === 0 ? <Empty title="No matches" body="Try a different word, or turn off the filter." /> : (
           <Paged rows={rows}>
             {(page, pager) => (
@@ -143,6 +152,7 @@ export function Inventory() {
           </Paged>
         )}
       </Loaded>
+      {catFirst ? <CategoryForm key="first-category" draft={blankCategory()} intro="Items are kept in categories, which decide where their value and cost go in your books. Create your first one, then add the item." submit="Save and add item" onClose={() => setCatFirst(false)} onSaved={(c) => { queryClient.setQueryData<Category[]>(['categories', org.id], (old) => [...(old ?? []).filter((x) => x.id !== c.id), c]); setDraft({ ...blankItem(), category_id: String(c.id) }) }} /> : null}
       {draft ? <ItemForm key={`item-${draft.id ?? 'new'}`} draft={draft} onClose={() => setDraft(null)} onCreated={(id) => open(id)} /> : null}
       <MovementForm key={`move-${moving ? 'open' : 'closed'}`} open={moving !== null} itemList={all} onClose={() => setMoving(null)} />
     </Screen>
@@ -234,7 +244,10 @@ function MovementForm({ open, itemList, onClose }: { open: boolean; itemList: It
       created_by: userId,
       ...where,
     }]), { success: canSeeBooks ? 'Recorded, with its entry in your books' : 'Recorded. An accountant will post it to the books.', refresh: REFRESH, onDone: () => { refreshBooks(); onClose() } })
-  const offsetOptions = (chart.data ?? []).filter((a) => a.is_postable !== false).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))
+  // The other side of the entry can't be the stock account the item already posts to.
+  const cats = useQuery({ ...categories(org.id), enabled: open })
+  const stockAccount = String((cats.data ?? []).find((c) => String(c.id) === String(item?.category_id))?.inventory_account_id ?? '')
+  const offsetOptions = (chart.data ?? []).filter((a) => a.is_postable !== false && String(a.id) !== stockAccount).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))
   const needsOffset = canSeeBooks && f.type === 'in'
   return (
     <Modal open={open} onClose={onClose} title="Record stock movement">
@@ -262,6 +275,7 @@ function MovementForm({ open, itemList, onClose }: { open: boolean; itemList: It
 }
 
 type CatDraft = { id?: Id; name: string; description: string; inventory_account_id: string; expense_account_id: string }
+const blankCategory = (): CatDraft => ({ name: '', description: '', inventory_account_id: '', expense_account_id: '' })
 
 export function Categories() {
   const { org } = useApp()
@@ -271,7 +285,7 @@ export function Categories() {
   const [draft, setDraft] = useState<CatDraft | null>(null)
   const nameOf = new Map((chart.data ?? []).map((a) => [String(a.id), `${a.code} ${a.name}`]))
   return (
-    <Screen title="Inventory" sub="Categories decide which accounts stock uses." tabs={<Tabs items={INVENTORY_TABS} />} actions={canWrite ? <button className={btn.primary} onClick={() => setDraft({ name: '', description: '', inventory_account_id: '', expense_account_id: '' })}><Plus className="size-3.5 mr-1.5" />New category</button> : undefined}>
+    <Screen title="Inventory" sub="Categories decide which accounts stock uses." tabs={<Tabs items={INVENTORY_TABS} />} actions={canWrite ? <button className={btn.primary} onClick={() => setDraft(blankCategory())}><Plus className="size-3.5 mr-1.5" />New category</button> : undefined}>
       <Loaded query={list} empty={(d) => (d.length === 0 ? <Empty title="No categories yet" body="Create a category, for example Packaging or Raw materials." /> : null)}>
         {(rows) => (
           <Paged rows={rows}>
@@ -297,24 +311,27 @@ export function Categories() {
   )
 }
 
-function CategoryForm({ draft, onClose }: { draft: CatDraft | null; onClose: () => void }) {
+function CategoryForm({ draft, onClose, onSaved, intro, submit = 'Save category' }: { draft: CatDraft | null; onClose: () => void; onSaved?: (c: Category) => void; intro?: string; submit?: string }) {
   const { org, userId } = useApp()
   const chart = useQuery({ ...accounts(org.id), enabled: draft !== null })
-  const [f, setF] = useState<CatDraft>(draft ?? { name: '', description: '', inventory_account_id: '', expense_account_id: '' })
+  const [f, setF] = useState<CatDraft>(draft ?? blankCategory())
   const set = (k: keyof CatDraft) => (v: string) => setF((x) => ({ ...x, [k]: v }))
   const optionsOf = (type: string) => (chart.data ?? []).filter((a) => a.is_postable !== false && a.account_type === type).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))
+  // A new category starts on the books' own stock account, when there is one.
+  const stockAccount = f.inventory_account_id || (f.id == null ? String((chart.data ?? []).find((a) => a.system_role === 'inventory' && a.is_postable !== false)?.id ?? '') : '')
   const save = useSave(() => {
-    const fields = { name: f.name.trim(), description: f.description.trim() || null, inventory_account_id: Number(f.inventory_account_id), expense_account_id: Number(f.expense_account_id) }
+    const fields = { name: f.name.trim(), description: f.description.trim() || null, inventory_account_id: Number(stockAccount), expense_account_id: Number(f.expense_account_id) }
     return f.id != null
-      ? call('DataService', 'updateInventoryCategory', [f.id, fields])
-      : call('DataService', 'createInventoryCategory', [{ ...fields, organization_id: org.id, parent_id: null, is_active: true, created_by: userId }])
-  }, { success: 'Category saved', refresh: REFRESH, onDone: onClose })
+      ? call<Category>('DataService', 'updateInventoryCategory', [f.id, fields])
+      : call<Category>('DataService', 'createInventoryCategory', [{ ...fields, organization_id: org.id, parent_id: null, is_active: true, created_by: userId }])
+  }, { success: 'Category saved', refresh: REFRESH, onDone: (c) => { onClose(); if (c) onSaved?.(c) } })
   const remove = useSave(() => call('DataService', 'deleteInventoryCategory', [f.id]), { success: 'Category deleted', refresh: REFRESH, onDone: onClose })
   return (
     <Modal open={draft !== null} onClose={onClose} title={f.id != null ? 'Edit category' : 'New category'}>
-      <FormBody onSubmit={() => save.mutate()} submit="Save category" pending={save.isPending} onCancel={onClose} disabled={!f.name.trim() || !f.inventory_account_id || !f.expense_account_id}>
-        <Text label="Category name" required value={f.name} onChange={set('name')} />
-        <Choice label="Stock account" hint="Where the value of stock in this category is held." required placeholder="Select account" value={f.inventory_account_id} onChange={set('inventory_account_id')} options={optionsOf('asset')} />
+      <FormBody onSubmit={() => save.mutate()} submit={submit} pending={save.isPending} onCancel={onClose} disabled={!f.name.trim() || !stockAccount || !f.expense_account_id}>
+        {intro ? <p className="text-[13.5px] text-muted-foreground">{intro}</p> : null}
+        <Text label="Category name" required placeholder="For example, Packaging or Raw materials" value={f.name} onChange={set('name')} />
+        <Choice label="Stock account" hint="Where the value of stock in this category is held." required placeholder="Select account" value={stockAccount} onChange={set('inventory_account_id')} options={optionsOf('asset')} />
         <Choice label="Cost account" hint="Where the cost goes when stock is used or sold." required placeholder="Select account" value={f.expense_account_id} onChange={set('expense_account_id')} options={optionsOf('expense')} />
         <Text label="Description" value={f.description} onChange={set('description')} />
         {f.id != null ? <ConfirmDelete label="Delete this category" pending={remove.isPending} onConfirm={() => remove.mutate()} /> : null}
@@ -382,11 +399,16 @@ function PostMovement({ movement: m, onClose }: { movement: Movement; onClose: (
   const [offset, setOffset] = useState('')
   const save = useSave(() => call('BooksService', 'postStockMovement', [org.id, m.id, { offset_account_id: offset ? Number(offset) : null }]), { success: 'Posted to your books', refresh: REFRESH, onDone: () => { refreshBooks(); onClose() } })
   const needsOffset = m.transaction_type === 'in'
+  // The other side can't be the stock account the item already posts to.
+  const stock = useQuery(items(org.id))
+  const cats = useQuery(categories(org.id))
+  const catId = stock.data?.find((i) => String(i.id) === String(m.item_id))?.category_id
+  const stockAccount = String(cats.data?.find((c) => String(c.id) === String(catId))?.inventory_account_id ?? '')
   return (
     <Modal open onClose={onClose} title="Post to your books">
       <FormBody onSubmit={() => save.mutate()} submit={`Post ${figure(Math.abs(num(m.total_cost)), org.decimals)}`} pending={save.isPending} onCancel={onClose} disabled={needsOffset && !offset}>
         <p className="text-[13.5px]">{m.item?.name ?? `Item ${m.item_id}`}, {shortDate(m.transaction_date)}.</p>
-        <Choice label={needsOffset ? 'Where did it come from?' : 'Where does the cost go?'} placeholder={needsOffset ? 'Select account' : "Category's cost account"} value={offset} onChange={setOffset} options={(chart.data ?? []).filter((a) => a.is_postable !== false).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))} />
+        <Choice label={needsOffset ? 'Where did it come from?' : 'Where does the cost go?'} placeholder={needsOffset ? 'Select account' : "Category's cost account"} value={offset} onChange={setOffset} options={(chart.data ?? []).filter((a) => a.is_postable !== false && String(a.id) !== stockAccount).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))} />
       </FormBody>
     </Modal>
   )
