@@ -46,6 +46,17 @@ async function assertMoneyAccount(tx: Pg, org: string, id: number) {
   if (marked) throw new Error('Choose a bank or cash account for the money.')
 }
 
+export const STOCK_ON_CREDIT = "Stock bought on credit goes through a purchase voucher or order, so there's a bill behind what you owe. Or choose the bank or cash it was paid from."
+
+/** What's owed to suppliers or by customers always has a bill or invoice behind it, so a stock movement can't post there. */
+async function assertStockOffset(tx: Pg, org: string, offset: number | null | undefined) {
+  if (!offset) return
+  const [o] = (await tx`SELECT to_jsonb(a) ->> 'system_role' AS role FROM public.accounts a WHERE id = ${Number(offset)} AND organization_id = ${org}::uuid`) as Row[]
+  if (!o) throw new Error('Account not found.')
+  if (o.role === 'payable') throw new Error(STOCK_ON_CREDIT)
+  if (o.role === 'receivable') throw new Error('What customers owe comes from invoices. Choose another account.')
+}
+
 export type DocumentForm = {
   kind: 'invoice' | 'bill'
   customer_id?: number | null
@@ -271,6 +282,7 @@ export class BooksServiceAdmin {
     `) as Row[]
     if (!t) throw new Error('Stock movement not found.')
     if (t.journal_entry_id) throw new Error('This stock movement is already in your books.')
+    await assertStockOffset(tx, org, offset)
     const plan = stockEntry({ type: t.transaction_type, quantity: Number(t.quantity), total_cost: Number(t.total_cost ?? 0), inventory_account_id: Number(t.inventory_account_id), expense_account_id: Number(t.expense_account_id), offset_account_id: offset ? Number(offset) : null })
     if (plan.problem) throw new Error(plan.problem)
     if (!plan.lines) return null

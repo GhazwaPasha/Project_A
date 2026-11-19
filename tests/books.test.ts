@@ -31,6 +31,7 @@ before(async () => {
   a.inv = await account('1300', 'Inventory', 'asset')
   a.inputTax = await account('1400', 'Input tax', 'asset')
   a.ap = await account('2000', 'Payable', 'liability')
+  a.capital = await account('3100', 'Owner contributions', 'equity')
   a.outputTax = await account('2200', 'Output tax', 'liability')
   a.sales = await account('4000', 'Sales', 'revenue')
   a.cogs = await account('5000', 'Cost of goods', 'expense')
@@ -148,7 +149,11 @@ test('stock: moves and entries happen together, and failures leave nothing behin
   const start = await inv()
   await assert.rejects(() => B.recordStockMovement(ORG, { item_id: item, transaction_type: 'in', quantity: 10, unit_cost: 20, transaction_date: '2026-06-10' }), /came from/)
   assert.equal((await stock()).q, 0, 'a refused movement moves nothing')
-  await B.recordStockMovement(ORG, { item_id: item, transaction_type: 'in', quantity: 10, unit_cost: 20, transaction_date: '2026-06-10', offset_account_id: a.ap })
+  // Owed to a supplier means a bill, so stock on credit goes through a voucher or order instead.
+  await db.sql`UPDATE public.accounts SET system_role = 'payable' WHERE id = ${a.ap}`
+  await assert.rejects(() => B.recordStockMovement(ORG, { item_id: item, transaction_type: 'in', quantity: 10, unit_cost: 20, transaction_date: '2026-06-10', offset_account_id: a.ap }), /purchase voucher or order/)
+  assert.equal((await stock()).q, 0, 'stock on credit without a bill moves nothing')
+  await B.recordStockMovement(ORG, { item_id: item, transaction_type: 'in', quantity: 10, unit_cost: 20, transaction_date: '2026-06-10', offset_account_id: a.capital })
   assert.equal(await inv(), start + 200)
   assert.ok((await B.recordStockMovement(ORG, { item_id: item, transaction_type: 'out', quantity: 3, transaction_date: '2026-06-11' })).entry_id)
   assert.equal(await inv(), start + 140)

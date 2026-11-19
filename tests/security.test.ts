@@ -24,7 +24,7 @@ const row = async (id: number) => (await db.sql`SELECT quantity_available::float
 
 before(async () => {
   db = await startDatabase()
-  a.inv = await account('1300', 'Inv', 'asset'); a.cogs = await account('5000', 'Cogs', 'expense'); a.ap = await account('2000', 'AP', 'liability'); a.sales = await account('4000', 'Sales', 'revenue')
+  a.inv = await account('1300', 'Inv', 'asset'); a.cogs = await account('5000', 'Cogs', 'expense'); a.ap = await account('2000', 'AP', 'liability'); a.capital = await account('3100', 'Owner contributions', 'equity'); a.sales = await account('4000', 'Sales', 'revenue')
   a.header = await account('1000', 'Assets', 'asset', { postable: false })
   b.inv = await account('1300', 'Inv', 'asset', { org: OTHER_ORG }); b.cogs = await account('5000', 'Cogs', 'expense', { org: OTHER_ORG }); b.ap = await account('2000', 'AP', 'liability', { org: OTHER_ORG })
   a.cat = Number((await db.sql`INSERT INTO public.inventory_categories (organization_id, name, inventory_account_id, expense_account_id) VALUES (${ORG}::uuid, 'A', ${a.inv}, ${a.cogs}) RETURNING id`)[0].id)
@@ -52,7 +52,7 @@ test('even internal movements refuse to undo a movement that is not this item’
   const mine = await item(ORG, a.cat), other = await item(ORG, a.cat), theirs = await item(OTHER_ORG, b.cat)
   await B.recordStockMovement(OTHER_ORG, { item_id: theirs, transaction_type: 'in', quantity: 2, unit_cost: 1, transaction_date: DAY, offset_account_id: b.ap })
   const foreign = await B.recordStockMovement(OTHER_ORG, { item_id: theirs, transaction_type: 'out', quantity: 1, transaction_date: DAY })
-  const sibling = await B.recordStockMovement(ORG, { item_id: other, transaction_type: 'in', quantity: 2, unit_cost: 1, transaction_date: DAY, offset_account_id: a.ap })
+  const sibling = await B.recordStockMovement(ORG, { item_id: other, transaction_type: 'in', quantity: 2, unit_cost: 1, transaction_date: DAY, offset_account_id: a.capital })
   const call = (from: number) => db.sql.begin((tx) => D.applyInventoryTransaction(tx as never, { organization_id: ORG, item_id: mine, transaction_type: 'in', quantity: 1, unit_cost: 1, total_cost: 1, journal_entry_id: null, reference: null, description: null, transaction_date: DAY, created_by: USER, from_transaction_ids: [from] } as never))
   await assert.rejects(() => call(foreign.id), /Stock movement not found/)
   await assert.rejects(() => call(sibling.id), /Stock movement not found/)
@@ -131,7 +131,7 @@ test('purchase orders can’t use another organization’s tax rates', () => as(
 
 test('a closed period is closed to every stock movement', () => as(async () => {
   const i = await item(ORG, a.cat)
-  await B.recordStockMovement(ORG, { item_id: i, transaction_type: 'in', quantity: 5, unit_cost: 2, transaction_date: DAY, offset_account_id: a.ap })
+  await B.recordStockMovement(ORG, { item_id: i, transaction_type: 'in', quantity: 5, unit_cost: 2, transaction_date: DAY, offset_account_id: a.capital })
   const north = (await I.saveWarehouse(ORG, { name: 'North' })).id
   const main = Number((await db.sql`SELECT id FROM public.warehouses WHERE organization_id = ${ORG}::uuid AND is_default`)[0].id)
   await db.sql`INSERT INTO public.period_closes (organization_id, through_date, closed_by) VALUES (${ORG}::uuid, '2026-01-31', ${USER}::uuid)`

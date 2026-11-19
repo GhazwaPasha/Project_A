@@ -28,7 +28,7 @@ const item = async (o: Doc = {}) => {
   if (o.costing_method) await I.setItemCosting(ORG, id, o.costing_method)
   return id
 }
-const stockIn = (id: number, q: number, cost: number, o: Doc = {}) => B.recordStockMovement(ORG, { item_id: id, transaction_type: 'in', quantity: q, unit_cost: cost, transaction_date: DAY, offset_account_id: a.ap, ...o })
+const stockIn = (id: number, q: number, cost: number, o: Doc = {}) => B.recordStockMovement(ORG, { item_id: id, transaction_type: 'in', quantity: q, unit_cost: cost, transaction_date: DAY, offset_account_id: a.capital, ...o })
 const row = async (id: number) => (await db.sql`SELECT quantity_available::float AS q, total_value::float AS v FROM public.inventory_items WHERE id = ${id}`)[0] as Doc
 const booksAgree = async () => { const c = await I.getBooksCheck(ORG); assert.ok(c.agrees, JSON.stringify(c.rows)) }
 const invoice = async (lines: Doc[]) => {
@@ -39,7 +39,7 @@ const invoice = async (lines: Doc[]) => {
 before(async () => {
   db = await startDatabase()
   a.bank = await account('1010', 'Bank', 'asset'); a.ar = await account('1200', 'Receivable', 'asset'); a.inv = await account('1300', 'Inventory', 'asset'); a.tax = await account('2200', 'Tax', 'liability')
-  a.ap = await account('2000', 'Payable', 'liability'); a.sales = await account('4000', 'Sales', 'revenue'); a.cogs = await account('5000', 'Cost', 'expense')
+  a.ap = await account('2000', 'Payable', 'liability'); a.capital = await account('3100', 'Owner contributions', 'equity'); a.sales = await account('4000', 'Sales', 'revenue'); a.cogs = await account('5000', 'Cost', 'expense')
   cat = Number((await db.sql`INSERT INTO public.inventory_categories (organization_id, name, inventory_account_id, expense_account_id) VALUES (${ORG}::uuid, 'Goods', ${a.inv}, ${a.cogs}) RETURNING id`)[0].id)
   for (const [id, email] of [[INVITED, 'new.person@example.com'], [STRANGER, 'someone.else@example.com']]) await db.sql`INSERT INTO public.user_profiles (id, email, full_name) VALUES (${id}::uuid, ${email}, 'x')`
 })

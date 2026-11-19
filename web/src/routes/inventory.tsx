@@ -9,7 +9,7 @@ import { Cell, Empty, Head, Loaded, Paged, Screen, SearchIcon, Table, Tabs, Tool
 import { Badge, Chip, Chips, type Tone } from '@/components/chips'
 import { call } from '@/lib/api'
 import { figure, shortDate, useApp } from '@/lib/boot'
-import { accounts, num, q, queryClient, refreshBooks, today, type Id, type Money, type StockItem } from '@/lib/data'
+import { accounts, num, q, queryClient, refreshBooks, today, type Account, type Id, type Money, type StockItem } from '@/lib/data'
 import { cn } from '@/lib/utils'
 
 export const INVENTORY_TABS = [
@@ -36,7 +36,12 @@ export const categories = (org: string) => q<Category[]>(['categories', org], 'D
 export const warehousesQuery = (org: string) => q<Warehouse[]>(['stock', org, 'warehouses'], 'InventoryService', 'listWarehouses', [org])
 export const unitsQuery = (org: string) => q<Unit[]>(['stock', org, 'units'], 'InventoryService', 'getAllUnits', [org])
 const movements = (org: string) => q<Movement[]>(['movements', org], 'DataService', 'getInventoryTransactions', [org, undefined, 200])
-export const STOCK_REFRESH = ['stock', 'low-stock', 'categories', 'movements']
+/**
+ * Accounts a stock movement can post against: not the item's own stock account, and not what's owed to suppliers
+ * or by customers, since those always have a bill or invoice behind them. The server checks the same.
+ */
+const stockOffset = (a: Account, stockAccount: string) => a.is_postable !== false && String(a.id) !== stockAccount && a.system_role !== 'payable' && a.system_role !== 'receivable'
+export const STOCK_REFRESH =['stock', 'low-stock', 'categories', 'movements']
 const REFRESH = STOCK_REFRESH
 
 export function useCanWriteStock() {
@@ -247,7 +252,7 @@ function MovementForm({ open, itemList, onClose }: { open: boolean; itemList: It
   // The other side of the entry can't be the stock account the item already posts to.
   const cats = useQuery({ ...categories(org.id), enabled: open })
   const stockAccount = String((cats.data ?? []).find((c) => String(c.id) === String(item?.category_id))?.inventory_account_id ?? '')
-  const offsetOptions = (chart.data ?? []).filter((a) => a.is_postable !== false && String(a.id) !== stockAccount).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))
+  const offsetOptions = (chart.data ?? []).filter((a) => stockOffset(a, stockAccount)).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))
   const needsOffset = canSeeBooks && f.type === 'in'
   return (
     <Modal open={open} onClose={onClose} title="Record stock movement">
@@ -268,7 +273,7 @@ function MovementForm({ open, itemList, onClose }: { open: boolean; itemList: It
         {item?.track_serials ? <Text label="Serial numbers" hint={f.type === 'out' ? 'Separate with commas. Leave blank to take the oldest units.' : "Separate with commas. Leave blank and they're created from the SKU."} value={f.serial_numbers} onChange={set('serial_numbers')} /> : null}
         <Text label="Notes" value={f.description} onChange={set('description')} />
         {tooMany ? <p role="alert" className="text-[13px] text-destructive">Only {figure(num(item!.quantity_available), 0)} {item!.unit_of_measure} on hand.</p> : null}
-        {canSeeBooks ? <Choice label={f.type === 'in' ? 'Where did it come from?' : 'Where does the cost go?'} required={needsOffset} hint={f.type === 'in' ? 'For example, what you owe a supplier, or the bank.' : "Leave blank to use the category's cost account."} placeholder={f.type === 'in' ? 'Select account' : "Category's cost account"} value={offset} onChange={setOffset} options={offsetOptions} /> : <p className="text-[12.5px] text-muted-foreground">This updates stock. An accountant then posts it to the books.</p>}
+        {canSeeBooks ? <Choice label={f.type === 'in' ? 'Where did it come from?' : 'Where does the cost go?'} required={needsOffset} hint={f.type === 'in' ? 'For example, the bank or cash it was paid from. Bought on credit? Use a purchase voucher, so there is a bill for it.' : "Leave blank to use the category's cost account."} placeholder={f.type === 'in' ? 'Select account' : "Category's cost account"} value={offset} onChange={setOffset} options={offsetOptions} /> : <p className="text-[12.5px] text-muted-foreground">This updates stock. An accountant then posts it to the books.</p>}
       </FormBody>
     </Modal>
   )
@@ -408,7 +413,7 @@ function PostMovement({ movement: m, onClose }: { movement: Movement; onClose: (
     <Modal open onClose={onClose} title="Post to your books">
       <FormBody onSubmit={() => save.mutate()} submit={`Post ${figure(Math.abs(num(m.total_cost)), org.decimals)}`} pending={save.isPending} onCancel={onClose} disabled={needsOffset && !offset}>
         <p className="text-[13.5px]">{m.item?.name ?? `Item ${m.item_id}`}, {shortDate(m.transaction_date)}.</p>
-        <Choice label={needsOffset ? 'Where did it come from?' : 'Where does the cost go?'} placeholder={needsOffset ? 'Select account' : "Category's cost account"} value={offset} onChange={setOffset} options={(chart.data ?? []).filter((a) => a.is_postable !== false && String(a.id) !== stockAccount).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))} />
+        <Choice label={needsOffset ? 'Where did it come from?' : 'Where does the cost go?'} placeholder={needsOffset ? 'Select account' : "Category's cost account"} value={offset} onChange={setOffset} options={(chart.data ?? []).filter((a) => stockOffset(a, stockAccount)).map((a) => ({ value: String(a.id), label: `${a.code} ${a.name}` }))} />
       </FormBody>
     </Modal>
   )

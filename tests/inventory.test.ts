@@ -23,7 +23,7 @@ const newItem = async (o: Doc = {}) => {
   const made = await D.createInventoryItem({ organization_id: ORG, category_id: category, sku: `T-${counter}`, name: `Item ${counter}`, description: null, unit_of_measure: 'pcs', quantity_in: 0, quantity_out: 0, average_unit_cost: 0, reorder_point: 0, reorder_quantity: 0, is_active: true, created_by: USER, ...o } as never)
   return Number(made!.id)
 }
-const move = (item: number, type: 'in' | 'out' | 'adjustment', quantity: number, o: Doc = {}) => B.recordStockMovement(ORG, { item_id: item, transaction_type: type, quantity, transaction_date: DAY, offset_account_id: a.ap, ...o })
+const move = (item: number, type: 'in' | 'out' | 'adjustment', quantity: number, o: Doc = {}) => B.recordStockMovement(ORG, { item_id: item, transaction_type: type, quantity, transaction_date: DAY, offset_account_id: a.capital, ...o })
 const stock = async (item: number, cost?: number, quantity = 10, o: Doc = {}) => move(item, 'in', quantity, { unit_cost: cost ?? 10, ...o })
 const itemRow = async (id: number) => (await db.sql`SELECT quantity_available::float AS q, total_value::float AS v, average_unit_cost::float AS avg FROM public.inventory_items WHERE id = ${id}`)[0] as Doc
 const level = async (item: number, wh: number) => Number((await db.sql`SELECT quantity::float AS q FROM public.stock_levels WHERE item_id = ${item} AND warehouse_id = ${wh}`)[0]?.q ?? 0)
@@ -48,6 +48,7 @@ before(async () => {
   a.ar = await account('1200', 'Receivable', 'asset')
   a.inv = await account('1300', 'Inventory', 'asset')
   a.ap = await account('2000', 'Payable', 'liability')
+  a.capital = await account('3100', 'Owner contributions', 'equity')
   a.grni = await account('2100', 'Received not billed', 'liability')
   a.sales = await account('4000', 'Sales', 'revenue')
   a.cogs = await account('5000', 'Cost of goods', 'expense')

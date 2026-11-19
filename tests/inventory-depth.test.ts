@@ -27,7 +27,7 @@ const newItem = async (o: Doc = {}) => {
   if (o.costing_method) await I.setItemCosting(ORG, id, o.costing_method)
   return id
 }
-const move = (item: number, type: 'in' | 'out' | 'adjustment', quantity: number, o: Doc = {}) => B.recordStockMovement(ORG, { item_id: item, transaction_type: type, quantity, transaction_date: DAY, offset_account_id: a.ap, ...o })
+const move = (item: number, type: 'in' | 'out' | 'adjustment', quantity: number, o: Doc = {}) => B.recordStockMovement(ORG, { item_id: item, transaction_type: type, quantity, transaction_date: DAY, offset_account_id: a.capital, ...o })
 const row = async (id: number) => (await db.sql`SELECT quantity_available::float AS q, total_value::float AS v, average_unit_cost::float AS avg FROM public.inventory_items WHERE id = ${id}`)[0] as Doc
 const lastCost = async (item: number) => Number((await db.sql`SELECT total_cost::float AS c FROM public.inventory_transactions WHERE item_id = ${item} ORDER BY id DESC LIMIT 1`)[0].c)
 const inStock = async (item: number, wh?: number) => (await db.sql`SELECT serial_number FROM public.stock_serials WHERE item_id = ${item} AND in_stock AND (${wh ?? null}::bigint IS NULL OR warehouse_id = ${wh ?? null}::bigint) ORDER BY id`).map((r) => r.serial_number as string)
@@ -52,6 +52,7 @@ before(async () => {
   a.inv = await account('1300', 'Inventory', 'asset')
   a.inv2 = await account('1310', 'Finished goods', 'asset')
   a.ap = await account('2000', 'Payable', 'liability')
+  a.capital = await account('3100', 'Owner contributions', 'equity')
   a.grni = await account('2100', 'Received not billed', 'liability')
   a.sales = await account('4000', 'Sales', 'revenue')
   a.cogs = await account('5000', 'Cost of goods', 'expense')
